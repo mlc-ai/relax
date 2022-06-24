@@ -1877,10 +1877,9 @@ Doc AsTVMScriptDoc(const ObjectRef& mod, const String& tir_prefix, bool show_met
                    const PrimFunc& func) {
   ICHECK(mod->IsInstance<PrimFuncNode>() || mod->IsInstance<IRModuleNode>());
   TVMScriptPrinter printer(tir_prefix, show_meta);
-  Doc mod_doc = printer.Print(mod);
   // TODO(altan, tqchen): change to the first argument only?
   Doc doc;
-  doc << (func.defined() ? printer.Print(func) : mod_doc) << Doc::NewLine();
+  doc << (func.defined() ? printer.Print(func) : printer.Print(mod)) << Doc::NewLine();
   return doc;
 }
 
