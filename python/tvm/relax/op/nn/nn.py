@@ -14,13 +14,35 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=wildcard-import, redefined-builtin
-"""Relax core operators."""
 
-# Operators
-from .base import *
-from .nn import *
-from .op_attrs import *
-from .tensor import *
-from . import builtin
-from . import memory
+from . import _make
+from ...expr import Expr
+
+
+def dense(lhs: Expr, rhs: Expr) -> Expr:
+    return _make.dense(lhs, rhs)
+
+
+def conv2d(
+    lhs: Expr, rhs: Expr, kernel_size, stride=(1, 1), padding=[0, 0], dilation=[1, 1]
+) -> Expr:
+    return _make.conv2d(lhs, rhs, kernel_size, stride, padding, dilation)
+
+
+def relu(data: Expr) -> Expr:
+    return _make.relu(data)
+
+
+def softmax(data: Expr) -> Expr:
+    return _make.softmax(data)
+
+
+def flatten(data: Expr) -> Expr:
+    return _make.flatten(data)
+
+
+def max_pool2d(data: Expr, kernel_size, stride=None, padding=(0, 0), dilation=(1, 1)) -> Expr:
+    if stride is None:
+        stride = kernel_size
+    return _make.max_pool2d(data, kernel_size, stride, padding, dilation)
+
