@@ -103,8 +103,6 @@ Type InferTypeBinaryBroadcast(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(output_ndim, output_dtype);
 }
 
-TVM_REGISTER_NODE_TYPE(Conv2dAttrs);
-
 RELAX_REGISTER_BINARY_BROADCAST_OP("add")
     .describe("Elementwise add with broadcasting")
     .set_support_level(1);

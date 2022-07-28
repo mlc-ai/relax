@@ -23,6 +23,8 @@
 namespace tvm {
 namespace relax {
 
+TVM_REGISTER_NODE_TYPE(Conv2dAttrs);
+
 RELAY_REGISTER_OP("relax.nn.conv2d")
     .set_num_inputs(2)
     .add_argument("e1", "Expr", "The input expression")
