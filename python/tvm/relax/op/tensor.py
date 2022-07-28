@@ -13,6 +13,7 @@
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
+# under the License.
 # pylint: disable=redefined-builtin
 """Basic tensor operations."""
 import numpy as np
@@ -79,13 +80,13 @@ def numpy_unique(
 
     Uses numpy.unique to compute unique elements.
     """
-    # TODO(prakalp): add support for returning a tuple when return_inverse or return_counts is True
+    # TODO(prakalp) : add support for returning a tuple when return_inverse or return_counts is True
     if bool(return_inverse) or bool(return_counts):
         raise NotImplementedError("missing support return_inverse or return_counts set to true")
     if dim < 0:
         dim = None
     a_numpy = a.numpy()
-    # TODO(prakalp): use torch.unique instead of numpy when torch is installed in ci.
+    # TODO(prakalp) : use torch.unique instead of numpy when torch is installed in ci.
     output_sorted_numpy, indices = np.unique(a_numpy, return_index=True)
     if sort:
         return tvm.nd.array(output_sorted_numpy)
