@@ -112,6 +112,105 @@ Type InferTypeBinaryBroadcast(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(output_ndim, output_dtype);
 }
 
+Optional<Expr> InferShapeDense(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dense op should have 2 arguments");
+  }
+  Expr shape0 = call->args[0]->shape();
+  Expr shape1 = call->args[1]->shape();
+  auto* s0 = shape0.as<ShapeExprNode>();
+  auto* s1 = shape1.as<ShapeExprNode>();
+  if (s0 && s1) {
+    std::vector<PrimExpr> output_shape;
+    size_t ndim0 = s0->values.size();
+    size_t ndim1 = s1->values.size();
+    if (ndim0 != 2 || ndim1 != 2) {
+      LOG(INFO) << ndim0;
+      LOG(INFO) << ndim1;
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "The 2 arguments of Dense must be 2D Tensors");
+    }
+    if (!EqualCheck(s0->values[1], s1->values[1])) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "The 2 arguments of Dense must have the same number of columns");
+    }
+    return ShapeExpr(Array<PrimExpr>{s0->values[0], s1->values[0]});
+  } else {
+    return NullOpt;
+  }
+}
+
+Type InferTypeDense(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dense op should have 2 arguments");
+  }
+  Type type0 = call->args[0]->checked_type();
+  Type type1 = call->args[1]->checked_type();
+  auto* t0 = type0.as<DynTensorTypeNode>();
+  auto* t1 = type1.as<DynTensorTypeNode>();
+  if (!t0 || !t1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The 2 arguments of Dense should be DynTensor");
+  }
+
+  DataType output_dtype;
+  if (t0->IsUnknownDtype() || t1->IsUnknownDtype()) {
+    output_dtype = DataType::Void();
+  } else if (t0->dtype != t1->dtype) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Data types " << t0->dtype << ", and"
+                                                     << t1->dtype << " must be equal for Dense");
+  } else {
+    output_dtype = t0->dtype;
+  }
+
+  int output_ndim;
+  if (t0->IsUnknownNdim() || t1->IsUnknownNdim()) {
+    output_ndim = -1;
+  } else {
+    output_ndim = t0->ndim;
+  }
+  return DynTensorType(output_ndim, output_dtype);
+}
+
+Optional<Expr> InferShapeConv2d(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Conv2d op should have 2 arguments");
+  }
+  Expr shape0 = call->args[0]->shape();
+  Expr shape1 = call->args[1]->shape();
+  auto* s0 = shape0.as<ShapeExprNode>();
+  auto* s1 = shape1.as<ShapeExprNode>();
+  auto* attrs = call->attrs.as<Conv2dAttrs>();
+  if (s0 && s1) {
+    std::vector<PrimExpr> output_shape;
+    size_t ndim0 = s0->values.size();
+    size_t ndim1 = s1->values.size();
+    if (ndim0 != 4 || ndim1 != 4) {
+      LOG(INFO) << ndim0;
+      LOG(INFO) << ndim1;
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "The 2 arguments of Dense must be 4D Tensors");
+    }
+    // N
+    output_shape.push_back(s0->values[0]);
+    // C
+    output_shape.push_back(s1->values[0]);
+    // H
+    output_shape.push_back((s0->values[2] + 2 * attrs->padding[0] -
+                            attrs->dilation[0] * (attrs->kernel_size[0] - 1) - 1) /
+                               attrs->stride[0] +
+                           1);
+    // W
+    output_shape.push_back((s0->values[3] + 2 * attrs->padding[1] -
+                            attrs->dilation[1] * (attrs->kernel_size[1] - 1) - 1) /
+                               attrs->stride[1] +
+                           1);
+    return ShapeExpr(Array<PrimExpr>{output_shape.begin(), output_shape.end()});
+  } else {
+    return NullOpt;
+  }
+}
+
 }  // namespace relax
 }  // namespace tvm
 

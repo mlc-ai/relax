@@ -88,6 +88,38 @@ struct UniqueAttrs : public tvm::AttrsNode<UniqueAttrs> {
   }
 };  // struct UniqueAttrs
 
+/*! \brief Attributes used in MaxPool2d operator */
+struct MaxPool2dAttrs : public tvm::AttrsNode<MaxPool2dAttrs> {
+  Array<PrimExpr> kernel_size;
+  Array<PrimExpr> stride;
+  Array<PrimExpr> padding;
+  Array<PrimExpr> dilation;
+  TVM_DECLARE_ATTRS(MaxPool2dAttrs, "relax.attrs.MaxPool2dAttrs") {
+    TVM_ATTR_FIELD(kernel_size).describe("The size of the window to take a max over");
+    TVM_ATTR_FIELD(stride).describe(
+        "The stride of the window. If empty, the stride is equal to kernel size.");
+    TVM_ATTR_FIELD(padding).describe("The padding on the input.");
+    TVM_ATTR_FIELD(dilation).describe("The stride of elements in the window");
+  }
+};  // struct MaxPool2dAttrs
+
+/*! \brief Attributes used in Conv2d operator */
+struct Conv2dAttrs : public tvm::AttrsNode<Conv2dAttrs> {
+  Array<PrimExpr> kernel_size;
+  Array<PrimExpr> stride;
+  Array<PrimExpr> padding;
+  Array<PrimExpr> dilation;
+  TVM_DECLARE_ATTRS(Conv2dAttrs, "relax.attrs.Conv2dAttrs") {
+    TVM_ATTR_FIELD(kernel_size).describe("The size of the convolving kernel");
+    TVM_ATTR_FIELD(stride).describe(
+        "The stride of the convolution. If empty, the stride is calculated from the kernel "
+        "size.");
+    TVM_ATTR_FIELD(padding).describe("The padding on the input. If empty, default to 0");
+    TVM_ATTR_FIELD(dilation).describe(
+        "The spacing between kernel elements. If empty, default to 1");
+  }
+};  // struct Conv2dAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_
