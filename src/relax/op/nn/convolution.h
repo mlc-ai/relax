@@ -26,7 +26,7 @@
 #include "../op_common.h"
 namespace tvm {
 namespace relax {
-    
+
 Optional<Expr> InferShapeConv2d(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Conv2d op should have 2 arguments");

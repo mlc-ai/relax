@@ -22,8 +22,9 @@
 
 #include <tvm/relax/expr.h>
 #include <tvm/relax/type.h>
-#include "../tensor/unary.h"
+
 #include "../op_common.h"
+#include "../tensor/unary.h"
 namespace tvm {
 namespace relax {
 

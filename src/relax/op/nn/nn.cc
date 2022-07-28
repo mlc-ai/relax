@@ -36,7 +36,6 @@ Expr MakeDense(Expr expr1, Expr expr2) {
 
 TVM_REGISTER_GLOBAL("relax.op.nn.dense").set_body_typed(MakeDense);
 
-
 RELAX_REGISTER_UNARY_OP("nn.softmax");
 
 RELAX_REGISTER_UNARY_OP("nn.relu");

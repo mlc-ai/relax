@@ -18,6 +18,7 @@
  */
 
 #include "convolution.h"
+
 #include "../tensor/binary.h"
 namespace tvm {
 namespace relax {
@@ -41,7 +42,7 @@ Expr MakeConv2d(Expr expr1, Expr expr2, Array<PrimExpr> kernel_size, Array<PrimE
   return Call(op, {expr1, expr2}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.conv2d").set_body_typed(MakeConv2d);    
+TVM_REGISTER_GLOBAL("relax.op.nn.conv2d").set_body_typed(MakeConv2d);
 
 }  // namespace relax
 }  // namespace tvm
