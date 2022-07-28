@@ -67,8 +67,8 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
   RELAY_REGISTER_OP("relax." OpName)                                  \
       .set_num_inputs(1)                                              \
       .add_argument("e", "Tensor", "The input tensor.")               \
-      .set_attr<FInferShape>("FInferShape", InferShapeSame)           \
-      .set_attr<FInferType>("FInferType", InferTypeSame)
+      .set_attr<FInferShape>("FInferShape", InferShapeUnaryBroadcast) \
+      .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast)
 }  // namespace relax
 }  // namespace tvm
 

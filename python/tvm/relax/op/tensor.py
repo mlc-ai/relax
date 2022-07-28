@@ -29,35 +29,6 @@ def add(lhs: Expr, rhs: Expr) -> Expr:
 def multiply(lhs: Expr, rhs: Expr) -> Expr:
     return _ffi_api.multiply(lhs, rhs)
 
-
-def dense(lhs: Expr, rhs: Expr) -> Expr:
-    return _ffi_api.dense(lhs, rhs)
-
-
-def conv2d(
-    lhs: Expr, rhs: Expr, kernel_size, stride=(1, 1), padding=[0, 0], dilation=[1, 1]
-) -> Expr:
-    return _ffi_api.conv2d(lhs, rhs, kernel_size, stride, padding, dilation)
-
-
-def relu(data: Expr) -> Expr:
-    return _ffi_api.relu(data)
-
-
-def softmax(data: Expr) -> Expr:
-    return _ffi_api.softmax(data)
-
-
-def flatten(data: Expr) -> Expr:
-    return _ffi_api.flatten(data)
-
-
-def max_pool2d(data: Expr, kernel_size, stride=None, padding=(0, 0), dilation=(1, 1)) -> Expr:
-    if stride is None:
-        stride = kernel_size
-    return _ffi_api.max_pool2d(data, kernel_size, stride, padding, dilation)
-
-
 @tvm.register_func("relax.run.unique")
 def unique(
     a: tvm.nd.array,

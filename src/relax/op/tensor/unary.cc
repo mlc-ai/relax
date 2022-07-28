@@ -27,6 +27,64 @@
 namespace tvm {
 namespace relax {
 
+Optional<Expr> InferShapeUnique(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Unique op should have 1 argument");
+  }
+  auto unique_attrs = call->attrs.as<UniqueAttrs>();
+  // Only default values of these attributes are supported right now.
+  if (unique_attrs->return_counts || unique_attrs->return_inverse || unique_attrs->dim != -1)
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "support for return_inverse, return_counts, and dim is not implemented");
+  return relax::RuntimeDepShape(call->span);
+}
+
+Type InferTypeUnique(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Unique op should have 1 argument");
+  }
+  auto* input_ty = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (!input_ty) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Input should be DynTensor, but got "
+                       << call->args[0]->checked_type()->GetTypeKey());
+  }
+
+  // TODO(prakalp): Add support for return_inverse, return_counts and dim attributes. Only defaults
+  // are supported right now.
+  auto unique_attrs = call->attrs.as<UniqueAttrs>();
+  if (unique_attrs->return_counts || unique_attrs->return_inverse || unique_attrs->dim != -1)
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "support for return_inverse, return_counts, and dim is not implemented");
+  return DynTensorType(/*ndim=*/1, input_ty->dtype);
+}
+
+Optional<Expr> InferShapeUnaryBroadcast(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Unary op should have 1 argument");
+  }
+  Expr shape = call->args[0]->shape();
+  auto* s = shape.as<ShapeExprNode>();
+  if (s) {
+    return ShapeExpr(s->values);
+  } else {
+    return NullOpt;
+  }
+}
+
+Type InferTypeUnaryBroadcast(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Unary op should have 1 argument");
+  }
+  auto* input_ty = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (!input_ty) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Input should be DynTensor, but got "
+                       << call->args[0]->checked_type()->GetTypeKey());
+  }
+  return GetRef<DynTensorType>(input_ty);
+}
+
 TVM_REGISTER_NODE_TYPE(UniqueAttrs);
 TVM_REGISTER_NODE_TYPE(MaxPool2dAttrs);
 RELAY_REGISTER_OP("relax.unique")
@@ -51,42 +109,6 @@ Expr MakeUnique(Expr data, bool sorted, bool return_inverse, bool return_counts,
 }
 
 TVM_REGISTER_GLOBAL("relax.op.unique").set_body_typed(MakeUnique);
-
-RELAX_REGISTER_UNARY_OP("softmax");
-
-RELAX_REGISTER_UNARY_OP("relu");
-
-RELAY_REGISTER_OP("relax.flatten")
-    .set_num_inputs(1)
-    .add_argument("data", "Tensor", "The input tensor")
-    .set_attr<FInferShape>("FInferShape", InferShapeFlatten)
-    .set_attr<FInferType>("FInferType", InferTypeFlatten);
-
-Expr MakeFlatten(Expr data) {
-  static const Op& op = Op::Get("relax.flatten");
-  return Call(op, {data}, {}, {});
-}
-TVM_REGISTER_GLOBAL("relax.op.flatten").set_body_typed(MakeFlatten);
-
-RELAY_REGISTER_OP("relax.max_pool2d")
-    .set_num_inputs(1)
-    .add_argument("data", "Tensor", "The input tensor")
-    .set_attrs_type<MaxPool2dAttrs>()
-    .set_attr<FInferShape>("FInferShape", InferShapeMaxPool2d)
-    .set_attr<FInferType>("FInferType", InferTypeSame);
-
-Expr MakeMaxPool2d(Expr data, Array<PrimExpr> kernel_size, Array<PrimExpr> stride,
-                   Array<PrimExpr> padding, Array<PrimExpr> dilation) {
-  auto attrs = make_object<MaxPool2dAttrs>();
-  attrs->kernel_size = kernel_size;
-  attrs->stride = stride;
-  attrs->padding = padding;
-  attrs->dilation = dilation;
-  static const Op& op = Op::Get("relax.max_pool2d");
-  return Call(op, {data}, Attrs(attrs));
-}
-
-TVM_REGISTER_GLOBAL("relax.op.max_pool2d").set_body_typed(MakeMaxPool2d);
 
 }  // namespace relax
 }  // namespace tvm
