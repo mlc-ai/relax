@@ -99,12 +99,13 @@ class PopenWorker:
         an operation times out.
     """
 
-    def __init__(self, initializer=None, initargs=(), maximum_uses=None):
+    def __init__(self, initializer=None, initargs=(), maximum_uses=None, hide_stderr=True):
         self._proc = None
         self._initializer = initializer
         self._initargs = initargs
         self._maximum_uses = maximum_uses
         self._remaining_uses = None
+        self._hide_stderr = hide_stderr
 
         if self._initializer is not None and not callable(self._initializer):
             raise TypeError("initializer must be callable for PopenWorker")
@@ -157,6 +158,7 @@ class PopenWorker:
         worker_read, main_write = os.pipe()
 
         cmd = [sys.executable, "-m", "tvm.exec.popen_worker"]
+        stderr = subprocess.DEVNULL if self._hide_stderr else None
         if sys.platform == "win32":
             # pylint: disable=import-outside-toplevel
             import msvcrt
@@ -166,10 +168,10 @@ class PopenWorker:
             os.set_handle_inheritable(worker_read_handle, True)
             os.set_handle_inheritable(worker_write_handle, True)
             cmd += [str(worker_read_handle), str(worker_write_handle)]
-            self._proc = subprocess.Popen(cmd, close_fds=False)
+            self._proc = subprocess.Popen(cmd, close_fds=False, stderr=stderr)
         else:
             cmd += [str(worker_read), str(worker_write)]
-            self._proc = subprocess.Popen(cmd, pass_fds=(worker_read, worker_write))
+            self._proc = subprocess.Popen(cmd, pass_fds=(worker_read, worker_write), stderr=stderr)
 
         # close worker side of the pipe
         os.close(worker_read)
