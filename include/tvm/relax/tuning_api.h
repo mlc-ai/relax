@@ -35,8 +35,8 @@ namespace relax {
 TVM_ALWAYS_INLINE TVMRetValue CallPackedWithArgsInArray(const runtime::PackedFunc f,
                                                         const Array<ObjectRef>& args) {
   const size_t kNumArgs = args.size();
-  TVMValue tvm_values[kNumArgs];
-  int tvm_type_codes[kNumArgs];
+  TVMValue *tvm_values = new TVMValue[kNumArgs];
+  int *tvm_type_codes = new int[kNumArgs];
   runtime::TVMArgsSetter setter(tvm_values, tvm_type_codes);
   const ObjectRef* ptr = args.template as<ArrayNode>()->begin();
   for (size_t i = 0; i < kNumArgs; ++i) {
@@ -45,6 +45,8 @@ TVM_ALWAYS_INLINE TVMRetValue CallPackedWithArgsInArray(const runtime::PackedFun
 
   TVMRetValue rv;
   f.CallPacked(TVMArgs(tvm_values, tvm_type_codes, kNumArgs), &rv);
+  delete[] tvm_values;
+  delete[] tvm_type_codes;
   return rv;
 }
 
