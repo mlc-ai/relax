@@ -23,10 +23,46 @@ from ..expr import Expr
 
 
 def add(lhs: Expr, rhs: Expr) -> Expr:
+    """Addition with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : Expr
+        The left hand side input data
+    rhs : Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : Expr
+        The computed result.
+
+    Examples
+    --------
+    .. code:: python
+
+      x = relax.Var("a") # shape is [2, 3]
+      y = relax.Var("b") # shape is [2, 1]
+      z = relax.add(x, y)  # result shape is [2, 3]
+    """
     return _ffi_api.add(lhs, rhs)
 
 
 def multiply(lhs: Expr, rhs: Expr) -> Expr:
+    """Multiplication with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : Expr
+        The left hand side input data
+    rhs : Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : Expr
+        The computed result.
+    """
     return _ffi_api.multiply(lhs, rhs)
 
 

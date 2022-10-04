@@ -48,7 +48,10 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
         lowering pass
     """
 
-    def __init__(self, target: Target):
+    def __init__(
+        self,
+        target: Target,
+    ):
         self.target = target
 
     def transform_module(self, mod: IRModule, ctx: PassContext) -> IRModule:
@@ -82,14 +85,26 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
                     relay_op = ir.Op.get(relay_op_name)
 
                     te_inputs = [relax.expr.te_tensor(arg) for arg in call_node.args]
+
+                    # convert relax attr -> relay attr
+                    relax_op_attrs = call_node.attrs
+                    relay_op_attrs = None
+                    if relax_op_attrs:
+                        relax_attr_name = relax_op_attrs.get_name()
+                        # Note: convert `tvm.runtime.container.String` to string
+                        attrs_dict = {str(key): val for key, val in dict(relax_op_attrs).items()}
+                        relay_attr_name = "relay." + relax_attr_name[6:]
+                        relay_op_attrs = ir.attrs.make_node(relay_attr_name, **attrs_dict)
+
                     best_impl_tuple = select_implementation(
                         relay_op,
-                        call_node.attrs,
+                        relay_op_attrs,
                         te_inputs,
                         call_node.checked_type,
                         target,
                         use_autotvm=False,
                     )
+
                     compute_func = best_impl_tuple[0].compute
                     # Extract the name of the operator without the prefix
                     # e.g., for relay op "nn.conv2d", name_hint would be conv2d
@@ -97,11 +112,12 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
 
                     return self.builder_.call_te(
                         compute_func,
-                        call_node.attrs,
+                        relay_op_attrs,
                         call_node.args,
-                        call_node.attrs,
+                        call_node.checked_type,
                         primfunc_name_hint=name_hint,
                     )
+
                 else:
                     return call_node
 
@@ -114,4 +130,9 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
                         self.builder_.update_func(gv, updated_func)
                 return self.builder_.get()
 
-        return Lowerer().transform()
+        # Relax only supports MetaSchedule
+        new_config = dict(ctx.config)
+        new_config["relay.backend.use_meta_schedule"] = True
+        ctx.config = new_config
+        with target, ctx:
+            return Lowerer().transform()
