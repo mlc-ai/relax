@@ -161,5 +161,77 @@ def test_max_pool2d():
     tvm.testing.assert_allclose(out, expected)
 
 
+def test_add():
+    dtype = "float32"
+    a_shape = [15, 3, 5]
+    b_shape = [15, 1, 5]
+
+    tensor_type = relax.DynTensorType(ndim=3, dtype="float32")
+    a = relax.Var("a", a_shape, tensor_type)
+    b = relax.Var("b", b_shape, tensor_type)
+    c = relax.op.add(a, b)
+    f = relax.Function(
+        params=[a, b], body=c, ret_type=tensor_type, ret_shape=relax.ShapeExpr(a_shape)
+    )
+
+    a_np = np.random.rand(*a_shape).astype(dtype)
+    b_np = np.random.rand(*b_shape).astype(dtype)
+    a_relax = tvm.nd.array(a_np, dev)
+    b_relax = tvm.nd.array(b_np, dev)
+
+    res_np = np.add(a_np, b_np)
+    res_relax = relax_build_and_run(f, [a_relax, b_relax])
+
+    tvm.testing.assert_allclose(res_relax, res_np)
+
+
+def test_subtract():
+    dtype = "float32"
+    a_shape = [15, 3, 5]
+    b_shape = [1]
+
+    tensor_type = relax.DynTensorType(ndim=3, dtype="float32")
+    a = relax.Var("a", a_shape, tensor_type)
+    b = relax.Var("b", b_shape, tensor_type)
+    c = relax.op.subtract(a, b)
+    f = relax.Function(
+        params=[a, b], body=c, ret_type=tensor_type, ret_shape=relax.ShapeExpr(a_shape)
+    )
+
+    a_np = np.random.rand(*a_shape).astype(dtype)
+    b_np = np.random.rand(*b_shape).astype(dtype)
+    a_relax = tvm.nd.array(a_np, dev)
+    b_relax = tvm.nd.array(b_np, dev)
+
+    res_np = np.subtract(a_np, b_np)
+    res_relax = relax_build_and_run(f, [a_relax, b_relax])
+
+    tvm.testing.assert_allclose(res_relax, res_np)
+
+
+def test_multiply():
+    dtype = "float32"
+    a_shape = [15, 3, 5]
+    b_shape = [3, 1]
+
+    tensor_type = relax.DynTensorType(ndim=3, dtype="float32")
+    a = relax.Var("a", a_shape, tensor_type)
+    b = relax.Var("b", b_shape, tensor_type)
+    c = relax.op.multiply(a, b)
+    f = relax.Function(
+        params=[a, b], body=c, ret_type=tensor_type, ret_shape=relax.ShapeExpr(a_shape)
+    )
+
+    a_np = np.random.rand(*a_shape).astype(dtype)
+    b_np = np.random.rand(*b_shape).astype(dtype)
+    a_relax = tvm.nd.array(a_np, dev)
+    b_relax = tvm.nd.array(b_np, dev)
+
+    res_np = np.multiply(a_np, b_np)
+    res_relax = relax_build_and_run(f, [a_relax, b_relax])
+
+    tvm.testing.assert_allclose(res_relax, res_np)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

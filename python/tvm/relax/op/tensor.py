@@ -48,6 +48,24 @@ def add(lhs: Expr, rhs: Expr) -> Expr:
     return _ffi_api.add(lhs, rhs)
 
 
+def subtract(lhs: Expr, rhs: Expr) -> Expr:
+    """Subtraction with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : relax.Expr
+        The left hand side input data
+    rhs : relax.Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.subtract(lhs, rhs)
+
+
 def multiply(lhs: Expr, rhs: Expr) -> Expr:
     """Multiplication with numpy-style broadcasting.
 
