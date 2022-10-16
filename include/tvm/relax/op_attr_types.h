@@ -271,9 +271,35 @@ struct TransposeAttrs : public tvm::AttrsNode<TransposeAttrs> {
   Optional<Array<Integer>> axes;
 
   TVM_DECLARE_ATTRS(TransposeAttrs, "relax.attrs.TransposeAttrs") {
-    TVM_ATTR_FIELD(axes).describe("The target axes order, reverse order if not specified.");
+    TVM_ATTR_FIELD(axes)
+        .describe("The target axes order, reverse order if not specified.")
+        .set_default(Optional<Array<Integer>>{NullOpt});
   }
 };  // struct TransposeAttrs
+
+/*! \brief Attributes used in batch_norm operator */
+struct BatchNormAttrs : public tvm::AttrsNode<BatchNormAttrs> {
+  int axis;
+  double epsilon;
+  bool center;
+  bool scale;
+
+  TVM_DECLARE_ATTRS(BatchNormAttrs, "relax.attrs.BatchNormAttrs") {
+    TVM_ATTR_FIELD(axis).describe("Specify which shape axis denotes the channel.").set_default(1);
+    TVM_ATTR_FIELD(epsilon)
+        .describe("Small float added to variance to avoid dividing by zero")
+        .set_default(1e-5);
+    TVM_ATTR_FIELD(center)
+        .describe("If True, add offset of beta to normalized tensor. If False, beta is ignored")
+        .set_default(true);
+    TVM_ATTR_FIELD(scale)
+        .describe(
+            "If True, multiply by gamma. If False, gamma is not used. "
+            "When the next layer is piecewise linear (also, e.g., nn.relu), "
+            "this can be disabled since the scaling will be done by the next layer.")
+        .set_default(true);
+  }
+};  // struct BatchNormAttrs
 
 }  // namespace relax
 }  // namespace tvm

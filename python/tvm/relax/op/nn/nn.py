@@ -296,3 +296,99 @@ def max_pool2d(
     return _ffi_api.max_pool2d(
         data, pool_size, strides, padding, dilation, layout, out_layout, ceil_mode
     )
+
+
+def batch_norm(
+    data: Expr,
+    gamma: Expr,
+    beta: Expr,
+    moving_mean: Expr,
+    moving_var: Expr,
+    axis: int = 1,
+    epsilon: float = 1e-5,
+    center: bool = True,
+    scale: bool = True,
+) -> Expr:
+    r"""
+    Batch normalization layer (Ioffe and Szegedy, 2014).
+    Normalizes the input at each batch, i.e. applies a transformation
+    that maintains the mean activation close to 0 and the activation
+    standard deviation close to 1.
+
+    .. math::
+
+        data\_mean[i] = mean(data[:,i,:,...]) \\
+        data\_var[i] = var(data[:,i,:,...])
+
+    Then compute the normalized output, which has the same shape as input, as following:
+
+    .. math::
+
+        out[:,i,:,...] = \frac{data[:,i,:,...] - data\_mean[i]}{\sqrt{data\_var[i]+\epsilon}}
+            * gamma[i] + beta[i]
+
+    Both *mean* and *var* returns a scalar by treating the input as a vector.
+
+    Assume the input has size *k* on axis 1, then both ``gamma`` and ``beta``
+    have shape *(k,)*.
+
+    Besides the inputs and the outputs, this operator accepts two auxiliary
+    states, ``moving_mean`` and ``moving_var``, which are *k*-length
+    vectors. They are global statistics for the whole dataset, which are updated by
+
+    .. code:: python
+
+        moving_mean = moving_mean * momentum + data_mean * (1 - momentum)
+        moving_var = moving_var * momentum + data_var * (1 - momentum)
+
+    The parameter ``axis`` specifies which axis of the input shape denotes
+    the 'channel' (separately normalized groups).  The default is 1.
+    Specifying -1 sets the channel axis to be the last item in the input shape.
+
+    .. note::
+
+        This operator can be optimized away for inference.
+
+    Parameters
+    ----------
+    data : tvm.relax.Expr
+        Input to which batch_norm will be applied.
+
+    gamma : tvm.relax.Expr
+        The gamma scale factor.
+
+    beta : tvm.relax.Expr
+        The beta offset factor.
+
+    moving_mean : tvm.relax.Expr
+        Running mean of input,
+
+    moving_var : tvm.relax.Expr
+        Running variance of input.
+
+    axis : int, default=1
+        Specify along which shape axis the channel is specified.
+
+    epsilon : float, default=1e-5
+        Small float added to variance to avoid dividing by zero.
+
+    center : bool, default=True
+        If True, add offset of beta to normalized tensor, If False,
+        beta is ignored.
+
+    scale : bool, default=True
+        If true, multiply by gamma. If False, gamma is not used.
+        When the next layer is piecewise linear (also e.g. nn.relu),
+        this can be disabled since the scaling will be done by the next layer.
+
+    Returns
+    -------
+    result : relax.Tuple([tvm.relax.Expr, tvm.relax.Expr, tvm.relax.Expr])
+        Tuple of normed data (same shape as input),
+        new running mean (k-length vector),
+        and new running variance (k-length vector)
+    """
+    # Todo(ruihang): actually it returns a call to the batch-norm op
+    return _ffi_api.batch_norm(
+        data, gamma, beta, moving_mean, moving_var, axis, epsilon, center, scale
+    )

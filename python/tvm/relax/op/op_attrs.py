@@ -72,3 +72,8 @@ class SoftmaxAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.TransposeAttrs")
 class TransposeAttrs(Attrs):
     """Attributes for transpose operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.BatchNormAttrs")
+class BatchNormAttrs(Attrs):
+    """Attributes used in batch_norm operator"""

@@ -40,8 +40,7 @@ RELAX_REGISTER_OP("relax.transpose")
     .set_attr<FInferType>("FInferType", InferTypeTranspose);
 
 Expr MakeTranspose(Expr data, Optional<Array<Integer>> axes) {
-  auto attrs = make_object<TransposeAttrs>();
-
+  ObjectPtr<TransposeAttrs> attrs = make_object<TransposeAttrs>();
   attrs->axes = std::move(axes);
 
   static const Op& op = Op::Get("relax.transpose");

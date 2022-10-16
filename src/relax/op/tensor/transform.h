@@ -33,6 +33,7 @@
 namespace tvm {
 namespace relax {
 
+/* relax.transpose */
 Optional<Expr> InferShapeTranspose(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeTranspose(const Call& call, DiagnosticContext diag_ctx);

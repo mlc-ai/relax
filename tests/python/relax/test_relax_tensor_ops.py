@@ -45,7 +45,7 @@ def relax_build_and_run(f, inputs):
         mod = transform.LowerWithRelayOpStrategyPass(target)(mod)
         ex = relax.vm.build(mod, target)
         vm = relax.VirtualMachine(ex, dev)
-        return vm["default"](*inputs).numpy()
+        return vm["default"](*inputs)
 
 
 @pytest.mark.parametrize("op_name", ["relu", "softmax"])
@@ -75,7 +75,7 @@ def test_unary_ops(op_name: str):
     f = relax.Function([X], Z, ret_type=tensor_type)
     out = relax_build_and_run(f, inputs)
 
-    tvm.testing.assert_allclose(out, expected)
+    tvm.testing.assert_allclose(out.numpy(), expected)
 
 
 def test_conv2d():
@@ -103,7 +103,7 @@ def test_conv2d():
     f = relax.Function([D, W], Z, ret_type=tensor_type)
     out = relax_build_and_run(f, inputs)
 
-    tvm.testing.assert_allclose(out, expected)
+    tvm.testing.assert_allclose(out.numpy(), expected)
 
 
 def test_dense():
@@ -132,7 +132,7 @@ def test_dense():
     f = relax.Function([X, Y], Z, ret_type=tensor_type)
     out = relax_build_and_run(f, inputs)
 
-    tvm.testing.assert_allclose(out, expected)
+    tvm.testing.assert_allclose(out.numpy(), expected)
 
 
 def test_max_pool2d():
@@ -158,7 +158,7 @@ def test_max_pool2d():
     f = relax.Function([X], Z, ret_type=tensor_type)
     out = relax_build_and_run(f, inputs)
 
-    tvm.testing.assert_allclose(out, expected)
+    tvm.testing.assert_allclose(out.numpy(), expected)
 
 
 def test_add():
@@ -182,7 +182,7 @@ def test_add():
     res_np = np.add(a_np, b_np)
     res_relax = relax_build_and_run(f, [a_relax, b_relax])
 
-    tvm.testing.assert_allclose(res_relax, res_np)
+    tvm.testing.assert_allclose(res_relax.numpy(), res_np)
 
 
 def test_subtract():
@@ -206,7 +206,7 @@ def test_subtract():
     res_np = np.subtract(a_np, b_np)
     res_relax = relax_build_and_run(f, [a_relax, b_relax])
 
-    tvm.testing.assert_allclose(res_relax, res_np)
+    tvm.testing.assert_allclose(res_relax.numpy(), res_np)
 
 
 def test_multiply():
@@ -230,7 +230,51 @@ def test_multiply():
     res_np = np.multiply(a_np, b_np)
     res_relax = relax_build_and_run(f, [a_relax, b_relax])
 
-    tvm.testing.assert_allclose(res_relax, res_np)
+    tvm.testing.assert_allclose(res_relax.numpy(), res_np)
+
+
+def test_batch_norm():
+    dtype = "float32"
+    input_shape = [2, 4, 3, 3]
+    param_shape = [4]
+
+    tensor_type = relax.DynTensorType(ndim=4, dtype="float32")
+    param_type = relax.DynTensorType(ndim=1, dtype="float32")
+
+    eps = 1e-5
+    x = relax.Var("x", input_shape, tensor_type)
+    gamma = relax.Var("gamma", param_shape, param_type)
+    beta = relax.Var("beta", param_shape, param_type)
+    moving_mean = relax.Var("moving_mean", param_shape, param_type)
+    moving_var = relax.Var("moving_var", param_shape, param_type)
+    y = relax.op.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, epsilon=eps)
+
+    f = relax.Function(
+        params=[x, gamma, beta, moving_mean, moving_var],
+        body=y,
+        ret_type=relax.TupleType([tensor_type, param_type, param_type]),
+        ret_shape=relax.ShapeExpr(input_shape),
+    )
+
+    x_np = np.random.rand(*input_shape).astype(dtype)
+    gamma_np = np.random.rand(1, *param_shape, 1, 1).astype(dtype)
+    beta_np = np.random.rand(1, *param_shape, 1, 1).astype(dtype)
+    moving_mean_np = np.random.rand(1, *param_shape, 1, 1).astype(dtype)
+    moving_var_np = np.random.rand(1, *param_shape, 1, 1).astype(dtype)
+    x_relax = tvm.nd.array(x_np, dev)
+    gamma_relax = tvm.nd.array(gamma_np.flatten(), dev)
+    beta_relax = tvm.nd.array(beta_np.flatten(), dev)
+    moving_mean_relax = tvm.nd.array(moving_mean_np.flatten(), dev)
+    moving_var_relax = tvm.nd.array(moving_var_np.flatten(), dev)
+
+    res_np = ((x_np - moving_mean_np) / np.sqrt(moving_var_np + eps)) * gamma_np + beta_np
+    res_relax = relax_build_and_run(
+        f, [x_relax, gamma_relax, beta_relax, moving_mean_relax, moving_var_relax]
+    )
+
+    tvm.testing.assert_allclose(res_relax[0].numpy(), res_np)
+    tvm.testing.assert_allclose(res_relax[1].numpy(), moving_mean_np.flatten())
+    tvm.testing.assert_allclose(res_relax[2].numpy(), moving_var_np.flatten())
 
 
 if __name__ == "__main__":

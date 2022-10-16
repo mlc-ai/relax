@@ -119,6 +119,12 @@ Type InferTypeDense(const Call& call, DiagnosticContext diag_ctx) {
   }
   return DynTensorType(output_ndim, output_dtype);
 }
+
+/* relax.nn.batch_norm */
+Optional<Expr> InferShapeBatchNorm(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeBatchNorm(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_NN_NN_H_
