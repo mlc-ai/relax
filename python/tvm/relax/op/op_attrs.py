@@ -67,3 +67,8 @@ class MaxPool2DAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.SoftmaxAttrs")
 class SoftmaxAttrs(Attrs):
     """Attributes for nn.softmax"""
+
+
+@tvm._ffi.register_object("relax.attrs.TransposeAttrs")
+class TransposeAttrs(Attrs):
+    """Attributes for transpose operator"""

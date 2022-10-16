@@ -14,13 +14,30 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=wildcard-import, redefined-builtin
-"""Relax core operators."""
+"""Transform operators."""
+from typing import List, Optional
 
-# Operators
-from .base import *
-from .tensor import *
-from .op_attrs import *
-from .transform import *
-from . import builtin
-from .nn import *
+from . import _ffi_api
+from ..expr import Expr
+
+
+def transpose(data: Expr, axes: Optional[List[int]] = None) -> Expr:
+    """Permutes the dimensions of an array.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    axes : Optional[List[int]]
+        The target axes order, reverse order if not specified.
+
+    Returns
+    -------
+    result : relax.Expr
+        The transposed result.
+    """
+
+    if axes is not None:
+        axes = list(axes)
+    return _ffi_api.transpose(data, axes)

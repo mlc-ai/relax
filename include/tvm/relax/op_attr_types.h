@@ -266,6 +266,15 @@ struct AssertOpAttrs : public tvm::AttrsNode<AssertOpAttrs> {
   }
 };
 
+/*! \brief Attributes used in transpose operator */
+struct TransposeAttrs : public tvm::AttrsNode<TransposeAttrs> {
+  Optional<Array<Integer>> axes;
+
+  TVM_DECLARE_ATTRS(TransposeAttrs, "relax.attrs.TransposeAttrs") {
+    TVM_ATTR_FIELD(axes).describe("The target axes order, reverse order if not specified.");
+  }
+};  // struct TransposeAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_
