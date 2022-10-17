@@ -59,16 +59,6 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
       .set_attr<FInferShape>("FInferShape", InferShapeBinaryBroadcast)            \
       .set_attr<FInferType>("FInferType", InferTypeBinaryBroadcast)
 
-#define RELAX_REGISTER_UNARY_OP(OpName)                               \
-  TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr e) { \
-    static const Op& op = Op::Get("relax." OpName);                   \
-    return Call(op, {e}, Attrs(), {});                                \
-  });                                                                 \
-  RELAY_REGISTER_OP("relax." OpName)                                  \
-      .set_num_inputs(1)                                              \
-      .add_argument("e", "Tensor", "The input tensor.")               \
-      .set_attr<FInferShape>("FInferShape", InferShapeUnaryBroadcast) \
-      .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast)
 }  // namespace relax
 }  // namespace tvm
 

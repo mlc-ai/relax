@@ -22,4 +22,3 @@ from .base import *
 from .tensor import *
 from .op_attrs import *
 from . import builtin
-from .nn import *
