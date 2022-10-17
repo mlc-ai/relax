@@ -32,6 +32,7 @@ from tvm.relax.op import (
     make_closure,
     multiply,
     print,
+    reshape,
     shape_of,
     unique,
 )
@@ -363,6 +364,7 @@ __all__ = [
     "multiply",
     "output",
     "print",
+    "reshape",
     "unique",
     "shape_of",
     "tensor",

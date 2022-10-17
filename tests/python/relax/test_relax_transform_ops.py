@@ -22,7 +22,7 @@ import tvm
 from tvm import relax
 from tvm.error import DiagnosticError
 from tvm.relax.testing import transform
-from tvm.script import relax as R, tir as T
+from tvm.script._parser import relax as R
 import tvm.testing
 
 target_str = "llvm --num-cores=16"
@@ -90,7 +90,58 @@ def test_transpose_fail_on_duplicate_indices():
             gv = bb.emit(relax.op.transform.transpose(x, axes=[1, -1, 2, 3]))
 
 
+def test_reshape():
+    @R.function
+    def expected(x: R.Tensor((1, 2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((8, 3), "float32") = R.reshape(x, (8, 3))
+        return gv
+
+    x = relax.Var("x", [1, 2, 3, 4], relax.DynTensorType(ndim=4, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.reshape(x, newshape=(8, 3)))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_reshape_infer_dim():
+    @R.function
+    def expected(x: R.Tensor((1, 2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
+        gv: R.Tensor((8, 1, 3), "float32") = R.reshape(x, (8, -1, 3))
+        return gv
+
+    x = relax.Var("x", [1, 2, 3, 4], relax.DynTensorType(ndim=4, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.reshape(x, newshape=(8, -1, 3)))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_reshape_fail_on_multiple_inference():
+    input_shape = [1, 2, 3, 4]
+
+    tensor_type = relax.DynTensorType(ndim=4, dtype="float32")
+    return_type = relax.DynTensorType(ndim=4, dtype="float32")
+    x = relax.Var("x", input_shape, tensor_type)
+    y = relax.op.transform.reshape(x, newshape=(8, -1, 3, -1))
+    f = relax.Function(
+        params=[x], body=y, ret_type=return_type, ret_shape=relax.ShapeExpr([8, 1, 3, 1])
+    )
+
+    mod = tvm.IRModule.from_expr(f)
+    with pytest.raises(DiagnosticError):
+        mod = relax.transform.Normalize()(mod)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
     test_transpose_fail_on_duplicate_indices()
+    test_reshape()
+    test_reshape_infer_dim()
+    test_reshape_fail_on_multiple_inference()

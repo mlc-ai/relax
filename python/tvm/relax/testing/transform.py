@@ -19,12 +19,12 @@
 
 from __future__ import annotations
 from tvm import ir
-from tvm import relax
+from tvm import relax, relay
 from tvm.ir.module import IRModule
 from tvm.ir.transform import PassContext
 from tvm.target import Target
 from tvm.ir import transform
-from tvm.relax import PyExprMutator
+from tvm.relax import PyExprMutator, ShapeExpr
 from tvm.relax.expr import Call
 from tvm.relay.backend.te_compiler import select_implementation
 
@@ -96,11 +96,18 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
                         relay_attr_name = "relay." + relax_attr_name[6:]
                         relay_op_attrs = ir.attrs.make_node(relay_attr_name, **attrs_dict)
 
+                    out_type = call_node.checked_type
+                    if isinstance(out_type, relax.DynTensorType):
+                        # Ruihang: in case `call_node.checked_type` is relax.DynTensorType, we need
+                        # to convert it to relay.TensorType
+                        assert isinstance(call_node.shape, ShapeExpr)
+                        out_type = relay.TensorType(call_node.shape.values, out_type.dtype)
+
                     best_impl_tuple = select_implementation(
                         relay_op,
                         relay_op_attrs,
                         te_inputs,
-                        call_node.checked_type,
+                        out_type,
                         target,
                         use_autotvm=False,
                     )
@@ -114,7 +121,7 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
                         compute_func,
                         relay_op_attrs,
                         call_node.args,
-                        call_node.checked_type,
+                        out_type,
                         primfunc_name_hint=name_hint,
                     )
 

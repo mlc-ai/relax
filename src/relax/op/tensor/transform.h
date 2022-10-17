@@ -38,6 +38,11 @@ Optional<Expr> InferShapeTranspose(const Call& call, DiagnosticContext diag_ctx)
 
 Type InferTypeTranspose(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.reshape */
+Optional<Expr> InferShapeReshape(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeReshape(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 
