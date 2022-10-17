@@ -91,3 +91,27 @@ def reshape(
                 )
         newshape = relax.ShapeExpr(temp_shape)
     return _ffi_api.reshape(data, newshape)
+
+
+def expand_dims(data: Expr, axis: Union[int, Tuple[int], List[int]]) -> Expr:
+    """Insert new axes at the positions given by `axis`.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    axis : Union[int, Tuple[int], List[int]]
+        The axis at which the input array is expanded.
+        Should lie in range `[-data.ndim - 1, data.ndim]`.
+        If `axis < 0`, it is the first axis inserted;
+        If `axis >= 0`, it is the last axis inserted in Python's negative indexing.
+
+    Returns
+    -------
+    result : relax.Expr
+        The reshaped result.
+    """
+    if isinstance(axis, int):
+        axis = [axis]
+    return _ffi_api.expand_dims(data, axis)

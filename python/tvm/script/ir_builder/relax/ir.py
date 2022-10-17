@@ -28,6 +28,7 @@ from tvm.relax.op import (
     add,
     builtin,
     call_tir,
+    expand_dims,
     invoke_closure,
     make_closure,
     multiply,
@@ -42,6 +43,7 @@ from tvm.tir import PrimExpr
 
 from ..tir import var as _tir_var
 from . import _ffi_api, frame
+
 
 ############################## Tensor Type ##############################
 
@@ -353,6 +355,7 @@ __all__ = [
     "call_tir",
     "dataflow",
     "emit",
+    "expand_dims",
     "emit_match_shape",
     "func_attr",
     "func_name",

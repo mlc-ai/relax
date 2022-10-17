@@ -210,5 +210,94 @@ Type InferTypeReshape(const Call& call, DiagnosticContext diag_ctx) {
   }
 }
 
+/* relax.expand_dims */
+TVM_REGISTER_NODE_TYPE(ExpandDimsAttrs);
+
+RELAX_REGISTER_OP("relax.expand_dims")
+    .set_num_inputs(1)
+    .set_attrs_type<ExpandDimsAttrs>()
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeExpandDims)
+    .set_attr<FInferType>("FInferType", InferTypeExpandDims);
+
+Expr MakeExpandDims(Expr data, Array<Integer> axis) {
+  ObjectPtr<ExpandDimsAttrs> attrs = make_object<ExpandDimsAttrs>();
+  attrs->axis = std::move(axis);
+
+  static const Op& op = Op::Get("relax.expand_dims");
+  return Call(op, {std::move(data)}, Attrs{attrs}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.expand_dims").set_body_typed(MakeExpandDims);
+
+Optional<Expr> InferShapeExpandDims(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "ExpandDims op should have 1 argument");
+  }
+
+  const auto* shape = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* attrs = call->attrs.as<ExpandDimsAttrs>();
+  if (shape == nullptr) {
+    return NullOpt;
+  }
+
+  int ndim = shape->values.size();
+  int n_new_dim = attrs->axis.size();
+  int output_ndim = ndim + n_new_dim;
+
+  Array<PrimExpr> output_shape;
+  output_shape.resize(output_ndim);
+  for (int i = 0; i < n_new_dim; ++i) {
+    int dim = attrs->axis[i]->value;
+    if (dim < 0) {
+      dim = output_ndim + dim;
+    }
+
+    if (dim < 0 || dim >= output_ndim) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "The index \"" << attrs->axis[i]->value << "\" at the position " << i
+                         << " of the new axis indices of operator ExpandDim is out of range.");
+    }
+    if (output_shape[dim].defined()) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "The new axis indices of operator ExpandDim contain duplicate indices "
+                            "- at least two indices refers to dim "
+                         << dim << ". Please make sure the indices do not duplicate.");
+    }
+    output_shape.Set(dim, tvm::tir::make_const(tvm::DataType::Int(32), 1));
+  }
+
+  for (int i = 0, p = 0; i < output_ndim; ++i) {
+    if (output_shape[i].defined()) {
+      continue;
+    }
+    output_shape.Set(i, shape->values[p]);
+    ++p;
+  }
+
+  return ShapeExpr(output_shape);
+}
+
+Type InferTypeExpandDims(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "ExpandDims op should have 1 argument");
+  }
+
+  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  const auto* attrs = call->attrs.as<ExpandDimsAttrs>();
+  if (input_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input has type DynTensorType.");
+  }
+
+  if (input_type->ndim == -1) {
+    return GetRef<DynTensorType>(input_type);
+  } else {
+    return DynTensorType(input_type->ndim + attrs->axis.size(), input_type->dtype);
+  }
+}
+
 }  // namespace relax
 }  // namespace tvm

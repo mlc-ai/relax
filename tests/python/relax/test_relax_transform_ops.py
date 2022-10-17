@@ -25,6 +25,8 @@ from tvm.relax.testing import transform
 from tvm.script._parser import relax as R
 import tvm.testing
 
+# Todo(ruihang): switch the unit tests from numpy-result comparison to structural equality check
+
 target_str = "llvm --num-cores=16"
 target = tvm.target.Target(target_str)
 dev = tvm.device(target_str, 0)
@@ -138,6 +140,23 @@ def test_reshape_fail_on_multiple_inference():
         mod = relax.transform.Normalize()(mod)
 
 
+def test_expand_dims():
+    @R.function
+    def expected(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=8):
+        gv: R.Tensor((2, 1, 1, 1, 3, 1, 4, 1), "float32") = R.expand_dims(x, axis=[-1, 1, -6, 3, 5])
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.expand_dims(x, axis=[-1, 1, -6, 3, 5]))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -145,3 +164,4 @@ if __name__ == "__main__":
     test_reshape()
     test_reshape_infer_dim()
     test_reshape_fail_on_multiple_inference()
+    test_expand_dims()

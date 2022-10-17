@@ -43,6 +43,11 @@ Optional<Expr> InferShapeReshape(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeReshape(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.expand_dims */
+Optional<Expr> InferShapeExpandDims(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeExpandDims(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 

@@ -301,6 +301,19 @@ struct BatchNormAttrs : public tvm::AttrsNode<BatchNormAttrs> {
   }
 };  // struct BatchNormAttrs
 
+/*! \brief Attributes used in expand_dims operators */
+struct ExpandDimsAttrs : public tvm::AttrsNode<ExpandDimsAttrs> {
+  Array<Integer> axis;
+
+  TVM_DECLARE_ATTRS(ExpandDimsAttrs, "relax.attrs.ExpandDimsAttrs") {
+    TVM_ATTR_FIELD(axis).describe(
+        "The axes at which the input array is expanded."
+        "Each element should lie in range `[-data.ndim - 1, data.ndim]`."
+        "If `axis < 0`, it is the first axis inserted;"
+        "If `axis >= 0`, it is the last axis inserted in Python's negative indexing.");
+  }
+};  // struct ExpandDimsAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_

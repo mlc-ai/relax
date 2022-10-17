@@ -77,3 +77,8 @@ class TransposeAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.BatchNormAttrs")
 class BatchNormAttrs(Attrs):
     """Attributes used in batch_norm operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.ExpandDimsAttrs")
+class ExpandDimsAttrs(Attrs):
+    """Attributes for expand_dims operator"""
