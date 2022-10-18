@@ -148,7 +148,7 @@ Optional<Expr> InferShapeReshape(const Call& call, DiagnosticContext diag_ctx) {
   int dim_to_infer = -1;
   int new_ndim = new_shape->values.size();
   PrimExpr new_shape_prod = tir::make_const(tvm::DataType::Int(32), 1);
-  tvm::arith::Analyzer ana;
+  arith::Analyzer ana;
   for (int i = 0; i < new_ndim; ++i) {
     PrimExpr dim_len = new_shape->values[i];
     if (ana.CanProveEqual(dim_len, tir::make_const(tvm::DataType::Int(32), -1))) {
@@ -296,6 +296,117 @@ Type InferTypeExpandDims(const Call& call, DiagnosticContext diag_ctx) {
     return GetRef<DynTensorType>(input_type);
   } else {
     return DynTensorType(input_type->ndim + attrs->axis.size(), input_type->dtype);
+  }
+}
+
+/* relax.squeeze */
+TVM_REGISTER_NODE_TYPE(SqueezeAttrs);
+
+RELAX_REGISTER_OP("relax.squeeze")
+    .set_num_inputs(1)
+    .set_attrs_type<SqueezeAttrs>()
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeSqueeze)
+    .set_attr<FInferType>("FInferType", InferTypeSqueeze);
+
+Expr MakeSqueeze(Expr data, Optional<Array<Integer>> axis) {
+  ObjectPtr<SqueezeAttrs> attrs = make_object<SqueezeAttrs>();
+  attrs->axis = std::move(axis);
+
+  static const Op& op = Op::Get("relax.squeeze");
+  return Call(op, {std::move(data)}, Attrs{attrs}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.squeeze").set_body_typed(MakeSqueeze);
+
+Optional<Expr> InferShapeSqueeze(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Squeeze op should have 1 argument");
+  }
+
+  const auto* shape = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* attrs = call->attrs.as<SqueezeAttrs>();
+  if (shape == nullptr) {
+    return NullOpt;
+  }
+
+  int ndim = shape->values.size();
+  arith::Analyzer ana;
+  std::unordered_set<int> removed_axis;
+  removed_axis.reserve(ndim);
+
+  if (attrs->axis.defined()) {
+    for (int i = 0; i < static_cast<int>(attrs->axis.value().size()); ++i) {
+      int dim = attrs->axis.value()[i]->value;
+      if (dim < 0) {
+        dim = ndim + dim;
+      }
+
+      if (dim < 0 || dim >= ndim) {
+        diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                           << "The axis index \"" << attrs->axis.value()[i]->value
+                           << "\" at the position " << i
+                           << " of the axis indices of operator squeeze is out of range.");
+      }
+      if (ana.CanProve(shape->values[dim] != tir::make_const(DataType::Int(32), 1))) {
+        diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                           << "Squeeze expects all axis indices to correspond to axes with "
+                              "dimension length 1. However, the input data on given axis index "
+                           << dim << " is " << shape->values[i] << ", which cannot be 1.");
+      }
+      removed_axis.insert(dim);
+    }
+  } else {
+    for (int i = 0; i < ndim; ++i) {
+      bool is_one = ana.CanProveEqual(shape->values[i], tir::make_const(DataType::Int(32), 1));
+      bool isnt_one = ana.CanProve(shape->values[i] != tir::make_const(DataType::Int(32), 1));
+      if (!is_one && !isnt_one) {
+        return NullOpt;
+      } else if (is_one) {
+        removed_axis.insert(i);
+      }
+    }
+  }
+
+  Array<PrimExpr> new_shape;
+  new_shape.reserve(ndim);
+  for (int i = 0; i < ndim; ++i) {
+    if (!removed_axis.count(i)) {
+      new_shape.push_back(shape->values[i]);
+    }
+  }
+  return ShapeExpr(new_shape);
+}
+
+Type InferTypeSqueeze(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Squeeze op should have 1 argument");
+  }
+
+  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (input_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input has type DynTensorType.");
+  }
+
+  const auto* attrs = call->attrs.as<SqueezeAttrs>();
+  if (attrs->axis.defined()) {
+    if (input_type->ndim != -1) {
+      return DynTensorType(input_type->ndim - attrs->axis.value().size(), input_type->dtype);
+    } else {
+      return GetRef<DynTensorType>(input_type);
+    }
+  } else {
+    Optional<Expr> out_shape = InferShapeSqueeze(call, diag_ctx);
+    if (out_shape.defined()) {
+      const auto* shape = out_shape.value().as<ShapeExprNode>();
+      ICHECK_NOTNULL(shape);
+      return DynTensorType(shape->values.size(), input_type->dtype);
+    } else {
+      return DynTensorType(-1, input_type->dtype);
+    }
   }
 }
 

@@ -35,6 +35,7 @@ from tvm.relax.op import (
     print,
     reshape,
     shape_of,
+    squeeze,
     unique,
 )
 from tvm.relax.ty import ObjectType, ShapeType
@@ -368,6 +369,7 @@ __all__ = [
     "output",
     "print",
     "reshape",
+    "squeeze",
     "unique",
     "shape_of",
     "tensor",

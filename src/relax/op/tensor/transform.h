@@ -48,6 +48,11 @@ Optional<Expr> InferShapeExpandDims(const Call& call, DiagnosticContext diag_ctx
 
 Type InferTypeExpandDims(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.squeeze */
+Optional<Expr> InferShapeSqueeze(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeSqueeze(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 

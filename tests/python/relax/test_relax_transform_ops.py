@@ -157,6 +157,84 @@ def test_expand_dims():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_squeeze():
+    @R.function
+    def expected(x: R.Tensor((2, 1, 3, 1, 1, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
+        gv: R.Tensor((2, 3, 4), "float32") = R.squeeze(x)
+        return gv
+
+    x = relax.Var("x", [2, 1, 3, 1, 1, 4], relax.DynTensorType(ndim=6, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.squeeze(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_squeeze_with_indices():
+    @R.function
+    def expected(x: R.Tensor((2, 1, 3, 1, 1, 4), "float32")) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((2, 3, 1, 4), "float32") = R.squeeze(x, axis=[3, -5])
+        return gv
+
+    x = relax.Var("x", [2, 1, 3, 1, 1, 4], relax.DynTensorType(ndim=6, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.squeeze(x, axis=[3, -5]))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_squeeze_unable_to_infer():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 1, 3, "a", 1, 4), "float32")
+    ) -> R.Tensor(None, "float32", ndim=-1):
+        gv: R.Tensor(None, "float32", ndim=-1) = R.squeeze(x)
+        return gv
+
+    a = tvm.tir.Var("a", "int64")
+    x = relax.Var("x", [2, 1, 3, a, 1, 4], relax.DynTensorType(ndim=6, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.squeeze(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_squeeze_force_squeezing_with_indices():
+    @R.function
+    def expected(x: R.Tensor((2, 1, 3, "a", 1, 4), "float32")) -> R.Tensor(None, "float32", ndim=5):
+        gv: R.Tensor((2, 1, 3, 1, 4), "float32") = R.squeeze(x, axis=3)
+        return gv
+
+    a = tvm.tir.Var("a", "int64")
+    x = relax.Var("x", [2, 1, 3, a, 1, 4], relax.DynTensorType(ndim=6, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.squeeze(x, axis=3))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_squeeze_with_indices_fail_on_non_unit_dim():
+    a = tvm.tir.Var("a", "int64")
+    x = relax.Var("x", [2, 1, 3, a, 1, 4], relax.DynTensorType(ndim=6, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with pytest.raises(DiagnosticError):
+        with bb.function("main", [x]):
+            gv = bb.emit(relax.op.transform.squeeze(x, axis=2))
+            bb.emit_func_output(gv)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -165,3 +243,8 @@ if __name__ == "__main__":
     test_reshape_infer_dim()
     test_reshape_fail_on_multiple_inference()
     test_expand_dims()
+    test_squeeze()
+    test_squeeze_with_indices()
+    test_squeeze_unable_to_infer()
+    test_squeeze_force_squeezing_with_indices()
+    test_squeeze_with_indices_fail_on_non_unit_dim()

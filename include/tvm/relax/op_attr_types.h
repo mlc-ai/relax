@@ -314,6 +314,21 @@ struct ExpandDimsAttrs : public tvm::AttrsNode<ExpandDimsAttrs> {
   }
 };  // struct ExpandDimsAttrs
 
+/*! \brief Attributes used in squeeze operators */
+struct SqueezeAttrs : public tvm::AttrsNode<SqueezeAttrs> {
+  Optional<Array<Integer>> axis;
+
+  TVM_DECLARE_ATTRS(SqueezeAttrs, "relax.attrs.SqueezeAttrs") {
+    TVM_ATTR_FIELD(axis)
+        .describe(
+            "The axis to squeeze in the input tensor."
+            "If `axis = None`, all axis of dimension 1 get squeezed;"
+            "Else, the dimension in axes get squeezed."
+            "It is an error if an axis does not has dimension 1.")
+        .set_default(Optional<Array<Integer>>{NullOpt});
+  }
+};  // struct SqueezeAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_

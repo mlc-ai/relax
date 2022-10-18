@@ -115,3 +115,26 @@ def expand_dims(data: Expr, axis: Union[int, Tuple[int], List[int]]) -> Expr:
     if isinstance(axis, int):
         axis = [axis]
     return _ffi_api.expand_dims(data, axis)
+
+
+def squeeze(data, axis: Optional[Union[int, List[int], Tuple[int]]] = None):
+    """Squeeze axes in the array.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    axis : Optional[Union[int, List[int], Tuple[int]]]
+        The set of axes to remove.
+        If axis = None, remove all axis of dimensions 1.
+        If any specified axis has dimension that does not equal 1, it is an error.
+
+    Returns
+    -------
+    result : relax.Expr
+        The squeezed result.
+    """
+    if isinstance(axis, int):
+        axis = [axis]
+    return _ffi_api.squeeze(data, axis)

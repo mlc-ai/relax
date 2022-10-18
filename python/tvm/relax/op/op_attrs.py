@@ -82,3 +82,8 @@ class BatchNormAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.ExpandDimsAttrs")
 class ExpandDimsAttrs(Attrs):
     """Attributes for expand_dims operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.SqueezeAttrs")
+class SqueezeAttrs(Attrs):
+    """Attributes for squeeze operator"""
