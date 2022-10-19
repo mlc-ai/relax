@@ -180,6 +180,25 @@ def relu(data: Expr) -> Expr:
     return _ffi_api.relu(data)
 
 
+def gelu(data: Expr) -> Expr:
+    """Gaussian Error Linear Units function
+
+    .. math::
+       text{GELU}(x) = 0.5 * x * (1 + text{Tanh}(sqrt(2 / pi) * (x + 0.044715 * x^3)))
+
+    Parameters
+    ----------
+    data : Expr
+        The input data
+
+    Returns
+    -------
+    result : Expr
+        The computed result.
+    """
+    return _ffi_api.gelu(data)
+
+
 def softmax(data: Expr, axis=-1) -> Expr:
     r"""Computes softmax.
 

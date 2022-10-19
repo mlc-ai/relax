@@ -73,7 +73,11 @@ RELAX_REGISTER_OP("relax.nn.softmax")
 
 TVM_REGISTER_GLOBAL("relax.op.nn.softmax").set_body_typed(MakeSoftmax);
 
+/* relax.nn.relu */
 RELAX_REGISTER_UNARY_OP("nn.relu");
+
+/* relax.nn.gelu */
+RELAX_REGISTER_UNARY_OP("nn.gelu");
 
 RELAX_REGISTER_OP("relax.nn.flatten")
     .set_num_inputs(1)
