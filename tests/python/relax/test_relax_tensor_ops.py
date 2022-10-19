@@ -21,7 +21,7 @@ import numpy as np
 import tvm
 from tvm import relay, relax
 from tvm.relax.testing import transform
-from tvm.script import relax as R, tir as T
+from tvm.script._parser import relax as R
 import tvm.testing
 
 target_str = "llvm --num-cores=16"
@@ -275,6 +275,146 @@ def test_batch_norm():
     tvm.testing.assert_allclose(res_relax[0].numpy(), res_np)
     tvm.testing.assert_allclose(res_relax[1].numpy(), moving_mean_np.flatten())
     tvm.testing.assert_allclose(res_relax[2].numpy(), moving_var_np.flatten())
+
+
+def test_gelu():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.gelu(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.nn.gelu(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_silu():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.silu(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.nn.silu(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_sin():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.sin(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.sin(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_cos():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.cos(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.cos(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_floor_divide():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3), "float32"), y: R.Tensor((2, 1), "float32")
+    ) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.floor_divide(x, y)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [2, 1], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.floor_divide(x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_divide():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3), "float32"), y: R.Tensor((2, 1), "float32")
+    ) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.divide(x, y)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [2, 1], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.divide(x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_dropout():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")):
+        gv = R.dropout(x, rate=0.5)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.nn.dropout(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_layer_norm():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 4, 5), "float32"),
+        gamma: R.Tensor((4, 5), "float32"),
+        beta: R.Tensor((4, 5), "float32"),
+    ) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((2, 3, 4, 5), "float32") = R.layer_norm(x, gamma, beta, axis=[-2, -1])
+        return gv
+
+    x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
+    gamma = relax.Var("gamma", [4, 5], relax.DynTensorType(ndim=2, dtype="float32"))
+    beta = relax.Var("beta", [4, 5], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, gamma, beta]):
+        gv = bb.emit(relax.op.nn.layer_norm(x, gamma, beta, axis=[-2, -1]))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
 if __name__ == "__main__":
