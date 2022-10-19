@@ -12,12 +12,36 @@ from tvm.tir import StringImm, cutlass_gemm
 
 PKG_FILE = "/tmp/packaged.so"
 GLOBAL_SYMBOL = "HGEMM"
+M = 256
+N = 512
+K = 1024
 A_TYPE = "float16"
 B_TYPE = "float16"
 C_TYPE = "float16"
+TARGET = tvm.target.Target("nvidia/geforce-rtx-3090-ti")
 
 
-def construct_mod(m, n, k):
+def cublass_matmul(a_np, b_np):
+    from tvm import te
+    from tvm.contrib import cublas
+
+    A = te.placeholder((M, K), name="A", dtype=A_TYPE)
+    B = te.placeholder((K, N), name="B", dtype=B_TYPE)
+    C = cublas.matmul(A, B, transa=False, transb=False, dtype=C_TYPE)
+    s = te.create_schedule(C.op)
+
+    if not tvm.get_global_func("tvm.contrib.cublas.matmul", True):
+        raise ValueError("skip because extern function is not available")
+    dev = tvm.cuda(0)
+    f = tvm.build(s, [A, B, C], target=TARGET)
+    a = tvm.nd.array(a_np, dev)
+    b = tvm.nd.array(b_np, dev)
+    c = tvm.nd.array(np.zeros((M, N), dtype=C.dtype), dev)
+    f(a, b, c)
+    return c.numpy()
+
+
+def construct_mod():
     with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module():
             with T.prim_func():
@@ -28,12 +52,12 @@ def construct_mod(m, n, k):
                         "global_symbol": GLOBAL_SYMBOL,
                     }
                 )
-                A = T.arg("A", T.buffer_decl((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((m, n), C_TYPE))  # pylint: disable=invalid-name
+                A = T.arg("A", T.buffer_decl((M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = T.arg("B", T.buffer_decl((K, N), B_TYPE))  # pylint: disable=invalid-name
+                C = T.arg("C", T.buffer_decl((M, N), C_TYPE))  # pylint: disable=invalid-name
                 with T.block("cutlass"):
-                    T.reads(A[0:m, 0:k], B[0:k, 0:n])
-                    T.writes(C[0:m, 0:n])
+                    T.reads(A[0:M, 0:K], B[0:K, 0:N])
+                    T.writes(C[0:M, 0:N])
                     T.evaluate(
                         cutlass_gemm(
                             A.data,
@@ -49,31 +73,29 @@ def construct_mod(m, n, k):
                     )
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = R.call_tir(GLOBAL_SYMBOL, args=[A, B], shape=(m, n), dtype=C_TYPE)
+                A = R.arg("A", R.tensor((M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((K, N), B_TYPE))  # pylint: disable=invalid-name
+                C = R.call_tir(GLOBAL_SYMBOL, args=[A, B], shape=(M, N), dtype=C_TYPE)
                 R.func_ret_value(C)
     mod = ib.get()
     return mod
 
 
 def main():
-    m, n, k = 16, 64, 32
-    target = tvm.target.Target("nvidia/geforce-rtx-3090-ti")
-    mod = construct_mod(m=m, n=n, k=k)
+    mod = construct_mod()
     with tvm.transform.PassContext():
         mod = relax.transform.CutlassCodegen()(mod)
         # print("attrs['c_source']:", mod[GLOBAL_SYMBOL].attrs["c_source"])
         # print("attrs['c_source_fmt']:", mod[GLOBAL_SYMBOL].attrs["c_source_fmt"])
-        exe = relax.vm.build(mod, target=target)
+        exe = relax.vm.build(mod, target=TARGET)
     exe.mod.export_library(PKG_FILE, cc="nvcc")
     vm = relax.VirtualMachine(
         tvm.runtime.load_module(PKG_FILE),
         tvm.cuda(),
     )
-    a_np = np.random.rand(m, k).astype(A_TYPE)
-    b_np = np.random.rand(k, n).astype(B_TYPE)
-    c_np = np.matmul(a_np, b_np)
+    a_np = np.random.rand(M, K).astype(A_TYPE)
+    b_np = np.random.rand(K, N).astype(B_TYPE)
+    c_np = cublass_matmul(a_np, b_np)
     a = tvm.nd.array(a_np, device=tvm.cuda())
     b = tvm.nd.array(b_np, device=tvm.cuda())
     c = vm["main"](a, b)
