@@ -97,3 +97,8 @@ class ConcatenateAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.DropoutAttrs")
 class DropoutAttrs(Attrs):
     """Attributes for dropout operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.LayerNormAttrs")
+class LayerNormAttrs(Attrs):
+    """Attributes used in layer_norm operator"""

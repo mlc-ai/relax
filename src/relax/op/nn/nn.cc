@@ -281,5 +281,152 @@ Type InferTypeDropout(const Call& call, DiagnosticContext diag_ctx) {
   return TupleType({GetRef<DynTensorType>(input_type), GetRef<DynTensorType>(input_type)});
 }
 
+/* relax.nn.layer_norm */
+TVM_REGISTER_NODE_TYPE(LayerNormAttrs);
+
+RELAX_REGISTER_OP("relax.nn.layer_norm")
+    .set_attrs_type<LayerNormAttrs>()
+    .set_num_inputs(3)
+    .add_argument("data", "Tensor", "Input to which batch_norm will be applied.")
+    .add_argument("gamma", "Tensor", "The gamma scale factor.")
+    .add_argument("beta", "Tensor", "The beta offset factor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeLayerNorm)
+    .set_attr<FInferType>("FInferType", InferTypeLayerNorm);
+
+Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axis, double epsilon,
+                   bool center, bool scale) {
+  ObjectPtr<LayerNormAttrs> attrs = make_object<LayerNormAttrs>();
+  attrs->axis = std::move(axis);
+  attrs->epsilon = epsilon;
+  attrs->center = center;
+  attrs->scale = scale;
+
+  static const Op& op = Op::Get("relax.nn.layer_norm");
+  return Call(op, {std::move(data), std::move(gamma), std::move(beta)}, Attrs{attrs}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.nn.layer_norm").set_body_typed(MakeLayerNorm);
+
+Optional<Expr> InferShapeLayerNorm(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 3) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "LayerNorm op should have 3 arguments");
+  }
+
+  const auto* data_shape = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* gamma_shape = call->args[1]->shape().as<ShapeExprNode>();
+  const auto* beta_shape = call->args[2]->shape().as<ShapeExprNode>();
+
+  const auto* attrs = call->attrs.as<LayerNormAttrs>();
+
+  int n_axis = attrs->axis.size();
+  if (gamma_shape != nullptr && static_cast<int>(gamma_shape->values.size()) != n_axis) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "LayerNorm operator expects the input gamma to have the same rank as the "
+                          "number of input axes. However, the given gamma has rank "
+                       << gamma_shape->values.size() << " while the number of given axes is "
+                       << n_axis);
+  }
+  if (beta_shape != nullptr && static_cast<int>(beta_shape->values.size()) != n_axis) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "LayerNorm operator expects the input beta to have the same rank as the "
+                          "number of input axes. However, the given beta has rank "
+                       << gamma_shape->values.size() << " while the number of given axes is "
+                       << n_axis);
+  }
+
+  arith::Analyzer ana;
+  if (data_shape == nullptr) {
+    if (gamma_shape != nullptr && beta_shape != nullptr) {
+      for (int i = 0; i < n_axis; ++i) {
+        if (ana.CanProve(gamma_shape->values[i] != beta_shape->values[i])) {
+          diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                             << "LayerNorm expects the input gamma and beta to have the same "
+                                "shape. However, the given gamma and beta shapes differ on dim "
+                             << i);
+        }
+      }
+    }
+    return RuntimeDepShape();
+  }
+
+  int ndim = data_shape->values.size();
+  for (int i = 0; i < n_axis; ++i) {
+    int dim = attrs->axis[i]->value;
+    if (dim < 0) {
+      dim = ndim + dim;
+    }
+    if (dim < 0 || dim >= ndim) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "LayerNorm expects all the input axis indices are in range [-" << ndim
+                         << ", " << ndim << "). However, the given axis index " << i << " is "
+                         << attrs->axis[i]->value);
+    }
+    if (gamma_shape != nullptr && ana.CanProve(gamma_shape->values[i] != data_shape->values[dim])) {
+      diag_ctx.EmitFatal(
+          Diagnostic::Error(call->span)
+          << "LayerNorm expects the input gamma to have compatible shape with the input data with "
+             "regard to the input axis indices. However, the gamma dimension "
+          << i << " has length " << gamma_shape->values[i] << " while the data dimension " << dim
+          << " has length " << data_shape->values[dim]);
+    }
+    if (beta_shape != nullptr && ana.CanProve(beta_shape->values[i] != data_shape->values[dim])) {
+      diag_ctx.EmitFatal(
+          Diagnostic::Error(call->span)
+          << "LayerNorm expects the input beta to have compatible shape with the input data with "
+             "regard to the input axis indices. However, the beta dimension "
+          << i << " has length " << beta_shape->values[i] << " while the data dimension " << dim
+          << " has length " << data_shape->values[dim]);
+    }
+  }
+
+  return GetRef<ShapeExpr>(data_shape);
+}
+
+Type InferTypeLayerNorm(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 3) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "LayerNorm op should have 3 arguments");
+  }
+
+  const auto* data_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  const auto* gamma_type = call->args[1]->checked_type().as<DynTensorTypeNode>();
+  const auto* beta_type = call->args[2]->checked_type().as<DynTensorTypeNode>();
+  const auto* attrs = call->attrs.as<LayerNormAttrs>();
+  int n_axis = attrs->axis.size();
+
+  if (data_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "LayerNorm operator expects the input data to have type DynTensorType, "
+                          "but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input has type DynTensorType.");
+  }
+  if (gamma_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "LayerNorm operator expects the input gamma to have type DynTensorType, "
+                          "but actually it is "
+                       << call->args[1]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input has type DynTensorType.");
+  } else if (!gamma_type->IsUnknownNdim() && gamma_type->ndim != n_axis) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "LayerNorm operator expects the input gamma to have the same rank as the "
+                          "number of input axes. However, the given gamma has rank "
+                       << gamma_type->ndim << " while the number of given axes is " << n_axis);
+  }
+  if (beta_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "LayerNorm operator expects the input beta to have type DynTensorType, "
+                          "but actually it is "
+                       << call->args[2]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input has type DynTensorType.");
+  } else if (!beta_type->IsUnknownNdim() && beta_type->ndim != n_axis) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "LayerNorm operator expects the input beta to have the same rank as the "
+                          "number of input axes. However, the given beta has rank "
+                       << beta_type->ndim << " while the number of given axes is " << n_axis);
+  }
+
+  return GetRef<DynTensorType>(data_type);
+}
+
 }  // namespace relax
 }  // namespace tvm

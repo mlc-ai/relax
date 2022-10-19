@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 """Relax Neural Network (NN) operators"""
+from typing import List, Union
+
 from tvm.relay.op.nn.utils import get_pad_tuple2d
 from ...expr import Expr
 from . import _ffi_api
@@ -431,7 +433,8 @@ def batch_norm(
         data, gamma, beta, moving_mean, moving_var, axis, epsilon, center, scale
     )
 
-def dropout(data: Expr, rate: float=0.5) -> Expr:
+
+def dropout(data: Expr, rate: float = 0.5) -> Expr:
     """Applies the dropout operation to the input array.
 
     During training, each element of the input is set to zero with
@@ -450,7 +453,69 @@ def dropout(data: Expr, rate: float=0.5) -> Expr:
     -------
     result : relax.Expr
         The result of dropout, which is a tuple of two tensors.
-        The first one is the original tensor and the second one is a 
+        The first one is the original tensor and the second one is a
         mask tensor (1.0 where element not dropped, 0.0 where dropped)
     """
     return _ffi_api.dropout(data, rate)
+
+
+def layer_norm(
+    data: Expr,
+    gamma: Expr,
+    beta: Expr,
+    axis: Union[int, List[int]] = -1,
+    epsilon: float = 1e-5,
+    center: bool = True,
+    scale: bool = True,
+):
+    r"""
+    Layer normalization (Lei Ba and et al., 2016).
+    Applies layer normalization to the n-dimensional input array.
+    This operator takes an n-dimensional input array and normalizes
+    the input using the given axis:
+
+    .. math::
+
+        out = \frac{data - mean(data, axis)}{\sqrt{var(data, axis)+\epsilon}}
+            * gamma + beta
+
+    Unlike batch normalization, the mean and var are computed along the channel dimension.
+
+    Assume the input has size k on axis 1, then both gamma and beta have shape (k,).
+
+    .. note::
+
+        This operator can be optimized away for inference.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        Input to which layer_norm will be applied.
+
+    gamma : relax.Expr
+        The gamma scale factor.
+
+    beta : relax.Expr
+        The beta offset factor.
+
+    axis : Union[int, List[int]], default=-1
+        The axes that should be normalized, typically the axis of the channels.
+
+    epsilon : double, default=1e-5
+        Small float added to variance to avoid dividing by zero.
+
+    center : boolean, default=True
+        If True, add offset of beta to normalized tensor, If False,
+        beta is ignored.
+
+    scale : boolean, default=True
+        If True, multiply by gamma. If False, gamma is not used.
+
+    Returns
+    -------
+    result : relax.Expr
+        The normalized data.
+    """
+    if isinstance(axis, int):
+        axis = [axis]
+    return _ffi_api.layer_norm(data, gamma, beta, axis, epsilon, center, scale)

@@ -395,5 +395,27 @@ def test_dropout():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_layer_norm():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 4, 5), "float32"),
+        gamma: R.Tensor((4, 5), "float32"),
+        beta: R.Tensor((4, 5), "float32"),
+    ) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((2, 3, 4, 5), "float32") = R.layer_norm(x, gamma, beta, axis=[-2, -1])
+        return gv
+
+    x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
+    gamma = relax.Var("gamma", [4, 5], relax.DynTensorType(ndim=2, dtype="float32"))
+    beta = relax.Var("beta", [4, 5], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, gamma, beta]):
+        gv = bb.emit(relax.op.nn.layer_norm(x, gamma, beta, axis=[-2, -1]))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

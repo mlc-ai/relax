@@ -353,6 +353,30 @@ struct DropoutAttrs : public tvm::AttrsNode<DropoutAttrs> {
   }
 };  // struct DropoutAttrs
 
+/*! \brief Attributes used in layer_norm operator */
+struct LayerNormAttrs : public tvm::AttrsNode<LayerNormAttrs> {
+  Array<Integer> axis;
+  double epsilon;
+  bool center;
+  bool scale;
+
+  TVM_DECLARE_ATTRS(LayerNormAttrs, "relax.attrs.LayerNormAttrs") {
+    TVM_ATTR_FIELD(axis).set_default(Array<Integer>{Integer(-1)});
+    TVM_ATTR_FIELD(epsilon)
+        .describe("Small float added to variance to avoid dividing by zero")
+        .set_default(1e-5);
+    TVM_ATTR_FIELD(center)
+        .describe("If True, add offset of beta to normalized tensor. If False, beta is ignored")
+        .set_default(true);
+    TVM_ATTR_FIELD(scale)
+        .describe(
+            "If True, multiply by gamma. If False, gamma is not used. "
+            "When the next layer is piecewise linear (also, e.g., nn.relu), "
+            "this can be disabled since the scaling will be done by the next layer.")
+        .set_default(true);
+  }
+};  // struct LayerNormAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_
