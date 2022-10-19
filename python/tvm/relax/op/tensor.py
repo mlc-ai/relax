@@ -13,7 +13,6 @@
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
-# under the License.
 # pylint: disable=redefined-builtin
 """Basic tensor operations."""
 import numpy as np
@@ -24,10 +23,64 @@ from ..expr import Expr
 
 
 def add(lhs: Expr, rhs: Expr) -> Expr:
+    """Addition with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : Expr
+        The left hand side input data
+    rhs : Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : Expr
+        The computed result.
+
+    Examples
+    --------
+    .. code:: python
+
+      x = relax.Var("a") # shape is [2, 3]
+      y = relax.Var("b") # shape is [2, 1]
+      z = relax.add(x, y)  # result shape is [2, 3]
+    """
     return _ffi_api.add(lhs, rhs)
 
 
+def subtract(lhs: Expr, rhs: Expr) -> Expr:
+    """Subtraction with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : relax.Expr
+        The left hand side input data
+    rhs : relax.Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.subtract(lhs, rhs)
+
+
 def multiply(lhs: Expr, rhs: Expr) -> Expr:
+    """Multiplication with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : Expr
+        The left hand side input data
+    rhs : Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : Expr
+        The computed result.
+    """
     return _ffi_api.multiply(lhs, rhs)
 
 
@@ -80,13 +133,13 @@ def numpy_unique(
 
     Uses numpy.unique to compute unique elements.
     """
-    # TODO(prakalp) : add support for returning a tuple when return_inverse or return_counts is True
+    # TODO(prakalp): add support for returning a tuple when return_inverse or return_counts is True
     if bool(return_inverse) or bool(return_counts):
         raise NotImplementedError("missing support return_inverse or return_counts set to true")
     if dim < 0:
         dim = None
     a_numpy = a.numpy()
-    # TODO(prakalp) : use torch.unique instead of numpy when torch is installed in ci.
+    # TODO(prakalp): use torch.unique instead of numpy when torch is installed in ci.
     output_sorted_numpy, indices = np.unique(a_numpy, return_index=True)
     if sort:
         return tvm.nd.array(output_sorted_numpy)

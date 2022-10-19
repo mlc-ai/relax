@@ -74,7 +74,7 @@ Type InferTypeArg(const Call& call, DiagnosticContext diag_ctx) {
   return output_type;
 }
 
-RELAY_REGISTER_OP("relax.call_tir")
+RELAX_REGISTER_OP("relax.call_tir")
     .set_num_inputs(4)
     .add_argument("func", "Expr", "The destination-passing-style function.")
     .add_argument("args", "Tuple", "The input arguments.")
@@ -103,7 +103,7 @@ TVM_REGISTER_GLOBAL("relax.op.call_tir").set_body_typed(MakeCallTIR);
 // print
 TVM_REGISTER_NODE_TYPE(PrintAttrs);
 
-RELAY_REGISTER_OP("relax.print")
+RELAX_REGISTER_OP("relax.print")
     .set_attrs_type<PrintAttrs>()
     .set_num_inputs(-1)
     .add_argument("vals", "Array<Expr>", "Values to print.")
@@ -166,7 +166,7 @@ TVM_REGISTER_GLOBAL("relax.op.assert_op").set_body_typed(MakeAssertOp);
 
 // make_closure
 
-RELAY_REGISTER_OP("relax.make_closure")
+RELAX_REGISTER_OP("relax.make_closure")
     .set_num_inputs(2)
     .add_argument("func", "Expr", "The closure.")
     .add_argument("args", "Tuple", "The captured variables.")
@@ -181,7 +181,7 @@ TVM_REGISTER_GLOBAL("relax.op.make_closure").set_body_typed(MakeClosure);
 
 // invoke_closure
 
-RELAY_REGISTER_OP("relax.invoke_closure")
+RELAX_REGISTER_OP("relax.invoke_closure")
     .set_num_inputs(2)
     .add_argument("closure", "Expr", "The VMClosure.")
     .add_argument("args", "Tuple", "The captured variables.")
@@ -196,7 +196,7 @@ TVM_REGISTER_GLOBAL("relax.op.invoke_closure").set_body_typed(InvokeClosure);
 
 // shape_of
 
-RELAY_REGISTER_OP("relax.shape_of")
+RELAX_REGISTER_OP("relax.shape_of")
     .set_num_inputs(1)
     .add_argument("input", "Expr", "The input expression")
     .set_attr<FInferType>("FInferType", ReturnShapeType);
@@ -222,7 +222,7 @@ Type InferTypeAllocTensor(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(output_shape->values.size(), attrs->dtype);
 }
 
-RELAY_REGISTER_OP("relax.builtin.alloc_tensor")
+RELAX_REGISTER_OP("relax.builtin.alloc_tensor")
     .set_attrs_type<AllocTensorAttrs>()
     .set_num_inputs(1)
     .add_argument("shape", "Expr", "The shape of the tensor to allocate.")
@@ -241,7 +241,7 @@ TVM_REGISTER_GLOBAL("relax.op.builtin.alloc_tensor").set_body_typed(MakeAllocTen
 
 // vm alloc_storage
 
-RELAY_REGISTER_OP("relax.vm.builtin.alloc_storage")
+RELAX_REGISTER_OP("relax.vm.builtin.alloc_storage")
     .set_attrs_type<VMAllocStorageAttrs>()
     .set_num_inputs(1)
     .add_argument("size", "Expr", "The size of the storage to allocate.")
@@ -272,7 +272,7 @@ Type InferTypeVMAllocTensor(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType::CreateUnknownNDim(attrs->dtype, Span());
 }
 
-RELAY_REGISTER_OP("relax.vm.builtin.alloc_tensor")
+RELAX_REGISTER_OP("relax.vm.builtin.alloc_tensor")
     .set_attrs_type<VMAllocTensorAttrs>()
     .set_num_inputs(2)
     .add_argument("storage", "Expr", "The storage to allocate the tensor to.")
@@ -292,7 +292,7 @@ TVM_REGISTER_GLOBAL("relax.op.vm.builtin.alloc_tensor").set_body_typed(MakeVMAll
 
 // vm store_shape
 
-RELAY_REGISTER_OP("relax.vm.builtin.store_shape")
+RELAX_REGISTER_OP("relax.vm.builtin.store_shape")
     .set_attrs_type<ShapeHeapAttrs>()
     .set_num_inputs(2)
     .add_argument("shape", "Expr", "The shape to be stored.")
@@ -310,7 +310,7 @@ TVM_REGISTER_GLOBAL("relax.op.vm.builtin.store_shape").set_body_typed(MakeStoreS
 
 // vm load_shape
 
-RELAY_REGISTER_OP("relax.vm.builtin.load_shape")
+RELAX_REGISTER_OP("relax.vm.builtin.load_shape")
     .set_attrs_type<ShapeHeapAttrs>()
     .set_num_inputs(1)
     .add_argument("heap", "Expr", "The heap to load the shape from.")
@@ -327,7 +327,7 @@ TVM_REGISTER_GLOBAL("relax.op.vm.builtin.load_shape").set_body_typed(MakeLoadSha
 
 // vm call_tir_dyn
 
-RELAY_REGISTER_OP("relax.vm.call_tir_dyn")
+RELAX_REGISTER_OP("relax.vm.call_tir_dyn")
     .set_num_inputs(2)
     .add_argument("func", "Expr", "The destination-passing-style function.")
     .add_argument("args", "Tuple",

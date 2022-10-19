@@ -25,6 +25,7 @@ from . import op
 from . import analysis
 from . import transform
 from . import expr_functor
+from .op import nn
 
 # Expr
 Expr = expr.Expr
