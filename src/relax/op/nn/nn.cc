@@ -232,5 +232,54 @@ Type InferTypeBatchNorm(const Call& call, DiagnosticContext diag_ctx) {
   // Todo(ruihang): how to do dtype broadcasting?
 }
 
+/* relax.nn.dropout */
+TVM_REGISTER_NODE_TYPE(DropoutAttrs);
+
+RELAX_REGISTER_OP("relax.nn.dropout")
+    .set_attrs_type<DropoutAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "Input to which dropout will be applied.")
+    .set_attr<FInferShape>("FInferShape", InferShapeDropout)
+    .set_attr<FInferType>("FInferType", InferTypeDropout);
+
+Expr MakeDropout(Expr data, double rate) {
+  ObjectPtr<DropoutAttrs> attrs = make_object<DropoutAttrs>();
+  attrs->rate = rate;
+
+  static const Op& op = Op::Get("relax.nn.dropout");
+  return Call(op, {std::move(data)}, Attrs{attrs}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.nn.dropout").set_body_typed(MakeDropout);
+
+Optional<Expr> InferShapeDropout(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dropout op should have 1 argument");
+  }
+
+  const auto* shape = call->args[0]->shape().as<ShapeExprNode>();
+  if (shape == nullptr) {
+    return Tuple({RuntimeDepShape(), RuntimeDepShape()});
+  }
+
+  return Tuple({GetRef<ShapeExpr>(shape), GetRef<ShapeExpr>(shape)});
+}
+
+Type InferTypeDropout(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dropout op should have 1 argument");
+  }
+
+  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (input_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input has type DynTensorType.");
+  }
+
+  return TupleType({GetRef<DynTensorType>(input_type), GetRef<DynTensorType>(input_type)});
+}
+
 }  // namespace relax
 }  // namespace tvm

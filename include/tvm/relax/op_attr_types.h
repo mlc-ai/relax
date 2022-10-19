@@ -342,6 +342,17 @@ struct ConcatenateAttrs : public tvm::AttrsNode<ConcatenateAttrs> {
   }
 };  // struct ConcatenateAttrs
 
+/*! \brief Attributes used in dropout operator */
+struct DropoutAttrs : public tvm::AttrsNode<DropoutAttrs> {
+  double rate;
+
+  TVM_DECLARE_ATTRS(DropoutAttrs, "relax.attrs.DropoutAttrs") {
+    TVM_ATTR_FIELD(rate)
+        .describe("Fraction of the input that gets dropped out during training time")
+        .set_default(0.5);
+  }
+};  // struct DropoutAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_

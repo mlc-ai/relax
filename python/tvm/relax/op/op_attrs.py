@@ -92,3 +92,8 @@ class SqueezeAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.ConcatenateAttrs")
 class ConcatenateAttrs(Attrs):
     """Attributes for concatenate operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.DropoutAttrs")
+class DropoutAttrs(Attrs):
+    """Attributes for dropout operator"""

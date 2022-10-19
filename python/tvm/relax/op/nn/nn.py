@@ -430,3 +430,27 @@ def batch_norm(
     return _ffi_api.batch_norm(
         data, gamma, beta, moving_mean, moving_var, axis, epsilon, center, scale
     )
+
+def dropout(data: Expr, rate: float=0.5) -> Expr:
+    """Applies the dropout operation to the input array.
+
+    During training, each element of the input is set to zero with
+    probability ``p``. The whole array is rescaled by ``1/(1-p)``
+    to keep the expected sum of the input unchanged.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    rate : float, default=0.5
+        The probability for an element to be reset to 0.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result of dropout, which is a tuple of two tensors.
+        The first one is the original tensor and the second one is a 
+        mask tensor (1.0 where element not dropped, 0.0 where dropped)
+    """
+    return _ffi_api.dropout(data, rate)
