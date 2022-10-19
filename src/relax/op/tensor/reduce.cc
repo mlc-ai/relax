@@ -162,5 +162,8 @@ Type InferTypeReduction(const Call& call, DiagnosticContext diag_ctx) {
 /* relax.sum */
 RELAX_REGISTER_REDUCTION_OP("sum");
 
+/* relax.mean */
+RELAX_REGISTER_REDUCTION_OP("mean");
+
 }  // namespace relax
 }  // namespace tvm
