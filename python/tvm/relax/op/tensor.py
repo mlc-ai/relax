@@ -84,6 +84,24 @@ def multiply(lhs: Expr, rhs: Expr) -> Expr:
     return _ffi_api.multiply(lhs, rhs)
 
 
+def floor_divide(lhs, rhs):
+    """Floor division with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : relax.Expr
+        The left hand side input data
+    rhs : relax.Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.floor_divide(lhs, rhs)
+
+
 def sin(data):
     """Compute elementwise sin of data.
 
