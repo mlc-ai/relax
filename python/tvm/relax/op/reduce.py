@@ -109,3 +109,33 @@ def variance(
     if isinstance(axis, int):
         axis = [axis]
     return _ffi_api.variance(data, axis, keepdims)
+
+
+def max(
+    data: Expr, axis: Optional[Union[int, List[int], Tuple[int]]] = None, keepdims: bool = False
+) -> Expr:
+    """Computes the max of array elements over given axes.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    axis : Optional[Union[int, List[int], Tuple[int]]]
+        Axis or axes along which a mean operation is performed.
+        The default, axis=None, will compute the mean of all elements in the input array.
+        If axis is negative it counts from the last to the first axis.
+
+    keepdims : bool
+        If this is set to True, the axes which are reduced are left in the result as dimensions
+        with size one.
+        With this option, the result will broadcast correctly against the input array.
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    if isinstance(axis, int):
+        axis = [axis]
+    return _ffi_api.max(data, axis, keepdims)
