@@ -100,6 +100,22 @@ def sin(data):
     return _ffi_api.sin(data)
 
 
+def cos(data):
+    """Compute elementwise cos of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.cos(data)
+
+
 def unique(
     data: Expr,
     sorted: bool = True,
