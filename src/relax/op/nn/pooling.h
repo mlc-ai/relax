@@ -31,7 +31,7 @@ Optional<Expr> InferShapeMaxPool2d(const Call& call, DiagnosticContext diag_ctx)
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "MaxPool2d op should have 1 argument");
   }
-  auto attrs = call->attrs.as<MaxPool2dAttrs>();
+  auto attrs = call->attrs.as<MaxPool2DAttrs>();
   Expr shape = call->args[0]->shape();
   auto* s = shape.as<ShapeExprNode>();
   if (s) {
@@ -39,13 +39,13 @@ Optional<Expr> InferShapeMaxPool2d(const Call& call, DiagnosticContext diag_ctx)
     for (int i = 0; i < static_cast<int>(s->values.size()); i++) {
       if (i == static_cast<int>(s->values.size()) - 2) {
         output_shape.push_back((s->values[i] + 2 * attrs->padding[0] -
-                                attrs->dilation[0] * (attrs->kernel_size[0] - 1) - 1) /
-                                   attrs->stride[0] +
+                                attrs->dilation[0] * (attrs->pool_size[0] - 1) - 1) /
+                                   attrs->strides[0] +
                                1);
       } else if (i == static_cast<int>(s->values.size()) - 1) {
         output_shape.push_back((s->values[i] + 2 * attrs->padding[1] -
-                                attrs->dilation[1] * (attrs->kernel_size[1] - 1) - 1) /
-                                   attrs->stride[1] +
+                                attrs->dilation[1] * (attrs->pool_size[1] - 1) - 1) /
+                                   attrs->strides[1] +
                                1);
       } else {
         output_shape.push_back(s->values[i]);
@@ -59,4 +59,4 @@ Optional<Expr> InferShapeMaxPool2d(const Call& call, DiagnosticContext diag_ctx)
 
 }  // namespace relax
 }  // namespace tvm
-#endif
+#endif  // TVM_RELAX_OP_NN_POOLING_H_

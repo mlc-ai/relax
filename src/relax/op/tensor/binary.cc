@@ -107,6 +107,10 @@ RELAX_REGISTER_BINARY_BROADCAST_OP("add")
     .describe("Elementwise add with broadcasting")
     .set_support_level(1);
 
+RELAX_REGISTER_BINARY_BROADCAST_OP("subtract")
+    .describe("Elementwise subtract with broadcasting")
+    .set_support_level(1);
+
 RELAX_REGISTER_BINARY_BROADCAST_OP("multiply")
     .describe("Elementwise multiply with broadcasting")
     .set_support_level(1);

@@ -86,8 +86,8 @@ Type InferTypeUnaryBroadcast(const Call& call, DiagnosticContext diag_ctx) {
 }
 
 TVM_REGISTER_NODE_TYPE(UniqueAttrs);
-TVM_REGISTER_NODE_TYPE(MaxPool2dAttrs);
-RELAY_REGISTER_OP("relax.unique")
+
+RELAX_REGISTER_OP("relax.unique")
     .describe(
         "This operation returns the unique elements and the new index of each item in a given "
         "tensor.")

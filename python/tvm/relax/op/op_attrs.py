@@ -57,3 +57,48 @@ class PrintAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.AssertOpAttrs")
 class AssertOpAttrs(Attrs):
     """Attributes used for the assert operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.DenseAttrs")
+class DenseAttrs(Attrs):
+    """Attributes for nn.dense"""
+
+
+@tvm._ffi.register_object("relax.attrs.Conv2DAttrs")
+class Conv2DAttrs(Attrs):
+    """Attributes for nn.Conv2D"""
+
+
+@tvm._ffi.register_object("relax.attrs.MaxPool2DAttrs")
+class MaxPool2DAttrs(Attrs):
+    """Attributes for nn.MaxPool2D"""
+
+
+@tvm._ffi.register_object("relax.attrs.SoftmaxAttrs")
+class SoftmaxAttrs(Attrs):
+    """Attributes for nn.softmax"""
+
+
+@tvm._ffi.register_object("relax.attrs.TransposeAttrs")
+class TransposeAttrs(Attrs):
+    """Attributes for transpose operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.BatchNormAttrs")
+class BatchNormAttrs(Attrs):
+    """Attributes used in batch_norm operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.ExpandDimsAttrs")
+class ExpandDimsAttrs(Attrs):
+    """Attributes for expand_dims operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.SqueezeAttrs")
+class SqueezeAttrs(Attrs):
+    """Attributes for squeeze operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.ConcatenateAttrs")
+class ConcatenateAttrs(Attrs):
+    """Attributes for concatenate operator"""

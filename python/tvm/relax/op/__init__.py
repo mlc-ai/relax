@@ -22,5 +22,6 @@ from .base import *
 from .nn import *
 from .op_attrs import *
 from .tensor import *
+from .transform import *
 from . import builtin
 from . import memory
