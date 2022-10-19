@@ -117,7 +117,7 @@ def expand_dims(data: Expr, axis: Union[int, Tuple[int], List[int]]) -> Expr:
     return _ffi_api.expand_dims(data, axis)
 
 
-def squeeze(data, axis: Optional[Union[int, List[int], Tuple[int]]] = None):
+def squeeze(data, axis: Optional[Union[int, List[int], Tuple[int]]] = None) -> Expr:
     """Squeeze axes in the array.
 
     Parameters
@@ -140,7 +140,7 @@ def squeeze(data, axis: Optional[Union[int, List[int], Tuple[int]]] = None):
     return _ffi_api.squeeze(data, axis)
 
 
-def concatenate(data: Union[Expr, List[Expr], Tuple[Expr]], axis: Optional[int] = 0):
+def concatenate(data: Union[Expr, List[Expr], Tuple[Expr]], axis: Optional[int] = 0) -> Expr:
     """Concatenate the input tensors along the given axis.
 
     Parameters
