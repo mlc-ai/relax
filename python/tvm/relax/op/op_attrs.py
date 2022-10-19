@@ -102,3 +102,8 @@ class DropoutAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.LayerNormAttrs")
 class LayerNormAttrs(Attrs):
     """Attributes used in layer_norm operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.ReduceAttrs")
+class ReduceAttrs(Attrs):
+    """Attributes used in reduction operator"""

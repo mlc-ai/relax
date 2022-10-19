@@ -45,6 +45,7 @@ from tvm.relax.op import (
     silu,
     sin,
     squeeze,
+    sum,
     unique,
 )
 from tvm.relax.ty import ObjectType, ShapeType
@@ -388,6 +389,7 @@ __all__ = [
     "silu",
     "sin",
     "squeeze",
+    "sum",
     "unique",
     "shape_of",
     "tensor",

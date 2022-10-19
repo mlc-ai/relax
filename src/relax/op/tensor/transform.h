@@ -61,4 +61,4 @@ Type InferTypeConcatenate(const Call& call, DiagnosticContext diag_ctx);
 }  // namespace relax
 }  // namespace tvm
 
-#endif
+#endif  // TVM_RELAX_OP_TENSOR_TRANSFORM_H_
