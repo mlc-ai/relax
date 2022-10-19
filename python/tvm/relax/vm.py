@@ -16,19 +16,20 @@
 # under the License.
 # pylint: disable=invalid-name, redefined-builtin, no-else-return
 """The Relax virtual machine"""
-from typing import Callable, List, Optional, Union, Dict, Tuple
-import numpy as np
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
-from tvm._ffi import base as _base
+import numpy as np
 import tvm
 from tvm import relax
+from tvm._ffi import base as _base
 from tvm.ir.module import IRModule
 from tvm.relay import Any
 from tvm.runtime import Device, Module, PackedFunc, container
 from tvm.runtime.object import Object
 from tvm.tir.function import PrimFunc
-from . import _ffi_api
+
 from ..rpc.base import RPC_SESS_MASK
+from . import _ffi_api
 
 
 class Executable(object):
@@ -526,7 +527,7 @@ def _split_tir_relax(mod: tvm.IRModule) -> Tuple[tvm.IRModule, tvm.IRModule]:
     for gv in mod.get_global_vars():
         if isinstance(mod[gv], PrimFunc):
             tir_mod[gv] = mod[gv]
-        elif isinstance(mod[gv], relax.Function):
+        elif isinstance(mod[gv], (relax.Function, relax.ExternFunc)):
             rx_mod[gv] = mod[gv]
         else:
             raise TypeError(
