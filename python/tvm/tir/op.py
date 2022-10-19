@@ -18,14 +18,15 @@
 """Operators used in TIR expression."""
 import warnings
 from typing import Any, Optional
-import tvm._ffi
-from tvm.ir.base import Span
-from tvm.runtime import convert, const
-from tvm.ir import Array, Op
 
-from .buffer import Buffer
-from .expr import Call, PrimExprWithOp, StringImm, Var, CommReducer
+import tvm._ffi
+from tvm.ir import Array, Op
+from tvm.ir.base import Span
+from tvm.runtime import const, convert
+
 from . import _ffi_api
+from .buffer import Buffer
+from .expr import Call, CommReducer, PrimExprWithOp, StringImm, Var
 
 
 def _pack_buffer(buf, span=None):
@@ -640,6 +641,31 @@ def tvm_load_matrix_sync(fragment, m, n, k, index, buffer_ptr, stride, layout):
         buffer_ptr,
         stride,
         layout,
+    )
+
+
+def cutlass_gemm(
+    a,
+    b,
+    c,
+    dtype_a,
+    dtype_b,
+    dtype_c,
+    transpose_a,
+    transpose_b,
+    transpose_c,
+):
+    return _ffi_api.cutlass_gemm(
+        a,
+        b,
+        c,
+        dtype_a,
+        dtype_b,
+        dtype_c,
+        transpose_a,
+        transpose_b,
+        transpose_c,
+        None,
     )
 
 

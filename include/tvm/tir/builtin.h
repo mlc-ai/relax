@@ -747,6 +747,8 @@ TVM_DLL const Op& assume();
  */
 TVM_DLL const Op& undef();
 
+TVM_DLL const Op& cutlass_gemm();
+
 /*! \brief The kind of structure field info used in intrinsic */
 enum TVMStructFieldKind : int {
   // array head address
