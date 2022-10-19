@@ -4,66 +4,56 @@ from __future__ import annotations
 import numpy as np
 import tvm
 from tvm import relax
-from tvm.script import relax as R
 from tvm.script.ir_builder import IRBuilder
+from tvm.script.ir_builder import ir as I
+from tvm.script.ir_builder import relax as R
 from tvm.script.ir_builder import tir as T
 from tvm.tir import StringImm, cutlass_gemm
 
 PKG_FILE = "/tmp/packaged.so"
 GLOBAL_SYMBOL = "HGEMM"
-
-
-@tvm.script.ir_module
-class TestModule:
-    # Input IRModule.
-    @R.function
-    def main(
-        A: Tensor((16, 32), "float32"),
-        B: Tensor((32, 64), "float32"),
-    ):
-        C = relax.call_tir(
-            "HGEMM",
-            (A, B),
-            (16, 64),
-            dtype="float16",
-        )
-        return C
+A_TYPE = "float16"
+B_TYPE = "float16"
+C_TYPE = "float16"
 
 
 def construct_mod(m, n, k):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
-        with T.prim_func():
-            T.func_attr(
-                {
-                    "cutlass_codegen": 1,
-                    "global_symbol": GLOBAL_SYMBOL,
-                }
-            )
-            A = T.arg("A", T.buffer_decl((m, k), "float32"))  # pylint: disable=invalid-name
-            B = T.arg("B", T.buffer_decl((k, n), "float32"))  # pylint: disable=invalid-name
-            C = T.arg("C", T.buffer_decl((m, n), "float32"))  # pylint: disable=invalid-name
-            with T.block("cutlass"):
-                T.reads(A[0:m, 0:k], B[0:k, 0:n])
-                T.writes(C[0:m, 0:n])
-                T.evaluate(
-                    cutlass_gemm(
-                        A.data,
-                        B.data,
-                        C.data,
-                        StringImm(A.dtype),
-                        StringImm(B.dtype),
-                        StringImm(C.dtype),
-                        transpose_a=False,
-                        transpose_b=False,
-                        transpose_c=False,
-                    )
+        with I.ir_module():
+            with T.prim_func():
+                T.func_name(GLOBAL_SYMBOL)
+                T.func_attr(
+                    {
+                        "cutlass_codegen": 1,
+                        "global_symbol": GLOBAL_SYMBOL,
+                    }
                 )
-    mod = tvm.IRModule(
-        {
-            GLOBAL_SYMBOL: ib.get(),
-            "main": TestModule["main"],
-        }
-    )
+                A = T.arg("A", T.buffer_decl((m, k), A_TYPE))  # pylint: disable=invalid-name
+                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
+                C = T.arg("C", T.buffer_decl((m, n), C_TYPE))  # pylint: disable=invalid-name
+                with T.block("cutlass"):
+                    T.reads(A[0:m, 0:k], B[0:k, 0:n])
+                    T.writes(C[0:m, 0:n])
+                    T.evaluate(
+                        cutlass_gemm(
+                            A.data,
+                            B.data,
+                            C.data,
+                            StringImm(A.dtype),
+                            StringImm(B.dtype),
+                            StringImm(C.dtype),
+                            transpose_a=False,
+                            transpose_b=False,
+                            transpose_c=False,
+                        )
+                    )
+            with R.function():
+                R.func_name("main")
+                A = R.arg("A", R.tensor((m, k), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
+                C = R.call_tir(GLOBAL_SYMBOL, args=[A, B], shape=(m, n), dtype=C_TYPE)
+                R.func_ret_value(C)
+    mod = ib.get()
     return mod
 
 
@@ -81,9 +71,17 @@ def main():
         tvm.runtime.load_module(PKG_FILE),
         tvm.cuda(),
     )
-    a = tvm.nd.array(np.random.rand(m, k).astype("float16"), device=tvm.cuda())
-    b = tvm.nd.array(np.random.rand(k, n).astype("float16"), device=tvm.cuda())
+    a_np = np.random.rand(m, k).astype(A_TYPE)
+    b_np = np.random.rand(k, n).astype(B_TYPE)
+    c_np = np.matmul(a_np, b_np)
+    a = tvm.nd.array(a_np, device=tvm.cuda())
+    b = tvm.nd.array(b_np, device=tvm.cuda())
     c = vm["main"](a, b)
+    tvm.cuda().sync()
+    # print(c)
+    # print(c_np)
+    np.testing.assert_allclose(c.numpy(), c_np, rtol=1e-2, atol=1e-2)
 
 
-main()
+if __name__ == "__main__":
+    main()
