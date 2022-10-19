@@ -84,7 +84,25 @@ def multiply(lhs: Expr, rhs: Expr) -> Expr:
     return _ffi_api.multiply(lhs, rhs)
 
 
-def floor_divide(lhs, rhs):
+def divide(lhs: Expr, rhs: Expr) -> Expr:
+    """Division with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : relax.Expr
+        The left hand side input data
+    rhs : relax.Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.divide(lhs, rhs)
+
+
+def floor_divide(lhs, rhs) -> Expr:
     """Floor division with numpy-style broadcasting.
 
     Parameters
@@ -102,7 +120,7 @@ def floor_divide(lhs, rhs):
     return _ffi_api.floor_divide(lhs, rhs)
 
 
-def sin(data):
+def sin(data: Expr) -> Expr:
     """Compute elementwise sin of data.
 
     Parameters
@@ -118,7 +136,7 @@ def sin(data):
     return _ffi_api.sin(data)
 
 
-def cos(data):
+def cos(data: Expr) -> Expr:
     """Compute elementwise cos of data.
 
     Parameters
