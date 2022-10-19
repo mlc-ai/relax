@@ -410,5 +410,211 @@ Type InferTypeSqueeze(const Call& call, DiagnosticContext diag_ctx) {
   }
 }
 
+/* relax.concatenate */
+TVM_REGISTER_NODE_TYPE(ConcatenateAttrs);
+
+RELAY_REGISTER_OP("relax.concatenate")
+    .set_attrs_type<ConcatenateAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input list of tensors.")
+    .set_attr<FInferShape>("FInferShape", InferShapeConcatenate)
+    .set_attr<FInferType>("FInferType", InferTypeConcatenate);
+
+Expr MakeConcatenate(Expr data, Optional<Integer> axis) {
+  ObjectPtr<ConcatenateAttrs> attrs = make_object<ConcatenateAttrs>();
+  attrs->axis = std::move(axis);
+
+  static const Op& op = Op::Get("relax.concatenate");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.concatenate").set_body_typed(MakeConcatenate);
+
+Optional<Expr> InferShapeConcatenate(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Concatenate op should have 1 argument");
+  }
+
+  const auto* tuple_shape = call->args[0]->shape().as<TupleNode>();
+  if (tuple_shape == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Concatenate operator expects the input to be a tuple or a list of "
+                          "tensors, indicating that the input shape should be a tuple of "
+                          "ShapeExpr. However, the given input has shape "
+                       << call->args[0]->shape()->GetTypeKey());
+  }
+  const auto* attrs = call->attrs.as<ConcatenateAttrs>();
+
+  int n_tensor = tuple_shape->fields.size();
+  if (n_tensor == 0) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Concatenate operator expects the input to have at least one tensor. "
+                          "However, the given tensor tuple is empty");
+  }
+
+  int output_ndim = -1;
+  arith::Analyzer ana;
+
+  bool runtime_dep_shape = false;
+  for (int i = 0; i < n_tensor; ++i) {
+    const auto* shape = tuple_shape->fields[i].as<ShapeExprNode>();
+    if (shape == nullptr) {
+      if (!tuple_shape->fields[i]->IsInstance<RuntimeDepShapeNode>()) {
+        diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                           << "Invalid shape type " << tuple_shape->fields[i]->GetTypeKey());
+      }
+      runtime_dep_shape = true;
+      continue;
+    }
+
+    if (!attrs->axis.defined() && shape->values.size() != 1) {
+      diag_ctx.EmitFatal(
+          Diagnostic::Error(call->span)
+          << "Concatenate operator expects all input tensors to be 1-dim tensors when not given a "
+             "specific concatenation axis. However, the input tensor "
+          << i << " has " << shape->values.size() << " dimensions");
+    }
+
+    if (output_ndim == -1) {
+      output_ndim = shape->values.size();
+    } else if (static_cast<int>(shape->values.size()) != output_ndim) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "Concatenate operator expects all input tensors to have the same rank. "
+                            "However, one input tensor has rank "
+                         << output_ndim << " while another has rank " << shape->values.size());
+    }
+  }
+
+  if (runtime_dep_shape) {
+    return RuntimeDepShape();
+  }
+  ICHECK_NE(output_ndim, -1);
+
+  int concat_axis = attrs->axis.defined() ? attrs->axis.value()->value : 0;
+  if (concat_axis < 0) {
+    concat_axis = output_ndim + concat_axis;
+  }
+  if (concat_axis < 0 || concat_axis >= output_ndim) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Concatenate operator expects the axis to be concatenated is in range ["
+                       << -output_ndim << ", " << output_ndim
+                       << "). However, the given axis index is " << attrs->axis.value()->value
+                       << ", which is out of range");
+  }
+
+  Array<PrimExpr> output_shape;
+  output_shape.reserve(output_ndim);
+
+  for (int dim = 0; dim < output_ndim; ++dim) {
+    if (dim == concat_axis) {
+      PrimExpr concat_dim_len = tir::make_const(DataType::Int(32), 0);
+      for (int i = 0; i < n_tensor; ++i) {
+        PrimExpr dim_len = ana.Simplify(Downcast<ShapeExpr>(tuple_shape->fields[i])->values[dim]);
+        concat_dim_len = concat_dim_len + dim_len;
+      }
+      output_shape.push_back(concat_dim_len);
+    } else {
+      int static_len = -1;
+      PrimExpr symbolic_len{nullptr};
+      bool runtime_dep_dim = false;
+      for (int i = 0; i < n_tensor; ++i) {
+        PrimExpr dim_len = ana.Simplify(Downcast<ShapeExpr>(tuple_shape->fields[i])->values[dim]);
+        const int64_t* cur_dim_len = tir::as_const_int(dim_len);
+        if (cur_dim_len != nullptr) {
+          if (static_len == -1) {
+            static_len = *cur_dim_len;
+          } else if (*cur_dim_len != static_len) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "Concatenate operator expects all input tensors to have the "
+                                  "same shape except on the specified axis. However, the given "
+                                  "tensors don't have the same dimension length on axis "
+                               << dim);
+          }
+        } else if (!runtime_dep_dim) {
+          if (!symbolic_len.defined()) {
+            symbolic_len = dim_len;
+          } else if (!ana.CanProveEqual(dim_len, symbolic_len)) {
+            runtime_dep_dim = true;
+          }
+        }
+      }
+      if (static_len != -1) {
+        output_shape.push_back(tir::make_const(DataType::Int(32), static_len));
+      } else if (!runtime_dep_dim) {
+        ICHECK(symbolic_len.defined());
+        output_shape.push_back(symbolic_len);
+      } else {
+        return RuntimeDepShape();
+      }
+    }
+  }
+
+  return ShapeExpr(output_shape);
+}
+
+Type InferTypeConcatenate(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Concatenate op should have 1 argument");
+  }
+
+  const auto* tuple_type = call->args[0]->checked_type().as<TupleTypeNode>();
+  if (tuple_type == nullptr) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "Concatenate operator expects the input to be a tuple or a list of tensors, indicating "
+           "that the input type should be TupleType ShapeExpr. However, the given input has type "
+        << call->args[0]->checked_type()->GetTypeKey());
+  }
+  const auto* attrs = call->attrs.as<ConcatenateAttrs>();
+
+  int n_tensor = tuple_type->fields.size();
+  if (n_tensor == 0) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Concatenate operator expects the input to have at least one tensor. "
+                          "However, the given tensor tuple is empty");
+  }
+
+  int output_ndim = -1;
+  DataType dtype = DataType::Void();
+  for (int i = 0; i < n_tensor; ++i) {
+    const auto* tensor_type = tuple_type->fields[i].as<DynTensorTypeNode>();
+    if (tensor_type == nullptr) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "Concatenate operator expects the input tuple has elements of type "
+                            "DynTensorType. However, the element "
+                         << i << " has type " << tuple_type->fields[i]->GetTypeKey());
+    }
+    if (!tensor_type->IsUnknownNdim()) {
+      if (!attrs->axis.defined() && tensor_type->ndim != 1) {
+        diag_ctx.EmitFatal(
+            Diagnostic::Error(call->span)
+            << "Concatenate operator expects all input tensors to be 1-dim tensors when not given "
+               "a specific concatenation axis. However, the input tensor "
+            << i << " has " << tensor_type->ndim << " dimensions");
+      }
+      if (output_ndim == -1) {
+        output_ndim = tensor_type->ndim;
+      } else if (tensor_type->ndim != output_ndim) {
+        diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                           << "Concatenate operator expects all input tensors to have the same "
+                              "rank. However, one input tensor has rank "
+                           << output_ndim << " while another has rank " << tensor_type->ndim);
+      }
+    }
+    if (!tensor_type->IsUnknownDtype()) {
+      if (dtype.is_void()) {
+        dtype = tensor_type->dtype;
+      } else if (tensor_type->dtype != dtype) {
+        diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                           << "Concatenate operator expects all input tensors to have the same "
+                              "dtype. However, one input tensor has dtype "
+                           << dtype << " while another has dtype " << tensor_type->dtype);
+      }
+    }
+  }
+
+  return DynTensorType(output_ndim, dtype);
+}
+
 }  // namespace relax
 }  // namespace tvm

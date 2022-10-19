@@ -329,6 +329,19 @@ struct SqueezeAttrs : public tvm::AttrsNode<SqueezeAttrs> {
   }
 };  // struct SqueezeAttrs
 
+/*! \brief Attributes used in concatenate operators */
+struct ConcatenateAttrs : public tvm::AttrsNode<ConcatenateAttrs> {
+  Optional<Integer> axis;
+
+  TVM_DECLARE_ATTRS(ConcatenateAttrs, "relax.attrs.ConcatenateAttrs") {
+    TVM_ATTR_FIELD(axis)
+        .describe(
+            "The axis at which the input arrays are concatenated."
+            "Should lie in range `[-ndim, ndim)`.")
+        .set_default(Integer(0));
+  }
+};  // struct ConcatenateAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_

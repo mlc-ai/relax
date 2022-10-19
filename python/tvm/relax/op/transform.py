@@ -138,3 +138,24 @@ def squeeze(data, axis: Optional[Union[int, List[int], Tuple[int]]] = None):
     if isinstance(axis, int):
         axis = [axis]
     return _ffi_api.squeeze(data, axis)
+
+
+def concatenate(data: Union[Expr, List[Expr], Tuple[Expr]], axis: Optional[int] = 0):
+    """Concatenate the input tensors along the given axis.
+
+    Parameters
+    ----------
+    data : Union[Expr, List[relax.Expr], Tuple[relax.Expr]]
+        A list of tensors.
+    axis : Optional[int] = 0
+        The axis along which the tensors are concatenated.
+        If `axis` is `None`, arrays must be flattened before concatenation.
+
+    Returns
+    -------
+    result: relax.Expr
+        The concatenated tensor.
+    """
+    if isinstance(data, (list, tuple)):
+        data = relax.Tuple(data)
+    return _ffi_api.concatenate(data, axis)

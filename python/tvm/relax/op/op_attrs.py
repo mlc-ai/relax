@@ -87,3 +87,8 @@ class ExpandDimsAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.SqueezeAttrs")
 class SqueezeAttrs(Attrs):
     """Attributes for squeeze operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.ConcatenateAttrs")
+class ConcatenateAttrs(Attrs):
+    """Attributes for concatenate operator"""

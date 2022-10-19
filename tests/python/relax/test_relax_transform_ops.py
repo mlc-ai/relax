@@ -235,6 +235,59 @@ def test_squeeze_with_indices_fail_on_non_unit_dim():
             bb.emit_func_output(gv)
 
 
+def test_concatenate():
+    @R.function
+    def expected(
+        x1: R.Tensor((1, 2, 3), "float32"),
+        x2: R.Tensor((1, 3, 3), "float32"),
+        x3: R.Tensor((1, 4, 3), "float32"),
+    ) -> R.Tensor(None, "float32", ndim=3):
+        gv: R.Tensor((1, 9, 3), "float32") = R.concatenate((x1, x2, x3), axis=1)
+        return gv
+
+    x1 = relax.Var("x1", [1, 2, 3], relax.DynTensorType(ndim=3, dtype="float32"))
+    x2 = relax.Var("x2", [1, 3, 3], relax.DynTensorType(ndim=3, dtype="float32"))
+    x3 = relax.Var("x3", [1, 4, 3], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x1, x2, x3]):
+        gv = bb.emit(relax.op.transform.concatenate((x1, x2, x3), axis=1))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_concatenate_fail_on_incompatible_shape():
+    x1 = relax.Var("x1", [1, 2, 3], relax.DynTensorType(ndim=3, dtype="float32"))
+    x2 = relax.Var("x2", [2, 3, 3], relax.DynTensorType(ndim=3, dtype="float32"))
+    x3 = relax.Var("x3", [1, 4, 3], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with pytest.raises(DiagnosticError):
+        with bb.function("main", [x1, x2, x3]):
+            gv = bb.emit(relax.op.transform.concatenate((x1, x2, x3), axis=1))
+            bb.emit_func_output(gv)
+
+
+def test_concatenate_without_specified_axis():
+    @R.function
+    def expected(
+        x1: R.Tensor((2,), "float32"), x2: R.Tensor((3,), "float32"), x3: R.Tensor((4,), "float32")
+    ) -> R.Tensor(None, "float32", ndim=1):
+        gv: R.Tensor((9,), "float32") = R.concatenate((x1, x2, x3), axis=None)
+        return gv
+
+    x1 = relax.Var("x1", [2], relax.DynTensorType(ndim=1, dtype="float32"))
+    x2 = relax.Var("x2", [3], relax.DynTensorType(ndim=1, dtype="float32"))
+    x3 = relax.Var("x3", [4], relax.DynTensorType(ndim=1, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x1, x2, x3]):
+        gv = bb.emit(relax.op.transform.concatenate((x1, x2, x3), axis=None))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -248,3 +301,6 @@ if __name__ == "__main__":
     test_squeeze_unable_to_infer()
     test_squeeze_force_squeezing_with_indices()
     test_squeeze_with_indices_fail_on_non_unit_dim()
+    test_concatenate()
+    test_concatenate_fail_on_incompatible_shape()
+    test_concatenate_without_specified_axis()

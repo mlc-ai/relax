@@ -53,6 +53,11 @@ Optional<Expr> InferShapeSqueeze(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeSqueeze(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.concatenate */
+Optional<Expr> InferShapeConcatenate(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeConcatenate(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 
