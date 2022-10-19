@@ -48,6 +48,7 @@ from tvm.relax.op import (
     squeeze,
     sum,
     unique,
+    variance,
 )
 from tvm.relax.ty import ObjectType, ShapeType
 from tvm.runtime import Object as tvm_Object
@@ -393,6 +394,7 @@ __all__ = [
     "squeeze",
     "sum",
     "unique",
+    "variance",
     "shape_of",
     "tensor",
 ]
