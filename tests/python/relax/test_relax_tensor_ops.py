@@ -309,5 +309,21 @@ def test_silu():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_sin():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.sin(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.sin(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

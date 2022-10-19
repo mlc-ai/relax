@@ -84,6 +84,22 @@ def multiply(lhs: Expr, rhs: Expr) -> Expr:
     return _ffi_api.multiply(lhs, rhs)
 
 
+def sin(data):
+    """Compute elementwise sin of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.sin(data)
+
+
 def unique(
     data: Expr,
     sorted: bool = True,

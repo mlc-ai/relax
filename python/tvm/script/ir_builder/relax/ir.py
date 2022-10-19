@@ -38,6 +38,7 @@ from tvm.relax.op import (
     reshape,
     shape_of,
     silu,
+    sin,
     squeeze,
     unique,
 )
@@ -375,6 +376,7 @@ __all__ = [
     "print",
     "reshape",
     "silu",
+    "sin",
     "squeeze",
     "unique",
     "shape_of",
