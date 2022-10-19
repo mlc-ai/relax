@@ -79,6 +79,9 @@ RELAX_REGISTER_UNARY_OP("nn.relu");
 /* relax.nn.gelu */
 RELAX_REGISTER_UNARY_OP("nn.gelu");
 
+/* relax.nn.silu */
+RELAX_REGISTER_UNARY_OP("nn.silu");
+
 RELAX_REGISTER_OP("relax.nn.flatten")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")

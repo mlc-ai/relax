@@ -199,6 +199,25 @@ def gelu(data: Expr) -> Expr:
     return _ffi_api.gelu(data)
 
 
+def silu(data: Expr) -> Expr:
+    """Sigmoid Linear Unit function
+
+    .. math::
+       text{SILU}(x) = x * sigmoid(x)
+
+    Parameters
+    ----------
+    data : Expr
+        The input data
+
+    Returns
+    -------
+    result : Expr
+        The computed result.
+    """
+    return _ffi_api.silu(data)
+
+
 def softmax(data: Expr, axis=-1) -> Expr:
     r"""Computes softmax.
 
