@@ -138,6 +138,22 @@ def test_max():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_min():
+    @R.function
+    def expected(x: R.Tensor((1, 2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
+        gv: R.Tensor((1, 3, 4), "float32") = R.min(x, axis=1)
+        return gv
+
+    x = relax.Var("x", [1, 2, 3, 4], relax.DynTensorType(ndim=4, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.reduce.min(x, axis=1))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     test_sum()
     test_sum_without_specified_axis()
@@ -147,3 +163,4 @@ if __name__ == "__main__":
     test_mean()
     test_variance()
     test_max()
+    test_min()

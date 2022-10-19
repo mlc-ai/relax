@@ -171,5 +171,8 @@ RELAX_REGISTER_REDUCTION_OP("variance");
 /* relax.max */
 RELAX_REGISTER_REDUCTION_OP("max");
 
+/* relax.min */
+RELAX_REGISTER_REDUCTION_OP("min");
+
 }  // namespace relax
 }  // namespace tvm
