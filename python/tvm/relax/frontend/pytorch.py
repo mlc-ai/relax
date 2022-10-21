@@ -87,6 +87,23 @@ class TorchTranslator:
         else:
             return node
 
+    @staticmethod
+    def _promote_binary_op_args(lhs, rhs):
+        if isinstance(lhs, relax.Expr) and isinstance(rhs, relax.Expr):
+            return lhs, rhs
+        elif isinstance(lhs, relax.Expr):
+            assert isinstance(lhs.checked_type, relax.DynTensorType)
+            return lhs, relax.const(rhs, lhs.checked_type.dtype)
+        elif isinstance(rhs, relax.Expr):
+            assert isinstance(rhs.checked_type, relax.DynTensorType)
+            return relax.const(lhs, rhs.checked_type.dtype), rhs
+        else:
+            assert False
+
+    def _call_binary_op(self, op, lhs, rhs):
+        lhs, rhs = TorchTranslator._promote_binary_op_args(lhs, rhs)
+        return self.bb.emit(op(lhs, rhs))
+
     def normalize_axes(self, axes, ndim):
         if not isinstance(axes, (tuple, list)):
             axes = [axes]
@@ -104,15 +121,24 @@ class TorchTranslator:
         x = self.env[node.args[0]]
         module = self.named_modules[node.target]
         weight = self.params[module.weight]
+        weight_shape = weight.data.shape
 
-        conv2d = self.bb.emit_te(
-            topi.nn.conv2d,
-            x,
-            weight,
-            module.stride,
-            module.padding,
-            module.dilation,
-            data_layout="NCHW",
+        kernel_size = weight_shape[2:]
+        out_channels = weight_shape[1]
+
+        conv2d = self.bb.emit(
+            relax.op.nn.conv2d(
+                x,
+                weight,
+                kernel_size,
+                strides=module.stride,
+                padding=module.padding,
+                dilation=module.dilation,
+                groups=module.groups,
+                channels=out_channels,
+                data_layout="NCHW",
+                kernel_layout="OIHW",
+            )
         )
 
         if module.bias is None:
@@ -126,9 +152,10 @@ class TorchTranslator:
             )
             bias = self.params[module.bias] = reshaped_bias
 
-        return self.bb.emit_te(topi.add, conv2d, bias)
+        return self.bb.emit(relax.op.add(conv2d, bias))
 
     def _linear(self, node: fx.node.Node) -> relax.Var:
+
         x = self.env[node.args[0]]
         module = self.named_modules[node.target]
         weight = self.params[module.weight]
@@ -151,11 +178,11 @@ class TorchTranslator:
             )
             bias = self.params[module.bias] = reshaped_bias
 
-        return self.bb.emit_te(topi.add, dense, bias)
+        return self.bb.emit(relax.op.add(dense, bias))
 
     def _relu(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
-        return self.bb.emit_te(topi.nn.relu, x)
+        return self.bb.emit(relax.nn.relu(x))
 
     def _max_pool2d(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -213,7 +240,7 @@ class TorchTranslator:
             start_dim = node.args[1] if len(node.args) >= 2 else 0
             end_dim = node.args[2] if len(node.args) == 3 else -1
         assert start_dim == 1 and end_dim == -1
-        return self.bb.emit_te(topi.nn.flatten, x)
+        return self.bb.emit(relax.op.flatten(x))
 
     def _batch_norm_2d(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -225,15 +252,8 @@ class TorchTranslator:
         running_var = relax.const(module.running_var.cpu().detach().numpy(), dtype)
         eps = module.eps
 
-        res_tuple = self.bb.emit_te(
-            topi.nn.batch_norm,
-            x,
-            weight,
-            bias,
-            running_mean,
-            running_var,
-            axis=1,
-            epsilon=eps,
+        res_tuple = self.bb.emit(
+            relax.op.nn.batch_norm(x, weight, bias, running_mean, running_var, axis=1, epsilon=eps)
         )
 
         return self.bb.emit(relax.TupleGetItem(res_tuple, 0))
@@ -241,13 +261,13 @@ class TorchTranslator:
     def _add(self, node: fx.node.Node) -> relax.Var:
         lhs, rhs = self.retrive_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
-            return self.bb.emit_te(topi.add, lhs, rhs)
+            return self._call_binary_op(relax.op.add, lhs, rhs)
         return lhs + rhs
 
     def _sub(self, node: fx.node.Node) -> relax.Var:
         lhs, rhs = self.retrive_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
-            return self.bb.emit_te(topi.subtract, lhs, rhs)
+            return self._call_binary_op(relax.op.subtract, lhs, rhs)
         return lhs - rhs
 
     def _cumsum(self, node: fx.node.Node) -> relax.Var:
@@ -307,38 +327,38 @@ class TorchTranslator:
             sliced_shape = list(sliced.shape_)
             for i in expand_dim:
                 sliced_shape.insert(i, 1)
-            return self.bb.emit_te(topi.reshape, sliced, sliced_shape)
+            return self.bb.emit(relax.op.reshape(sliced, sliced_shape))
         else:
             assert False
 
     def _mul(self, node: fx.node.Node) -> relax.Var:
         lhs, rhs = self.retrive_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
-            return self.bb.emit_te(topi.multiply, lhs, rhs)
+            return self._call_binary_op(relax.op.multiply, lhs, rhs)
         else:
             return lhs * rhs
 
     def _sin(self, node: fx.node.Node) -> relax.Var:
-        return self.bb.emit_te(topi.sin, self.env[node.args[0]])
+        return self.bb.emit(relax.op.sin(self.env[node.args[0]]))
 
     def _cos(self, node: fx.node.Node) -> relax.Var:
-        return self.bb.emit_te(topi.cos, self.env[node.args[0]])
+        return self.bb.emit(relax.op.cos(self.env[node.args[0]]))
 
     def _cat(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
-        return self.bb.emit_te(topi.concatenate, tuple(args[0]), node.kwargs["dim"])
+        return self.bb.emit(relax.op.concatenate(args[0], axis=node.kwargs["dim"]))
 
     def _truediv(self, node: fx.node.Node) -> relax.Var:
         lhs, rhs = self.retrive_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
-            return self.bb.emit_te(topi.divide, lhs, rhs)
+            return self._call_binary_op(relax.op.divide, lhs, rhs)
         else:
             return lhs / rhs
 
     def _floordiv(self, node: fx.node.Node) -> relax.Var:
         lhs, rhs = self.retrive_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
-            return self.bb.emit_te(topi.floor_divide, lhs, rhs)
+            return self._call_binary_op(relax.op.floor_divide, lhs, rhs)
         else:
             return lhs // rhs
 
@@ -350,11 +370,11 @@ class TorchTranslator:
         )
         return res
 
-    def _matmul_impl(self, a, b):
+    def _matmul_impl(self, a: relax.Expr, b: relax.Expr):
         a_shape = self.shape_of(a)
         b_shape = self.shape_of(b)
         if len(a_shape) == 1 or len(b_shape) == 1:
-            return self.bb.emit_te(topi.multiply, a, b)
+            return self.bb.emit(relax.op.multiply(a, b))
         elif len(a_shape) == 2 and len(b_shape) == 2:
             return self.bb.emit_te(topi.matmul, a, b)
         else:
@@ -394,15 +414,7 @@ class TorchTranslator:
             return self.bb.emit_te(matmul, a, b)
 
     def _gelu(self, node: fx.node.Node) -> relax.Var:
-        def gelu(x):
-            return te.compute(
-                x.shape,
-                lambda *i: 0.5
-                * x(*i)
-                * (1 + te.tanh(math.sqrt(2 / math.pi) * (x(*i) + 0.044715 * te.power(x(*i), 3)))),
-            )
-
-        return self.bb.emit_te(gelu, self.env[node.args[0]])
+        return self.bb.emit(relax.op.gelu(self.env[node.args[0]]))
 
     def _interpolate(self, node: fx.node.Node) -> relax.Var:
         # torch.nn.functional.interpolate(
@@ -452,7 +464,7 @@ class TorchTranslator:
         y = self.env[node.args[1]]
         z = self.env[node.args[2]]
         matmul = self.bb.emit_te(topi.matmul, y, z)
-        return self.bb.emit_te(topi.add, x, matmul)
+        return self.bb.emit(relax.op.add(x, matmul))
 
     def _split(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -477,9 +489,6 @@ class TorchTranslator:
             size = (size,)
         return self.bb.emit_te(topi.full, size, fill_value=1, dtype=self_var.checked_type.dtype)
 
-    # def _expand(self, node: fx.node.Node) -> relax.Var:
-    #     args = self.retrive_args(node)
-    #     return self.bb.emit_te(topi.expand_dims, args[0], *(args[1:]))
     def _expand(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
         return self.bb.emit_te(topi.broadcast_to, args[0], args[1:])
@@ -489,7 +498,7 @@ class TorchTranslator:
 
     def _permute(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
-        return self.bb.emit_te(topi.transpose, args[0], args[1:])
+        return self.bb.emit(relax.op.transpose(args[0], args[1:]))
 
     def _reshape(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
@@ -502,13 +511,13 @@ class TorchTranslator:
                 prod *= args[i]
         if infer_idx != -1:
             args[infer_idx] = np.prod(args[0].shape).value // prod
-        return self.bb.emit_te(topi.reshape, args[0], args[1:])
+        return self.bb.emit(relax.op.reshape(args[0], args[1:]))
 
     def _transpose(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
         full_idx = [i for i in range(len(args[0].shape))]
         full_idx[args[1]], full_idx[args[2]] = full_idx[args[2]], full_idx[args[1]]
-        return self.bb.emit_te(topi.transpose, args[0], full_idx)
+        return self.bb.emit(relax.op.transpose(args[0], full_idx))
 
     def _softmax(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -519,7 +528,7 @@ class TorchTranslator:
             nargs = len(node.args)
             dim = node.args[1] if nargs > 1 else node.kwargs["dim"]
         assert dim is not None
-        return self.bb.emit_te(topi.nn.softmax, x, dim)
+        return self.bb.emit(relax.op.nn.softmax(x, dim))
 
     def _view(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
@@ -533,12 +542,11 @@ class TorchTranslator:
                 prod *= new_shape[i]
         if infer_idx != -1:
             new_shape[infer_idx] = np.prod(args[0].shape).value // prod
-        return self.bb.emit_te(topi.reshape, args[0], new_shape)
+        return self.bb.emit(relax.op.reshape(args[0], new_shape))
 
     def _silu(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
-        sig = self.bb.emit_te(topi.sigmoid, x)
-        return self.bb.emit_te(topi.multiply, x, sig)
+        return self.bb.emit(relax.op.silu(x))
 
     def _group_norm(self, node: fx.node.Node) -> relax.Var:
         # torch.nn.GroupNorm(num_groups, num_channels, eps=1e-05, affine=True, device=None, dtype=None)
@@ -555,27 +563,27 @@ class TorchTranslator:
         assert C == num_channels
         assert C % num_groups == 0
         grouped_x = self.bb.emit_te(topi.reshape, x, [N, num_groups, C // num_groups, H, W])
-        sum_x = self.bb.emit_te(topi.sum, grouped_x, [2, 3, 4], keepdims=True)
-        mean_x = self.bb.emit_te(topi.divide, sum_x, C // num_groups * H * W)
-        sub_x = self.bb.emit_te(topi.subtract, grouped_x, mean_x)
-        square_x = self.bb.emit_te(topi.multiply, sub_x, sub_x)
-        sum_square_x = self.bb.emit_te(topi.sum, square_x, [2, 3, 4], keepdims=True)
+        mean_x = self.bb.emit(relax.op.mean(grouped_x, [2, 3, 4], keepdims=True))
+        sub_x = self.bb.emit(relax.op.subtract(grouped_x, mean_x))
+        square_x = self.bb.emit(relax.op.multiply(sub_x, sub_x))
+        sum_square_x = self.bb.emit(relax.op.sum(square_x, [2, 3, 4], keepdims=True))
         var_x = self.bb.emit_te(topi.divide, sum_square_x, C // num_groups * H * W)
-        var_x_eps = self.bb.emit_te(topi.add, var_x, eps)
-        std_x = self.bb.emit_te(topi.sqrt, var_x_eps)
-        norm_x = self.bb.emit_te(topi.divide, sub_x, std_x)
+        var_x_eps = self._call_binary_op(relax.op.add, var_x, eps)
+        std_x = self.bb.emit(relax.op.sqrt(var_x_eps))
+        norm_x = self.bb.emit(relax.op.divide(sub_x, std_x))
+
         if affine:
             weight = self.params[module.weight]
             bias = self.params[module.bias]
-            weight_reshape = self.bb.emit_te(
-                topi.reshape, weight, (1, num_groups, C // num_groups, 1, 1)
+            weight_reshape = self.bb.emit(
+                relax.op.reshape(weight, (1, num_groups, C // num_groups, 1, 1))
             )
-            bias_reshape = self.bb.emit_te(
-                topi.reshape, bias, (1, num_groups, C // num_groups, 1, 1)
+            bias_reshape = self.bb.emit(
+                relax.op.reshape(bias, (1, num_groups, C // num_groups, 1, 1))
             )
-            norm_x = self.bb.emit_te(topi.multiply, norm_x, weight_reshape)
-            norm_x = self.bb.emit_te(topi.add, norm_x, bias_reshape)
-        return self.bb.emit_te(topi.reshape, norm_x, (N, C, H, W))
+            norm_x = self.bb.emit(relax.op.multiply(norm_x, weight_reshape))
+            norm_x = self.bb.emit(relax.op.add(norm_x, bias_reshape))
+        return self.bb.emit(relax.op.reshape(norm_x, (N, C, H, W)))
 
     def _layer_norm(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -590,13 +598,7 @@ class TorchTranslator:
         dim_num = len(module.normalized_shape)
         axis = tuple(range(-dim_num, 0))
 
-        def layer_norm(x, gamma, beta, axis, eps):
-            shape_prod = np.prod([x.shape[i] for i in axis])
-            mean = topi.sum(x, axis=axis, keepdims=True) / shape_prod
-            var = topi.sum((x - mean) * (x - mean), axis=axis, keepdims=True) / shape_prod
-            return gamma * ((x - mean) / topi.sqrt(var + eps)) + beta
-
-        return self.bb.emit_te(layer_norm, x, gamma, beta, axis=axis, eps=module.eps)
+        return self.bb.emit(relax.op.nn.layer_norm(x, gamma, beta, axis=axis, epsilon=module.eps))
 
     def create_convert_map(self):
         self.convert_map = {
