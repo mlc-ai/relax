@@ -713,6 +713,9 @@ GlobalVar BlockBuilderNode::AddFunction(const BaseFunc& func, const String& func
   if (it == func_map_.end()) {
     context_mod_.CopyOnWrite();
     String func_name = name_table_->GetUniqueName(func_name_hint);
+    while (context_mod_->ContainGlobalVar(func_name)) {
+      func_name = name_table_->GetUniqueName(func_name_hint);
+    }
     GlobalVar gvar = GlobalVar(func_name);
     if (const tir::PrimFuncNode* prim_func = func.as<tir::PrimFuncNode>()) {
       tir::PrimFunc fn = GetRef<tir::PrimFunc>(prim_func);
