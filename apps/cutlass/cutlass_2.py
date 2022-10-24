@@ -8,7 +8,7 @@ from tvm.script.ir_builder import IRBuilder
 from tvm.script.ir_builder import ir as I
 from tvm.script.ir_builder import relax as R
 from tvm.script.ir_builder import tir as T
-from tvm.tir import StringImm, cutlass_gemm
+from tvm.tir import cutlass_gemm
 
 PKG_FILE = "/tmp/packaged.so"
 GLOBAL_SYMBOL = "HGEMM"
@@ -19,6 +19,23 @@ A_TYPE = "float16"
 B_TYPE = "float16"
 C_TYPE = "float16"
 TARGET = tvm.target.Target("nvidia/geforce-rtx-3090-ti")
+
+
+@tvm._ffi.register_func("relax.transform.cutlass_codegen")
+def cutlass_codegen(
+    m: int,
+    n: int,
+    k: int,
+    a_dtype: str,
+    b_dtype: str,
+    c_dtype: str,
+    transpose_a: bool,
+    transpose_b: bool,
+    transpose_c: bool,
+    op_type: str,
+):
+    target = tvm.target.Target.current(allow_none=False)
+    ...
 
 
 def cublass_matmul(a_np, b_np):
@@ -46,31 +63,16 @@ def construct_mod():
         with I.ir_module():
             with T.prim_func():
                 T.func_name(GLOBAL_SYMBOL)
-                T.func_attr(
-                    {
-                        "cutlass_codegen": 1,
-                        "global_symbol": GLOBAL_SYMBOL,
-                    }
-                )
+                T.func_attr({"cutlass_codegen": 1, "global_symbol": GLOBAL_SYMBOL})
                 A = T.arg("A", T.buffer_decl((M, K), A_TYPE))  # pylint: disable=invalid-name
                 B = T.arg("B", T.buffer_decl((K, N), B_TYPE))  # pylint: disable=invalid-name
                 C = T.arg("C", T.buffer_decl((M, N), C_TYPE))  # pylint: disable=invalid-name
                 with T.block("cutlass"):
                     T.reads(A[0:M, 0:K], B[0:K, 0:N])
                     T.writes(C[0:M, 0:N])
-                    T.evaluate(
-                        cutlass_gemm(
-                            A.data,
-                            B.data,
-                            C.data,
-                            StringImm(A.dtype),
-                            StringImm(B.dtype),
-                            StringImm(C.dtype),
-                            transpose_a=False,
-                            transpose_b=False,
-                            transpose_c=False,
-                        )
-                    )
+                    # fmt: off
+                    T.evaluate(cutlass_gemm(A.data, B.data, C.data, A.dtype, B.dtype, C.dtype, False, False, False))
+                    # fmt: on
             with R.function():
                 R.func_name("main")
                 A = R.arg("A", R.tensor((M, K), A_TYPE))  # pylint: disable=invalid-name

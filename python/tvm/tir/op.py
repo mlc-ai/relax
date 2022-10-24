@@ -655,13 +655,15 @@ def cutlass_gemm(
     transpose_b,
     transpose_c,
 ):
+    from tvm.tir import StringImm  # pylint: disable=import-outside-toplevel
+
     return _ffi_api.cutlass_gemm(
         a,
         b,
         c,
-        dtype_a,
-        dtype_b,
-        dtype_c,
+        StringImm(dtype_a),
+        StringImm(dtype_b),
+        StringImm(dtype_c),
         transpose_a,
         transpose_b,
         transpose_c,

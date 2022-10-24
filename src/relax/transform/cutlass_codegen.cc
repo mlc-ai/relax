@@ -20,7 +20,9 @@
 #include <tvm/relax/expr_functor.h>
 #include <tvm/relax/transform.h>
 #include <tvm/relax/type.h>
+#include <tvm/tir/builtin.h>
 #include <tvm/tir/function.h>
+#include <tvm/tir/stmt_functor.h>
 
 namespace tvm {
 namespace relax {
@@ -111,8 +113,35 @@ void StringReplace(std::string* subject, const std::string& search, const std::s
 
 ExternFunc CodegenWithCutlass(const tir::PrimFuncNode* pf, String global_symbol) {
   using namespace tvm::tir;
-  std::string source = kGeneratedCode;
-  StringReplace(&source, "{global_symbol}", global_symbol);
+  std::string source;
+  Map<tir::Var, Buffer> data2buffer;
+  for (const auto& it : pf->buffer_map) {
+    const Buffer& buffer = it.second;
+    data2buffer.Set(buffer->data, buffer);
+  }
+  PostOrderVisit(pf->body, [&data2buffer](const ObjectRef& node) -> void {
+    if (const auto* block = node.as<BlockNode>()) {
+      for (const Buffer& buffer : block->alloc_buffers) {
+        data2buffer.Set(buffer->data, buffer);
+      }
+    }
+  });
+  PostOrderVisit(pf->body, [&source, &data2buffer](const ObjectRef& node) -> void {
+    if (const tir::CallNode* call = node.as<tir::CallNode>()) {
+      if (call->op.same_as(builtin::cutlass_gemm())) {
+        Buffer a_data = data2buffer.at(Downcast<tir::Var>(call->args[0]));
+        Buffer b_data = data2buffer.at(Downcast<tir::Var>(call->args[1]));
+        Buffer c_data = data2buffer.at(Downcast<tir::Var>(call->args[2]));
+        std::string dtype_a = call->args[3].as<StringImmNode>()->value;
+        std::string dtype_b = call->args[4].as<StringImmNode>()->value;
+        std::string dtype_c = call->args[5].as<StringImmNode>()->value;
+        bool transpose_a = call->args[6].as<IntImmNode>()->value;
+        bool transpose_b = call->args[7].as<IntImmNode>()->value;
+        bool transpose_c = call->args[8].as<IntImmNode>()->value;
+      }
+    }
+  });
+  // StringReplace(&source, "{global_symbol}", global_symbol);
   ExternFunc ret(global_symbol);
   ret = WithAttrs(std::move(ret), Map<String, ObjectRef>{
                                       {String(kCSource), String(source)},
