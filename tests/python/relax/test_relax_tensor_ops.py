@@ -20,6 +20,7 @@ import pytest
 import numpy as np
 import tvm
 from tvm import relay, relax
+from tvm.error import DiagnosticError
 from tvm.relax.testing import transform
 from tvm.script._parser import relax as R
 import tvm.testing
@@ -431,6 +432,121 @@ def test_sqrt():
 
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_matmul_2_2():
+    @R.function
+    def expected(
+        x: R.Tensor((3, 4), "float32"), y: R.Tensor((4, 5), "float32")
+    ) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((3, 5), "float32") = R.matmul(x, y)
+        return gv
+
+    x = relax.Var("x", [3, 4], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [4, 5], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.nn.matmul(x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_matmul_1_1():
+    @R.function
+    def expected(
+        x: R.Tensor((4,), "float32"), y: R.Tensor((4,), "float32")
+    ) -> R.Tensor(None, "float32", ndim=0):
+        gv: R.Tensor((), "float32") = R.matmul(x, y)
+        return gv
+
+    x = relax.Var("x", [4], relax.DynTensorType(ndim=1, dtype="float32"))
+    y = relax.Var("y", [4], relax.DynTensorType(ndim=1, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.nn.matmul(x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_matmul_1_4():
+    @R.function
+    def expected(
+        x: R.Tensor((4,), "float32"), y: R.Tensor((2, 3, 4, 5), "float32")
+    ) -> R.Tensor(None, "float32", ndim=3):
+        gv: R.Tensor((2, 3, 5), "float32") = R.matmul(x, y)
+        return gv
+
+    x = relax.Var("x", [4], relax.DynTensorType(ndim=1, dtype="float32"))
+    y = relax.Var("y", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.nn.matmul(x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_matmul_4_1():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((5,), "float32")
+    ) -> R.Tensor(None, "float32", ndim=3):
+        gv: R.Tensor((2, 3, 4), "float32") = R.matmul(x, y)
+        return gv
+
+    x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
+    y = relax.Var("y", [5], relax.DynTensorType(ndim=1, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.nn.matmul(x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_matmul_4_5():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((6, 2, 3, 5, 7), "float32")
+    ) -> R.Tensor(None, "float32", ndim=5):
+        gv: R.Tensor((6, 2, 3, 4, 7), "float32") = R.matmul(x, y)
+        return gv
+
+    x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
+    y = relax.Var("y", [6, 2, 3, 5, 7], relax.DynTensorType(ndim=5, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.nn.matmul(x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_matmul_fail_on_incompatible_last_two_dims():
+    x = relax.Var("x", [3, 4, 5], relax.DynTensorType(ndim=3, dtype="float32"))
+    y = relax.Var("y", [3, 4, 5], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with pytest.raises(DiagnosticError):
+        with bb.function("main", [x, y]):
+            gv = bb.emit(relax.op.nn.matmul(x, y))
+            bb.emit_func_output(gv)
+
+
+def test_matmul_fail_on_not_broadcastable():
+    x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
+    y = relax.Var("y", [2, 8, 3, 5, 6], relax.DynTensorType(ndim=5, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with pytest.raises(DiagnosticError):
+        with bb.function("main", [x, y]):
+            gv = bb.emit(relax.op.nn.matmul(x, y))
+            bb.emit_func_output(gv)
 
 
 if __name__ == "__main__":
