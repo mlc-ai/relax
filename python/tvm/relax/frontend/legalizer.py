@@ -81,15 +81,15 @@ class OperatorLegalizer(relax.PyExprMutator):
             sig = bb.emit_te(topi.sigmoid, args[0])
             return bb.call_te(topi.multiply, args[0], sig)
         elif op.name == "relax.reshape":
-            return bb.emit_te(topi.reshape, args[0], args[1])
+            return bb.call_te(topi.reshape, args[0], args[1])
         elif op.name == "relax.transpose":
-            return bb.emit_te(topi.transpose, args[0], attrs.axes)
+            return bb.call_te(topi.transpose, args[0], attrs.axes)
         elif op.name == "relax.concatenate":
             n_field = len(args[0].shape_.fields)
             fields = []
             for i in range(n_field):
                 fields.append(bb.emit(relax.TupleGetItem(args[0], i)))
-            return bb.emit_te(
+            return bb.call_te(
                 topi.concatenate, fields, None if attrs.axis is None else attrs.axis.value
             )
         elif op.name == "relax.nn.layer_norm":
@@ -102,20 +102,20 @@ class OperatorLegalizer(relax.PyExprMutator):
                 var = topi.sum((x - mean) * (x - mean), axis=axis, keepdims=True) / shape_prod
                 return gamma * ((x - mean) / topi.sqrt(var + eps)) + beta
 
-            return bb.emit_te(
+            return bb.call_te(
                 te_layer_norm, args[0], args[1], args[2], axis=attrs.axis, eps=attrs.epsilon
             )
         elif op.name == "relax.nn.softmax":
-            return bb.emit_te(topi.nn.softmax, args[0], attrs.axis)
+            return bb.call_te(topi.nn.softmax, args[0], attrs.axis)
         elif op.name == "relax.sum":
-            return bb.emit_te(topi.sum, args[0], attrs.axis, attrs.keepdims)
+            return bb.call_te(topi.sum, args[0], attrs.axis, attrs.keepdims)
         elif op.name == "relax.mean":
             shape_prod = tvm.tir.const(1, "int32")
             axis = attrs.axis if attrs.axis is not None else range(0, len(args[0].shape))
             for dim in axis:
                 shape_prod = shape_prod * args[0].shape[dim.value]
             sum_var = bb.emit_te(topi.sum, args[0], axis, attrs.keepdims)
-            return bb.emit_te(topi.divide, sum_var, shape_prod)
+            return bb.call_te(topi.divide, sum_var, shape_prod)
 
         if op.name != "relax.call_tir":
             print(op.name)
