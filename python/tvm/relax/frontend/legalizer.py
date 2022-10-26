@@ -26,7 +26,7 @@ from tvm.relax.block_builder import BlockBuilder
 
 
 def _nn_conv2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
-    return bb.emit_te(
+    return bb.call_te(
         topi.nn.conv2d,
         args[0],
         args[1],
