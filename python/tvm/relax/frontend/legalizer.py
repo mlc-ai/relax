@@ -65,7 +65,7 @@ class OperatorLegalizer(relax.PyExprMutator):
             return bb.call_te(topi.nn.relu, args[0])
         elif op.name == "relax.nn.gelu":
 
-            def te_gelu(x):
+            def gelu(x):
                 return te.compute(
                     x.shape,
                     lambda *i: 0.5
@@ -76,7 +76,7 @@ class OperatorLegalizer(relax.PyExprMutator):
                     ),
                 )
 
-            return bb.call_te(te_gelu, args[0])
+            return bb.call_te(gelu, args[0])
         elif op.name == "relax.nn.silu":
             sig = bb.emit_te(topi.sigmoid, args[0])
             return bb.call_te(topi.multiply, args[0], sig)
@@ -94,7 +94,7 @@ class OperatorLegalizer(relax.PyExprMutator):
             )
         elif op.name == "relax.nn.layer_norm":
 
-            def te_layer_norm(x, gamma, beta, axis, eps):
+            def layer_norm(x, gamma, beta, axis, eps):
                 shape_prod = tvm.tir.const(1, "int32")
                 for dim in axis:
                     shape_prod = shape_prod * x.shape[dim.value]
@@ -103,8 +103,59 @@ class OperatorLegalizer(relax.PyExprMutator):
                 return gamma * ((x - mean) / topi.sqrt(var + eps)) + beta
 
             return bb.call_te(
-                te_layer_norm, args[0], args[1], args[2], axis=attrs.axis, eps=attrs.epsilon
+                layer_norm, args[0], args[1], args[2], axis=attrs.axis, eps=attrs.epsilon
             )
+        elif op.name == "relax.nn.matmul":
+            a = args[0]
+            b = args[1]
+            a_shape = list(a.shape_)
+            b_shape = list(b.shape_)
+            output_shape = list(call.shape_)
+
+            a_prepended = False
+            b_appended = False
+            if len(a_shape) == 1:
+                a_prepended = True
+                a_shape.insert(0, 1)
+            if len(b_shape) == 1:
+                b_appended = True
+                b_shape.append(1)
+
+            is_a_larger = len(a_shape) > len(b_shape)
+            offset = len(a_shape) - len(b_shape) if is_a_larger else len(b_shape) - len(a_shape)
+
+            def matmul(a, b):
+                def matmul_compute(*idx_spatial):
+                    k = te.reduce_axis((0, a_shape[-1]), name="k")
+
+                    def multiply_compute(idx_reducce):
+                        a_indices = []
+                        b_indices = []
+
+                        for i in range(offset):
+                            if is_a_larger:
+                                a_indices.append(idx_spatial[i])
+                            else:
+                                b_indices.append(idx_spatial[i])
+                        for i in range(len(output_shape) - offset - (2 - a_prepended - b_appended)):
+                            a_idx = i + offset if is_a_larger else i
+                            b_idx = i + offset if not is_a_larger else i
+                            a_indices.append(idx_spatial[a_idx] if a_shape[a_idx] > 1 else 0)
+                            b_indices.append(idx_spatial[b_idx] if b_shape[b_idx] > 1 else 0)
+                        if not a_prepended:
+                            a_indices.append(idx_spatial[-2 + b_appended])
+                        a_indices.append(idx_reducce)
+                        b_indices.append(idx_reducce)
+                        if not b_appended:
+                            b_indices.append(idx_spatial[-1])
+
+                        return a(*a_indices) * b(*b_indices)
+
+                    return te.sum(multiply_compute(k), axis=k)
+
+                return te.compute(output_shape, lambda *idx: matmul_compute(*idx), name="matmul")
+
+            return bb.emit_te(matmul, a, b)
         elif op.name == "relax.nn.softmax":
             return bb.call_te(topi.nn.softmax, args[0], attrs.axis)
         elif op.name == "relax.sum":

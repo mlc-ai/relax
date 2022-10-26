@@ -371,47 +371,7 @@ class TorchTranslator:
         return res
 
     def _matmul_impl(self, a: relax.Expr, b: relax.Expr):
-        a_shape = self.shape_of(a)
-        b_shape = self.shape_of(b)
-        if len(a_shape) == 1 or len(b_shape) == 1:
-            return self.bb.emit(relax.op.multiply(a, b))
-        elif len(a_shape) == 2 and len(b_shape) == 2:
-            return self.bb.emit_te(topi.matmul, a, b)
-        else:
-            assert len(a_shape) >= 2 and len(b_shape) >= 2
-            if len(a_shape) < len(b_shape):
-                a, b = b, a
-                a_shape, b_shape = b_shape, a_shape
-            offset = len(a_shape) - len(b_shape)
-            output_shape = []
-            for i in range(offset):
-                output_shape.append(a_shape[i])
-            for i in range(offset, len(b_shape) - 2):
-                output_shape.append(max(a_shape[i], b_shape[i]))
-            output_shape.append(a_shape[-2])
-            output_shape.append(b_shape[-1])
-
-            def matmul(a, b):
-                def f(*indices_spatial):
-                    k = te.reduce_axis((0, a_shape[-1]), name="k")
-
-                    def g(*index_reduce):
-                        a_indices = []
-                        b_indices = []
-                        for i in range(offset):
-                            a_indices.append(indices_spatial[i])
-                        for i in range(offset, len(b_shape) - 2):
-                            a_indices.append(indices_spatial[i] if a_shape[i] > 1 else 0)
-                            b_indices.append(indices_spatial[i] if b_shape[i] > 1 else 0)
-                        a_indices += [indices_spatial[-2], index_reduce[0]]
-                        b_indices += [index_reduce[0], indices_spatial[-1]]
-                        return a(*a_indices) * b(*b_indices)
-
-                    return te.sum(g(k), axis=k)
-
-                return te.compute(output_shape, lambda *i: f(*i), name="matmul")
-
-            return self.bb.emit_te(matmul, a, b)
+        return self.bb.emit(relax.op.nn.matmul(a, b))
 
     def _gelu(self, node: fx.node.Node) -> relax.Var:
         return self.bb.emit(relax.op.gelu(self.env[node.args[0]]))
