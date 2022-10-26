@@ -18,11 +18,14 @@ from typing import List
 import math
 
 import tvm
-from tvm import ir, relax, te, topi
+from tvm import ir, te, topi
 from tvm.ir import Attrs
 from tvm.ir.module import IRModule
-from tvm.relax import Expr
-from tvm.relax.block_builder import BlockBuilder
+
+from ..analysis import remove_all_unused
+from ..expr import Call, Expr, Function, TupleGetItem
+from ..expr_functor import mutator, PyExprMutator
+from ..block_builder import BlockBuilder
 
 
 def _nn_conv2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
@@ -103,7 +106,7 @@ def _concatenate(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape:
     n_field = len(args[0].shape_.fields)
     fields = []
     for i in range(n_field):
-        fields.append(bb.emit(relax.TupleGetItem(args[0], i)))
+        fields.append(bb.emit(TupleGetItem(args[0], i)))
     return bb.call_te(topi.concatenate, fields, None if attrs.axis is None else attrs.axis.value)
 
 
@@ -212,13 +215,13 @@ op_legalization_map = {
 }
 
 
-@relax.expr_functor.mutator
-class OperatorLegalizer(relax.PyExprMutator):
+@mutator
+class OperatorLegalizer(PyExprMutator):
     def __init__(self, mod: IRModule) -> None:
         super().__init__(mod)
         self.mod_ = mod
 
-    def _convert_op(self, call: relax.Call) -> relax.Call:
+    def _convert_op(self, call: Call) -> Call:
         if call.op in op_legalization_map:
             return op_legalization_map[call.op](self.builder_, call.args, call.attrs, call.shape_)
 
@@ -228,10 +231,10 @@ class OperatorLegalizer(relax.PyExprMutator):
 
     def transform(self) -> IRModule:
         for global_var, func in self.mod_.functions.items():
-            if not isinstance(func, relax.Function):
+            if not isinstance(func, Function):
                 continue
             updated_func = self.visit_expr(func)
-            updated_func = relax.analysis.remove_all_unused(updated_func)
+            updated_func = remove_all_unused(updated_func)
             self.builder_.update_func(global_var, updated_func)
 
         return self.builder_.get()
