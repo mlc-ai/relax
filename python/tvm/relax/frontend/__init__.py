@@ -19,5 +19,5 @@ Frontends for constructing Relax programs.
 
 Contains the model importers currently defined for Relax.
 """
-from .pytorch import TorchTranslator
+from .pytorch_fx import TorchFXTranslator
 

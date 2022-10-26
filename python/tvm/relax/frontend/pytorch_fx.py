@@ -19,12 +19,11 @@ import torch
 import tvm
 
 from torch import nn, fx
-from tvm import relax, topi, te
-import math
+from tvm import relax, topi
 import numpy as np
 
 
-class TorchTranslator:
+class TorchFXTranslator:
     def __init__(self) -> None:
         self.env = {}
         self.params = {}
@@ -54,13 +53,13 @@ class TorchTranslator:
                 )
             attr_itr = getattr(attr_itr, atom)
         if isinstance(attr_itr, torch.Tensor):
-            return TorchTranslator._convert_torch_tensor_to_relax(attr_itr)
+            return TorchFXTranslator._convert_torch_tensor_to_relax(attr_itr)
         return attr_itr
 
     @staticmethod
     def _convert_torch_tensor_to_relax(tensor: torch.Tensor) -> relax.Var:
         ndim = len(tensor.data.shape)
-        dtype = TorchTranslator._convert_data_type(str(tensor.data.dtype))
+        dtype = TorchFXTranslator._convert_data_type(str(tensor.data.dtype))
         return relax.const(tensor.data.cpu().numpy(), relax.DynTensorType(ndim, dtype))
 
     @staticmethod
@@ -101,7 +100,7 @@ class TorchTranslator:
             assert False
 
     def _call_binary_op(self, op, lhs, rhs):
-        lhs, rhs = TorchTranslator._promote_binary_op_args(lhs, rhs)
+        lhs, rhs = TorchFXTranslator._promote_binary_op_args(lhs, rhs)
         return self.bb.emit(op(lhs, rhs))
 
     def normalize_axes(self, axes, ndim):
@@ -660,7 +659,7 @@ class TorchTranslator:
                         output = self.bb.emit_output(self.env[node.args[0]])
                         break
                     elif node.op == "get_attr":
-                        self.env[node] = TorchTranslator._fetch_attr(model, node.target)
+                        self.env[node] = TorchFXTranslator._fetch_attr(model, node.target)
                     elif node.op == "call_module":
                         module = self.named_modules[node.target]
                         assert (
