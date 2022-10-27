@@ -521,7 +521,7 @@ class TorchFXTranslator:
         N, C, H, W = shape[0], shape[1], shape[2], shape[3]
         assert C == num_channels
         assert C % num_groups == 0
-        grouped_x = self.bb.emit_te(topi.reshape, x, [N, num_groups, C // num_groups, H, W])
+        grouped_x = self.bb.emit(relax.op.reshape(x, [N, num_groups, C // num_groups, H, W]))
         mean_x = self.bb.emit(relax.op.mean(grouped_x, [2, 3, 4], keepdims=True))
         sub_x = self.bb.emit(relax.op.subtract(grouped_x, mean_x))
         square_x = self.bb.emit(relax.op.multiply(sub_x, sub_x))

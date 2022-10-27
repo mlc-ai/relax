@@ -23,7 +23,7 @@ from tvm.ir import Attrs
 from tvm.ir.module import IRModule
 
 from ..analysis import remove_all_unused
-from ..expr import Call, Expr, Function, TupleGetItem
+from ..expr import Call, Expr, Function, Tuple, TupleGetItem
 from ..expr_functor import mutator, PyExprMutator
 from ..block_builder import BlockBuilder
 
@@ -106,7 +106,11 @@ def _concatenate(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape:
     n_field = len(args[0].shape_.fields)
     fields = []
     for i in range(n_field):
-        fields.append(bb.emit(TupleGetItem(args[0], i)))
+        fields.append(
+            bb.emit(TupleGetItem(args[0], i))
+            if not isinstance(args[0], Tuple)
+            else args[0].fields[i]
+        )
     return bb.call_te(topi.concatenate, fields, None if attrs.axis is None else attrs.axis.value)
 
 
@@ -144,7 +148,7 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
         def matmul_compute(*idx_spatial):
             k = te.reduce_axis((0, a_shape[-1]), name="k")
 
-            def multiply_compute(idx_reducce):
+            def multiply_compute(idx_reduce):
                 a_indices = []
                 b_indices = []
 
@@ -153,18 +157,20 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
                         a_indices.append(idx_spatial[i])
                     else:
                         b_indices.append(idx_spatial[i])
-                for i in range(len(output_shape) - offset - (2 - a_prepended - b_appended)):
-                    a_idx = i + offset if is_a_larger else i
-                    b_idx = i + offset if not is_a_larger else i
-                    a_indices.append(idx_spatial[a_idx] if a_shape[a_idx] > 1 else 0)
-                    b_indices.append(idx_spatial[b_idx] if b_shape[b_idx] > 1 else 0)
+                for i in range(offset, len(output_shape) - (2 - a_prepended - b_appended)):
+                    a_idx = i if is_a_larger else i - offset
+                    b_idx = i if not is_a_larger else i - offset
+                    a_indices.append(idx_spatial[i] if a_shape[a_idx] > 1 else 0)
+                    b_indices.append(idx_spatial[i] if b_shape[b_idx] > 1 else 0)
                 if not a_prepended:
                     a_indices.append(idx_spatial[-2 + b_appended])
-                a_indices.append(idx_reducce)
-                b_indices.append(idx_reducce)
+                a_indices.append(idx_reduce)
+                b_indices.append(idx_reduce)
                 if not b_appended:
                     b_indices.append(idx_spatial[-1])
 
+                print(a_indices)
+                print(b_indices)
                 return a(*a_indices) * b(*b_indices)
 
             return te.sum(multiply_compute(k), axis=k)
