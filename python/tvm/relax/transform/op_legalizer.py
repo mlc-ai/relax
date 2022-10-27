@@ -95,7 +95,7 @@ def _nn_silu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Exp
 
 
 def _reshape(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
-    return bb.call_te(topi.reshape, args[0], args[1])
+    return bb.call_te(topi.reshape, args[0], output_shape)
 
 
 def _transpose(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):

@@ -555,7 +555,6 @@ def test_reshape():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
-# Todo(ruihang): fix this test
 def test_reshape_dim_inference():
     @I.ir_module
     class Reshape:
@@ -565,39 +564,39 @@ def test_reshape_dim_inference():
             return gv
 
     @I.ir_module
-    class WrongBehavior:
+    class Expected:
         @R.function
         def main(x: R.Tensor((1, 2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
-            gv = R.call_tir(reshape, (x,), (8, -1, 3), dtype="float32")
+            gv = R.call_tir(reshape, (x,), (8, 1, 3), dtype="float32")
             return gv
 
         @T.prim_func
         def reshape(
             rxplaceholder: T.Buffer[(1, 2, 3, 4), "float32"],
-            T_reshape: T.Buffer[(8, -1, 3), "float32"],
+            T_reshape: T.Buffer[(8, 1, 3), "float32"],
         ) -> None:
             T.func_attr({"global_symbol": "reshape", "tir.noalias": True})
-            for i0, i1, i2 in T.grid(8, -1, 3):
+            for i0, i1, i2 in T.grid(8, 1, 3):
                 with T.block("T_reshape"):
                     ax0, ax1, ax2 = T.axis.remap("SSS", [i0, i1, i2])
                     T.reads(
                         rxplaceholder[
                             0,
-                            (ax0 * 21 + ax1 * 3 + ax2) % 24 // 12,
-                            (ax0 * 9 + ax1 * 3 + ax2) % 12 // 4,
-                            (ax1 * 3 + ax2 + ax0) % 4,
+                            (ax0 * 3 + ax1 * 3 + ax2) % 24 // 12,
+                            (ax0 * 3 + ax1 * 3 + ax2) % 12 // 4,
+                            (ax0 * 3 + ax1 * 3 + ax2) % 4,
                         ]
                     )
                     T.writes(T_reshape[ax0, ax1, ax2])
                     T_reshape[ax0, ax1, ax2] = rxplaceholder[
                         0,
-                        (ax1 * 3 + ax2 - ax0 * 3) % 24 // 12,
-                        (ax1 * 3 + ax2 - ax0 * 3) % 12 // 4,
-                        (ax1 * 3 + ax2 - ax0 * 3) % 4,
+                        (ax0 * 3 + ax1 * 3 + ax2) % 24 // 12,
+                        (ax0 * 3 + ax1 * 3 + ax2) % 12 // 4,
+                        (ax0 * 3 + ax1 * 3 + ax2) % 4,
                     ]
 
     mod = OperatorLegalizer(Reshape).transform()
-    tvm.ir.assert_structural_equal(mod, WrongBehavior)
+    tvm.ir.assert_structural_equal(mod, Expected)
 
 
 def test_transpose():
