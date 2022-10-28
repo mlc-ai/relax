@@ -294,6 +294,43 @@ def MetaScheduleApplyDatabase() -> tvm.ir.transform.Pass:
     return _ffi_api.MetaScheduleApplyDatabase()
 
 
+def SimpleAD(func_name, target = "", require_grads = None) -> tvm.ir.transform.Pass:
+    """Simple high level reverse-mode auto-differentiation.
+
+    Parameters
+    ----------
+    func_name: str
+        The function name to be pass.
+    target: Union[str, relax.Var]
+        The relax variable serves as target in the differentiation.
+        If it is None or empty, the body of seq expr will be the target.
+    require_grads: List[Union[str, relax.Var]]
+        The relax variables which need adjoints. Must be inputs.
+        If the list is empty, it will emit an adjoint for each input.
+
+    Returns
+    -------
+    ret: tvm.ir.transform.Pass
+    """
+
+    if require_grads is None:
+        require_grads = []
+
+    if not isinstance(require_grads, list):
+        require_grads = [require_grads]
+
+    if not isinstance(target, str):
+        assert isinstance(target, tvm.relax.expr.Var)
+        target = target.name_hint
+    for i in range(len(require_grads)):
+        if not isinstance(require_grads[i], str):
+            print(type(require_grads[i]), require_grads[i])
+            assert isinstance(require_grads[i], tvm.relax.expr.Var)
+            require_grads[i] = require_grads[i].name_hint
+
+    return _ffi_api.SimpleAD(func_name, target, require_grads)
+
+
 def _wrap_class_function_pass(pass_cls, pass_info):
     """Wrap a python class as function pass."""
 
