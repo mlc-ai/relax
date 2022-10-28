@@ -464,14 +464,14 @@ struct TakeAttrs : public tvm::AttrsNode<TakeAttrs> {
   }
 };  // struct TakeAttrs
 
-/*! \brief Attributes used in full operator */
-struct FullAttrs : public tvm::AttrsNode<FullAttrs> {
+/*! \brief Attributes used in full, ones, and zero operators */
+struct InitAttrs : public tvm::AttrsNode<InitAttrs> {
   DataType dtype;
 
-  TVM_DECLARE_ATTRS(FullAttrs, "relax.attrs.FullAttrs") {
+  TVM_DECLARE_ATTRS(InitAttrs, "relax.attrs.InitAttrs") {
     TVM_ATTR_FIELD(dtype).describe("Target data type.");
   }
-};  // struct FullAttrs
+};  // struct InitAttrs
 
 /*! \brief Attributes used in split operator */
 struct SplitAttrs : public tvm::AttrsNode<SplitAttrs> {

@@ -139,8 +139,8 @@ class TakeAttrs(Attrs):
     """Attributes used in take operator"""
 
 
-@tvm._ffi.register_object("relax.attrs.FullAttrs")
-class FullAttrs(Attrs):
+@tvm._ffi.register_object("relax.attrs.InitAttrs")
+class InitAttrs(Attrs):
     """Attributes used in full operator"""
 
 
@@ -167,4 +167,3 @@ class AdaptivePool2DAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.MatmulAttrs")
 class MatmulAttrs(Attrs):
     """Attributes for matmul operator"""
-

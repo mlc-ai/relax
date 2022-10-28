@@ -64,6 +64,15 @@ RELAX_REGISTER_UNARY_OP("cos");
 /* relax.sqrt */
 RELAX_REGISTER_UNARY_OP("sqrt");
 
+/* relax.log */
+RELAX_REGISTER_UNARY_OP("log");
+
+/* relax.negative */
+RELAX_REGISTER_UNARY_OP("negative");
+
+/* relax.tanh */
+RELAX_REGISTER_UNARY_OP("tanh");
+
 TVM_REGISTER_NODE_TYPE(UniqueAttrs);
 
 RELAX_REGISTER_OP("relax.unique")

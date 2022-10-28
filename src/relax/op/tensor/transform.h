@@ -88,6 +88,26 @@ Expr InferShapeFull(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeFull(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.ones and relax.zeros */
+Optional<Expr> InferShapeOnesZeros(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeOnesZeros(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.full_like */
+Optional<Expr> InferShapeFullLike(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeFullLike(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.collapse_sum_like */
+Optional<Expr> InferShapeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.collapse_sum_to */
+Optional<Expr> InferShapeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx);
+
 /* relax.split */
 Expr InferShapeSplit(const Call& call, DiagnosticContext diag_ctx);
 

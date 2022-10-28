@@ -71,6 +71,18 @@ def _cos(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.cos, args[0])
 
 
+def _tanh(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.tanh, args[0])
+
+
+def _negative(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.negative, args[0])
+
+
+def _log(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.log, args[0])
+
+
 def _sqrt(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.sqrt, args[0])
 
@@ -148,6 +160,44 @@ def _full(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
         attrs.dtype if attrs.dtype is not None else args[0].checked_type.dtype,
         args[0],
     )
+
+
+def _zeros(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.full,
+        args[0],
+        attrs.dtype if attrs.dtype is not None else args[0].checked_type.dtype,
+        0.0,
+    )
+
+
+def _ones(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.full,
+        args[0],
+        attrs.dtype if attrs.dtype is not None else args[0].checked_type.dtype,
+        1.0,
+    )
+
+
+def _full_like(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.full_like, args[0], args[1])
+
+
+def _ones_like(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.full_like, args[0], 1.0)
+
+
+def _zeros_like(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.full_like, args[0], 0.0)
+
+
+def _collapse_sum_like(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.collapse_sum, args[0], args[1].shape)
+
+
+def _collapse_sum_to(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.collapse_sum, args[0], args[1])
 
 
 def _split(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
@@ -341,6 +391,13 @@ op_legalization_map = {
     ir.Op.get("relax.cast"): _cast,
     ir.Op.get("relax.take"): _take,
     ir.Op.get("relax.full"): _full,
+    ir.Op.get("relax.full_like"): _full_like,
+    ir.Op.get("relax.ones"): _ones,
+    ir.Op.get("relax.ones_like"): _ones_like,
+    ir.Op.get("relax.zeros"): _zeros,
+    ir.Op.get("relax.zeros_like"): _zeros_like,
+    ir.Op.get("relax.collapse_sum_like"): _collapse_sum_like,
+    ir.Op.get("relax.collapse_sum_to"): _collapse_sum_to,
     ir.Op.get("relax.split"): _split,
     ir.Op.get("relax.strided_slice"): _strided_slice,
     ir.Op.get("relax.broadcast_to"): _broadcast_to,
@@ -354,6 +411,9 @@ op_legalization_map = {
     ir.Op.get("relax.sum"): _sum,
     ir.Op.get("relax.mean"): _mean,
     ir.Op.get("relax.image.resize2d"): _image_resize2d,
+    ir.Op.get("relax.tanh"): _tanh,
+    ir.Op.get("relax.negative"): _negative,
+    ir.Op.get("relax.log"): _log,
 }
 
 

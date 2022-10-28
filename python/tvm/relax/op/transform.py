@@ -27,6 +27,24 @@ from ..expr import Expr
 PrimExprLike = Union[int, PrimExpr]
 
 
+def _handle_shape(input_shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]) -> Expr:
+    if isinstance(input_shape, (PrimExpr, int)):
+        input_shape = [input_shape]
+    if isinstance(input_shape, (tuple, list)):
+        temp_shape = []
+        for shape in input_shape:
+            if isinstance(shape, PrimExpr):
+                temp_shape.append(shape)
+            elif isinstance(shape, int):
+                temp_shape.append(tvm.tir.const(shape, "int64"))
+            else:
+                raise RuntimeError(
+                    f"The input shape contains unrecognized dimension {shape}"
+                )
+        input_shape = relax.ShapeExpr(temp_shape)
+    return input_shape
+
+
 def transpose(data: Expr, axes: Optional[List[int]] = None) -> Expr:
     """Permutes the dimensions of an array.
 
@@ -76,20 +94,7 @@ def reshape(
     result : relax.Expr
         The reshaped result.
     """
-    if isinstance(newshape, (PrimExpr, int)):
-        newshape = [newshape]
-    if isinstance(newshape, (tuple, list)):
-        temp_shape = []
-        for shape in newshape:
-            if isinstance(shape, PrimExpr):
-                temp_shape.append(shape)
-            elif isinstance(shape, int):
-                temp_shape.append(tvm.tir.const(shape, "int64"))
-            else:
-                raise RuntimeError(
-                    f"The input new shape of reshape operator contains unrecognized dimension {shape}"
-                )
-        newshape = relax.ShapeExpr(temp_shape)
+    newshape = _handle_shape(newshape)
     return _ffi_api.reshape(data, newshape)
 
 
@@ -323,7 +328,7 @@ def take(
 def full(
     fill_value: Expr,
     shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr],
-    dtype: Optional[Union[str, tvm.DataType]],
+    dtype: Optional[Union[str, tvm.DataType]] = None,
 ) -> Expr:
     """Fill array with scalar value.
 
@@ -338,31 +343,128 @@ def full(
     dtype : Optional[str]
         The data type of the target.
 
+        If dtype is not given, the dtype of the target would be the dtype of fill_value.
+
     Returns
     -------
     result : relax.Expr
-        The resulting tensor.
+        The result tensor.
     """
-    if isinstance(shape, (PrimExpr, int)):
-        shape = [shape]
-    if isinstance(shape, (tuple, list)):
-        temp_shape = []
-        for shape in shape:
-            if isinstance(shape, PrimExpr):
-                temp_shape.append(shape)
-            elif isinstance(shape, int):
-                temp_shape.append(tvm.tir.const(shape, "int64"))
-            else:
-                raise RuntimeError(
-                    f"The input new shape of reshape operator contains unrecognized dimension {shape}"
-                )
-        shape = relax.ShapeExpr(temp_shape)
+    shape = _handle_shape(shape)
 
     if dtype is None:
-        dtype = tvm.DataType("void")
+        # currently tvm.DataType cannot identify "void"
+        # so leave dtype to be None so it will be converted into void type in PackedFunc calling process
+        # dtype = tvm.DataType("void")
+        dtype = None
     elif isinstance(dtype, str):
         dtype = tvm.DataType(dtype)
     return _ffi_api.full(fill_value, shape, dtype)
+
+
+def full_like(data: Expr, fill_value: Expr) -> Expr:
+    """Return a scalar value array of the same shape and type as data, filled with fill_value.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input tensor.
+
+    fill_value : relax.Expr
+        The scalar value to fill.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result tensor.
+    """
+    return _ffi_api.full_like(data, fill_value)
+
+
+def ones(
+    shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr],
+    dtype: Optional[Union[str, tvm.DataType]] = "float32"
+) -> Expr:
+    """Fill array of given shape and dtype with ones.
+
+    Parameters
+    ----------
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+        The shape of the target.
+
+    dtype : Optional[str]
+        The data type of the target.
+
+        If dtype is not given, the dtype of the target would be float32.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result tensor.
+    """
+    shape = _handle_shape(shape)
+    if isinstance(dtype, str):
+        dtype = tvm.DataType(dtype)
+    return _ffi_api.ones(shape, dtype)
+
+
+def zeros(
+    shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr],
+    dtype: Optional[Union[str, tvm.DataType]] = "float32"
+) -> Expr:
+    """Fill array of given shape and dtype with zeros.
+
+    Parameters
+    ----------
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+        The shape of the target.
+
+    dtype : Optional[str]
+        The data type of the target.
+
+        If dtype is not given, the dtype of the target would be float32.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result tensor.
+    """
+    shape = _handle_shape(shape)
+    if isinstance(dtype, str):
+        dtype = tvm.DataType(dtype)
+    return _ffi_api.zeros(shape, dtype)
+
+
+def ones_like(data: Expr) -> Expr:
+    """Return a scalar value array of the same shape and type as data, filled with ones.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input tensor.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result tensor.
+    """
+    return _ffi_api.ones_like(data)
+
+
+def zeros_like(data: Expr) -> Expr:
+    """Return a scalar value array of the same shape and type as data, filled with zeros.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input tensor.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result tensor.
+    """
+    return _ffi_api.zeros_like(data)
 
 
 def split(
@@ -432,23 +534,9 @@ def broadcast_to(
     Returns
     -------
     result : relay.Expr
-        The resulting tensor.
+        The result tensor.
     """
-    if isinstance(shape, (PrimExpr, int)):
-        shape = [shape]
-    if isinstance(shape, (tuple, list)):
-        temp_shape = []
-        for shape in shape:
-            if isinstance(shape, PrimExpr):
-                temp_shape.append(shape)
-            elif isinstance(shape, int):
-                temp_shape.append(tvm.tir.const(shape, "int64"))
-            else:
-                raise RuntimeError(
-                    f"The input new shape of reshape operator contains unrecognized dimension {shape}"
-                )
-        shape = relax.ShapeExpr(temp_shape)
-
+    shape = _handle_shape(shape)
     return _ffi_api.broadcast_to(data, shape)
 
 
@@ -511,3 +599,60 @@ def strided_slice(
     end = convert_int(end)
     strides = convert_int(strides) if strides else None
     return _ffi_api.strided_slice(data, begin, end, strides, axes, slice_mode)
+
+
+def collapse_sum_like(data: Expr, collapse_target: Expr) -> Expr:
+    """Return a summation of data to the shape of collapse_target.
+
+    For details, please see relax.op.collapse_sum_to.
+
+    Parameters
+    ----------
+    data : Expr
+        The input tensor.
+
+    collapse_target : Expr
+        The tensor whose shape is the shape to collapse to.
+
+    Returns
+    -------
+    result : Expr
+        The result tensor after summation.
+    """
+    return _ffi_api.collapse_sum_like(data, collapse_target)
+
+
+def collapse_sum_to(
+    data: Expr,
+    shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+) -> Expr:
+    """Return a summation of data to the given shape.
+
+    collapse_sum_to is intended as the backward operator of tvm.relax.op.broadcast_to and
+    other broadcast operators in the automatic differentiation process.
+
+    We expect that data is the result of broadcasting some tensor of the given shape in some
+    broadcast operation. Thus the given shape and data.shape must follow broadcast rules.
+
+    During computation, the axes of data.shape and shape are checked from right to left. For every
+    axis, if it either:
+    - exist in data but not in collapse_target, or
+    - is larger than 1 in data and equals to 1 in collapse_target,
+
+    data will be summed over this axis.
+
+    Parameters
+    ----------
+    data : Expr
+        The input tensor.
+
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+        The shape to collapse to.
+
+    Returns
+    -------
+    result : Expr
+        The result tensor after summation.
+    """
+    shape = _handle_shape(shape)
+    return _ffi_api.collapse_sum_to(data, shape)

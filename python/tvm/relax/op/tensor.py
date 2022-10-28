@@ -126,6 +126,22 @@ def floor_divide(lhs, rhs) -> Expr:
     return _ffi_api.floor_divide(lhs, rhs)
 
 
+def negative(lhs: Expr) -> Expr:
+    """Compute element-wise negative of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result
+    """
+    return _ffi_api.negative(lhs)
+
+
 def sin(data: Expr) -> Expr:
     """Compute elementwise sin of data.
 
@@ -158,6 +174,22 @@ def cos(data: Expr) -> Expr:
     return _ffi_api.cos(data)
 
 
+def tanh(data: Expr) -> Expr:
+    """Compute elementwise tanh of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.tanh(data)
+
+
 def sqrt(data: Expr) -> Expr:
     """Compute elementwise square root of data.
 
@@ -172,6 +204,22 @@ def sqrt(data: Expr) -> Expr:
         The computed result.
     """
     return _ffi_api.sqrt(data)
+
+
+def log(data: Expr) -> Expr:
+    """Compute elementwise natural logarithm of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    ret : relax.Expr
+        The computed result
+    """
+    return _ffi_api.log(data)
 
 
 def unique(

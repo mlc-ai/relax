@@ -26,6 +26,8 @@
 
 #include <unordered_set>
 
+#include "unary.h"
+
 namespace tvm {
 namespace relax {
 
@@ -906,11 +908,11 @@ Type InferTypeTake(const Call& call, DiagnosticContext diag_ctx) {
 }
 
 /* Initialization operators */
-TVM_REGISTER_NODE_TYPE(FullAttrs);
+TVM_REGISTER_NODE_TYPE(InitAttrs);
 
 /* relax.full */
 RELAX_REGISTER_OP("relax.full")
-    .set_attrs_type<FullAttrs>()
+    .set_attrs_type<InitAttrs>()
     .set_num_inputs(2)
     .add_argument("fill_value", "Tensor", "The scalar tensor, denoting the value to fill.")
     .add_argument("shape", "ShapeExpr", "The shape of the created tensor.")
@@ -918,7 +920,7 @@ RELAX_REGISTER_OP("relax.full")
     .set_attr<FInferType>("FInferType", InferTypeFull);
 
 Expr MakeFull(Expr fill_value, Expr shape, DataType dtype) {
-  ObjectPtr<FullAttrs> attrs = make_object<FullAttrs>();
+  ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
   attrs->dtype = dtype;
 
   static const Op& op = Op::Get("relax.full");
@@ -976,8 +978,238 @@ Type InferTypeFull(const Call& call, DiagnosticContext diag_ctx) {
     ndim = shape->values.size();
   }
 
-  const auto* attrs = call->attrs.as<FullAttrs>();
+  const auto* attrs = call->attrs.as<InitAttrs>();
   return DynTensorType(ndim, attrs->dtype.is_void() ? fill_value_type->dtype : attrs->dtype);
+}
+
+/* relax.ones */
+RELAX_REGISTER_OP("relax.ones")
+    .set_attrs_type<InitAttrs>()
+    .set_num_inputs(1)
+    .add_argument("shape", "ShapeExpr", "The shape of the created tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeOnesZeros)
+    .set_attr<FInferType>("FInferType", InferTypeOnesZeros);
+
+Expr MakeOnes(Expr shape, DataType dtype) {
+  ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
+  attrs->dtype = dtype;
+
+  static const Op& op = Op::Get("relax.ones");
+  return Call(op, {std::move(shape)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.ones").set_body_typed(MakeOnes);
+
+Optional<Expr> InferShapeOnesZeros(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Ones or zeros op should have 1 argument");
+  }
+  return call->args[0];
+}
+
+Type InferTypeOnesZeros(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Ones or zeros op should have 1 argument");
+  }
+
+  const auto* shape_type = call->args[0]->checked_type().as<ShapeTypeNode>();
+  if (shape_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The input shape should has type ShapeType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input data has type ShapeType.");
+  }
+
+  int ndim = -1;
+  const auto* shape = call->args[0].as<ShapeExprNode>();
+  if (shape != nullptr) {
+    ndim = shape->values.size();
+  }
+
+  const auto* attrs = call->attrs.as<InitAttrs>();
+  return DynTensorType(ndim, attrs->dtype);
+}
+
+/* relax.zeros */
+RELAX_REGISTER_OP("relax.zeros")
+    .set_attrs_type<InitAttrs>()
+    .set_num_inputs(1)
+    .add_argument("shape", "ShapeExpr", "The shape of the created tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeOnesZeros)
+    .set_attr<FInferType>("FInferType", InferTypeOnesZeros);
+
+Expr MakeZeros(Expr shape, DataType dtype) {
+  ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
+  attrs->dtype = dtype;
+
+  static const Op& op = Op::Get("relax.zeros");
+  return Call(op, {std::move(shape)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.zeros").set_body_typed(MakeZeros);
+
+/* relax.full_like */
+RELAX_REGISTER_OP("relax.full_like")
+    .set_num_inputs(2)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .add_argument("fill_value", "Tensor", "The scalar value to fill.")
+    .set_attr<FInferShape>("FInferShape", InferShapeFullLike)
+    .set_attr<FInferType>("FInferType", InferTypeFullLike);
+
+Expr MakeFullLike(Expr data, Expr fill_value) {
+  static const Op& op = Op::Get("relax.full_like");
+  return Call(op, {std::move(data), std::move(fill_value)}, Attrs(), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.full_like").set_body_typed(MakeFullLike);
+
+Optional<Expr> InferShapeFullLike(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "full_like op should have 2 arguments");
+  }
+
+  const auto* fill_value_shape = call->args[1]->shape().as<ShapeExprNode>();
+  if (fill_value_shape != nullptr && fill_value_shape->values.size() != 0) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Full like operator expects the input fill value to be a scalar tensor "
+                          "(0-rank tensor). However, the input fill value has rank "
+                       << fill_value_shape->values.size());
+  }
+
+  Expr shape = call->args[0]->shape();
+  auto* s = shape.as<ShapeExprNode>();
+  if (s) {
+    return ShapeExpr(s->values);
+  } else {
+    return NullOpt;
+  }
+}
+
+Type InferTypeFullLike(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "full_like op should have 2 arguments");
+  }
+
+  auto* input_ty = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (!input_ty) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The input tensor should be DynTensor, but got "
+                       << call->args[0]->checked_type()->GetTypeKey());
+  }
+
+  const auto* fill_value_type = call->args[1]->checked_type().as<DynTensorTypeNode>();
+  if (fill_value_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The input fill value should has type DynTensorType, but got "
+                       << call->args[1]->checked_type()->GetTypeKey());
+  }
+  if (!fill_value_type->IsUnknownNdim() && fill_value_type->ndim != 0) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Full operator expects the input fill value to be a scalar tensor "
+                          "(0-rank tensor). However, the input fill value has rank "
+                       << fill_value_type->ndim);
+  }
+
+  return GetRef<DynTensorType>(input_ty);
+}
+
+/* relax.ones_like */
+RELAX_REGISTER_UNARY_OP("ones_like");
+
+/* relax.zeros_like */
+RELAX_REGISTER_UNARY_OP("zeros_like");
+
+/* relax.collapse_sum_like */
+RELAX_REGISTER_OP("relax.collapse_sum_like")
+    .set_num_inputs(2)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .add_argument("collapse_target", "Tensor", "The tensor whose shape is the shape to collapse to.")
+    .set_attr<FInferShape>("FInferShape", InferShapeCollapseSumLike)
+    .set_attr<FInferType>("FInferType", InferTypeCollapseSumLike);
+
+Expr MakeCollapseSumLike(Expr data, Expr collapse_target) {
+  static const Op& op = Op::Get("relax.collapse_sum_like");
+  return Call(op, {std::move(data), std::move(collapse_target)}, Attrs(), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.collapse_sum_like").set_body_typed(MakeCollapseSumLike);
+
+Optional<Expr> InferShapeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "collapse_sum_like op should have 2 arguments");
+  }
+
+  Expr shape = call->args[1]->shape();
+  auto* s = shape.as<ShapeExprNode>();
+  if (s) {
+    return ShapeExpr(s->values);
+  } else {
+    return NullOpt;
+  }
+}
+
+Type InferTypeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "full_like op should have 2 arguments");
+  }
+
+  auto* input_ty = call->args[1]->checked_type().as<DynTensorTypeNode>();
+  if (!input_ty) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The input tensor should be DynTensor, but got "
+                       << call->args[0]->checked_type()->GetTypeKey());
+  }
+
+  return GetRef<DynTensorType>(input_ty);
+}
+
+/* relax.collapse_sum_to */
+RELAX_REGISTER_OP("relax.collapse_sum_to")
+    .set_num_inputs(2)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .add_argument("shape", "ShapeExpr", "The shape to collapse to..")
+    .set_attr<FInferShape>("FInferShape", InferShapeCollapseSumTo)
+    .set_attr<FInferType>("FInferType", InferTypeCollapseSumTo);
+
+Expr MakeCollapseSumTo(Expr data, Expr shape) {
+  static const Op& op = Op::Get("relax.collapse_sum_to");
+  return Call(op, {std::move(data), std::move(shape)}, Attrs(), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.collapse_sum_to").set_body_typed(MakeCollapseSumTo);
+
+
+Optional<Expr> InferShapeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Full op should have 2 arguments");
+  }
+
+  return call->args[1];
+}
+
+Type InferTypeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Full op should have 2 arguments");
+  }
+
+  const auto* orig_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  const auto* shape_type = call->args[1]->checked_type().as<ShapeTypeNode>();
+  if (shape_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The input shape should has type ShapeType, but actually it is "
+                       << call->args[1]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input data has type ShapeType.");
+  }
+
+  int ndim = -1;
+  const auto* shape = call->args[1].as<ShapeExprNode>();
+  if (shape != nullptr) {
+    ndim = shape->values.size();
+  }
+
+  return DynTensorType(ndim, orig_type->dtype);
 }
 
 /* relax.split */
