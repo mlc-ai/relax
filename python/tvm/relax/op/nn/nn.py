@@ -248,6 +248,14 @@ def softmax(data: Expr, axis=-1) -> Expr:
     """
     return _ffi_api.softmax(data, axis)
 
+def gradrelu_(data: Expr) -> Expr:
+    return _ffi_api.gradrelu_(data)
+
+def cross_entropy(lhs: Expr, rhs: Expr) -> Expr:
+    return _ffi_api.cross_entropy(lhs, rhs)
+
+def softmax_cross_entropy(lhs: Expr, rhs: Expr) -> Expr:
+    return _ffi_api.softmax_cross_entropy(lhs, rhs)
 
 def flatten(data: Expr) -> Expr:
     """Flatten.

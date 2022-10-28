@@ -87,6 +87,29 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
       .set_attr<FInferShape>("FInferShape", InferShapeReduction)                    \
       .set_attr<FInferType>("FInferType", InferTypeReduction)
 
+#define RELAX_REGISTER_UNARY_OP_BASE(OpName, InferShape, InferType)   \
+  TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr e) { \
+    static const Op& op = Op::Get("relax." OpName);                   \
+    return Call(op, {e}, Attrs(), {});                                \
+  });                                                                 \
+  RELAY_REGISTER_OP("relax." OpName)                                  \
+      .set_num_inputs(1)                                              \
+      .add_argument("e", "Tensor", "The input tensor.")               \
+      .set_attr<FInferShape>("FInferShape", InferShape) \
+      .set_attr<FInferType>("FInferType", InferType)
+
+#define RELAX_REGISTER_BINARY_OP_BASE(OpName, InferShape, InferType)                   \
+  TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr lhs, Expr rhs) { \
+    static const Op& op = Op::Get("relax." OpName);                               \
+    return Call(op, {lhs, rhs}, Attrs(), {});                                     \
+  });                                                                             \
+  RELAY_REGISTER_OP("relax." OpName)                                              \
+      .set_num_inputs(2)                                                          \
+      .add_argument("lhs", "Tensor", "The left hand side tensor.")                \
+      .add_argument("rhs", "Tensor", "The right hand side tensor.")               \
+      .set_attr<FInferShape>("FInferShape", InferShape)            \
+      .set_attr<FInferType>("FInferType", InferType)
+
 }  // namespace relax
 }  // namespace tvm
 

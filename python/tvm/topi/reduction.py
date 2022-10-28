@@ -248,3 +248,18 @@ def prod(data, axis=None, keepdims=False):
     ret : tvm.te.Tensor
     """
     return cpp.prod(data, axis, keepdims)
+
+
+def collapse_sum(data, target_shape):
+    """Python correspondence of the topi operator collapse_sum.
+
+    Parameters
+    ----------
+    data : tvm.te.Tensor
+        The input tvm tensor
+
+    Returns
+    -------
+    ret : tvm.te.Tensor
+    """
+    return cpp.collapse_sum(data, target_shape)

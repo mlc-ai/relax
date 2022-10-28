@@ -18,6 +18,7 @@
  */
 
 #include "nn.h"
+#include "../tensor/binary.h"
 
 namespace tvm {
 namespace relax {
@@ -605,6 +606,10 @@ Type InferTypeMatmul(const Call& call, DiagnosticContext diag_ctx) {
 
   return DynTensorType(output_ndim, output_dtype);
 }
+
+RELAX_REGISTER_UNARY_OP("nn.gradrelu_");
+RELAX_REGISTER_BINARY_OP_BASE("nn.cross_entropy", InferShapeCrossEntropy, InferTypeCrossEntropy);
+RELAX_REGISTER_BINARY_OP_BASE("nn.softmax_cross_entropy", InferShapeCrossEntropy, InferTypeCrossEntropy);
 
 }  // namespace relax
 }  // namespace tvm

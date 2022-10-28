@@ -94,6 +94,48 @@ RELAX_REGISTER_UNARY_OP("cos");
 /* relax.sqrt */
 RELAX_REGISTER_UNARY_OP("sqrt");
 
+Optional<Expr> InferShapeTranspose(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Unary op should have 1 argument");
+  }
+  Expr shape = call->args[0]->shape();
+  if (auto* s = shape.as<ShapeExprNode>()) {
+    return ShapeExpr(Array<PrimExpr>{s->values[1], s->values[0]});
+  } else {
+    return NullOpt;
+  }
+}
+
+Optional<Expr> InferShapeSum(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Sum op should have 1 arguments");
+  }
+  Expr shape = call->args[0]->shape();
+  auto* s = shape.as<ShapeExprNode>();
+  if (s) {
+    return ShapeExpr(Array<PrimExpr>{});
+  } else {
+    return NullOpt;
+  }
+}
+
+Type InferTypeSum(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Sum op should have 1 arguments");
+  }
+  Type type0 = call->args[0]->checked_type();
+  auto* t0 = type0.as<DynTensorTypeNode>();
+  DataType output_dtype;
+  if (t0->IsUnknownDtype()) {
+    output_dtype = DataType::Void();
+  } else {
+    output_dtype = t0->dtype;
+  }
+  int output_ndim = 0;
+  return DynTensorType(output_ndim, output_dtype);
+}
+
+
 TVM_REGISTER_NODE_TYPE(UniqueAttrs);
 
 RELAX_REGISTER_OP("relax.unique")
@@ -118,6 +160,13 @@ Expr MakeUnique(Expr data, bool sorted, bool return_inverse, bool return_counts,
 }
 
 TVM_REGISTER_GLOBAL("relax.op.unique").set_body_typed(MakeUnique);
+
+RELAX_REGISTER_UNARY_OP_BASE("transpose", InferShapeTranspose, InferTypeUnaryBroadcast);
+RELAX_REGISTER_UNARY_OP_BASE("sum", InferShapeSum, InferTypeSum);
+RELAX_REGISTER_UNARY_OP("log");
+RELAX_REGISTER_UNARY_OP("negative");
+RELAX_REGISTER_UNARY_OP("ones_like");
+RELAX_REGISTER_UNARY_OP("zeros_like");
 
 }  // namespace relax
 }  // namespace tvm
