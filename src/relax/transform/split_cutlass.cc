@@ -223,7 +223,7 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     }
   }
   if (!has_second_func) {
-    return {WithAttr(func, "cutlass_kernel", StringImm(matcher.cutlass_annotation_)), NullOpt};
+    return {WithAttr(func, "cutlass_kernel", String(matcher.cutlass_annotation_)), NullOpt};
   }
 
   Stmt body1 = BlockMasker::Mask(func->body, matcher.block_partition_, matcher.allocs1_, true);
@@ -252,7 +252,7 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
 
   PrimFunc func1 =
       PrimFunc(new_params1, body1, func->ret_type, new_buffer_map1, NullOpt, func->attrs);
-  func1 = WithAttr(func1, "cutlass_kernel", StringImm(matcher.cutlass_annotation_));
+  func1 = WithAttr(func1, "cutlass_kernel", String(matcher.cutlass_annotation_));
   // deal with second function
   Array<Var> new_params2;
   std::vector<int> arg_partition2;
@@ -317,7 +317,7 @@ class SplitMutator : public ExprMutator {
           tir::SplitFunctions(func, &arg_partition);
       if (!split_funcs.second.defined()) {
         ObjectPtr<CallNode> new_call = make_object<CallNode>(*call.operator->());
-        GlobalVar gv = builder_->AddFunction(split_funcs.first, "cutlass");
+        GlobalVar gv = builder_->AddFunction(split_funcs.first, "cutlass_primfunc");
         new_call->args.Set(0, gv);
         return Call(new_call);
       }
@@ -330,7 +330,7 @@ class SplitMutator : public ExprMutator {
       }
 
       ShapeExpr shape1(func1->buffer_map[func1->params.back()]->shape);
-      GlobalVar gv1 = builder_->AddFunction(func1, "cutlass");
+      GlobalVar gv1 = builder_->AddFunction(func1, "cutlass_primfunc");
       Call call1(call_tir_op_, {gv1, Tuple(args1), shape1}, call->attrs, call->type_args);
       Var call_var1 = builder_->Emit(call1);
       Array<Expr> args2;

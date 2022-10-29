@@ -30,7 +30,7 @@ from tvm.contrib.cutlass.gen_gemm import CutlassGemmProfiler
 @click.option("--layouta", default="row", help="Layout of A")
 @click.option("--layoutb", default="row", help="Layout of B")
 @click.option("--layoutc", default="row", help="Layout of C")
-@click.option("--op_type", default=None, help="Epilogue pattern")
+@click.option("--op_type", default="cutlass.dense", help="Epilogue pattern")
 @click.option("--tmpdir", default="/tmp", help="Temp directory")
 def main(m, n, k, sm, typea, typeb, typec, layouta, layoutb, layoutc, op_type, tmpdir):
     cutlass_profiler = CutlassGemmProfiler(sm, _get_cutlass_path(), tmpdir)  

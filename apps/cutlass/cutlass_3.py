@@ -1,9 +1,8 @@
-# pylint: disable=missing-docstring
-from __future__ import annotations
-
-import numpy as np
 import tvm
+import tvm.testing
 from tvm import relax
+import tvm.script
+import numpy as np
 from tvm.script.ir_builder import IRBuilder
 from tvm.script.ir_builder import ir as I
 from tvm.script.ir_builder import relax as R
@@ -16,22 +15,23 @@ A_TYPE = "float16"
 B_TYPE = "float16"
 C_TYPE = "float16"
 
-
-def construct_mod(m, n, k):
+def construct_mod_gemm(m, n, k):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
-        with I.ir_module():
+        with I.ir_module() as frame:
             with T.prim_func():
                 T.func_name(GLOBAL_SYMBOL)
                 T.func_attr(
                     {
                         "cutlass_codegen": 1,
-                        "cutlass_kernel": "cutlass.dense"
-                        # "global_symbol": GLOBAL_SYMBOL,
+                        #"global_symbol": GLOBAL_SYMBOL,
                     }
                 )
-                A = T.arg("A", T.buffer_decl((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((m, n), C_TYPE))  # pylint: disable=invalid-name
+                A = T.arg("A", T.buffer_decl((m, k), A_TYPE)
+                          )  # pylint: disable=invalid-name
+                B = T.arg("B", T.buffer_decl((k, n), B_TYPE)
+                          )  # pylint: disable=invalid-name
+                C = T.arg("C", T.buffer_decl((m, n), C_TYPE)
+                          )  # pylint: disable=invalid-name
                 with T.block("cutlass"):
                     T.reads(A[0:m, 0:k], B[0:k, 0:n])
                     T.writes(C[0:m, 0:n])
@@ -50,9 +50,12 @@ def construct_mod(m, n, k):
                     )
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = R.call_tir(GLOBAL_SYMBOL, args=[A, B], shape=(m, n), dtype=C_TYPE)
+                A = R.arg("A", R.tensor((m, k), A_TYPE)
+                          )  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((k, n), B_TYPE)
+                          )  # pylint: disable=invalid-name
+                C = R.call_tir(frame.global_vars[GLOBAL_SYMBOL], args=[
+                               A, B], shape=(m, n), dtype=C_TYPE)
                 R.func_ret_value(C)
     mod = ib.get()
     return mod
@@ -66,7 +69,6 @@ def construct_mod_gemm_bias_relu(m, n, k):
                 T.func_attr(
                     {
                         "cutlass_codegen": 1,
-                        "cutlass_kernel": "cutlass.dense_bias_relu",
                         # "global_symbol": GLOBAL_SYMBOL,
                     }
                 )
@@ -74,10 +76,9 @@ def construct_mod_gemm_bias_relu(m, n, k):
                           )  # pylint: disable=invalid-name
                 B = T.arg("B", T.buffer_decl((k, n), B_TYPE)
                           )  # pylint: disable=invalid-name
-                Bias = T.arg("Bias", T.buffer_decl((1, n), C_TYPE))
+                Bias = T.arg("Bias", T.buffer_decl((n,), C_TYPE))
                 C = T.arg("C", T.buffer_decl((m, n), C_TYPE)
                           )  # pylint: disable=invalid-name
-
                 D = T.alloc_buffer((m, n), C_TYPE)
                 E = T.alloc_buffer((m, n), C_TYPE)
                 with T.block("cutlass"):
@@ -97,13 +98,13 @@ def construct_mod_gemm_bias_relu(m, n, k):
                             transpose_c=False,
                         )
                     )
-                with T.grid(m, n) as (i, j):
+                with T.grid(16, 64) as (i, j):
                     with T.block("bias"):
-                        T.reads(D[i, j], Bias[0, j])
+                        T.reads(D[i, j], Bias[j])
                         T.writes(E[i, j])
                         T.buffer_store(
-                            E, D[i, j] + Bias[0, j], [i, j])
-                with T.grid(m, n) as (i, j):
+                            E, D[i, j] + Bias[j], [i, j])
+                with T.grid(16, 64) as (i, j):
                     with T.block("relu"):
                         T.reads(E[i, j])
                         T.writes(C[i, j])
@@ -115,7 +116,7 @@ def construct_mod_gemm_bias_relu(m, n, k):
                           )  # pylint: disable=invalid-name
                 B = R.arg("B", R.tensor((k, n), B_TYPE)
                           )  # pylint: disable=invalid-name
-                Bias = R.arg("Bias", R.tensor((1, n), C_TYPE))
+                Bias = R.arg("Bias", R.tensor((n,), C_TYPE))
                 C = R.call_tir(frame.global_vars[GLOBAL_SYMBOL], args=[
                                A, B, Bias], shape=(m, n), dtype=C_TYPE)
                 R.func_ret_value(C)
@@ -126,15 +127,15 @@ def construct_mod_gemm_bias_relu(m, n, k):
 def gemm():
     m, n, k = 16, 64, 32
     target = tvm.target.Target("nvidia/geforce-rtx-3090-ti")
-    mod = construct_mod(m=m, n=n, k=k)
-
-    print(mod.script())
+    mod = construct_mod_gemm(m=m, n=n, k=k)
 
     with tvm.transform.PassContext():
+        # print(mod.script())
+        mod = relax.transform.SplitCutlass()(mod)
+        mod = relax.transform.RemoveUnusedFunctions()(mod)
+        # print(mod.script())
         mod = relax.transform.CutlassCodegen()(mod)
-        print(mod.script())
-        # print("attrs['c_source']:", mod[GLOBAL_SYMBOL].attrs["c_source"])
-        # print("attrs['c_source_fmt']:", mod[GLOBAL_SYMBOL].attrs["c_source_fmt"])
+        # print(mod.script())
         exe = relax.vm.build(mod, target=target)
     exe.mod.export_library(PKG_FILE, cc="nvcc")
     vm = relax.VirtualMachine(
@@ -148,8 +149,8 @@ def gemm():
     b = tvm.nd.array(b_np, device=tvm.cuda())
     c = vm["main"](a, b)
     tvm.cuda().sync()
-    print(c)
-    print(c_np)
+    # print(c)
+    # print(c_np)
     np.testing.assert_allclose(c.numpy(), c_np, rtol=1e-2, atol=1e-2)
 
 
@@ -158,13 +159,13 @@ def gemm_bias_relu():
     target = tvm.target.Target("nvidia/geforce-rtx-3090-ti")
     mod = construct_mod_gemm_bias_relu(m=m, n=n, k=k)
 
-    print(mod.script())
-
     with tvm.transform.PassContext():
+        print(mod.script())
+        mod = relax.transform.SplitCutlass()(mod)
+        mod = relax.transform.RemoveUnusedFunctions()(mod)
+        print(mod.script())
         mod = relax.transform.CutlassCodegen()(mod)
         print(mod.script())
-        # print("attrs['c_source']:", mod[GLOBAL_SYMBOL].attrs["c_source"])
-        # print("attrs['c_source_fmt']:", mod[GLOBAL_SYMBOL].attrs["c_source_fmt"])
         executable = relax.vm.build(mod, target=target)
     executable.mod.export_library(PKG_FILE, cc="nvcc")
     executable = tvm.runtime.load_module(PKG_FILE)
@@ -185,5 +186,5 @@ def gemm_bias_relu():
 
 
 if __name__ == "__main__":
-    gemm()
+    # gemm()
     gemm_bias_relu()

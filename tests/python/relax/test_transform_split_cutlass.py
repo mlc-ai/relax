@@ -36,6 +36,7 @@ A_TYPE = "float16"
 B_TYPE = "float16"
 C_TYPE = "float16"
 
+
 def construct_mod(m, n, k):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
@@ -195,7 +196,7 @@ def construct_mod_gemm_bias_relu_exp(m, n, k):
                 T.func_attr(
                     {
                         "cutlass_codegen": 1,
-                        "global_symbol": GLOBAL_SYMBOL,
+                        # "global_symbol": GLOBAL_SYMBOL,
                     }
                 )
                 A = T.arg("A", T.buffer_decl((m, k), A_TYPE)
@@ -260,15 +261,18 @@ def construct_mod_gemm_bias_relu_exp(m, n, k):
 def test_cutlass_split_dense():
     m, n, k = 16, 64, 32
     mod = construct_mod(m=m, n=n, k=k)
+    print(mod.script())
     new_mod = relax.transform.SplitCutlass()(mod)
+    new_mod = relax.transform.RemoveUnusedFunctions()(new_mod)
     print(new_mod.script())
-
 
 
 def test_cutlass_split_dense_bias_relu():
     m, n, k = 16, 64, 32
     mod = construct_mod_gemm_bias_relu_exp(m=m, n=n, k=k)
+    print(mod.script())
     new_mod = relax.transform.SplitCutlass()(mod)
+    new_mod = relax.transform.RemoveUnusedFunctions()(new_mod)
     print(new_mod.script())
 
 
@@ -280,6 +284,6 @@ def test_cutlass_split_fail_dense_relu():
 
 
 if __name__ == "__main__":
-    test_cutlass_split_dense()
-    test_cutlass_split_fail_dense_relu()
+    # test_cutlass_split_dense()
+    # test_cutlass_split_fail_dense_relu()
     test_cutlass_split_dense_bias_relu()
