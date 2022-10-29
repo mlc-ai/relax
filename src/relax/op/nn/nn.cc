@@ -428,5 +428,183 @@ Type InferTypeLayerNorm(const Call& call, DiagnosticContext diag_ctx) {
   return GetRef<DynTensorType>(data_type);
 }
 
+/* relax.nn.matmul */
+RELAX_REGISTER_OP("relax.nn.matmul")
+    .set_num_inputs(2)
+    .add_argument("a", "Tensor", "The left operand of the matmul.")
+    .add_argument("b", "Tensor", "The right operand of the matmul.")
+    .set_attr<FInferShape>("FInferShape", InferShapeMatmul)
+    .set_attr<FInferType>("FInferType", InferTypeMatmul);
+
+Expr MakeMatmul(Expr a, Expr b) {
+  static const Op& op = Op::Get("relax.nn.matmul");
+  return Call(op, {std::move(a), std::move(b)}, Attrs(), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.nn.matmul").set_body_typed(MakeMatmul);
+
+Optional<Expr> InferShapeMatmul(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Matmul operator should have 2 arguments");
+  }
+  const auto* a_shape_expr = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* b_shape_expr = call->args[1]->shape().as<ShapeExprNode>();
+  if (a_shape_expr == nullptr || b_shape_expr == nullptr) {
+    return RuntimeDepShape();
+  }
+
+  Array<PrimExpr> a_shape = a_shape_expr->values;
+  Array<PrimExpr> b_shape = b_shape_expr->values;
+  int a_ndim = a_shape.size();
+  int b_ndim = b_shape.size();
+
+  if (a_ndim == 0 || b_ndim == 0) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "Matmul requires both operands to be have at lease one dimension. However, the operand `"
+        << (a_ndim == 0 ? "a" : "b") << "` has zero dimension.");
+  }
+
+  bool a_prepended = false;
+  bool b_appended = false;
+  if (a_ndim == 1) {
+    a_shape.insert(a_shape.begin(), tir::make_const(DataType::Int(32), 1));
+    a_ndim = 2;
+    a_prepended = true;
+  }
+  if (b_ndim == 1) {
+    b_shape.insert(b_shape.end(), tir::make_const(DataType::Int(32), 1));
+    b_ndim = 2;
+    b_appended = true;
+  }
+
+  bool is_a_larger = a_ndim > b_ndim;
+  int offset = is_a_larger ? a_ndim - b_ndim : b_ndim - a_ndim;
+  int output_ndim = is_a_larger ? a_ndim : b_ndim;
+  Array<PrimExpr> output_shape;
+  output_shape.reserve(output_ndim);
+  for (int i = 0; i < offset; ++i) {
+    output_shape.push_back(is_a_larger ? a_shape[i] : b_shape[i]);
+  }
+
+  arith::Analyzer ana;
+  for (int i = 0; i < output_ndim - offset - 2; ++i) {
+    int a_idx, b_idx;
+    if (is_a_larger) {
+      a_idx = i + offset;
+      b_idx = i;
+    } else {
+      a_idx = i;
+      b_idx = i + offset;
+    }
+    PrimExpr a_dim = a_shape[a_idx];
+    PrimExpr b_dim = b_shape[b_idx];
+    if (is_a_larger) {
+      a_dim = a_shape[i + offset];
+      b_dim = b_shape[i];
+    } else {
+      a_dim = a_shape[i];
+      b_dim = b_shape[i + offset];
+    }
+
+    if (EqualConstInt(a_dim, 1)) {
+      output_shape.push_back(b_dim);
+    } else if (EqualConstInt(b_dim, 1)) {
+      output_shape.push_back(a_dim);
+    } else if (EqualCheck(a_dim, b_dim)) {
+      output_shape.push_back(a_dim);
+    } else if (ana.CanProve(a_dim != b_dim)) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "Matmul expects the input tensors to have broadcastable shapes. "
+                            "However, the shape of `a` at dim "
+                         << a_idx << " (which is " << a_dim
+                         << ") is not compatible with the shape of `b` at dim " << b_idx
+                         << " (which is " << b_dim << ")");
+    } else {
+      // Todo(ruihang): refine this point
+      // defer the computation of output shapes to runtime
+      // e.g., broadcast Tensor([m, n]), Tensor([k]) -> defer to runtime
+      return Call(ExternFunc(String("vm.binary_broadcast_shape_infer")),
+                  {call->args[0], call->args[1]}, {}, {});
+    }
+  }
+
+  if (ana.CanProve(a_shape[a_ndim - 1] != b_shape[b_ndim - 2])) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "Matmul expects the last two dimensions of both operands to be matmul-compatible. "
+           "However, the last dimension of `a` is "
+        << a_shape[a_ndim - 1]
+        << ", which is incompatible with the last but one dimension of `b`, which is "
+        << b_shape[b_ndim - 2]);
+  }
+  // Todo(ruihang): if cannot prove equal, do runtime inference.
+  if (!a_prepended) {
+    output_shape.push_back(a_shape[a_ndim - 2]);
+  }
+  if (!b_appended) {
+    output_shape.push_back(b_shape[b_ndim - 1]);
+  }
+
+  return ShapeExpr(output_shape);
+}
+
+Type InferTypeMatmul(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Matmul operator should have 2 arguments");
+  }
+
+  const auto* a_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  const auto* b_type = call->args[1]->checked_type().as<DynTensorTypeNode>();
+  if (a_type == nullptr || b_type == nullptr) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "Matmul expects both operands to have type DynTensorType. However, the operand `"
+        << (a_type == nullptr ? "a" : "b") << "` has type "
+        << call->args[a_type == nullptr ? 0 : 1]->checked_type()->GetTypeKey());
+  }
+
+  DataType output_dtype;
+  if (a_type->IsUnknownDtype() || b_type->IsUnknownDtype()) {
+    // Todo: do runtime type inference
+    output_dtype = DataType::Void();
+  } else if (a_type->dtype != b_type->dtype) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Matmul expects both operands to have the same data types. However, "
+                          "operand `a` has dtype "
+                       << a_type->dtype << " while `b` has dtype " << b_type->dtype);
+  } else {
+    output_dtype = a_type->dtype;
+  }
+
+  int a_ndim = a_type->ndim;
+  int b_ndim = b_type->ndim;
+
+  if (a_ndim == 0 || b_ndim == 0) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "Matmul requires both operands to be have at lease one dimension. However, the operand `"
+        << (a_ndim == 0 ? "a" : "b") << "` has zero dimension.");
+  }
+  if (a_type->IsUnknownNdim() || b_type->IsUnknownNdim()) {
+    return DynTensorType(-1, output_dtype);
+  }
+
+  bool a_prepended = false;
+  bool b_appended = false;
+  if (a_ndim == 1) {
+    a_ndim = 2;
+    a_prepended = true;
+  }
+  if (b_ndim == 1) {
+    b_ndim = 2;
+    b_appended = true;
+  }
+  int output_ndim =
+      std::max(a_ndim, b_ndim) - static_cast<int>(a_prepended) - static_cast<int>(b_appended);
+
+  return DynTensorType(output_ndim, output_dtype);
+}
+
 }  // namespace relax
 }  // namespace tvm

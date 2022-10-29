@@ -196,7 +196,9 @@ class BlockBuilder(Object):
         te_args_list = []
 
         def _convert_te_arg_helper(arg):
-            if isinstance(arg, Expr):  # type: ignore
+            if isinstance(arg, ShapeExpr):  # type: ignore
+                return [_convert_te_arg_helper(x) for x in arg.values]
+            elif isinstance(arg, Expr):  # type: ignore
                 arg = te_tensor(arg)
                 te_args_list.append(arg)
                 return arg
