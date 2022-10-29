@@ -152,6 +152,22 @@ def cos(data: Expr) -> Expr:
     return _ffi_api.cos(data)
 
 
+def sqrt(data: Expr) -> Expr:
+    """Compute elementwise square root of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.sqrt(data)
+
+
 def unique(
     data: Expr,
     sorted: bool = True,
