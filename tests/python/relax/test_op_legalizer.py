@@ -785,6 +785,45 @@ def test_cumsum_without_specified_axis():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_expand_dims():
+    @I.ir_module
+    class ExpandDims:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=8):
+            gv: R.Tensor((2, 1, 1, 1, 3, 1, 4, 1), "float32") = R.expand_dims(
+                x, axis=[-1, 1, -6, 3, 5]
+            )
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=8):
+            gv = R.call_tir(expand_dims, (x,), (2, 1, 1, 1, 3, 1, 4, 1), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def expand_dims(
+            rxplaceholder: T.Buffer[(2, 3, 4), "float32"],
+            compute: T.Buffer[(2, 1, 1, 1, 3, 1, 4, 1), "float32"],
+        ) -> None:
+            T.func_attr({"global_symbol": "expand_dims", "tir.noalias": True})
+            for i0, i1, i2, i3, i4, i5, i6, i7 in T.grid(2, 1, 1, 1, 3, 1, 4, 1):
+                with T.block("compute"):
+                    i0_1, i1_1, i2_1, i3_1, i4_1, i5_1, i6_1, i7_1 = T.axis.remap(
+                        "SSSSSSSS", [i0, i1, i2, i3, i4, i5, i6, i7]
+                    )
+                    T.reads(rxplaceholder[i0_1, i4_1, i6_1])
+                    T.writes(compute[i0_1, i1_1, i2_1, i3_1, i4_1, i5_1, i6_1, i7_1])
+                    compute[i0_1, i1_1, i2_1, i3_1, i4_1, i5_1, i6_1, i7_1] = rxplaceholder[
+                        i0_1, i4_1, i6_1
+                    ]
+
+    mod = OperatorLegalizer(ExpandDims).transform()
+    # print(mod.script())
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_layer_norm():
     @I.ir_module
     class LayerNorm:
@@ -1273,29 +1312,30 @@ def test_mean():
 
 
 if __name__ == "__main__":
-    test_conv2d()
-    test_add()
-    test_subtract()
-    test_multiply()
-    test_divide()
-    test_floor_divide()
-    test_sin()
-    test_cos()
-    test_sqrt()
-    test_relu()
-    test_gelu()
-    test_silu()
-    test_reshape()
-    test_reshape_dim_inference()
-    test_transpose()
-    test_concatenate()
-    test_cumsum()
-    test_cumsum_without_specified_axis()
-    test_layer_norm()
-    test_matmul_1_4()
-    test_matmul_4_1()
-    test_matmul_1_1()
-    test_matmul_4_5()
-    test_softmax()
-    test_sum()
-    test_mean()
+    # test_conv2d()
+    # test_add()
+    # test_subtract()
+    # test_multiply()
+    # test_divide()
+    # test_floor_divide()
+    # test_sin()
+    # test_cos()
+    # test_sqrt()
+    # test_relu()
+    # test_gelu()
+    # test_silu()
+    # test_reshape()
+    # test_reshape_dim_inference()
+    # test_transpose()
+    # test_concatenate()
+    # test_cumsum()
+    test_expand_dims()
+    # test_cumsum_without_specified_axis()
+    # test_layer_norm()
+    # test_matmul_1_4()
+    # test_matmul_4_1()
+    # test_matmul_1_1()
+    # test_matmul_4_5()
+    # test_softmax()
+    # test_sum()
+    # test_mean()

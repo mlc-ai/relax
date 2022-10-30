@@ -114,8 +114,21 @@ def _concatenate(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape:
     return bb.call_te(topi.concatenate, fields, None if attrs.axis is None else attrs.axis.value)
 
 
+def _expand_dims(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    output_ndim = len(output_shape)
+
+    def expand_dims(data, axis):
+        data_dims = []
+        for i in range(output_ndim):
+            if i not in axis and (i - output_ndim) not in axis:
+                data_dims.append(i)
+        return te.compute(output_shape, lambda *idx: data(*[idx[dim] for dim in data_dims]))
+
+    return bb.call_te(expand_dims, args[0], attrs.axis)
+
+
 def _cumsum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
-    return bb.emit_te(topi.cumsum, args[0], attrs.axis)
+    return bb.call_te(topi.cumsum, args[0], attrs.axis)
 
 
 def _nn_layer_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
@@ -215,6 +228,7 @@ op_legalization_map = {
     ir.Op.get("relax.reshape"): _reshape,
     ir.Op.get("relax.transpose"): _transpose,
     ir.Op.get("relax.concatenate"): _concatenate,
+    ir.Op.get("relax.expand_dims"): _expand_dims,
     ir.Op.get("relax.cumsum"): _cumsum,
     ir.Op.get("relax.nn.layer_norm"): _nn_layer_norm,
     ir.Op.get("relax.nn.matmul"): _nn_matmul,

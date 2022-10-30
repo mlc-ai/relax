@@ -564,7 +564,7 @@ class TorchFXTranslator:
             # call_module
             nn.Conv2d: self._conv2d,
             nn.Linear: self._linear,
-            nn.ReLU: lambda node: self.bb.emit_te(topi.nn.relu, self.env[node.args[0]]),
+            nn.ReLU: lambda node: self.bb.emit(relax.op.nn.relu(self.env[node.args[0]])),
             nn.MaxPool2d: self._max_pool2d,
             nn.AdaptiveAvgPool2d: self._adaptive_avg_pool2d,
             nn.Flatten: self._flatten,
@@ -581,8 +581,8 @@ class TorchFXTranslator:
             "flatten": self._flatten,
             "size": self._size,
             "cumsum": self._cumsum,
-            "unsqueeze": lambda node: self.bb.emit_te(
-                topi.expand_dims, self.env[node.args[0]], node.args[1], 1
+            "unsqueeze": lambda node: self.bb.emit(
+                relax.op.expand_dims(self.env[node.args[0]], node.args[1])
             ),
             "getattr": self._getattr,
             "getitem": self._getitem,
