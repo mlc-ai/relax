@@ -159,3 +159,42 @@ def concatenate(data: Union[Expr, List[Expr], Tuple[Expr]], axis: Optional[int] 
     if isinstance(data, (list, tuple)):
         data = relax.Tuple(data)
     return _ffi_api.concatenate(data, axis)
+
+
+def cumsum(data: Expr, axis: Optional[int]=None) -> Expr:
+    """Numpy style cumsum op. Return the cumulative inclusive sum of the elements along
+    a given axis.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input data to the operator.
+
+    axis : Optional[int]
+        Axis along which the cumulative sum is computed. The default (None) is to compute
+        the cumsum over the flattened array.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result has the same size as data, and the same shape as data if axis is not None.
+        If axis is None, the result is a 1-d array.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        a = [[1,2,3], [4,5,6]]
+
+        cumsum(a)  # if axis is not provided, cumsum is done over the flattened input.
+        -> [ 1,  3,  6, 10, 15, 21]
+
+        cumsum(a, axis=0)  # sum over rows for each of the 3 columns
+        -> [[1, 2, 3],
+            [5, 7, 9]]
+
+        cumsum(a, axis=1)
+        -> [[ 1,  3,  6],
+            [ 4,  9, 15]]
+    """
+    return _ffi_api.cumsum(data, axis)

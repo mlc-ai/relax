@@ -687,6 +687,104 @@ def test_concatenate():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_cumsum():
+    @I.ir_module
+    class Cumsum:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
+            gv: R.Tensor((2, 3, 4), "float32") = R.cumsum(x, axis=-2)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
+            gv = R.call_tir(cumsum, (x,), (2, 3, 4), dtype="float32")
+            gv1: R.Tensor((2, 3, 4), "float32") = gv
+            return gv1
+
+        @T.prim_func
+        def cumsum(
+            rxplaceholder: T.Buffer[(2, 3, 4), "float32"], out_buf: T.Buffer[(2, 3, 4), "float32"]
+        ) -> None:
+            T.func_attr({"global_symbol": "cumsum", "tir.noalias": True})
+            with T.block("cumsum_generic"):
+                T.reads(rxplaceholder[0:2, 0:3, 0:4])
+                T.writes(out_buf[0:2, 0:3, 0:4])
+                for fused in T.parallel(8):
+                    out_buf[
+                        (fused // 4 * 3 * 4 + fused % 4) // 4 // 3,
+                        (fused // 4 * 3 * 4 + fused % 4) // 4 % 3,
+                        (fused // 4 * 3 * 4 + fused % 4) % 4,
+                    ] = rxplaceholder[
+                        (fused // 4 * 3 * 4 + fused % 4) // 4 // 3,
+                        (fused // 4 * 3 * 4 + fused % 4) // 4 % 3,
+                        (fused // 4 * 3 * 4 + fused % 4) % 4,
+                    ]
+                    for v_k in T.serial(2):
+                        out_buf[
+                            (fused // 4 * 3 * 4 + fused % 4 + (v_k + 1) * 4) // 4 // 3,
+                            (fused // 4 * 3 * 4 + fused % 4 + (v_k + 1) * 4) // 4 % 3,
+                            (fused // 4 * 3 * 4 + fused % 4 + (v_k + 1) * 4) % 4,
+                        ] = (
+                            out_buf[
+                                (fused // 4 * 3 * 4 + fused % 4 + (v_k + 1 - 1) * 4) // 4 // 3,
+                                (fused // 4 * 3 * 4 + fused % 4 + (v_k + 1 - 1) * 4) // 4 % 3,
+                                (fused // 4 * 3 * 4 + fused % 4 + (v_k + 1 - 1) * 4) % 4,
+                            ]
+                            + rxplaceholder[
+                                (fused // 4 * 3 * 4 + fused % 4 + (v_k + 1) * 4) // 4 // 3,
+                                (fused // 4 * 3 * 4 + fused % 4 + (v_k + 1) * 4) // 4 % 3,
+                                (fused // 4 * 3 * 4 + fused % 4 + (v_k + 1) * 4) % 4,
+                            ]
+                        )
+
+    mod = OperatorLegalizer(Cumsum).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_cumsum_without_specified_axis():
+    @I.ir_module
+    class Cumsum:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=1):
+            gv: R.Tensor((24,), "float32") = R.cumsum(x)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=1):
+            gv = R.call_tir(cumsum, (x,), (24,), dtype="float32")
+            gv1: R.Tensor((24,), "float32") = gv
+            return gv1
+
+        @T.prim_func
+        def cumsum(
+            rxplaceholder: T.Buffer[(2, 3, 4), "float32"], out_buf: T.Buffer[24, "float32"]
+        ) -> None:
+            T.func_attr({"global_symbol": "cumsum", "tir.noalias": True})
+            with T.block("cumsum_generic"):
+                T.reads(rxplaceholder[0:2, 0:3, 0:4])
+                T.writes(out_buf[0:24])
+                for fused in T.parallel(1):
+                    out_buf[fused * 24] = rxplaceholder[
+                        fused * 24 // 4 // 3, fused * 24 // 4 % 3, fused * 24 % 4
+                    ]
+                    for v_k in T.serial(23):
+                        out_buf[fused * 24 + (v_k + 1)] = (
+                            out_buf[fused * 24 + (v_k + 1 - 1)]
+                            + rxplaceholder[
+                                (fused * 24 + (v_k + 1)) // 4 // 3,
+                                (fused * 24 + (v_k + 1)) // 4 % 3,
+                                (fused * 24 + (v_k + 1)) % 4,
+                            ]
+                        )
+
+    mod = OperatorLegalizer(Cumsum).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_layer_norm():
     @I.ir_module
     class LayerNorm:
@@ -1191,6 +1289,8 @@ if __name__ == "__main__":
     test_reshape_dim_inference()
     test_transpose()
     test_concatenate()
+    test_cumsum()
+    test_cumsum_without_specified_axis()
     test_layer_norm()
     test_matmul_1_4()
     test_matmul_4_1()

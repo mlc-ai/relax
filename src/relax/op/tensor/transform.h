@@ -58,6 +58,11 @@ Optional<Expr> InferShapeConcatenate(const Call& call, DiagnosticContext diag_ct
 
 Type InferTypeConcatenate(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.cumsum */
+Optional<Expr> InferShapeCumsum(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeCumsum(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 

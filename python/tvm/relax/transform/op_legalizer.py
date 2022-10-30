@@ -114,6 +114,10 @@ def _concatenate(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape:
     return bb.call_te(topi.concatenate, fields, None if attrs.axis is None else attrs.axis.value)
 
 
+def _cumsum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.emit_te(topi.cumsum, args[0], attrs.axis)
+
+
 def _nn_layer_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     def layer_norm(x, gamma, beta, axis, eps):
         shape_prod = tvm.tir.const(1, "int32")
@@ -169,8 +173,6 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
                 if not b_appended:
                     b_indices.append(idx_spatial[-1])
 
-                print(a_indices)
-                print(b_indices)
                 return a(*a_indices) * b(*b_indices)
 
             return te.sum(multiply_compute(k), axis=k)
@@ -213,6 +215,7 @@ op_legalization_map = {
     ir.Op.get("relax.reshape"): _reshape,
     ir.Op.get("relax.transpose"): _transpose,
     ir.Op.get("relax.concatenate"): _concatenate,
+    ir.Op.get("relax.cumsum"): _cumsum,
     ir.Op.get("relax.nn.layer_norm"): _nn_layer_norm,
     ir.Op.get("relax.nn.matmul"): _nn_matmul,
     ir.Op.get("relax.nn.softmax"): _nn_softmax,

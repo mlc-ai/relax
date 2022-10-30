@@ -616,5 +616,68 @@ Type InferTypeConcatenate(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(output_ndim, dtype);
 }
 
+/* relax.cumsum */
+TVM_REGISTER_NODE_TYPE(CumsumAttrs);
+
+RELAX_REGISTER_OP("relax.cumsum")
+    .set_attrs_type<CumsumAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeCumsum)
+    .set_attr<FInferType>("FInferType", InferTypeCumsum);
+
+Expr MakeCumsum(Expr data, Optional<Integer> axis) {
+  ObjectPtr<CumsumAttrs> attrs = make_object<CumsumAttrs>();
+  attrs->axis = axis;
+
+  static const Op& op = Op::Get("relax.cumsum");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.cumsum").set_body_typed(MakeCumsum);
+
+Optional<Expr> InferShapeCumsum(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Cumsum op should have 1 argument");
+  }
+
+  const auto* shape = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* attrs = call->attrs.as<CumsumAttrs>();
+  if (shape == nullptr) {
+    return RuntimeDepShape();
+  }
+
+  if (attrs->axis.defined()) {
+    return GetRef<ShapeExpr>(shape);
+  }
+
+  PrimExpr prod = tir::make_const(DataType::Int(32), 1);
+  for (const PrimExpr& shape_dim : shape->values) {
+    prod = prod * shape_dim;
+  }
+  return ShapeExpr({prod});
+}
+
+Type InferTypeCumsum(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Cumsum op should have 1 argument");
+  }
+
+  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (input_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input has type DynTensorType.");
+  }
+
+  const auto* attrs = call->attrs.as<CumsumAttrs>();
+  if (attrs->axis.defined()) {
+    return GetRef<DynTensorType>(input_type);
+  } else {
+    return DynTensorType(/*ndim=*/1, input_type->dtype);
+  }
+}
+
 }  // namespace relax
 }  // namespace tvm

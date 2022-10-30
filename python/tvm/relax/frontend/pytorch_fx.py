@@ -272,7 +272,7 @@ class TorchFXTranslator:
     def _cumsum(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         axis = node.args[1]
-        return self.bb.emit_te(topi.cumsum, x, axis)
+        return self.bb.emit(relax.op.cumsum(x, axis))
 
     def _size(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -422,7 +422,7 @@ class TorchFXTranslator:
         x = self.env[node.args[0]]
         y = self.env[node.args[1]]
         z = self.env[node.args[2]]
-        matmul = self.bb.emit_te(topi.matmul, y, z)
+        matmul = self.bb.emit(relax.op.nn.matmul(y, z))
         return self.bb.emit(relax.op.add(x, matmul))
 
     def _split(self, node: fx.node.Node) -> relax.Var:

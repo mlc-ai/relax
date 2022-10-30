@@ -107,3 +107,8 @@ class LayerNormAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.ReduceAttrs")
 class ReduceAttrs(Attrs):
     """Attributes used in reduction operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.CumsumAttrs")
+class CumsumAttrs(Attrs):
+    """Attributes used in cumsum operator"""
