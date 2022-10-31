@@ -724,5 +724,48 @@ Type InferTypeTrilu(const Call& call, DiagnosticContext diag_ctx) {
   return GetRef<DynTensorType>(input_type);
 }
 
+/* relax.cast */
+TVM_REGISTER_NODE_TYPE(CastAttrs);
+
+RELAX_REGISTER_OP("relax.cast")
+    .set_attrs_type<CastAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor")
+    .set_attr<FInferShape>("FInferShape", InferShapeCast)
+    .set_attr<FInferType>("FInferType", InferTypeCast);
+
+Expr MakeCast(Expr data, DataType dtype) {
+  ObjectPtr<CastAttrs> attrs = make_object<CastAttrs>();
+  attrs->dtype = dtype;
+
+  static const Op& op = Op::Get("relax.cast");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.cast").set_body_typed(MakeCast);
+
+Optional<Expr> InferShapeCast(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Cast op should have 1 argument");
+  }
+  return call->args[0]->shape();
+}
+
+Type InferTypeCast(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Cast op should have 1 argument");
+  }
+
+  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (input_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input has type DynTensorType.");
+  }
+  const auto* attrs = call->attrs.as<CastAttrs>();
+  return DynTensorType(input_type->ndim, attrs->dtype);
+}
+
 }  // namespace relax
 }  // namespace tvm

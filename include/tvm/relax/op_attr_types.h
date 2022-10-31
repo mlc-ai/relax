@@ -425,6 +425,15 @@ struct TriluAttrs : public tvm::AttrsNode<TriluAttrs> {
   }
 };  // struct TriluAttrs
 
+/*! \brief Attributes used in cast operator */
+struct CastAttrs : public tvm::AttrsNode<CastAttrs> {
+  DataType dtype;
+
+  TVM_DECLARE_ATTRS(CastAttrs, "relax.attrs.CastAttrs") {
+    TVM_ATTR_FIELD(dtype).describe("Target data type");
+  }
+};  // struct CastAttrs.
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_

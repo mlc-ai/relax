@@ -135,6 +135,10 @@ def _trilu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr)
     return bb.call_te(topi.trilu, args[0], tvm.tir.const(attrs.k, "int32"), attrs.is_upper)
 
 
+def _cast(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.cast, args[0], attrs.dtype)
+
+
 def _nn_layer_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     def layer_norm(x, gamma, beta, axis, eps):
         shape_prod = tvm.tir.const(1, "int32")
@@ -235,6 +239,7 @@ op_legalization_map = {
     ir.Op.get("relax.expand_dims"): _expand_dims,
     ir.Op.get("relax.cumsum"): _cumsum,
     ir.Op.get("relax.trilu"): _trilu,
+    ir.Op.get("relax.cast"): _cast,
     ir.Op.get("relax.nn.layer_norm"): _nn_layer_norm,
     ir.Op.get("relax.nn.matmul"): _nn_matmul,
     ir.Op.get("relax.nn.softmax"): _nn_softmax,

@@ -117,3 +117,8 @@ class CumsumAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.TriluAttrs")
 class TriluAttrs(Attrs):
     """Attributes used in trilu operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.CastAttrs")
+class CastAttrs(Attrs):
+    """Attributes used in cast operator"""

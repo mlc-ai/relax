@@ -822,6 +822,37 @@ def test_trilu():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_cast():
+    @I.ir_module
+    class Cast:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "int32", ndim=3):
+            gv: R.Tensor((2, 3, 4), "int32") = R.cast(x, "int32")
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "int32", ndim=3):
+            gv = R.call_tir(cast, (x,), (2, 3, 4), dtype="int32")
+            return gv
+
+        @T.prim_func
+        def cast(
+            rxplaceholder: T.Buffer[(2, 3, 4), "float32"], compute: T.Buffer[(2, 3, 4), "int32"]
+        ) -> None:
+            T.func_attr({"global_symbol": "cast", "tir.noalias": True})
+            for i0, i1, i2 in T.grid(2, 3, 4):
+                with T.block("compute"):
+                    i0_1, i1_1, i2_1 = T.axis.remap("SSS", [i0, i1, i2])
+                    T.reads(rxplaceholder[i0_1, i1_1, i2_1])
+                    T.writes(compute[i0_1, i1_1, i2_1])
+                    compute[i0_1, i1_1, i2_1] = T.cast(rxplaceholder[i0_1, i1_1, i2_1], "int32")
+
+    mod = OperatorLegalizer(Cast).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_layer_norm():
     @I.ir_module
     class LayerNorm:
@@ -1326,6 +1357,7 @@ if __name__ == "__main__":
     test_cumsum_without_specified_axis()
     test_expand_dims()
     test_trilu()
+    test_cast()
     test_layer_norm()
     test_matmul_1_4()
     test_matmul_4_1()

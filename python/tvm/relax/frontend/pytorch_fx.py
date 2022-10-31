@@ -218,7 +218,7 @@ class TorchFXTranslator:
         x = self.env[node.args[0]]
         module = self.named_modules[node.target]
         weight = self.params[module.weight]
-        x = self.bb.emit_te(topi.cast, x, "int32")
+        x = self.bb.emit(relax.op.cast(x, "int32"))
         return self.bb.emit_te(topi.take, weight, x, axis=0)
 
     def _adaptive_avg_pool2d(self, node: fx.node.Node) -> relax.Var:
@@ -440,7 +440,6 @@ class TorchFXTranslator:
         k = node.args[1] if len(node.args) > 1 else 0
         assert isinstance(k, int)
         return self.bb.emit(relax.op.trilu(x, k, False))
-        # return self.bb.emit_te(topi.trilu, x, tvm.tir.const(k, "int32"), False)
 
     def _new_ones(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
@@ -455,7 +454,7 @@ class TorchFXTranslator:
         return self.bb.emit_te(topi.broadcast_to, args[0], args[1:])
 
     def _float(self, node: fx.node.Node) -> relax.Var:
-        return self.bb.emit_te(topi.cast, self.env[node.args[0]], "float32")
+        return self.bb.emit(relax.op.cast(self.env[node.args[0]], "float32"))
 
     def _permute(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)

@@ -68,6 +68,11 @@ Optional<Expr> InferShapeTrilu(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeTrilu(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.cast */
+Optional<Expr> InferShapeCast(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeCast(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 

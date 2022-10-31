@@ -238,3 +238,24 @@ def trilu(data: Expr, k: int = 0, is_upper: bool = True) -> Expr:
              [0, 0, 8]]
     """
     return _ffi_api.trilu(data, k, is_upper)
+
+
+def cast(data: Expr, dtype: Union[str, tvm.DataType]) -> Expr:
+    """Cast input tensor to data type.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    dtype: Union[str, tvm.DataType]
+        The target data type
+
+    Returns
+    -------
+    result : relax.Expr
+        The casted result.
+    """
+    if isinstance(dtype, str):
+        dtype = tvm.DataType(dtype)
+    return _ffi_api.cast(data, dtype)

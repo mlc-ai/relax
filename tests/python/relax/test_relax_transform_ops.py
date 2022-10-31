@@ -336,6 +336,22 @@ def test_trilu():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_cast():
+    @R.function
+    def expected(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "int32", ndim=3):
+        gv: R.Tensor((2, 3, 4), "int32") = R.cast(x, "int32")
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.cast(x, "int32"))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -355,3 +371,4 @@ if __name__ == "__main__":
     test_cumsum()
     test_cumsum_without_specified_axis()
     test_trilu()
+    test_cast()
