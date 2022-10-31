@@ -139,6 +139,21 @@ def _cast(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.cast, args[0], attrs.dtype)
 
 
+def _nn_batch_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.nn.batch_norm,
+        data=args[0],
+        gamma=args[1],
+        beta=args[2],
+        moving_mean=args[3],
+        moving_var=args[4],
+        axis=attrs.axis,
+        epsilon=attrs.epsilon,
+        center=attrs.center,
+        scale=attrs.scale,
+    )
+
+
 def _nn_layer_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     def layer_norm(x, gamma, beta, axis, eps):
         shape_prod = tvm.tir.const(1, "int32")
@@ -207,6 +222,10 @@ def _nn_softmax(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: 
     return bb.call_te(topi.nn.softmax, args[0], attrs.axis)
 
 
+def _nn_flatten(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.nn.flatten, args[0])
+
+
 def _sum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.sum, args[0], attrs.axis, attrs.keepdims)
 
@@ -240,9 +259,11 @@ op_legalization_map = {
     ir.Op.get("relax.cumsum"): _cumsum,
     ir.Op.get("relax.trilu"): _trilu,
     ir.Op.get("relax.cast"): _cast,
+    ir.Op.get("relax.nn.batch_norm"): _nn_batch_norm,
     ir.Op.get("relax.nn.layer_norm"): _nn_layer_norm,
     ir.Op.get("relax.nn.matmul"): _nn_matmul,
     ir.Op.get("relax.nn.softmax"): _nn_softmax,
+    ir.Op.get("relax.nn.flatten"): _nn_flatten,
     ir.Op.get("relax.sum"): _sum,
     ir.Op.get("relax.mean"): _mean,
 }
