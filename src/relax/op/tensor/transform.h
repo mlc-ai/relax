@@ -63,6 +63,11 @@ Optional<Expr> InferShapeCumsum(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeCumsum(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.trilu */
+Optional<Expr> InferShapeTrilu(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeTrilu(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 

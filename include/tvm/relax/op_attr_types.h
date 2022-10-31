@@ -412,6 +412,19 @@ struct CumsumAttrs : public tvm::AttrsNode<CumsumAttrs> {
   }
 };  // struct CumsumAttrs
 
+/*! \brief Attributes used in trilu operator */
+struct TriluAttrs : public tvm::AttrsNode<TriluAttrs> {
+  int k;
+  bool is_upper;
+
+  TVM_DECLARE_ATTRS(TriluAttrs, "relax.attrs.TriluAttrs") {
+    TVM_ATTR_FIELD(k).describe(
+        "The number of diagonals above or below the main diagonal to exclude or include.");
+    TVM_ATTR_FIELD(is_upper).set_default(true).describe(
+        "Whether to keep the upper or lower half of the diagonal.");
+  }
+};  // struct TriluAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_

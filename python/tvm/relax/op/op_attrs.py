@@ -112,3 +112,8 @@ class ReduceAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.CumsumAttrs")
 class CumsumAttrs(Attrs):
     """Attributes used in cumsum operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.TriluAttrs")
+class TriluAttrs(Attrs):
+    """Attributes used in trilu operator"""

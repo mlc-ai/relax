@@ -57,6 +57,7 @@ from tvm.relax.op import (
     subtract,
     sum,
     transpose,
+    trilu,
     unique,
     variance,
 )
@@ -413,6 +414,7 @@ __all__ = [
     "subtract",
     "sum",
     "transpose",
+    "trilu",
     "unique",
     "variance",
     "shape_of",

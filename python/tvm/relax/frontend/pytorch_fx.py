@@ -438,7 +438,9 @@ class TorchFXTranslator:
     def _tril(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         k = node.args[1] if len(node.args) > 1 else 0
-        return self.bb.emit_te(topi.trilu, x, tvm.tir.const(k, "int32"), False)
+        assert isinstance(k, int)
+        return self.bb.emit(relax.op.trilu(x, k, False))
+        # return self.bb.emit_te(topi.trilu, x, tvm.tir.const(k, "int32"), False)
 
     def _new_ones(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)

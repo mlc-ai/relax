@@ -679,5 +679,50 @@ Type InferTypeCumsum(const Call& call, DiagnosticContext diag_ctx) {
   }
 }
 
+/* relax.trilu */
+TVM_REGISTER_NODE_TYPE(TriluAttrs);
+
+RELAX_REGISTER_OP("relax.trilu")
+    .set_attrs_type<TriluAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeTrilu)
+    .set_attr<FInferType>("FInferType", InferTypeTrilu);
+
+Expr MakeTrilu(Expr data, int k, bool is_upper) {
+  auto attrs = make_object<TriluAttrs>();
+  attrs->k = k;
+  attrs->is_upper = is_upper;
+
+  static const Op& op = Op::Get("relax.trilu");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.trilu").set_body_typed(MakeTrilu);
+
+Optional<Expr> InferShapeTrilu(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Trilu op should have 1 argument");
+  }
+
+  return call->args[0]->shape();
+}
+
+Type InferTypeTrilu(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Trilu op should have 1 argument");
+  }
+
+  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (input_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Trilu operator requires the input data to have type DynTensorType. "
+                          "However, the type of the given input is "
+                       << call->args[0]->checked_type()->GetTypeKey());
+  }
+
+  return GetRef<DynTensorType>(input_type);
+}
+
 }  // namespace relax
 }  // namespace tvm

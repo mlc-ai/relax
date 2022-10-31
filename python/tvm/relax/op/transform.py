@@ -161,7 +161,7 @@ def concatenate(data: Union[Expr, List[Expr], Tuple[Expr]], axis: Optional[int] 
     return _ffi_api.concatenate(data, axis)
 
 
-def cumsum(data: Expr, axis: Optional[int]=None) -> Expr:
+def cumsum(data: Expr, axis: Optional[int] = None) -> Expr:
     """Numpy style cumsum op. Return the cumulative inclusive sum of the elements along
     a given axis.
 
@@ -198,3 +198,43 @@ def cumsum(data: Expr, axis: Optional[int]=None) -> Expr:
             [ 4,  9, 15]]
     """
     return _ffi_api.cumsum(data, axis)
+
+
+def trilu(data: Expr, k: int = 0, is_upper: bool = True) -> Expr:
+    """
+    Given a 2-D matrix or batches of 2-D matrices, returns the
+    upper or lower triangular part of the tensor.
+
+    Parameters
+    ----------
+    data: relax.Expr
+        The tensor that trilu will be applied to. Must be either
+        a 2D matrix or a tensor of batches of 2D matrices.
+
+    k: int
+        The number of diagonals above or below the main diagonal
+        to exclude or include.
+
+    is_upper: bool
+        If True, only upper triangular values of input are kept,
+        if False, the lower triangular values are kept.
+
+    Returns
+    -------
+    ret : relax.Expr
+        The new tensor with appropriate diagonals set to zero.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        x = [[0, 1, 2],
+             [3, 4, 5],
+             [6, 7, 8]]
+
+        relay.trilu(x, 0, True) =
+            [[0, 1, 2],
+             [0, 4, 5],
+             [0, 0, 8]]
+    """
+    return _ffi_api.trilu(data, k, is_upper)

@@ -74,30 +74,6 @@ def test_conv2d():
     mod = OperatorLegalizer(Conv2d).transform()
     tvm.ir.assert_structural_equal(mod, Expected)
 
-    # dev = tvm.cpu()
-    # ex = relax.vm.build(mod, target="llvm")
-    # vm = relax.VirtualMachine(ex, dev)
-
-    # import numpy as np
-    # import torch
-
-    # x_np = np.random.rand(2, 3, 28, 28).astype("float32")
-    # w_np = np.random.rand(4, 3, 3, 3).astype("float32")
-    # res_torch = torch.nn.functional.conv2d(torch.tensor(x_np), torch.tensor(w_np))
-    # res_relax = vm["main"](tvm.nd.array(x_np, dev), tvm.nd.array(w_np, dev))
-    # tvm.testing.assert_allclose(res_relax.numpy(), res_torch.numpy(), rtol=1e-5, atol=1e-5)
-
-    # print("pass")
-
-    # x = relax.Var("x", [2, 3, 28, 28], relax.DynTensorType(ndim=4, dtype="float32"))
-    # w = relax.Var("w", [4, 3, 3, 3], relax.DynTensorType(ndim=4, dtype="float32"))
-    # bb = relax.BlockBuilder()
-    # with bb.function("main", [x, w]):
-    #     gv = bb.emit(relax.op.conv2d(x, w, 3))
-    #     bb.emit_func_output(gv)
-
-    # print(mod.script())
-
 
 def test_add():
     @I.ir_module
@@ -134,14 +110,6 @@ def test_add():
 
     mod = OperatorLegalizer(Add).transform()
     tvm.ir.assert_structural_equal(mod, Expected)
-
-    # x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
-    # y = relax.Var("y", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
-    # bb = relax.BlockBuilder()
-    # with bb.function("main", [x, y]):
-    #     gv = bb.emit(relax.op.add(x, y))
-    #     bb.emit_func_output(gv)
-    # print(bb.get().script())
 
 
 def test_subtract():
@@ -700,8 +668,7 @@ def test_cumsum():
         @R.function
         def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
             gv = R.call_tir(cumsum, (x,), (2, 3, 4), dtype="float32")
-            gv1: R.Tensor((2, 3, 4), "float32") = gv
-            return gv1
+            return gv
 
         @T.prim_func
         def cumsum(
@@ -756,8 +723,7 @@ def test_cumsum_without_specified_axis():
         @R.function
         def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=1):
             gv = R.call_tir(cumsum, (x,), (24,), dtype="float32")
-            gv1: R.Tensor((24,), "float32") = gv
-            return gv1
+            return gv
 
         @T.prim_func
         def cumsum(
@@ -820,7 +786,39 @@ def test_expand_dims():
                     ]
 
     mod = OperatorLegalizer(ExpandDims).transform()
-    # print(mod.script())
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_trilu():
+    @I.ir_module
+    class Trilu:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
+            gv: R.Tensor((2, 3, 4), "float32") = R.trilu(x, k=0, is_upper=False)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
+            gv = R.call_tir(trilu, (x,), (2, 3, 4), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def trilu(
+            rxplaceholder: T.Buffer[(2, 3, 4), "float32"], trilu: T.Buffer[(2, 3, 4), "float32"]
+        ) -> None:
+            T.func_attr({"global_symbol": "trilu", "tir.noalias": True})
+            for i0, i1, i2 in T.grid(2, 3, 4):
+                with T.block("trilu"):
+                    i0_1, i1_1, i2_1 = T.axis.remap("SSS", [i0, i1, i2])
+                    T.reads(rxplaceholder[i0_1, i1_1, i2_1])
+                    T.writes(trilu[i0_1, i1_1, i2_1])
+                    trilu[i0_1, i1_1, i2_1] = T.Select(
+                        i2_1 <= i1_1, rxplaceholder[i0_1, i1_1, i2_1], T.float32(0)
+                    )
+
+    mod = OperatorLegalizer(Trilu).transform()
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
@@ -1080,7 +1078,6 @@ def test_matmul_1_1():
         def main(
             x: R.Tensor((4,), "float32"), y: R.Tensor((4,), "float32")
         ) -> R.Tensor(None, "float32", ndim=0):
-            # block 0
             gv = R.call_tir(matmul, (x, y), (), dtype="float32")
             return gv
 
@@ -1090,10 +1087,7 @@ def test_matmul_1_1():
             rxplaceholder_1: T.Buffer[4, "float32"],
             matmul: T.Buffer[(), "float32"],
         ) -> None:
-            # function attr dict
             T.func_attr({"global_symbol": "matmul", "tir.noalias": True})
-            # body
-            # with T.block("root")
             for i0 in T.serial(4):
                 with T.block("matmul"):
                     k = T.axis.reduce(4, i0)
@@ -1312,30 +1306,31 @@ def test_mean():
 
 
 if __name__ == "__main__":
-    # test_conv2d()
-    # test_add()
-    # test_subtract()
-    # test_multiply()
-    # test_divide()
-    # test_floor_divide()
-    # test_sin()
-    # test_cos()
-    # test_sqrt()
-    # test_relu()
-    # test_gelu()
-    # test_silu()
-    # test_reshape()
-    # test_reshape_dim_inference()
-    # test_transpose()
-    # test_concatenate()
-    # test_cumsum()
+    test_conv2d()
+    test_add()
+    test_subtract()
+    test_multiply()
+    test_divide()
+    test_floor_divide()
+    test_sin()
+    test_cos()
+    test_sqrt()
+    test_relu()
+    test_gelu()
+    test_silu()
+    test_reshape()
+    test_reshape_dim_inference()
+    test_transpose()
+    test_concatenate()
+    test_cumsum()
+    test_cumsum_without_specified_axis()
     test_expand_dims()
-    # test_cumsum_without_specified_axis()
-    # test_layer_norm()
-    # test_matmul_1_4()
-    # test_matmul_4_1()
-    # test_matmul_1_1()
-    # test_matmul_4_5()
-    # test_softmax()
-    # test_sum()
-    # test_mean()
+    test_trilu()
+    test_layer_norm()
+    test_matmul_1_4()
+    test_matmul_4_1()
+    test_matmul_1_1()
+    test_matmul_4_5()
+    test_softmax()
+    test_sum()
+    test_mean()
