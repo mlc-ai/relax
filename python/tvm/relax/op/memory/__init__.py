@@ -15,15 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 # pylint: disable=wildcard-import, redefined-builtin
-"""Relax core operators."""
+"""Relax memory primitives."""
 
-# Operators
-from .base import *
-from .image import *
-from .tensor import *
-from .op_attrs import *
-from .reduce import *
-from .transform import *
-from .nn import *
-from . import builtin
-from . import memory
+from .memory import *
