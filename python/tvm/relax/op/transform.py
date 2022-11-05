@@ -293,3 +293,48 @@ def take(
         The computed result.
     """
     return _ffi_api.take(data, indices, axis, batch_dims, mode)
+
+
+def full(
+    fill_value: Expr,
+    shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr],
+    dtype: Optional[Union[str, tvm.DataType]],
+):
+    """Fill array with scalar value.
+
+    Parameters
+    ----------
+    fill_value : relax.Expr
+        The value to fill. Must be a scalar.
+
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+        The shape of the target.
+
+    dtype : Optional[str]
+        The data type of the target.
+
+    Returns
+    -------
+    result : relax.Expr
+        The resulting tensor.
+    """
+    if isinstance(shape, (PrimExpr, int)):
+        shape = [shape]
+    if isinstance(shape, (tuple, list)):
+        temp_shape = []
+        for shape in shape:
+            if isinstance(shape, PrimExpr):
+                temp_shape.append(shape)
+            elif isinstance(shape, int):
+                temp_shape.append(tvm.tir.const(shape, "int32"))
+            else:
+                raise RuntimeError(
+                    f"The input new shape of reshape operator contains unrecognized dimension {shape}"
+                )
+        shape = relax.ShapeExpr(temp_shape)
+
+    if dtype is None:
+        dtype = tvm.DataType("void")
+    elif isinstance(dtype, str):
+        dtype = tvm.DataType(dtype)
+    return _ffi_api.full(fill_value, shape, dtype)

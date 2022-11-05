@@ -864,5 +864,80 @@ Type InferTypeTake(const Call& call, DiagnosticContext diag_ctx) {
   }
 }
 
+/* Initialization operators */
+TVM_REGISTER_NODE_TYPE(InitOpAttrs);
+
+/* relax.full */
+RELAX_REGISTER_OP("relax.full")
+    .set_attrs_type<InitOpAttrs>()
+    .set_num_inputs(2)
+    .add_argument("fill_value", "Tensor", "The scalar tensor, denoting the value to fill.")
+    .add_argument("shape", "ShapeExpr", "The shape of the created tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeFull)
+    .set_attr<FInferType>("FInferType", InferTypeFull);
+
+Expr MakeFull(Expr fill_value, Expr shape, DataType dtype) {
+  ObjectPtr<InitOpAttrs> attrs = make_object<InitOpAttrs>();
+  attrs->dtype = dtype;
+
+  static const Op& op = Op::Get("relax.full");
+  return Call(op, {std::move(fill_value), std::move(shape)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.full").set_body_typed(MakeFull);
+
+Optional<Expr> InferShapeFull(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Full op should have 2 arguments");
+  }
+
+  const auto* fill_value_shape = call->args[0]->shape().as<ShapeExprNode>();
+  if (fill_value_shape != nullptr && fill_value_shape->values.size() != 0) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Full operator expects the input fill value to be a scalar tensor "
+                          "(0-rank tensor). However, the input fill value has rank "
+                       << fill_value_shape->values.size());
+  }
+
+  return call->args[1];
+}
+
+Type InferTypeFull(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Full op should have 2 arguments");
+  }
+
+  const auto* fill_value_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  const auto* shape_type = call->args[1]->checked_type().as<ShapeTypeNode>();
+  if (fill_value_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The input fill value should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input data has type DynTensorType.");
+  }
+  if (!fill_value_type->IsUnknownNdim() && fill_value_type->ndim != 0) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Full operator expects the input fill value to be a scalar tensor "
+                          "(0-rank tensor). However, the input fill value has rank "
+                       << fill_value_type->ndim);
+  }
+  if (shape_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The input shape should has type ShapeType, but actually it is "
+                       << call->args[1]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input data has type ShapeType.");
+  }
+
+  // Todo(ruihang): add ndim to ShapeType
+  int ndim = -1;
+  const auto* shape = call->args[1].as<ShapeExprNode>();
+  if (shape != nullptr) {
+    ndim = shape->values.size();
+  }
+
+  const auto* attrs = call->attrs.as<InitOpAttrs>();
+  return DynTensorType(ndim, attrs->dtype.is_void() ? fill_value_type->dtype : attrs->dtype);
+}
+
 }  // namespace relax
 }  // namespace tvm

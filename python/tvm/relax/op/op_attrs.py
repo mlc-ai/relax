@@ -127,3 +127,8 @@ class CastAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.TakeAttrs")
 class TakeAttrs(Attrs):
     """Attributes used in take operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.InitOpAttrs")
+class InitOpAttrs(Attrs):
+    """Attributes that specify a tensor"""

@@ -453,7 +453,16 @@ struct TakeAttrs : public tvm::AttrsNode<TakeAttrs> {
         "wrap - wrap around the indices"
         "fast - no clip or wrap around (user must make sure indices are in-bound)");
   }
-};
+};  // struct TakeAttrs
+
+/*! \brief Attributes that specify a tensor */
+struct InitOpAttrs : public tvm::AttrsNode<InitOpAttrs> {
+  DataType dtype;
+
+  TVM_DECLARE_ATTRS(InitOpAttrs, "relax.attrs.InitOpAttrs") {
+    TVM_ATTR_FIELD(dtype).describe("Target data type.");
+  }
+};  // struct InitOpAttrs
 
 }  // namespace relax
 }  // namespace tvm

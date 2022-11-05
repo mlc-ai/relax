@@ -447,7 +447,11 @@ class TorchFXTranslator:
         size = args[1:]
         if not iterable(size):
             size = (size,)
-        return self.bb.emit_te(topi.full, size, fill_value=1, dtype=self_var.checked_type.dtype)
+        return self.bb.emit(
+            relax.op.full(
+                relax.const(1, self_var.checked_type.dtype), size, self_var.checked_type.dtype
+            )
+        )
 
     def _expand(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)

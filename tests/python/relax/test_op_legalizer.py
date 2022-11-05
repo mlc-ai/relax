@@ -895,6 +895,35 @@ def test_take():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_full():
+    @I.ir_module
+    class Full:
+        @R.function
+        def main(v: R.Tensor((), "int32")) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.full(v, (2, 3), dtype="float32")
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(v: R.Tensor((), "int32")) -> R.Tensor(None, "float32", ndim=2):
+            gv = R.call_tir(full, (v,), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def full(rxplaceholder: T.Buffer[(), "int32"], T_full: T.Buffer[(2, 3), "float32"]) -> None:
+            T.func_attr({"global_symbol": "full", "tir.noalias": True})
+            for i0, i1 in T.grid(2, 3):
+                with T.block("T_full"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[()])
+                    T.writes(T_full[ax0, ax1])
+                    T_full[ax0, ax1] = T.cast(rxplaceholder[()], "float32")
+
+    mod = OperatorLegalizer(Full).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_layer_norm():
     @I.ir_module
     class LayerNorm:
@@ -1401,6 +1430,7 @@ if __name__ == "__main__":
     test_trilu()
     test_cast()
     test_take()
+    test_full()
     test_layer_norm()
     test_matmul_1_4()
     test_matmul_4_1()

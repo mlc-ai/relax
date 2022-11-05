@@ -390,6 +390,22 @@ def test_take_high_dim_indices_with_axis():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_full():
+    @R.function
+    def expected(v: R.Tensor((), "int32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.full(v, (2, 3), dtype="float32")
+        return gv
+
+    bb = relax.BlockBuilder()
+    v = relax.Var("v", (), relax.DynTensorType(0, "int32"))
+    with bb.function("main", [v]):
+        gv = bb.emit(relax.op.transform.full(v, (2, 3), "float32"))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -412,3 +428,4 @@ if __name__ == "__main__":
     test_cast()
     test_take()
     test_take_high_dim_indices_with_axis()
+    test_full()

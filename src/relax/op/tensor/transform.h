@@ -78,6 +78,11 @@ Optional<Expr> InferShapeTake(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeTake(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.full */
+Optional<Expr> InferShapeFull(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeFull(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 
