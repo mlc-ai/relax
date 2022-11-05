@@ -23,6 +23,7 @@ from typing import Callable, Dict, List, Optional, Union
 
 import numpy as np
 import tvm.ir
+from tvm import relax, IRModule
 
 from . import _ffi_api
 
@@ -294,41 +295,64 @@ def MetaScheduleApplyDatabase() -> tvm.ir.transform.Pass:
     return _ffi_api.MetaScheduleApplyDatabase()
 
 
-def SimpleAD(func_name, target = "", require_grads = None) -> tvm.ir.transform.Pass:
-    """Simple high level reverse-mode auto-differentiation.
+def SimpleAD(func, require_grads = None) -> tvm.ir.transform.Pass:
+    """Automatically differentiate the given function in the IRModule, and add the generated
+    function to the IRModule, with name [name of func] + "_adjoint".
 
     Parameters
     ----------
-    func_name: str
-        The function name to be pass.
-    target: Union[str, relax.Var]
-        The relax variable serves as target in the differentiation.
-        If it is None or empty, the body of seq expr will be the target.
-    require_grads: List[Union[str, relax.Var]]
-        The relax variables which need adjoints. Must be inputs.
+    func: relax.GlobalVar
+        The global variable (of the given module) to differentiate.
+        The function should only return one scalar value.
+    require_grads: Union[List[relax.Var], List[int]]
+        The relax variables which need adjoints. Must be arguments of func.
+        If the elements in require_grads are integers, integer i represent the i-th variable in the
+        parameter list of func. The index is 0-based.
         If the list is empty, it will emit an adjoint for each input.
 
-    Returns
+    Returns.
     -------
     ret: tvm.ir.transform.Pass
     """
-
     if require_grads is None:
         require_grads = []
 
     if not isinstance(require_grads, list):
         require_grads = [require_grads]
 
-    if not isinstance(target, str):
-        assert isinstance(target, tvm.relax.expr.Var)
-        target = target.name_hint
-    for i in range(len(require_grads)):
-        if not isinstance(require_grads[i], str):
-            print(type(require_grads[i]), require_grads[i])
-            assert isinstance(require_grads[i], tvm.relax.expr.Var)
-            require_grads[i] = require_grads[i].name_hint
+    return _ffi_api.SimpleAD(func, require_grads)
 
-    return _ffi_api.SimpleAD(func_name, target, require_grads)
+
+def gradient(func, require_grads = None, mod = None):
+    """Functional interface of SimpleAD. Takes a relax function as input, and returns the
+    differentiated function.
+
+    Parameters
+    ----------
+    func: Union[relax.Function, relax.GlobalVar]
+        The function or global var to differentiate.
+        The function should only return one scalar value.
+        If func is an instance of relax.GlobalVar, mod must be given.
+    require_grads: Union[list[relax.Var], list[int]]
+        The relax variables which need adjoints. Must be arguments of func.
+        If the elements in require_grads are integers, integer i represent the i-th variable in the
+        parameter list of func. The index is 0-based.
+        If the list is empty, it will emit an adjoint for each input.
+    mod: Optional[IRModule]
+        The IRModule that GlobalVar looks up into.
+
+    Returns
+    -------
+    ret: relax.Function
+        The result function.
+    """
+    if isinstance(func, relax.GlobalVar):
+        if mod is None:
+            raise ValueError("please provide the IRModule of GlobalVar")
+        func = mod[func]
+
+    func_module = IRModule.from_expr(func)
+    return SimpleAD(func_module.get_global_var("main"), require_grads)(func_module)["main_adjoint"]
 
 
 def _wrap_class_function_pass(pass_cls, pass_info):

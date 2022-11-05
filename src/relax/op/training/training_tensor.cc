@@ -17,29 +17,29 @@
  * under the License.
  */
 
-/*!
- * \file binary.h
- * \brief shape and type deduction for binary broadcast operators.
- */
-
-#ifndef TVM_RELAX_OP_TENSOR_BINARY_H_
-#define TVM_RELAX_OP_TENSOR_BINARY_H_
-
-#include <tvm/relax/expr.h>
-#include <tvm/relax/type.h>
-
-#include <algorithm>
-#include <vector>
-
-#include "../op_common.h"
+#include "training_tensor.h"
 
 namespace tvm {
 namespace relax {
-// Binary broadcast
-Optional<Expr> InferShapeBinaryBroadcast(const Call& call, DiagnosticContext diag_ctx);
-Type InferTypeBinaryBroadcast(const Call& call, DiagnosticContext diag_ctx);
+
+RELAX_REGISTER_UNARY_OP_BASE("transpose", InferShapeTranspose, InferTypeUnaryBroadcast);
+RELAX_REGISTER_UNARY_OP_BASE("sum", InferShapeSum, InferTypeSum);
+RELAX_REGISTER_UNARY_OP("log");
+RELAX_REGISTER_UNARY_OP("negative");
+RELAX_REGISTER_UNARY_OP("ones_like");
+RELAX_REGISTER_UNARY_OP("zeros_like");
+
+RELAY_REGISTER_OP("relax.zeros")
+    .set_num_inputs(1)
+    .set_attr<FInferShape>("FInferShape", InferShapeFull)
+    .set_attr<FInferType>("FInferType", InferTypeFull);
+    
+RELAY_REGISTER_OP("relax.ones")
+    .set_num_inputs(1)
+    .set_attr<FInferShape>("FInferShape", InferShapeFull)
+    .set_attr<FInferType>("FInferType", InferTypeFull);
+
+RELAX_REGISTER_BINARY_OP_BASE("collapse_sum_like", InferShapeCollapseSumLike, InferTypeCollapseSumLike);
 
 }  // namespace relax
 }  // namespace tvm
-
-#endif  // TVM_RELAX_OP_TENSOR_BINARY_H_

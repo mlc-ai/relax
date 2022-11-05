@@ -80,7 +80,7 @@ Type InferTypeUnaryBroadcast(const Call& call, DiagnosticContext diag_ctx) {
   if (!input_ty) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                        << "Input should be DynTensor, but got "
-                       << call->args[0]->checked_type()->GetTypeKey());
+                       << call->args[0]->checked_type()->GetTypeKey() << " " << call);
   }
   return GetRef<DynTensorType>(input_ty);
 }
@@ -160,13 +160,6 @@ Expr MakeUnique(Expr data, bool sorted, bool return_inverse, bool return_counts,
 }
 
 TVM_REGISTER_GLOBAL("relax.op.unique").set_body_typed(MakeUnique);
-
-RELAX_REGISTER_UNARY_OP_BASE("transpose", InferShapeTranspose, InferTypeUnaryBroadcast);
-RELAX_REGISTER_UNARY_OP_BASE("sum", InferShapeSum, InferTypeSum);
-RELAX_REGISTER_UNARY_OP("log");
-RELAX_REGISTER_UNARY_OP("negative");
-RELAX_REGISTER_UNARY_OP("ones_like");
-RELAX_REGISTER_UNARY_OP("zeros_like");
 
 }  // namespace relax
 }  // namespace tvm

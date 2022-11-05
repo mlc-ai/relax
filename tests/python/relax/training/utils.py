@@ -22,7 +22,6 @@ class LowerToTensorIR(relax.PyExprMutator):
 
     def visit_call_(self, call):
         call = self.visit_expr_post_order(call)
-
         if isinstance(call, relax.Call) and call.op in self.op_map:
             return self.op_map[call.op](self.builder_, call)
         return call
@@ -105,6 +104,13 @@ def map_collapse_sum_like(bb, call):
         return topi.collapse_sum(x, y.shape)
     return bb.call_te(te_collapse_sum_like, call.args[0], call.args[1])
 
+def map_zeros(bb, call):
+    shape_values = [prim_expr.value for prim_expr in call.args[0].values]
+    return tvm.relay.const(np.zeros(shape_values))
+
+def map_ones(bb, call):
+    shape_values = [prim_expr.value for prim_expr in call.args[0].values]
+    return tvm.relay.const(np.ones(shape_values))
 
 
 op_map = {
@@ -125,6 +131,8 @@ op_map = {
   "relax.collapse_sum_like": map_collapse_sum_like,
   "relax.log": map_log,
   "relax.sum": map_sum,
+  "relax.zeros": map_zeros,
+  "relax.ones": map_ones,
 }
 
 @tvm.ir.transform.module_pass(opt_level=0, name="LowerToTensorIR")
