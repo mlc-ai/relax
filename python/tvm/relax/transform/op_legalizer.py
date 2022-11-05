@@ -139,6 +139,10 @@ def _cast(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.cast, args[0], attrs.dtype)
 
 
+def _take(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.take, args[0], args[1], attrs.axis, attrs.batch_dims, attrs.mode)
+
+
 def _nn_batch_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(
         topi.nn.batch_norm,
@@ -259,6 +263,7 @@ op_legalization_map = {
     ir.Op.get("relax.cumsum"): _cumsum,
     ir.Op.get("relax.trilu"): _trilu,
     ir.Op.get("relax.cast"): _cast,
+    ir.Op.get("relax.take"): _take,
     ir.Op.get("relax.nn.batch_norm"): _nn_batch_norm,
     ir.Op.get("relax.nn.layer_norm"): _nn_layer_norm,
     ir.Op.get("relax.nn.matmul"): _nn_matmul,

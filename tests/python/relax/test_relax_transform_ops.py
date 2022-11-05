@@ -352,6 +352,44 @@ def test_cast():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_take():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 4), "float32"), indices: R.Tensor((1,), "int32")
+    ) -> R.Tensor(None, "float32", ndim=1):
+        gv: R.Tensor((1,), "float32") = R.take(x, indices)
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    indices = relax.Var("indices", [1], relax.DynTensorType(ndim=1, dtype="int32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, indices]):
+        gv = bb.emit(relax.op.transform.take(x, indices))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_take_high_dim_indices_with_axis():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 4), "float32"), indices: R.Tensor((3, 4, 2), "int32")
+    ) -> R.Tensor(None, "float32", ndim=5):
+        gv: R.Tensor((2, 3, 4, 2, 4), "float32") = R.take(x, indices, axis=1)
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    indices = relax.Var("indices", [3, 4, 2], relax.DynTensorType(ndim=3, dtype="int32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, indices]):
+        gv = bb.emit(relax.op.transform.take(x, indices, axis=1))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -372,3 +410,5 @@ if __name__ == "__main__":
     test_cumsum_without_specified_axis()
     test_trilu()
     test_cast()
+    test_take()
+    test_take_high_dim_indices_with_axis()

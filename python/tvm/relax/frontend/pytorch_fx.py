@@ -219,7 +219,7 @@ class TorchFXTranslator:
         module = self.named_modules[node.target]
         weight = self.params[module.weight]
         x = self.bb.emit(relax.op.cast(x, "int32"))
-        return self.bb.emit_te(topi.take, weight, x, axis=0)
+        return self.bb.emit(relax.op.take(weight, x, axis=0))
 
     def _adaptive_avg_pool2d(self, node: fx.node.Node) -> relax.Var:
         module = self.named_modules[node.target]

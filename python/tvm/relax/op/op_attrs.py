@@ -122,3 +122,8 @@ class TriluAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.CastAttrs")
 class CastAttrs(Attrs):
     """Attributes used in cast operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.TakeAttrs")
+class TakeAttrs(Attrs):
+    """Attributes used in take operator"""

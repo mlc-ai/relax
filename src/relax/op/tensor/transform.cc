@@ -767,5 +767,102 @@ Type InferTypeCast(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(input_type->ndim, attrs->dtype);
 }
 
+/* relax.take */
+TVM_REGISTER_NODE_TYPE(TakeAttrs);
+
+RELAX_REGISTER_OP("relax.take")
+    .set_attrs_type<TakeAttrs>()
+    .set_num_inputs(2)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .add_argument("indices", "Tensor", "The indices tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeTake)
+    .set_attr<FInferType>("FInferType", InferTypeTake);
+
+Expr MakeTake(Expr data, Expr indices, Optional<Integer> axis, int batch_dims, String mode) {
+  ObjectPtr<TakeAttrs> attrs = make_object<TakeAttrs>();
+  attrs->axis = std::move(axis);
+  attrs->batch_dims = batch_dims;
+  attrs->mode = std::move(mode);
+
+  static const Op& op = Op::Get("relax.take");
+  return Call(op, {std::move(data), std::move(indices)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.take").set_body_typed(MakeTake);
+
+Optional<Expr> InferShapeTake(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Take op should have 2 arguments");
+  }
+
+  const auto* data_shape = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* indices_shape = call->args[1]->shape().as<ShapeExprNode>();
+  const auto* attrs = call->attrs.as<TakeAttrs>();
+
+  if (indices_shape == nullptr) {
+    return RuntimeDepShape();
+  } else if (!attrs->axis.defined()) {
+    return GetRef<ShapeExpr>(indices_shape);
+  } else if (data_shape == nullptr) {
+    return RuntimeDepShape();
+  }
+
+  int axis = attrs->axis.value()->value;
+  int ndim_data = data_shape->values.size();
+  if (axis < 0) {
+    axis = ndim_data + axis;
+  }
+  if (axis < 0 || axis >= ndim_data) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Take operator expects the input axis to be in range [" << -ndim_data
+                       << ", " << ndim_data << "). However, the given axis is "
+                       << attrs->axis.value()->value << ", which is out of range");
+  }
+
+  Array<PrimExpr> output_shape = data_shape->values;
+  output_shape.erase(output_shape.begin() + axis);
+  output_shape.insert(output_shape.begin() + axis, indices_shape->values.begin(),
+                      indices_shape->values.end());
+  return ShapeExpr(output_shape);
+}
+
+Type InferTypeTake(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Take op should have 2 arguments");
+  }
+
+  const auto* data_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  const auto* indices_type = call->args[1]->checked_type().as<DynTensorTypeNode>();
+  const auto* attrs = call->attrs.as<TakeAttrs>();
+  if (data_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input data should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input data has type DynTensorType.");
+  }
+  if (indices_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input indices should has type DynTensorType, but actually it is "
+                       << call->args[1]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input indices has type DynTensorType.");
+  }
+  if (!indices_type->IsUnknownDtype() && !indices_type->dtype.is_int()) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Take operator expects the input indices to have integer dtype. However, "
+                          "the given indices has dtype "
+                       << indices_type->dtype);
+  }
+
+  if (indices_type->IsUnknownNdim()) {
+    return DynTensorType(-1, data_type->dtype);
+  } else if (!attrs->axis.defined()) {
+    return DynTensorType(indices_type->ndim, data_type->dtype);
+  } else if (data_type->IsUnknownNdim()) {
+    return DynTensorType(-1, data_type->dtype);
+  } else {
+    return DynTensorType(data_type->ndim - 1 + indices_type->ndim, data_type->dtype);
+  }
+}
+
 }  // namespace relax
 }  // namespace tvm

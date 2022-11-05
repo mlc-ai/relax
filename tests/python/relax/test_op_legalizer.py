@@ -853,6 +853,48 @@ def test_cast():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_take():
+    @I.ir_module
+    class Take:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 4), "float32"), indices: R.Tensor((3, 4, 2), "int32")
+        ) -> R.Tensor(None, "float32", ndim=5):
+            gv: R.Tensor((2, 3, 4, 2, 4), "float32") = R.take(x, indices, axis=1)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 4), "float32"), indices: R.Tensor((3, 4, 2), "int32")
+        ) -> R.Tensor(None, "float32", ndim=5):
+            gv = R.call_tir(take, (x, indices), (2, 3, 4, 2, 4), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def take(
+            rxplaceholder: T.Buffer[(2, 3, 4), "float32"],
+            rxplaceholder_1: T.Buffer[(3, 4, 2), "int32"],
+            T_take: T.Buffer[(2, 3, 4, 2, 4), "float32"],
+        ) -> None:
+            T.func_attr({"global_symbol": "take", "tir.noalias": True})
+            for i0, i1, i2, i3, i4 in T.grid(2, 3, 4, 2, 4):
+                with T.block("T_take"):
+                    ax0, ax1, ax2, ax3, ax4 = T.axis.remap("SSSSS", [i0, i1, i2, i3, i4])
+                    T.reads(
+                        rxplaceholder[ax0, T.min(T.max(0, rxplaceholder_1[ax1, ax2, ax3]), 2), ax4],
+                        rxplaceholder_1[ax1, ax2, ax3],
+                    )
+                    T.writes(T_take[ax0, ax1, ax2, ax3, ax4])
+                    T_take[ax0, ax1, ax2, ax3, ax4] = rxplaceholder[
+                        ax0, T.min(T.max(0, rxplaceholder_1[ax1, ax2, ax3]), 2), ax4
+                    ]
+
+    mod = OperatorLegalizer(Take).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_layer_norm():
     @I.ir_module
     class LayerNorm:
@@ -1358,6 +1400,7 @@ if __name__ == "__main__":
     test_expand_dims()
     test_trilu()
     test_cast()
+    test_take()
     test_layer_norm()
     test_matmul_1_4()
     test_matmul_4_1()

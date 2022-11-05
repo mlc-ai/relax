@@ -259,3 +259,37 @@ def cast(data: Expr, dtype: Union[str, tvm.DataType]) -> Expr:
     if isinstance(dtype, str):
         dtype = tvm.DataType(dtype)
     return _ffi_api.cast(data, dtype)
+
+
+def take(
+    data: Expr, indices: Expr, axis: Optional[int] = None, batch_dims: int = 0, mode: str = "clip"
+):
+    """Take elements from an array along an axis.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The source array.
+
+    indices : relax.Expr
+        The indices of the values to extract.
+
+    axis : Optional[int]
+        The axis over which to select values. By default,
+        the flattened input array is used.
+
+    batch_dims : int
+        The number of batch dimensions. By default is 0.
+
+    mode : str, optional
+        Specifies how out-of-bound indices will behave [clip, wrap, fast].
+        clip: clip to the range (default).
+        wrap: wrap around the indices.
+        fast: no clip or wrap around (user must make sure indices are in-bound).
+
+    Returns
+    -------
+    ret : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.take(data, indices, axis, batch_dims, mode)

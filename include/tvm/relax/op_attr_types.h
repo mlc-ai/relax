@@ -434,6 +434,27 @@ struct CastAttrs : public tvm::AttrsNode<CastAttrs> {
   }
 };  // struct CastAttrs.
 
+/*! \brief Attributes used in take operator */
+struct TakeAttrs : public tvm::AttrsNode<TakeAttrs> {
+  Optional<Integer> axis;
+  int batch_dims;
+  String mode;
+
+  TVM_DECLARE_ATTRS(TakeAttrs, "relax.attrs.TakeAttrs") {
+    TVM_ATTR_FIELD(axis)
+        .set_default(Optional<Integer>{NullOpt})
+        .describe("The axis over which to select values.");
+    TVM_ATTR_FIELD(batch_dims)
+        .set_default(0)
+        .describe("The batch_dims over which to select values.");
+    TVM_ATTR_FIELD(mode).set_default("clip").describe(
+        "Specify how out-of-bound indices will behave."
+        "clip - clip to the range (default)"
+        "wrap - wrap around the indices"
+        "fast - no clip or wrap around (user must make sure indices are in-bound)");
+  }
+};
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_
