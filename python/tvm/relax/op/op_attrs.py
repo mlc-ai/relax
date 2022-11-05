@@ -132,3 +132,8 @@ class TakeAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.InitOpAttrs")
 class InitOpAttrs(Attrs):
     """Attributes that specify a tensor"""
+
+
+@tvm._ffi.register_object("relax.attrs.SplitAttrs")
+class SplitAttrs(Attrs):
+    """Attributes used in split operator"""

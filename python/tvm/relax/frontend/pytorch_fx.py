@@ -432,8 +432,8 @@ class TorchFXTranslator:
             dim = node.kwargs["dim"]
         else:
             dim = 0
-        split_size = x.shape[dim].value // split_size
-        return self.bb.emit_te(topi.split, x, split_size, dim)
+        n_section = x.shape[dim].value // split_size
+        return self.bb.emit(relax.op.split(x, n_section, dim))
 
     def _tril(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]

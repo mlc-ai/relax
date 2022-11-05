@@ -406,6 +406,49 @@ def test_full():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_split_by_indices():
+    @R.function
+    def expected(x: R.Tensor((2, 10, 4), "float32")):
+        gv = R.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1)
+        return gv
+
+    x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(
+            relax.op.transform.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1)
+        )
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_split_by_n_section():
+    @R.function
+    def expected(x: R.Tensor((2, 10, 4), "float32")):
+        gv = R.split(x, indices_or_sections=5, axis=1)
+        return gv
+
+    x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.split(x, indices_or_sections=5, axis=1))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_split_by_n_section_not_divisible():
+    x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with pytest.raises(DiagnosticError):
+        with bb.function("main", [x]):
+            gv = bb.emit(relax.op.transform.split(x, indices_or_sections=3, axis=1))
+            bb.emit_func_output(gv)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -429,3 +472,6 @@ if __name__ == "__main__":
     test_take()
     test_take_high_dim_indices_with_axis()
     test_full()
+    test_split_by_indices()
+    test_split_by_n_section()
+    test_split_by_n_section_not_divisible()

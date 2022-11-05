@@ -1431,6 +1431,9 @@ if __name__ == "__main__":
     test_cast()
     test_take()
     test_full()
+    # Todo: test_split_by_indices
+    # Todo: test_split_by_n_section
+    # Todo: test_batch_norm
     test_layer_norm()
     test_matmul_1_4()
     test_matmul_4_1()

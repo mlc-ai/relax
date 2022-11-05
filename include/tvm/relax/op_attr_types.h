@@ -464,6 +464,18 @@ struct InitOpAttrs : public tvm::AttrsNode<InitOpAttrs> {
   }
 };  // struct InitOpAttrs
 
+/*! \brief Attributes used in split operator */
+struct SplitAttrs : public tvm::AttrsNode<SplitAttrs> {
+  ObjectRef indices_or_sections;
+  int axis;
+
+  TVM_DECLARE_ATTRS(SplitAttrs, "relax.attrs.SplitAttrs") {
+    TVM_ATTR_FIELD(indices_or_sections)
+        .describe("The input array of indices or the number of split sections.");
+    TVM_ATTR_FIELD(axis).describe("The axis to be splitted");
+  }
+};  // struct SplitAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_

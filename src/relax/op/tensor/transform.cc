@@ -939,5 +939,136 @@ Type InferTypeFull(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(ndim, attrs->dtype.is_void() ? fill_value_type->dtype : attrs->dtype);
 }
 
+/* relax.split */
+TVM_REGISTER_NODE_TYPE(SplitAttrs);
+
+RELAX_REGISTER_OP("relax.split")
+    .set_attrs_type<SplitAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeSplit)
+    .set_attr<FInferType>("FInferType", InferTypeSplit);
+
+Expr MakeSplit(Expr data, ObjectRef indices_or_sections, int axis) {
+  ObjectPtr<SplitAttrs> attrs = make_object<SplitAttrs>();
+  attrs->indices_or_sections = indices_or_sections;
+  if (const auto* n_section = indices_or_sections.as<IntImmNode>()) {
+    CHECK(n_section->value > 0) << "Split operator expects the input number of sections to be a "
+                                   "positive integer. However, the given number of sections is "
+                                << n_section->value;
+  }
+  attrs->axis = axis;
+
+  static const Op& op = Op::Get("relax.split");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.split").set_body_typed(MakeSplit);
+
+Optional<Expr> InferShapeSplit(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Split op should have 1 argument");
+  }
+
+  const auto* input_shape = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* attrs = call->attrs.as<SplitAttrs>();
+  if (input_shape == nullptr) {
+    return RuntimeDepShape();
+  }
+
+  int ndim = input_shape->values.size();
+  int axis = attrs->axis;
+  if (axis < 0) {
+    axis = ndim + axis;
+  }
+  if (axis < 0 || axis >= ndim) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Split operator expects the input axis to be in range [" << -ndim << ", "
+                       << ndim << "). However, the given axis is " << attrs->axis
+                       << ", which is out of range");
+  }
+
+  Array<Expr> output_shape;
+  PrimExpr len_axis = input_shape->values[axis];
+  if (const auto* p_indices = attrs->indices_or_sections.as<ArrayNode>()) {
+    Array<PrimExpr> indices = GetRef<Array<PrimExpr>>(p_indices);
+    PrimExpr zero = tir::make_const(DataType::Int(32), 0);
+
+    output_shape.reserve(indices.size() + 1);
+    indices.insert(indices.begin(), zero);
+    indices.insert(indices.end(), len_axis);
+
+    for (int i = 0; i + 1 < static_cast<int>(indices.size()); ++i) {
+      PrimExpr l = tvm::max(zero, indices[i]);
+      PrimExpr r = tvm::min(len_axis, indices[i + 1]);
+      PrimExpr len = tvm::max(zero, r - l);
+      Array<PrimExpr> shape = input_shape->values;
+      shape.erase(shape.begin() + axis);
+      shape.insert(shape.begin() + axis, len);
+      output_shape.push_back(ShapeExpr(shape));
+    }
+  } else {
+    const auto* p_n_section = attrs->indices_or_sections.as<IntImmNode>();
+    ICHECK_NOTNULL(p_n_section);
+    int n_section = p_n_section->value;
+    if (n_section <= 0) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "Split operator expects the input number of sections to be a positive "
+                            "integer. However, the given number of sections is "
+                         << n_section);
+    }
+    if (const int64_t* len_axis_value = tir::as_const_int(len_axis)) {
+      if (*len_axis_value % n_section != 0) {
+        diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                           << "Split operator expects the length of the input axis is divisible by "
+                              "the input number of section. However, the axis has length "
+                           << *len_axis_value << " while the given number of section is "
+                           << n_section << ", which does not result in an equal division.");
+      }
+    }
+    // Todo(relax-team): need runtime divisibility check for the cases where `len_axis` is symbolic
+
+    PrimExpr n_section_expr = tir::make_const(DataType::Int(32), n_section);
+    Array<PrimExpr> shape = input_shape->values;
+    shape.erase(shape.begin() + axis);
+    shape.insert(shape.begin() + axis, tvm::floordiv(len_axis, n_section_expr));
+    for (int i = 0; i < n_section; ++i) {
+      output_shape.push_back(ShapeExpr(shape));
+    }
+  }
+  return Tuple(output_shape);
+}
+
+Type InferTypeSplit(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Split op should have 1 argument");
+  }
+
+  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  const auto* attrs = call->attrs.as<SplitAttrs>();
+  if (input_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input data should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input data has type DynTensorType.");
+  }
+
+  int n_tensor = -1;
+  if (const auto* p_indices = attrs->indices_or_sections.as<ArrayNode>()) {
+    n_tensor = p_indices->size() + 1;
+  } else {
+    const auto* p_n_section = attrs->indices_or_sections.as<IntImmNode>();
+    ICHECK_NOTNULL(p_n_section);
+    n_tensor = p_n_section->value;
+  }
+
+  Array<Type> output_type;
+  output_type.reserve(n_tensor);
+  for (int i = 0; i < n_tensor; ++i) {
+    output_type.push_back(GetRef<DynTensorType>(input_type));
+  }
+  return TupleType(output_type);
+}
+
 }  // namespace relax
 }  // namespace tvm

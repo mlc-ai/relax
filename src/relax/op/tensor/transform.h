@@ -83,6 +83,11 @@ Optional<Expr> InferShapeFull(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeFull(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.split */
+Optional<Expr> InferShapeSplit(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeSplit(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 

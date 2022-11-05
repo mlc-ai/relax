@@ -263,7 +263,7 @@ def cast(data: Expr, dtype: Union[str, tvm.DataType]) -> Expr:
 
 def take(
     data: Expr, indices: Expr, axis: Optional[int] = None, batch_dims: int = 0, mode: str = "clip"
-):
+) -> Expr:
     """Take elements from an array along an axis.
 
     Parameters
@@ -299,7 +299,7 @@ def full(
     fill_value: Expr,
     shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr],
     dtype: Optional[Union[str, tvm.DataType]],
-):
+) -> Expr:
     """Fill array with scalar value.
 
     Parameters
@@ -338,3 +338,53 @@ def full(
     elif isinstance(dtype, str):
         dtype = tvm.DataType(dtype)
     return _ffi_api.full(fill_value, shape, dtype)
+
+
+def split(
+    data: Expr,
+    indices_or_sections: Union[int, List[PrimExprLike], Tuple[PrimExprLike]],
+    axis: int = 0,
+) -> Expr:
+    """Split input tensor along axis by sections or indices.
+
+    If indices_or_sections is an integer, the input will be divided equally
+    along given axis. If such a split is not possible, an error is raised.
+
+    If indices_or_sections is a tuple of mixture of int or PrimExpr,
+    the entries indicate the indices where along axis the array is split.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The source array.
+
+    indices_or_sections : Union[int, Tuple[PrimExprLike]]
+        Indices or sections to split into. Accepts an int or a tuple
+
+    axis : int
+        The axis over which to split.
+
+    Returns
+    -------
+    ret : relax.Expr
+        The computed result.
+    """
+    if isinstance(indices_or_sections, (tuple, list)):
+        indices = []
+        for idx in indices_or_sections:
+            if isinstance(idx, PrimExpr):
+                indices.append(idx)
+            elif isinstance(idx, int):
+                indices.append(tvm.tir.const(idx, "int32"))
+            else:
+                raise RuntimeError(
+                    f'The input indices of split operator contains unrecognized index "{idx}"'
+                )
+        indices_or_sections = indices
+    elif isinstance(indices_or_sections, int):
+        indices_or_sections = tvm.tir.IntImm("int32", indices_or_sections)
+    else:
+        raise RuntimeError(
+            f"The input `indices_or_sections` has unrecognized type {type(indices_or_sections)}"
+        )
+    return _ffi_api.split(data, indices_or_sections, axis)
