@@ -924,6 +924,38 @@ def test_full():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_broadcast_to():
+    @I.ir_module
+    class BroadcastTo:
+        @R.function
+        def main(x: R.Tensor((2, 1, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((4, 2, 5, 3), "float32") = R.broadcast_to(x, (4, 2, 5, 3))
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 1, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv = R.call_tir(broadcast_to, (x,), (4, 2, 5, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def broadcast_to(
+            rxplaceholder: T.Buffer[(2, 1, 3), "float32"],
+            T_broadcast_to: T.Buffer[(4, 2, 5, 3), "float32"],
+        ) -> None:
+            T.func_attr({"global_symbol": "broadcast_to", "tir.noalias": True})
+            for i0, i1, i2, i3 in T.grid(4, 2, 5, 3):
+                with T.block("T_broadcast_to"):
+                    ax0, ax1, ax2, ax3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+                    T.reads(rxplaceholder[ax1, 0, ax3])
+                    T.writes(T_broadcast_to[ax0, ax1, ax2, ax3])
+                    T_broadcast_to[ax0, ax1, ax2, ax3] = rxplaceholder[ax1, 0, ax3]
+
+    mod = OperatorLegalizer(BroadcastTo).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_layer_norm():
     @I.ir_module
     class LayerNorm:
@@ -1433,6 +1465,7 @@ if __name__ == "__main__":
     test_full()
     # Todo: test_split_by_indices
     # Todo: test_split_by_n_section
+    test_broadcast_to()
     # Todo: test_batch_norm
     test_layer_norm()
     test_matmul_1_4()

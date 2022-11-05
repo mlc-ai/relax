@@ -865,11 +865,11 @@ Type InferTypeTake(const Call& call, DiagnosticContext diag_ctx) {
 }
 
 /* Initialization operators */
-TVM_REGISTER_NODE_TYPE(InitOpAttrs);
+TVM_REGISTER_NODE_TYPE(FullAttrs);
 
 /* relax.full */
 RELAX_REGISTER_OP("relax.full")
-    .set_attrs_type<InitOpAttrs>()
+    .set_attrs_type<FullAttrs>()
     .set_num_inputs(2)
     .add_argument("fill_value", "Tensor", "The scalar tensor, denoting the value to fill.")
     .add_argument("shape", "ShapeExpr", "The shape of the created tensor.")
@@ -877,7 +877,7 @@ RELAX_REGISTER_OP("relax.full")
     .set_attr<FInferType>("FInferType", InferTypeFull);
 
 Expr MakeFull(Expr fill_value, Expr shape, DataType dtype) {
-  ObjectPtr<InitOpAttrs> attrs = make_object<InitOpAttrs>();
+  ObjectPtr<FullAttrs> attrs = make_object<FullAttrs>();
   attrs->dtype = dtype;
 
   static const Op& op = Op::Get("relax.full");
@@ -935,7 +935,7 @@ Type InferTypeFull(const Call& call, DiagnosticContext diag_ctx) {
     ndim = shape->values.size();
   }
 
-  const auto* attrs = call->attrs.as<InitOpAttrs>();
+  const auto* attrs = call->attrs.as<FullAttrs>();
   return DynTensorType(ndim, attrs->dtype.is_void() ? fill_value_type->dtype : attrs->dtype);
 }
 
@@ -1068,6 +1068,88 @@ Type InferTypeSplit(const Call& call, DiagnosticContext diag_ctx) {
     output_type.push_back(GetRef<DynTensorType>(input_type));
   }
   return TupleType(output_type);
+}
+
+/* relax.broadcast_to */
+RELAX_REGISTER_OP("relax.broadcast_to")
+    .set_num_inputs(2)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .add_argument("shape", "ShapeExpr", "The shape of the created tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeBroadcastTo)
+    .set_attr<FInferType>("FInferType", InferTypeBroadcastTo);
+
+Expr MakeBroadcastTo(Expr data, Expr shape) {
+  const static Op& op = Op::Get("relax.broadcast_to");
+  return Call(op, {std::move(data), std::move(shape)}, Attrs(), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.broadcast_to").set_body_typed(MakeBroadcastTo);
+
+Optional<Expr> InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "BroadcastTo op should have 2 arguments");
+  }
+
+  const auto* data_shape = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* new_shape = call->args[1].as<ShapeExprNode>();
+  if (data_shape == nullptr || new_shape == nullptr) {
+    // Todo: need runtime shape broadcast compatibility check
+    return call->args[1];
+  }
+
+  int data_ndim = data_shape->values.size();
+  int new_ndim = new_shape->values.size();
+  if (new_ndim < data_ndim) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The broadcast_to operator expects the input new shape to have at least "
+                          "as many dimensions as the input data. However, the given data has ndim "
+                       << data_ndim << " while the given shape has ndim " << new_ndim);
+  }
+
+  arith::Analyzer ana;
+  for (int i = 1; i <= data_ndim; ++i) {
+    PrimExpr prev_len = data_shape->values[data_ndim - i];
+    PrimExpr new_len = new_shape->values[new_ndim - i];
+    if (tir::is_const_int(prev_len, 1)) {
+      continue;
+    } else if (ana.CanProve(prev_len != new_len)) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "The broadcast_to operator expects the input new shape is broadcast "
+                            "compatible with the shape of the input data. However, on the last but "
+                         << i << " dimension, the input data shape has length " << prev_len
+                         << " while the nwe shape has length " << new_len
+                         << ", which are not compatible");
+    }
+  }
+  return GetRef<ShapeExpr>(new_shape);
+}
+
+Type InferTypeBroadcastTo(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "BroadcastTo op should have 2 arguments");
+  }
+
+  const auto* data_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  const auto* shape_type = call->args[1]->checked_type().as<ShapeTypeNode>();
+  if (data_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input data should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input data has type DynTensorType.");
+  }
+  if (shape_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input new shape should has type ShapeType, but actually it is "
+                       << call->args[1]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input data has type ShapeType.");
+  }
+
+  // Todo(ruihang): add ndim to ShapeType
+  int ndim = -1;
+  if (const auto* shape = call->args[1].as<ShapeExprNode>()) {
+    ndim = shape->values.size();
+  }
+  return DynTensorType(ndim, data_type->dtype);
 }
 
 }  // namespace relax

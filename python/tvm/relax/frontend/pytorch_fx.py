@@ -455,7 +455,7 @@ class TorchFXTranslator:
 
     def _expand(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
-        return self.bb.emit_te(topi.broadcast_to, args[0], args[1:])
+        return self.bb.emit(relax.op.broadcast_to(args[0], args[1:]))
 
     def _float(self, node: fx.node.Node) -> relax.Var:
         return self.bb.emit(relax.op.cast(self.env[node.args[0]], "float32"))
@@ -531,7 +531,7 @@ class TorchFXTranslator:
         sub_x = self.bb.emit(relax.op.subtract(grouped_x, mean_x))
         square_x = self.bb.emit(relax.op.multiply(sub_x, sub_x))
         sum_square_x = self.bb.emit(relax.op.sum(square_x, [2, 3, 4], keepdims=True))
-        var_x = self.bb.emit_te(topi.divide, sum_square_x, C // num_groups * H * W)
+        var_x = self._call_binary_op(relax.op.divide, sum_square_x, (C // num_groups * H * W).value)
         var_x_eps = self._call_binary_op(relax.op.add, var_x, eps)
         std_x = self.bb.emit(relax.op.sqrt(var_x_eps))
         norm_x = self.bb.emit(relax.op.divide(sub_x, std_x))

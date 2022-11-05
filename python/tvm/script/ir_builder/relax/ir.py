@@ -26,6 +26,7 @@ from tvm.relax import Call, Expr, ExternFunc, ShapeExpr, Var
 ############################### Operators ###############################
 from tvm.relax.op import (
     add,
+    broadcast_to,
     builtin,
     call_tir,
     cast,
@@ -379,6 +380,7 @@ __all__ = [
     "add",
     "arg",
     "builtin",
+    "broadcast_to",
     "call_packed",
     "call_tir",
     "cast",

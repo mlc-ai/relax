@@ -129,9 +129,9 @@ class TakeAttrs(Attrs):
     """Attributes used in take operator"""
 
 
-@tvm._ffi.register_object("relax.attrs.InitOpAttrs")
-class InitOpAttrs(Attrs):
-    """Attributes that specify a tensor"""
+@tvm._ffi.register_object("relax.attrs.FullAttrs")
+class FullAttrs(Attrs):
+    """Attributes used in full operator"""
 
 
 @tvm._ffi.register_object("relax.attrs.SplitAttrs")

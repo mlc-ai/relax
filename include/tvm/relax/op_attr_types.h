@@ -455,14 +455,14 @@ struct TakeAttrs : public tvm::AttrsNode<TakeAttrs> {
   }
 };  // struct TakeAttrs
 
-/*! \brief Attributes that specify a tensor */
-struct InitOpAttrs : public tvm::AttrsNode<InitOpAttrs> {
+/*! \brief Attributes used in full operator */
+struct FullAttrs : public tvm::AttrsNode<FullAttrs> {
   DataType dtype;
 
-  TVM_DECLARE_ATTRS(InitOpAttrs, "relax.attrs.InitOpAttrs") {
+  TVM_DECLARE_ATTRS(FullAttrs, "relax.attrs.FullAttrs") {
     TVM_ATTR_FIELD(dtype).describe("Target data type.");
   }
-};  // struct InitOpAttrs
+};  // struct FullAttrs
 
 /*! \brief Attributes used in split operator */
 struct SplitAttrs : public tvm::AttrsNode<SplitAttrs> {

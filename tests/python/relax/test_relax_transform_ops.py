@@ -449,6 +449,22 @@ def test_split_by_n_section_not_divisible():
             bb.emit_func_output(gv)
 
 
+def test_broadcast_to():
+    @R.function
+    def expected(x: R.Tensor((2, 1, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((4, 2, 5, 3), "float32") = R.broadcast_to(x, (4, 2, 5, 3))
+        return gv
+
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", (2, 1, 3), relax.DynTensorType(3, "float32"))
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.broadcast_to(x, (4, 2, 5, 3)))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -475,3 +491,4 @@ if __name__ == "__main__":
     test_split_by_indices()
     test_split_by_n_section()
     test_split_by_n_section_not_divisible()
+    test_broadcast_to()

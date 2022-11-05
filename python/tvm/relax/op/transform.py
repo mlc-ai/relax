@@ -388,3 +388,40 @@ def split(
             f"The input `indices_or_sections` has unrecognized type {type(indices_or_sections)}"
         )
     return _ffi_api.split(data, indices_or_sections, axis)
+
+
+def broadcast_to(
+    data: Expr, shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+):
+    """Return a scalar value array with the same type, broadcast to
+    the provided shape.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input tensor.
+
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+        Provide the shape to broadcast to.
+
+    Returns
+    -------
+    result : relay.Expr
+        The resulting tensor.
+    """
+    if isinstance(shape, (PrimExpr, int)):
+        shape = [shape]
+    if isinstance(shape, (tuple, list)):
+        temp_shape = []
+        for shape in shape:
+            if isinstance(shape, PrimExpr):
+                temp_shape.append(shape)
+            elif isinstance(shape, int):
+                temp_shape.append(tvm.tir.const(shape, "int32"))
+            else:
+                raise RuntimeError(
+                    f"The input new shape of reshape operator contains unrecognized dimension {shape}"
+                )
+        shape = relax.ShapeExpr(temp_shape)
+
+    return _ffi_api.broadcast_to(data, shape)
