@@ -275,6 +275,11 @@ def flatten(data: Expr) -> Expr:
     """
     return _ffi_api.flatten(data)
 
+def sigmoid(data: Expr) -> Expr:
+    return _make.sigmoid(data)
+
+def tanh(data: Expr) -> Expr:
+    return _make.tanh(data)
 
 def max_pool2d(
     data: Expr,
