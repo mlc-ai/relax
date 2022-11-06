@@ -177,6 +177,20 @@ def _strided_slice(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shap
     )
 
 
+def _nn_max_pool2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.nn.pool2d,
+        args[0],
+        kernel=attrs.pool_size,
+        stride=attrs.strides,
+        dilation=attrs.dilation,
+        padding=attrs.padding,
+        pool_type="max",
+        ceil_mode=attrs.ceil_mode,
+        layout=attrs.layout,
+    )
+
+
 def _nn_batch_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(
         topi.nn.batch_norm,
@@ -318,6 +332,7 @@ op_legalization_map = {
     ir.Op.get("relax.split"): _split,
     ir.Op.get("relax.strided_slice"): _strided_slice,
     ir.Op.get("relax.broadcast_to"): _broadcast_to,
+    ir.Op.get("relax.nn.max_pool2d"): _nn_max_pool2d,
     ir.Op.get("relax.nn.batch_norm"): _nn_batch_norm,
     ir.Op.get("relax.nn.layer_norm"): _nn_layer_norm,
     ir.Op.get("relax.nn.matmul"): _nn_matmul,

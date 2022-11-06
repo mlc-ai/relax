@@ -997,6 +997,61 @@ def test_strided_slice():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_max_pool2d():
+    @I.ir_module
+    class MaxPool2D:
+        @R.function
+        def main(x: R.Tensor((4, 6, 112, 112), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((4, 6, 56, 56), "float32") = R.max_pool2d(
+                x,
+                pool_size=[3, 3],
+                strides=[2, 2],
+                dilation=[1, 1],
+                padding=[1, 1, 1, 1],
+                layout="NCHW",
+            )
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((4, 6, 112, 112), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv = R.call_tir(pool2d, (x,), (4, 6, 56, 56), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def pool2d(
+            rxplaceholder: T.Buffer[(4, 6, 112, 112), "float32"],
+            tensor: T.Buffer[(4, 6, 56, 56), "float32"],
+        ) -> None:
+            T.func_attr({"global_symbol": "pool2d", "tir.noalias": True})
+            pad_temp = T.alloc_buffer([4, 6, 114, 114], dtype="float32")
+            for i0, i1, i2, i3 in T.grid(4, 6, 114, 114):
+                with T.block("pad_temp"):
+                    ax0, ax1, ax2, ax3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+                    T.reads(rxplaceholder[ax0, ax1, ax2 - 1, ax3 - 1])
+                    T.writes(pad_temp[ax0, ax1, ax2, ax3])
+                    pad_temp[ax0, ax1, ax2, ax3] = T.if_then_else(
+                        1 <= ax2 and ax2 < 113 and 1 <= ax3 and ax3 < 113,
+                        rxplaceholder[ax0, ax1, ax2 - 1, ax3 - 1],
+                        T.float32(-3.4028234663852886e38),
+                        dtype="float32",
+                    )
+            for i0, i1, i2, i3, i4, i5 in T.grid(4, 6, 56, 56, 3, 3):
+                with T.block("tensor"):
+                    ax0, ax1, ax2, ax3, rv0, rv1 = T.axis.remap("SSSSRR", [i0, i1, i2, i3, i4, i5])
+                    T.reads(pad_temp[ax0, ax1, ax2 * 2 + rv0, ax3 * 2 + rv1])
+                    T.writes(tensor[ax0, ax1, ax2, ax3])
+                    with T.init():
+                        tensor[ax0, ax1, ax2, ax3] = T.float32(-3.4028234663852886e38)
+                    tensor[ax0, ax1, ax2, ax3] = T.max(
+                        tensor[ax0, ax1, ax2, ax3], pad_temp[ax0, ax1, ax2 * 2 + rv0, ax3 * 2 + rv1]
+                    )
+
+    mod = OperatorLegalizer(MaxPool2D).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_layer_norm():
     @I.ir_module
     class LayerNorm:
@@ -1558,6 +1613,7 @@ if __name__ == "__main__":
     # Todo: test_split_by_n_section
     test_broadcast_to()
     test_strided_slice()
+    test_max_pool2d()
     # Todo: test_batch_norm
     test_layer_norm()
     test_matmul_1_4()

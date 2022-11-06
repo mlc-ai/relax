@@ -204,14 +204,15 @@ class TorchFXTranslator:
         padding = padding if isinstance(padding, tuple) else (padding, padding, padding, padding)
         dilation = dilation if isinstance(dilation, tuple) else (dilation, dilation)
 
-        return self.bb.emit_te(
-            topi.nn.pool2d,
-            x,
-            kernel,
-            stride,
-            dilation,
-            padding,
-            pool_type="max",
+        return self.bb.emit(
+            relax.op.nn.max_pool2d(
+                x,
+                pool_size=kernel,
+                strides=stride,
+                padding=padding,
+                dilation=dilation,
+                layout="NCHW",
+            )
         )
 
     def _embedding(self, node: fx.node.Node) -> relax.Var:
@@ -283,7 +284,13 @@ class TorchFXTranslator:
         idx = node.args[1]
         return x.shape[idx].value
 
+    def _type(self, node: fx.node.Node) -> relax.Var:
+        args = self.retrive_args(node)
+        return self.bb.emit(relax.op.cast(args[0], args[1]))
+
     def _getattr(self, node: fx.node.Node) -> relax.Var:
+        if isinstance(self.env[node.args[0]], relax.Var) and node.args[1] == "dtype":
+            return self.env[node.args[0]].checked_type.dtype
         return getattr(self.env[node.args[0]], node.args[1])
 
     def _getitem(self, node: fx.node.Node) -> relax.Var:
@@ -324,7 +331,6 @@ class TorchFXTranslator:
                 axes.append(i)
                 i = i + 1
             sliced = self.bb.emit(relax.op.strided_slice(x, begin, end, stride, axes))
-            # sliced = self.bb.emit_te(topi.strided_slice, x, begin, end, stride, axes)
             sliced_shape = list(sliced.shape_)
             for i in expand_dim:
                 sliced_shape.insert(i, 1)
@@ -494,17 +500,9 @@ class TorchFXTranslator:
 
     def _view(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
-        infer_idx = -1
-        prod = 1
-        new_shape = list(args[1:])
-        for i in range(len(new_shape)):
-            if new_shape[i] == -1:
-                infer_idx = i
-            else:
-                prod *= new_shape[i]
-        if infer_idx != -1:
-            new_shape[infer_idx] = np.prod(args[0].shape).value // prod
-        return self.bb.emit(relax.op.reshape(args[0], new_shape))
+        if isinstance(args[1], (torch.Size, tuple, list)):
+            return self.bb.emit(relax.op.reshape(args[0], tuple(args[1])))
+        return self.bb.emit(relax.op.reshape(args[0], args[1:]))
 
     def _silu(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -610,6 +608,7 @@ class TorchFXTranslator:
             "transpose": self._transpose,
             "softmax": self._softmax,
             "view": self._view,
+            "type": self._type,
             "contiguous": lambda node: self.env[node.args[0]],
         }
 
