@@ -410,14 +410,10 @@ class TorchFXTranslator:
         else:
             coord_trans = "half_pixel"
 
-        return self.bb.emit_te(
-            topi.image.resize2d,
-            data,
-            [0.0] * 4,
-            size,
-            layout="NCHW",
-            method=method,
-            coordinate_transformation_mode=coord_trans,
+        return self.bb.emit(
+            relax.op.image.resize2d(
+                data, size, layout="NCHW", method=method, coordinate_transformation_mode=coord_trans
+            )
         )
 
     def _addmm(self, node: fx.node.Node) -> relax.Var:

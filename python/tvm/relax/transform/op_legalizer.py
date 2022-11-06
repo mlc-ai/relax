@@ -277,6 +277,22 @@ def _mean(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.divide, sum_var, shape_prod)
 
 
+def _image_resize2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.image.resize2d,
+        args[0],
+        roi=attrs.roi,
+        size=attrs.size,
+        layout=attrs.layout,
+        method=attrs.method,
+        coordinate_transformation_mode=attrs.coordinate_transformation_mode,
+        rounding_method=attrs.rounding_method,
+        bicubic_alpha=attrs.cubic_alpha,
+        bicubic_exclude=attrs.cubic_exclude,
+        extrapolation_value=attrs.extrapolation_value,
+    )
+
+
 op_legalization_map = {
     ir.Op.get("relax.nn.conv2d"): _nn_conv2d,
     ir.Op.get("relax.add"): _add,
@@ -309,6 +325,7 @@ op_legalization_map = {
     ir.Op.get("relax.nn.flatten"): _nn_flatten,
     ir.Op.get("relax.sum"): _sum,
     ir.Op.get("relax.mean"): _mean,
+    ir.Op.get("relax.image.resize2d"): _image_resize2d,
 }
 
 

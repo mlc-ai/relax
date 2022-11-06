@@ -503,6 +503,56 @@ struct StridedSliceAttrs : public tvm::AttrsNode<StridedSliceAttrs> {
   }
 };  // struct StridedSliceAttrs
 
+/*! \brief Attributes used in image resize2d operator */
+struct Resize2DAttrs : public tvm::AttrsNode<Resize2DAttrs> {
+  Array<PrimExpr> size;
+  Array<FloatImm> roi;
+  String layout;
+  String method;
+  String coordinate_transformation_mode;
+  String rounding_method;
+  double cubic_alpha;
+  int cubic_exclude;
+  double extrapolation_value;
+
+  TVM_DECLARE_ATTRS(Resize2DAttrs, "relax.attrs.Resize2DAttrs") {
+    TVM_ATTR_FIELD(size).describe("Output image size.");
+    TVM_ATTR_FIELD(roi).describe(
+        "Region of Interest for coordinate transformation mode 'tf_crop_and_resize'");
+    TVM_ATTR_FIELD(layout).set_default("NCHW").describe(
+        "Dimension ordering of input data. Can be 'NCHW', 'NHWC', etc."
+        "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
+        "dimensions respectively. Resize is applied on the 'H' and"
+        "'W' dimensions.");
+    TVM_ATTR_FIELD(method).set_default("linear").describe(
+        "Specify the mode to use for scaling."
+        "nearest_neighbor -  Nearest Neighbor"
+        "linear - Bilinear Interpolation"
+        "cubic - Bicubic Interpolation");
+    TVM_ATTR_FIELD(coordinate_transformation_mode)
+        .set_default("half_pixel")
+        .describe(
+            "Describes how to transform the coordinate in the resized tensor"
+            "to the coordinate in the original tensor."
+            "Refer to the ONNX Resize operator specification for details"
+            "Available options are half_pixel, align_corners and asymmetric");
+    TVM_ATTR_FIELD(rounding_method)
+        .set_default("round")
+        .describe(
+            "indicates how to find the \"nearest\" pixel in nearest_neighbor method"
+            "Available options are round, floor, and ceil.");
+    TVM_ATTR_FIELD(cubic_alpha)
+        .set_default(-0.5)
+        .describe("Spline Coefficient for Bicubic Interpolation");
+    TVM_ATTR_FIELD(cubic_exclude)
+        .set_default(0)
+        .describe("Flag to exclude exterior of the image during bicubic interpolation");
+    TVM_ATTR_FIELD(extrapolation_value)
+        .set_default(0.0)
+        .describe("Value to return when roi is outside of the image");
+  }
+};  // struct Resize2dAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_

@@ -1480,6 +1480,56 @@ def test_mean():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_image_resize2d():
+    @I.ir_module
+    class Resize2D:
+        @R.function
+        def main(x: R.Tensor((2, 8, 8, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((2, 16, 16, 3), "float32") = R.resize2d(
+                x,
+                size=[16, 16],
+                layout="NHWC",
+                method="nearest_neighbor",
+                coordinate_transformation_mode="asymmetric",
+            )
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 8, 8, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv = R.call_tir(resize2d, (x,), (2, 16, 16, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def resize2d(
+            rxplaceholder: T.Buffer[(2, 8, 8, 3), "float32"],
+            resize: T.Buffer[(2, 16, 16, 3), "float32"],
+        ) -> None:
+            T.func_attr({"global_symbol": "resize2d", "tir.noalias": True})
+            for i0, i1, i2, i3 in T.grid(2, 16, 16, 3):
+                with T.block("resize"):
+                    i0_1, i1_1, i2_1, i3_1 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+                    T.reads(
+                        rxplaceholder[
+                            i0_1,
+                            T.max(T.min(T.div(i1_1, 2), 7), 0),
+                            T.max(T.min(T.div(i2_1, 2), 7), 0),
+                            i3_1,
+                        ]
+                    )
+                    T.writes(resize[i0_1, i1_1, i2_1, i3_1])
+                    resize[i0_1, i1_1, i2_1, i3_1] = rxplaceholder[
+                        i0_1,
+                        T.max(T.min(T.div(i1_1, 2), 7), 0),
+                        T.max(T.min(T.div(i2_1, 2), 7), 0),
+                        i3_1,
+                    ]
+
+    mod = OperatorLegalizer(Resize2D).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 if __name__ == "__main__":
     test_conv2d()
     test_add()
@@ -1517,3 +1567,4 @@ if __name__ == "__main__":
     test_softmax()
     test_sum()
     test_mean()
+    test_image_resize2d()

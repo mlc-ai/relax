@@ -392,7 +392,7 @@ def split(
 
 def broadcast_to(
     data: Expr, shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
-):
+) -> Expr:
     """Return a scalar value array with the same type, broadcast to
     the provided shape.
 
@@ -434,7 +434,7 @@ def strided_slice(
     strides: Optional[Union[List[PrimExprLike], Tuple[PrimExprLike]]] = None,
     axes: Optional[Union[List[int], Tuple[int]]] = None,
     slice_mode: str = "end",
-):
+) -> Expr:
     """Strided slice of an array.
 
     Parameters
