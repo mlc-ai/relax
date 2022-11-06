@@ -293,8 +293,8 @@ class TorchFXTranslator:
         elif isinstance(x, relax.Var):
             if isinstance(x.shape, relax.Tuple):
                 return self.bb.emit(relax.TupleGetItem(x, node.args[1]))
-            else:
-                begin = []
+
+            begin = []
             end = []
             stride = []
             axes = []
@@ -315,6 +315,7 @@ class TorchFXTranslator:
                     i = i + 1
                 elif index is None:
                     expand_dim.append(i)
+                    i = i + 1
                 else:
                     raise ValueError("Unsupported index type: " + str(type(index)))
             while i < len(x.shape_):
@@ -322,7 +323,8 @@ class TorchFXTranslator:
                 end.append(x.shape_[i])
                 axes.append(i)
                 i = i + 1
-            sliced = self.bb.emit_te(topi.strided_slice, x, begin, end, stride, axes)
+            sliced = self.bb.emit(relax.op.strided_slice(x, begin, end, stride, axes))
+            # sliced = self.bb.emit_te(topi.strided_slice, x, begin, end, stride, axes)
             sliced_shape = list(sliced.shape_)
             for i in expand_dim:
                 sliced_shape.insert(i, 1)

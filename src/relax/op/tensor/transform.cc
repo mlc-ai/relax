@@ -1152,5 +1152,161 @@ Type InferTypeBroadcastTo(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(ndim, data_type->dtype);
 }
 
+/* relax.strided_slice */
+TVM_REGISTER_NODE_TYPE(StridedSliceAttrs);
+
+RELAX_REGISTER_OP("relax.strided_slice")
+    .set_attrs_type<StridedSliceAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferShape>("FInferShape", InferShapeStridedSlice)
+    .set_attr<FInferType>("FInferType", InferTypeStridedSlice);
+
+Expr MakeStridedSlice(Expr data,                          //
+                      Array<PrimExpr> begin,              //
+                      Array<PrimExpr> end,                //
+                      Optional<Array<PrimExpr>> strides,  //
+                      Optional<Array<Integer>> axes,      //
+                      String slice_mode) {
+  CHECK(slice_mode == "end" || slice_mode == "size")
+      << "Operator strided_slice expects the input `slice_mode` to be either \"end\" or \"size\". "
+         "However, the given `slice_mode` is "
+      << slice_mode;
+
+  ObjectPtr<StridedSliceAttrs> attrs = make_object<StridedSliceAttrs>();
+  attrs->begin = std::move(begin);
+  attrs->end = std::move(end);
+  attrs->strides = std::move(strides);
+  attrs->axes = std::move(axes);
+  attrs->slice_mode = std::move(slice_mode);
+
+  const static Op& op = Op::Get("relax.strided_slice");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.strided_slice").set_body_typed(MakeStridedSlice);
+
+Optional<Expr> InferShapeStridedSlice(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "StridedSlice op should have 1 argument");
+  }
+
+  const auto* input_shape = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* attrs = call->attrs.as<StridedSliceAttrs>();
+  if (input_shape == nullptr) {
+    return RuntimeDepShape();
+  }
+
+  int ndim = input_shape->values.size();
+  Array<Integer> axes;
+  if (attrs->axes.defined()) {
+    axes = attrs->axes.value();
+  } else {
+    axes.reserve(ndim);
+    for (int i = 0; i < ndim; ++i) {
+      axes.push_back(Integer(i));
+    }
+  }
+
+  int n_axis = axes.size();
+  Array<PrimExpr> begins = attrs->begin;
+  Array<PrimExpr> ends = attrs->end;
+  Array<PrimExpr> strides;
+  if (attrs->strides.defined()) {
+    strides = attrs->strides.value();
+  } else {
+    strides.reserve(n_axis);
+    for (int i = 0; i < n_axis; ++i) {
+      strides.push_back(tir::make_const(DataType::Int(32), 1));
+    }
+  }
+
+  if (static_cast<int>(begins.size()) != n_axis) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "The strided_slice operator expects the input begin values to have the same length as "
+           "the number of input axes. However, the input axes length is  "
+        << n_axis << " while the length of begin values is " << begins.size());
+  }
+  if (static_cast<int>(ends.size()) != n_axis) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "The strided_slice operator expects the input end values to have the same length as "
+           "the number of input axes. However, the input axes length is  "
+        << n_axis << " while the length of end values is " << ends.size());
+  }
+  if (static_cast<int>(strides.size()) != n_axis) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "The strided_slice operator expects the input stride values to have the same length as "
+           "the number of input axes. However, the input axes length is  "
+        << n_axis << " while the length of stride values is " << strides.size());
+  }
+
+  arith::Analyzer ana;
+  Array<PrimExpr> output_shape = input_shape->values;
+  std::unordered_set<int> specified_axes;
+  specified_axes.reserve(axes.size());
+  for (int i = 0; i < static_cast<int>(axes.size()); ++i) {
+    int axis = axes[i]->value;
+    if (axis < 0) {
+      axis = ndim + axis;
+    }
+    if (axis < 0 || axis >= ndim) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "Operator strided_slice expects the input axis to be in range ["
+                         << -ndim << ", " << ndim << "). However, the given axis " << i << " is "
+                         << axes[i]->value << ", which is out of range");
+    }
+    if (specified_axes.count(axis)) {
+      diag_ctx.EmitFatal(
+          Diagnostic::Error(call->span)
+          << "Operator strided_slice expects the input axes not to duplicate. However, axis "
+          << axis << " occurs twice");
+    }
+    specified_axes.insert(axis);
+
+    PrimExpr begin = begins[i];
+    PrimExpr end{nullptr};
+    PrimExpr stride = strides[i];
+
+    if (attrs->slice_mode == "size") {
+      stride = tir::make_const(DataType::Int(32), 1);
+      end = begin + ends[i];
+    } else {
+      if (attrs->slice_mode != "end") {
+        diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                           << "The strided_slice operator expects the input `slice_mode` to be "
+                              "either \"end\" or \"size\". However, the given `slice_mode` is "
+                           << attrs->slice_mode);
+      }
+      end = tvm::min(input_shape->values[axis], ends[i]);
+    }
+    if (ana.CanProveLess(stride, 0)) {
+      output_shape.Set(axis, tvm::ceildiv(begin - end, -stride));
+    } else {
+      output_shape.Set(axis, tvm::ceildiv(end - begin, stride));
+    }
+  }
+
+  return ShapeExpr(output_shape);
+}
+
+Type InferTypeStridedSlice(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "StridedSlice op should have 1 argument");
+  }
+
+  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (input_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input data should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input data has type DynTensorType.");
+  }
+
+  return GetRef<DynTensorType>(input_type);
+}
+
 }  // namespace relax
 }  // namespace tvm

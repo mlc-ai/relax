@@ -465,6 +465,31 @@ def test_broadcast_to():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_strided_slice():
+    @R.function
+    def expected(x: R.Tensor((8, 9, 10, 10), "float32")) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((4, 9, 10, 3), "float32") = R.strided_slice(
+            x,
+            begin=[1, 0, 8],
+            end=[8, 9, 0],
+            strides=[2, 1, -3],
+            axes=[0, 1, -1],
+            slice_mode="end",
+        )
+        return gv
+
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", (8, 9, 10, 10), relax.DynTensorType(4, "float32"))
+    with bb.function("main", [x]):
+        gv = bb.emit(
+            relax.op.transform.strided_slice(x, [1, 0, 8], [8, 9, 0], [2, 1, -3], [0, 1, -1])
+        )
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -492,3 +517,4 @@ if __name__ == "__main__":
     test_split_by_n_section()
     test_split_by_n_section_not_divisible()
     test_broadcast_to()
+    test_strided_slice()

@@ -165,6 +165,18 @@ def _broadcast_to(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape
     return bb.call_te(topi.broadcast_to, args[0], args[1])
 
 
+def _strided_slice(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.strided_slice,
+        args[0],
+        attrs.begin,
+        attrs.end,
+        attrs.strides,
+        attrs.axes,
+        attrs.slice_mode,
+    )
+
+
 def _nn_batch_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(
         topi.nn.batch_norm,
@@ -288,6 +300,7 @@ op_legalization_map = {
     ir.Op.get("relax.take"): _take,
     ir.Op.get("relax.full"): _full,
     ir.Op.get("relax.split"): _split,
+    ir.Op.get("relax.strided_slice"): _strided_slice,
     ir.Op.get("relax.broadcast_to"): _broadcast_to,
     ir.Op.get("relax.nn.batch_norm"): _nn_batch_norm,
     ir.Op.get("relax.nn.layer_norm"): _nn_layer_norm,

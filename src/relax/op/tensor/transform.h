@@ -93,6 +93,11 @@ Optional<Expr> InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ct
 
 Type InferTypeBroadcastTo(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.strided_slice */
+Optional<Expr> InferShapeStridedSlice(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeStridedSlice(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 

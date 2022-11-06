@@ -956,6 +956,47 @@ def test_broadcast_to():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_strided_slice():
+    @I.ir_module
+    class StridedSlice:
+        @R.function
+        def main(x: R.Tensor((8, 9, 10, 10), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((4, 9, 10, 3), "float32") = R.strided_slice(
+                x,
+                begin=[1, 0, 8],
+                end=[8, 9, 0],
+                strides=[2, 1, -3],
+                axes=[0, 1, 3],
+                slice_mode="end",
+            )
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((8, 9, 10, 10), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv = R.call_tir(strided_slice, (x,), (4, 9, 10, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def strided_slice(
+            rxplaceholder: T.Buffer[(8, 9, 10, 10), "float32"],
+            T_strided_slice_with_axes: T.Buffer[(4, 9, 10, 3), "float32"],
+        ) -> None:
+            T.func_attr({"global_symbol": "strided_slice", "tir.noalias": True})
+            for i0, i1, i2, i3 in T.grid(4, 9, 10, 3):
+                with T.block("T_strided_slice_with_axes"):
+                    ax0, ax1, ax2, ax3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+                    T.reads(rxplaceholder[ax0 * 2 + 1, ax1, ax2, 8 - ax3 * 3])
+                    T.writes(T_strided_slice_with_axes[ax0, ax1, ax2, ax3])
+                    T_strided_slice_with_axes[ax0, ax1, ax2, ax3] = rxplaceholder[
+                        ax0 * 2 + 1, ax1, ax2, 8 - ax3 * 3
+                    ]
+
+    mod = OperatorLegalizer(StridedSlice).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_layer_norm():
     @I.ir_module
     class LayerNorm:
@@ -1466,6 +1507,7 @@ if __name__ == "__main__":
     # Todo: test_split_by_indices
     # Todo: test_split_by_n_section
     test_broadcast_to()
+    test_strided_slice()
     # Todo: test_batch_norm
     test_layer_norm()
     test_matmul_1_4()

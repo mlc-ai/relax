@@ -425,3 +425,64 @@ def broadcast_to(
         shape = relax.ShapeExpr(temp_shape)
 
     return _ffi_api.broadcast_to(data, shape)
+
+
+def strided_slice(
+    data: Expr,
+    begin: Union[List[PrimExprLike], Tuple[PrimExprLike]],
+    end: Union[List[PrimExprLike], Tuple[PrimExprLike]],
+    strides: Optional[Union[List[PrimExprLike], Tuple[PrimExprLike]]] = None,
+    axes: Optional[Union[List[int], Tuple[int]]] = None,
+    slice_mode: str = "end",
+):
+    """Strided slice of an array.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The source array to be sliced.
+
+    begin : Union[List[PrimExprLike], Tuple[PrimExprLike]],
+        The indices to begin with in the slicing.
+
+    end : Union[List[PrimExprLike], Tuple[PrimExprLike]]
+        Indices indicating end of the slice.
+
+    strides : Optional[Union[List[PrimExprLike], Tuple[PrimExprLike]]]
+        Specifies the stride values, it can be negative in that case,
+        the input tensor will be reversed in that particular axis.
+
+    axes : Optional[Union[List[int], Tuple[int]]]
+        Axes along which slicing is applied. When it is specified, the length of begin, end,
+        strides, and axes must be equal.
+
+    slice_mode : str
+        The slice mode [end, size].
+        end: The ending indices for the slice [default].
+        size: The input strides will be ignored, input end in this mode indicates
+        the size of a slice starting at the location specified by begin. If end[i]
+        is -1, all remaining elements in that dimension are included in the slice.
+
+    Returns
+    -------
+    ret : relax.Expr
+        The computed result.
+    """
+
+    def convert_int(arr):
+        res = []
+        for x in arr:
+            if isinstance(x, PrimExpr):
+                res.append(x)
+            elif isinstance(x, int):
+                res.append(tvm.tir.const(x, "int32"))
+            else:
+                raise RuntimeError(
+                    f"The input of strided_slice operator contains unrecognized value {x}"
+                )
+        return res
+
+    begin = convert_int(begin)
+    end = convert_int(end)
+    strides = convert_int(strides) if strides else None
+    return _ffi_api.strided_slice(data, begin, end, strides, axes, slice_mode)
