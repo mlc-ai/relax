@@ -553,6 +553,21 @@ struct Resize2DAttrs : public tvm::AttrsNode<Resize2DAttrs> {
   }
 };  // struct Resize2dAttrs
 
+/*! \brief Attributes for 2d adaptive pool operator */
+struct AdaptivePool2DAttrs : public tvm::AttrsNode<AdaptivePool2DAttrs> {
+  Optional<Array<PrimExpr>> output_size;
+  String layout;
+
+  TVM_DECLARE_ATTRS(AdaptivePool2DAttrs, "relax.attrs.AdaptivePool2DAttrs") {
+    TVM_ATTR_FIELD(output_size).describe("Output height and width.");
+    TVM_ATTR_FIELD(layout).describe(
+        "Dimension ordering of input data. Can be 'NCHW', 'NHWC', etc."
+        "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
+        "dimensions respectively. Pooling is applied on the 'H' and"
+        "'W' dimensions.");
+  }
+};  // struct AdaptivePool2DAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_

@@ -25,6 +25,7 @@ from tvm.relax import Call, Expr, ExternFunc, ShapeExpr, Var
 
 ############################### Operators ###############################
 from tvm.relax.op import (
+    adaptive_avg_pool2d,
     add,
     broadcast_to,
     builtin,
@@ -380,6 +381,7 @@ __all__ = [
     "Shape",
     "TensorType",
     "Then",
+    "adaptive_avg_pool2d",
     "add",
     "arg",
     "builtin",

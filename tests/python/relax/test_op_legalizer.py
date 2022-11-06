@@ -1450,6 +1450,52 @@ def test_softmax():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_adaptive_avg_pool2d():
+    @I.ir_module
+    class AdaptiveAvgPool2D:
+        @R.function
+        def main(x: R.Tensor((2, 64, 7, 7), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((2, 64, 1, 1), "float32") = R.adaptive_avg_pool2d(x, output_size=[1, 1])
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 64, 7, 7), "float32")) -> R.Tensor(None, "float32", ndim=4):
+            gv = R.call_tir(adaptive_pool, (x,), (2, 64, 1, 1), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def adaptive_pool(
+            rxplaceholder: T.Buffer[(2, 64, 7, 7), "float32"],
+            tensor: T.Buffer[(2, 64, 1, 1), "float32"],
+        ) -> None:
+            T.func_attr({"global_symbol": "adaptive_pool", "tir.noalias": True})
+            tensor_1 = T.alloc_buffer([2, 64, 1, 1], dtype="float32")
+            for i0, i1, i2, i3, i4, i5 in T.grid(2, 64, 1, 1, 7, 7):
+                with T.block("tensor"):
+                    ax0, ax1, ax2, ax3, rv0, rv1 = T.axis.remap("SSSSRR", [i0, i1, i2, i3, i4, i5])
+                    T.reads(rxplaceholder[ax0, ax1, ax2 * 7 + rv0, ax3 * 7 + rv1])
+                    T.writes(tensor_1[ax0, ax1, ax2, ax3])
+                    with T.init():
+                        tensor_1[ax0, ax1, ax2, ax3] = T.float32(0)
+                    tensor_1[ax0, ax1, ax2, ax3] = (
+                        tensor_1[ax0, ax1, ax2, ax3]
+                        + rxplaceholder[ax0, ax1, ax2 * 7 + rv0, ax3 * 7 + rv1]
+                    )
+            for i0, i1, i2, i3 in T.grid(2, 64, 1, 1):
+                with T.block("tensor_1"):
+                    ax0, ax1, ax2, ax3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+                    T.reads(tensor_1[ax0, ax1, ax2, ax3])
+                    T.writes(tensor[ax0, ax1, ax2, ax3])
+                    tensor[ax0, ax1, ax2, ax3] = tensor_1[ax0, ax1, ax2, ax3] * T.float32(
+                        0.020408163265306121
+                    )
+
+    mod = OperatorLegalizer(AdaptiveAvgPool2D).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_sum():
     @I.ir_module
     class Sum:
@@ -1586,41 +1632,7 @@ def test_image_resize2d():
 
 
 if __name__ == "__main__":
-    test_conv2d()
-    test_add()
-    test_subtract()
-    test_multiply()
-    test_divide()
-    test_floor_divide()
-    test_sin()
-    test_cos()
-    test_sqrt()
-    test_relu()
-    test_gelu()
-    test_silu()
-    test_reshape()
-    test_reshape_dim_inference()
-    test_transpose()
-    test_concatenate()
-    test_cumsum()
-    test_cumsum_without_specified_axis()
-    test_expand_dims()
-    test_trilu()
-    test_cast()
-    test_take()
-    test_full()
     # Todo: test_split_by_indices
     # Todo: test_split_by_n_section
-    test_broadcast_to()
-    test_strided_slice()
-    test_max_pool2d()
     # Todo: test_batch_norm
-    test_layer_norm()
-    test_matmul_1_4()
-    test_matmul_4_1()
-    test_matmul_1_1()
-    test_matmul_4_5()
-    test_softmax()
-    test_sum()
-    test_mean()
-    test_image_resize2d()
+    pytest.main([__file__])

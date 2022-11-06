@@ -147,3 +147,8 @@ class StridedSliceAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.Resize2DAttrs")
 class Resize2DAttrs(Attrs):
     """Attributes used in image resize2d operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.AdaptivePool2DAttrs")
+class AdaptivePool2DAttrs(Attrs):
+    """Attributes for 2d adaptive pool operator"""

@@ -278,6 +278,12 @@ def _nn_flatten(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: 
     return bb.call_te(topi.nn.flatten, args[0])
 
 
+def _nn_adaptive_max_pool2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.nn.adaptive_pool, args[0], attrs.output_size, pool_type="avg", layout=attrs.layout
+    )
+
+
 def _sum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.sum, args[0], attrs.axis, attrs.keepdims)
 
@@ -338,6 +344,7 @@ op_legalization_map = {
     ir.Op.get("relax.nn.matmul"): _nn_matmul,
     ir.Op.get("relax.nn.softmax"): _nn_softmax,
     ir.Op.get("relax.nn.flatten"): _nn_flatten,
+    ir.Op.get("relax.nn.adaptive_avg_pool2d"): _nn_adaptive_max_pool2d,
     ir.Op.get("relax.sum"): _sum,
     ir.Op.get("relax.mean"): _mean,
     ir.Op.get("relax.image.resize2d"): _image_resize2d,

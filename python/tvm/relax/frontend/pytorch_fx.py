@@ -226,9 +226,7 @@ class TorchFXTranslator:
         module = self.named_modules[node.target]
         x = self.env[node.args[0]]
 
-        return self.bb.emit_te(
-            topi.nn.adaptive_pool, x, module.output_size, pool_type="avg", layout="NCHW"
-        )
+        return self.bb.emit(relax.op.nn.adaptive_avg_pool2d(x, module.output_size, layout="NCHW"))
 
     def _flatten(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
