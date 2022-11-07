@@ -123,12 +123,9 @@ def gemm():
     mod = construct_mod_gemm(m=m, n=n, k=k)
 
     with tvm.transform.PassContext():
-        # print(mod.script())
         mod = relax.transform.SplitCutlass()(mod)
         mod = relax.transform.RemoveUnusedFunctions()(mod)
-        # print(mod.script())
         mod = relax.transform.CutlassCodegen()(mod)
-        # print(mod.script())
         exe = relax.vm.build(mod, target=target)
     exe.mod.export_library(PKG_FILE, cc="nvcc")
     vm = relax.VirtualMachine(
@@ -153,12 +150,9 @@ def gemm_bias_relu():
     mod = construct_mod_gemm_bias_relu(m=m, n=n, k=k)
 
     with tvm.transform.PassContext():
-        # print(mod.script())
         mod = relax.transform.SplitCutlass()(mod)
-        print(mod.script())
         mod = relax.transform.RemoveUnusedFunctions()(mod)
         mod = relax.transform.CutlassCodegen()(mod)
-        print(mod.script())
         executable = relax.vm.build(mod, target=target)
     executable.mod.export_library(PKG_FILE, cc="nvcc")
     executable = tvm.runtime.load_module(PKG_FILE)
@@ -172,8 +166,8 @@ def gemm_bias_relu():
     bias = tvm.nd.array(bias_np, device=tvm.cuda())
     c = vm["main"](a, b, bias)
     c_np = np.maximum(np.matmul(a_np, b_np) + bias_np, 0)
-    print(c)
-    print(c_np)
+    # print(c)
+    # print(c_np)
 
     np.testing.assert_allclose(c.numpy(), c.numpy(), rtol=1e-2, atol=1e-2)
 
