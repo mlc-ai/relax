@@ -9,7 +9,7 @@ from tvm.script.ir_builder import relax as R
 from tvm.script.ir_builder import tir as T
 from tvm.tir import StringImm, cutlass_gemm
 
-import pattern
+import tvm.relax.cutlass.pattern
 
 PKG_FILE = "/tmp/packaged.so"
 GLOBAL_SYMBOL = "HGEMM"
@@ -125,8 +125,6 @@ def gemm():
     with tvm.transform.PassContext():
         # print(mod.script())
         mod = relax.transform.SplitCutlass()(mod)
-        print(mod.script())
-        exit()
         mod = relax.transform.RemoveUnusedFunctions()(mod)
         # print(mod.script())
         mod = relax.transform.CutlassCodegen()(mod)
@@ -181,5 +179,5 @@ def gemm_bias_relu():
 
 
 if __name__ == "__main__":
-    # gemm()
+    gemm()
     gemm_bias_relu()
