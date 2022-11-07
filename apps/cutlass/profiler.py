@@ -19,6 +19,7 @@ from tvm.contrib.cutlass.gen_gemm import CutlassGemmProfiler
 # "cutlass.conv2d_transpose": (EpilogueFunctor.LinearCombination, False),
 # "cutlass.conv2d_backward_weight": (EpilogueFunctor.LinearCombination, False),
 
+
 @click.command()
 @click.option("--m", default=1024, help="M dimension")
 @click.option("--n", default=1024, help="N dimension")
@@ -33,7 +34,7 @@ from tvm.contrib.cutlass.gen_gemm import CutlassGemmProfiler
 @click.option("--op_type", default="cutlass.dense", help="Epilogue pattern")
 @click.option("--tmpdir", default="/tmp", help="Temp directory")
 def main(m, n, k, sm, typea, typeb, typec, layouta, layoutb, layoutc, op_type, tmpdir):
-    cutlass_profiler = CutlassGemmProfiler(sm, _get_cutlass_path(), tmpdir)  
+    cutlass_profiler = CutlassGemmProfiler(sm, _get_cutlass_path(), tmpdir)
     name, cutlass_op_def = select_gemm_kernel(
         cutlass_profiler,
         op_type,
@@ -49,10 +50,11 @@ def main(m, n, k, sm, typea, typeb, typec, layouta, layoutb, layoutc, op_type, t
         False,
         False,
         False,
-        True
+        True,
     )
     print(name)
     print(cutlass_op_def)
+
 
 if __name__ == "__main__":
     main()

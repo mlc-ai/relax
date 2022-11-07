@@ -70,13 +70,10 @@ def construct_mod_gemm_bias_relu(m, n, k):
                         # "global_symbol": GLOBAL_SYMBOL,
                     }
                 )
-                A = T.arg("A", T.buffer_decl((m, k), A_TYPE)
-                          )  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE)
-                          )  # pylint: disable=invalid-name
+                A = T.arg("A", T.buffer_decl((m, k), A_TYPE))  # pylint: disable=invalid-name
+                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
                 Bias = T.arg("Bias", T.buffer_decl((1, n), C_TYPE))
-                C = T.arg("C", T.buffer_decl((m, n), C_TYPE)
-                          )  # pylint: disable=invalid-name
+                C = T.arg("C", T.buffer_decl((m, n), C_TYPE))  # pylint: disable=invalid-name
 
                 D = T.alloc_buffer((m, n), C_TYPE)
                 E = T.alloc_buffer((m, n), C_TYPE)
@@ -101,23 +98,20 @@ def construct_mod_gemm_bias_relu(m, n, k):
                     with T.block("bias"):
                         T.reads(D[i, j], Bias[0, j])
                         T.writes(E[i, j])
-                        T.buffer_store(
-                            E, D[i, j] + Bias[0, j], [i, j])
+                        T.buffer_store(E, D[i, j] + Bias[0, j], [i, j])
                 with T.grid(m, n) as (i, j):
                     with T.block("relu"):
                         T.reads(E[i, j])
                         T.writes(C[i, j])
-                        T.buffer_store(
-                            C, T.max(E[i, j], T.cast(0, "float16")), [i, j])
+                        T.buffer_store(C, T.max(E[i, j], T.cast(0, "float16")), [i, j])
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((m, k), A_TYPE)
-                          )  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((k, n), B_TYPE)
-                          )  # pylint: disable=invalid-name
+                A = R.arg("A", R.tensor((m, k), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
                 Bias = R.arg("Bias", R.tensor((1, n), C_TYPE))
-                C = R.call_tir(frame.global_vars[GLOBAL_SYMBOL], args=[
-                               A, B, Bias], shape=(m, n), dtype=C_TYPE)
+                C = R.call_tir(
+                    frame.global_vars[GLOBAL_SYMBOL], args=[A, B, Bias], shape=(m, n), dtype=C_TYPE
+                )
                 R.func_ret_value(C)
     mod = ib.get()
     return mod

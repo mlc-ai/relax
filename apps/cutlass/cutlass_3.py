@@ -9,11 +9,14 @@ from tvm.script.ir_builder import relax as R
 from tvm.script.ir_builder import tir as T
 from tvm.tir import StringImm, cutlass_gemm
 
+import pattern
+
 PKG_FILE = "/tmp/packaged.so"
 GLOBAL_SYMBOL = "HGEMM"
 A_TYPE = "float16"
 B_TYPE = "float16"
 C_TYPE = "float16"
+
 
 def construct_mod_gemm(m, n, k):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
@@ -23,7 +26,7 @@ def construct_mod_gemm(m, n, k):
                 T.func_attr(
                     {
                         "cutlass_codegen": 1,
-                        #"global_symbol": GLOBAL_SYMBOL,
+                        # "global_symbol": GLOBAL_SYMBOL,
                     }
                 )
                 A = T.arg("A", T.buffer_decl((m, k), A_TYPE)
@@ -32,30 +35,25 @@ def construct_mod_gemm(m, n, k):
                           )  # pylint: disable=invalid-name
                 C = T.arg("C", T.buffer_decl((m, n), C_TYPE)
                           )  # pylint: disable=invalid-name
-                with T.block("cutlass"):
-                    T.reads(A[0:m, 0:k], B[0:k, 0:n])
-                    T.writes(C[0:m, 0:n])
-                    T.evaluate(
-                        cutlass_gemm(
-                            A.data,
-                            B.data,
-                            C.data,
-                            StringImm(A.dtype),
-                            StringImm(B.dtype),
-                            StringImm(C.dtype),
-                            transpose_a=False,
-                            transpose_b=False,
-                            transpose_c=False,
-                        )
-                    )
+                with T.grid(m, n, k) as (l0, l1, l2):
+                    with T.block("dense_row_row_row"):
+                        vi, vj, vk = T.axis.remap("SSR", [l0, l1, l2])
+                        T.reads(A[vi, vk], B[vk, vj])
+                        T.writes(C[vi, vj])
+                        with T.init():
+                            T.buffer_store(C, T.cast(0.0, C_TYPE), [vi, vj])
+                        T.buffer_store(
+                            C, C[vi, vj] + A[vi, vk] * B[vk, vj], [vi, vj])
             with R.function():
                 R.func_name("main")
                 A = R.arg("A", R.tensor((m, k), A_TYPE)
                           )  # pylint: disable=invalid-name
                 B = R.arg("B", R.tensor((k, n), B_TYPE)
                           )  # pylint: disable=invalid-name
-                C = R.call_tir(frame.global_vars[GLOBAL_SYMBOL], args=[
-                               A, B], shape=(m, n), dtype=C_TYPE)
+                C = R.call_tir(
+                    frame.global_vars[GLOBAL_SYMBOL], args=[
+                        A, B], shape=(m, n), dtype=C_TYPE
+                )
                 R.func_ret_value(C)
     mod = ib.get()
     return mod
@@ -76,36 +74,29 @@ def construct_mod_gemm_bias_relu(m, n, k):
                           )  # pylint: disable=invalid-name
                 B = T.arg("B", T.buffer_decl((k, n), B_TYPE)
                           )  # pylint: disable=invalid-name
-                Bias = T.arg("Bias", T.buffer_decl((n,), C_TYPE))
+                Bias = T.arg("Bias", T.buffer_decl((1, n), C_TYPE))
                 C = T.arg("C", T.buffer_decl((m, n), C_TYPE)
                           )  # pylint: disable=invalid-name
                 D = T.alloc_buffer((m, n), C_TYPE)
                 E = T.alloc_buffer((m, n), C_TYPE)
-                with T.block("cutlass"):
-                    T.reads(A[0:m, 0:k], B[0:k, 0:n])
-                    T.writes(D[0:m, 0:n])
-
-                    T.evaluate(
-                        cutlass_gemm(
-                            A.data,
-                            B.data,
-                            D.data,
-                            StringImm(A.dtype),
-                            StringImm(B.dtype),
-                            StringImm(D.dtype),
-                            transpose_a=False,
-                            transpose_b=False,
-                            transpose_c=False,
-                        )
-                    )
-                with T.grid(16, 64) as (i, j):
+                with T.grid(m, n, k) as (l0, l1, l2):
+                    with T.block("dense_row_row_row"):
+                        i, j, vk = T.axis.remap("SSR", [l0, l1, l2])
+                        T.reads(A[i, vk], B[vk, j])
+                        T.writes(D[i, j])
+                        with T.init():
+                            T.buffer_store(D, T.cast(0.0, C_TYPE), [i, j])
+                        T.buffer_store(D, D[i, j] + A[i, vk]
+                                       * B[vk, j], [i, j])
+                with T.grid(m, n) as (l0, l1):
                     with T.block("bias"):
-                        T.reads(D[i, j], Bias[j])
+                        i, j = T.axis.remap("SS", [l0, l1])
+                        T.reads(D[i, j], Bias[0, j])
                         T.writes(E[i, j])
-                        T.buffer_store(
-                            E, D[i, j] + Bias[j], [i, j])
-                with T.grid(16, 64) as (i, j):
+                        T.buffer_store(E, D[i, j] + Bias[0, j], [i, j])
+                with T.grid(m, n) as (l0, l1):
                     with T.block("relu"):
+                        i, j = T.axis.remap("SS", [l0, l1])
                         T.reads(E[i, j])
                         T.writes(C[i, j])
                         T.buffer_store(
@@ -117,8 +108,10 @@ def construct_mod_gemm_bias_relu(m, n, k):
                 B = R.arg("B", R.tensor((k, n), B_TYPE)
                           )  # pylint: disable=invalid-name
                 Bias = R.arg("Bias", R.tensor((n,), C_TYPE))
-                C = R.call_tir(frame.global_vars[GLOBAL_SYMBOL], args=[
-                               A, B, Bias], shape=(m, n), dtype=C_TYPE)
+                C = R.call_tir(
+                    frame.global_vars[GLOBAL_SYMBOL], args=[
+                        A, B, Bias], shape=(m, n), dtype=C_TYPE
+                )
                 R.func_ret_value(C)
     mod = ib.get()
     return mod
@@ -132,6 +125,8 @@ def gemm():
     with tvm.transform.PassContext():
         # print(mod.script())
         mod = relax.transform.SplitCutlass()(mod)
+        print(mod.script())
+        exit()
         mod = relax.transform.RemoveUnusedFunctions()(mod)
         # print(mod.script())
         mod = relax.transform.CutlassCodegen()(mod)
@@ -160,10 +155,10 @@ def gemm_bias_relu():
     mod = construct_mod_gemm_bias_relu(m=m, n=n, k=k)
 
     with tvm.transform.PassContext():
-        print(mod.script())
+        # print(mod.script())
         mod = relax.transform.SplitCutlass()(mod)
-        mod = relax.transform.RemoveUnusedFunctions()(mod)
         print(mod.script())
+        mod = relax.transform.RemoveUnusedFunctions()(mod)
         mod = relax.transform.CutlassCodegen()(mod)
         print(mod.script())
         executable = relax.vm.build(mod, target=target)

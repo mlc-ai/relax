@@ -79,7 +79,7 @@ def gemm():
     b = tvm.nd.array(b_np, device=tvm.cuda())
     c = vm["main"](a, b)
     print(c)
-    
+
     A = te.placeholder((16, 32), name="A", dtype="float16")
     B = te.placeholder((32, 64), name="B", dtype="float16")
     C = cublas.matmul(A, B, dtype="float16")
