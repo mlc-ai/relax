@@ -288,6 +288,208 @@ def test_concatenate_without_specified_axis():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_cumsum():
+    @R.function
+    def expected(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
+        gv: R.Tensor((2, 3, 4), "float32") = R.cumsum(x, axis=-2)
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.cumsum(x, axis=-2))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_cumsum_without_specified_axis():
+    @R.function
+    def expected(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=1):
+        gv: R.Tensor((24,), "float32") = R.cumsum(x)
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.cumsum(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_trilu():
+    @R.function
+    def expected(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float32", ndim=3):
+        gv: R.Tensor((2, 3, 4), "float32") = R.trilu(x, k=0, is_upper=False)
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.trilu(x, k=0, is_upper=False))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_cast():
+    @R.function
+    def expected(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "int32", ndim=3):
+        gv: R.Tensor((2, 3, 4), "int32") = R.cast(x, "int32")
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.cast(x, "int32"))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_take():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 4), "float32"), indices: R.Tensor((1,), "int32")
+    ) -> R.Tensor(None, "float32", ndim=1):
+        gv: R.Tensor((1,), "float32") = R.take(x, indices)
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    indices = relax.Var("indices", [1], relax.DynTensorType(ndim=1, dtype="int32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, indices]):
+        gv = bb.emit(relax.op.transform.take(x, indices))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_take_high_dim_indices_with_axis():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 4), "float32"), indices: R.Tensor((3, 4, 2), "int32")
+    ) -> R.Tensor(None, "float32", ndim=5):
+        gv: R.Tensor((2, 3, 4, 2, 4), "float32") = R.take(x, indices, axis=1)
+        return gv
+
+    x = relax.Var("x", [2, 3, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    indices = relax.Var("indices", [3, 4, 2], relax.DynTensorType(ndim=3, dtype="int32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, indices]):
+        gv = bb.emit(relax.op.transform.take(x, indices, axis=1))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_full():
+    @R.function
+    def expected(v: R.Tensor((), "int32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.full(v, (2, 3), dtype="float32")
+        return gv
+
+    bb = relax.BlockBuilder()
+    v = relax.Var("v", (), relax.DynTensorType(0, "int32"))
+    with bb.function("main", [v]):
+        gv = bb.emit(relax.op.transform.full(v, (2, 3), "float32"))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_split_by_indices():
+    @R.function
+    def expected(x: R.Tensor((2, 10, 4), "float32")):
+        gv = R.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1)
+        return gv
+
+    x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(
+            relax.op.transform.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1)
+        )
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_split_by_n_section():
+    @R.function
+    def expected(x: R.Tensor((2, 10, 4), "float32")):
+        gv = R.split(x, indices_or_sections=5, axis=1)
+        return gv
+
+    x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.split(x, indices_or_sections=5, axis=1))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_split_by_n_section_not_divisible():
+    x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with pytest.raises(DiagnosticError):
+        with bb.function("main", [x]):
+            gv = bb.emit(relax.op.transform.split(x, indices_or_sections=3, axis=1))
+            bb.emit_func_output(gv)
+
+
+def test_broadcast_to():
+    @R.function
+    def expected(x: R.Tensor((2, 1, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((4, 2, 5, 3), "float32") = R.broadcast_to(x, (4, 2, 5, 3))
+        return gv
+
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", (2, 1, 3), relax.DynTensorType(3, "float32"))
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.broadcast_to(x, (4, 2, 5, 3)))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_strided_slice():
+    @R.function
+    def expected(x: R.Tensor((8, 9, 10, 10), "float32")) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((4, 9, 10, 3), "float32") = R.strided_slice(
+            x,
+            begin=[1, 0, 8],
+            end=[8, 9, 0],
+            strides=[2, 1, -3],
+            axes=[0, 1, -1],
+            slice_mode="end",
+        )
+        return gv
+
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", (8, 9, 10, 10), relax.DynTensorType(4, "float32"))
+    with bb.function("main", [x]):
+        gv = bb.emit(
+            relax.op.transform.strided_slice(x, [1, 0, 8], [8, 9, 0], [2, 1, -3], [0, 1, -1])
+        )
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     test_transpose()
     test_transpose_none_arg()
@@ -304,3 +506,15 @@ if __name__ == "__main__":
     test_concatenate()
     test_concatenate_fail_on_incompatible_shape()
     test_concatenate_without_specified_axis()
+    test_cumsum()
+    test_cumsum_without_specified_axis()
+    test_trilu()
+    test_cast()
+    test_take()
+    test_take_high_dim_indices_with_axis()
+    test_full()
+    test_split_by_indices()
+    test_split_by_n_section()
+    test_split_by_n_section_not_divisible()
+    test_broadcast_to()
+    test_strided_slice()

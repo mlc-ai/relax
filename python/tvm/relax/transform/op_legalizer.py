@@ -114,6 +114,98 @@ def _concatenate(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape:
     return bb.call_te(topi.concatenate, fields, None if attrs.axis is None else attrs.axis.value)
 
 
+def _expand_dims(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    output_ndim = len(output_shape)
+
+    def expand_dims(data, axis):
+        data_dims = []
+        for i in range(output_ndim):
+            if i not in axis and (i - output_ndim) not in axis:
+                data_dims.append(i)
+        return te.compute(output_shape, lambda *idx: data(*[idx[dim] for dim in data_dims]))
+
+    return bb.call_te(expand_dims, args[0], attrs.axis)
+
+
+def _cumsum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.cumsum, args[0], attrs.axis)
+
+
+def _trilu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.trilu, args[0], tvm.tir.const(attrs.k, "int32"), attrs.is_upper)
+
+
+def _cast(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.cast, args[0], attrs.dtype)
+
+
+def _take(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.take, args[0], args[1], attrs.axis, attrs.batch_dims, attrs.mode)
+
+
+def _full(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.full,
+        args[1],
+        attrs.dtype if attrs.dtype is not None else args[0].checked_type.dtype,
+        args[0],
+    )
+
+
+def _split(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    indices_or_sections = (
+        attrs.indices_or_sections.value
+        if isinstance(attrs.indices_or_sections, tvm.tir.IntImm)
+        else attrs.indices_or_sections
+    )
+    return bb.call_te(topi.split, args[0], indices_or_sections, attrs.axis)
+
+
+def _broadcast_to(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.broadcast_to, args[0], args[1])
+
+
+def _strided_slice(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.strided_slice,
+        args[0],
+        attrs.begin,
+        attrs.end,
+        attrs.strides,
+        attrs.axes,
+        attrs.slice_mode,
+    )
+
+
+def _nn_max_pool2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.nn.pool2d,
+        args[0],
+        kernel=attrs.pool_size,
+        stride=attrs.strides,
+        dilation=attrs.dilation,
+        padding=attrs.padding,
+        pool_type="max",
+        ceil_mode=attrs.ceil_mode,
+        layout=attrs.layout,
+    )
+
+
+def _nn_batch_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.nn.batch_norm,
+        data=args[0],
+        gamma=args[1],
+        beta=args[2],
+        moving_mean=args[3],
+        moving_var=args[4],
+        axis=attrs.axis,
+        epsilon=attrs.epsilon,
+        center=attrs.center,
+        scale=attrs.scale,
+    )
+
+
 def _nn_layer_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     def layer_norm(x, gamma, beta, axis, eps):
         shape_prod = tvm.tir.const(1, "int32")
@@ -169,8 +261,6 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
                 if not b_appended:
                     b_indices.append(idx_spatial[-1])
 
-                print(a_indices)
-                print(b_indices)
                 return a(*a_indices) * b(*b_indices)
 
             return te.sum(multiply_compute(k), axis=k)
@@ -184,6 +274,16 @@ def _nn_softmax(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: 
     return bb.call_te(topi.nn.softmax, args[0], attrs.axis)
 
 
+def _nn_flatten(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.nn.flatten, args[0])
+
+
+def _nn_adaptive_max_pool2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.nn.adaptive_pool, args[0], attrs.output_size, pool_type="avg", layout=attrs.layout
+    )
+
+
 def _sum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.sum, args[0], attrs.axis, attrs.keepdims)
 
@@ -195,6 +295,22 @@ def _mean(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
         shape_prod = shape_prod * args[0].shape[dim.value]
     sum_var = bb.emit_te(topi.sum, args[0], axis, attrs.keepdims)
     return bb.call_te(topi.divide, sum_var, shape_prod)
+
+
+def _image_resize2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(
+        topi.image.resize2d,
+        args[0],
+        roi=attrs.roi,
+        size=attrs.size,
+        layout=attrs.layout,
+        method=attrs.method,
+        coordinate_transformation_mode=attrs.coordinate_transformation_mode,
+        rounding_method=attrs.rounding_method,
+        bicubic_alpha=attrs.cubic_alpha,
+        bicubic_exclude=attrs.cubic_exclude,
+        extrapolation_value=attrs.extrapolation_value,
+    )
 
 
 op_legalization_map = {
@@ -213,11 +329,25 @@ op_legalization_map = {
     ir.Op.get("relax.reshape"): _reshape,
     ir.Op.get("relax.transpose"): _transpose,
     ir.Op.get("relax.concatenate"): _concatenate,
+    ir.Op.get("relax.expand_dims"): _expand_dims,
+    ir.Op.get("relax.cumsum"): _cumsum,
+    ir.Op.get("relax.trilu"): _trilu,
+    ir.Op.get("relax.cast"): _cast,
+    ir.Op.get("relax.take"): _take,
+    ir.Op.get("relax.full"): _full,
+    ir.Op.get("relax.split"): _split,
+    ir.Op.get("relax.strided_slice"): _strided_slice,
+    ir.Op.get("relax.broadcast_to"): _broadcast_to,
+    ir.Op.get("relax.nn.max_pool2d"): _nn_max_pool2d,
+    ir.Op.get("relax.nn.batch_norm"): _nn_batch_norm,
     ir.Op.get("relax.nn.layer_norm"): _nn_layer_norm,
     ir.Op.get("relax.nn.matmul"): _nn_matmul,
     ir.Op.get("relax.nn.softmax"): _nn_softmax,
+    ir.Op.get("relax.nn.flatten"): _nn_flatten,
+    ir.Op.get("relax.nn.adaptive_avg_pool2d"): _nn_adaptive_max_pool2d,
     ir.Op.get("relax.sum"): _sum,
     ir.Op.get("relax.mean"): _mean,
+    ir.Op.get("relax.image.resize2d"): _image_resize2d,
 }
 
 

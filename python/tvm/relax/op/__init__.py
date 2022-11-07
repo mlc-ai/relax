@@ -19,6 +19,7 @@
 
 # Operators
 from .base import *
+from .image import *
 from .nn import *
 from .op_attrs import *
 from .reduce import *

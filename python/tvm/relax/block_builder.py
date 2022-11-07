@@ -213,7 +213,9 @@ class BlockBuilder(Object):
                     ), "emit_te only supports dict with string as the key currently"
                 return {k: _convert_te_arg_helper(arg[k]) for k in arg}
             elif (
-                isinstance(arg, (int, float, str, tir.IntImm, tvm.ir.Type, tvm.ir.Attrs))
+                isinstance(
+                    arg, (int, float, str, tir.IntImm, tir.FloatImm, tvm.ir.Type, tvm.ir.Attrs)
+                )
                 or arg is None
             ):
                 return arg
