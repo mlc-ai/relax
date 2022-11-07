@@ -204,30 +204,29 @@ class TorchFXTranslator:
         padding = padding if isinstance(padding, tuple) else (padding, padding, padding, padding)
         dilation = dilation if isinstance(dilation, tuple) else (dilation, dilation)
 
-        return self.bb.emit_te(
-            topi.nn.pool2d,
-            x,
-            kernel,
-            stride,
-            dilation,
-            padding,
-            pool_type="max",
+        return self.bb.emit(
+            relax.op.nn.max_pool2d(
+                x,
+                pool_size=kernel,
+                strides=stride,
+                padding=padding,
+                dilation=dilation,
+                layout="NCHW",
+            )
         )
 
     def _embedding(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         module = self.named_modules[node.target]
         weight = self.params[module.weight]
-        x = self.bb.emit_te(topi.cast, x, "int32")
-        return self.bb.emit_te(topi.take, weight, x, axis=0)
+        x = self.bb.emit(relax.op.cast(x, "int32"))
+        return self.bb.emit(relax.op.take(weight, x, axis=0))
 
     def _adaptive_avg_pool2d(self, node: fx.node.Node) -> relax.Var:
         module = self.named_modules[node.target]
         x = self.env[node.args[0]]
 
-        return self.bb.emit_te(
-            topi.nn.adaptive_pool, x, module.output_size, pool_type="avg", layout="NCHW"
-        )
+        return self.bb.emit(relax.op.nn.adaptive_avg_pool2d(x, module.output_size, layout="NCHW"))
 
     def _flatten(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -272,7 +271,7 @@ class TorchFXTranslator:
     def _cumsum(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         axis = node.args[1]
-        return self.bb.emit_te(topi.cumsum, x, axis)
+        return self.bb.emit(relax.op.cumsum(x, axis))
 
     def _size(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -283,7 +282,13 @@ class TorchFXTranslator:
         idx = node.args[1]
         return x.shape[idx].value
 
+    def _type(self, node: fx.node.Node) -> relax.Var:
+        args = self.retrive_args(node)
+        return self.bb.emit(relax.op.cast(args[0], args[1]))
+
     def _getattr(self, node: fx.node.Node) -> relax.Var:
+        if isinstance(self.env[node.args[0]], relax.Var) and node.args[1] == "dtype":
+            return self.env[node.args[0]].checked_type.dtype
         return getattr(self.env[node.args[0]], node.args[1])
 
     def _getitem(self, node: fx.node.Node) -> relax.Var:
@@ -293,8 +298,8 @@ class TorchFXTranslator:
         elif isinstance(x, relax.Var):
             if isinstance(x.shape, relax.Tuple):
                 return self.bb.emit(relax.TupleGetItem(x, node.args[1]))
-            else:
-                begin = []
+
+            begin = []
             end = []
             stride = []
             axes = []
@@ -315,6 +320,7 @@ class TorchFXTranslator:
                     i = i + 1
                 elif index is None:
                     expand_dim.append(i)
+                    i = i + 1
                 else:
                     raise ValueError("Unsupported index type: " + str(type(index)))
             while i < len(x.shape_):
@@ -322,7 +328,7 @@ class TorchFXTranslator:
                 end.append(x.shape_[i])
                 axes.append(i)
                 i = i + 1
-            sliced = self.bb.emit_te(topi.strided_slice, x, begin, end, stride, axes)
+            sliced = self.bb.emit(relax.op.strided_slice(x, begin, end, stride, axes))
             sliced_shape = list(sliced.shape_)
             for i in expand_dim:
                 sliced_shape.insert(i, 1)
@@ -408,21 +414,17 @@ class TorchFXTranslator:
         else:
             coord_trans = "half_pixel"
 
-        return self.bb.emit_te(
-            topi.image.resize2d,
-            data,
-            [0.0] * 4,
-            size,
-            layout="NCHW",
-            method=method,
-            coordinate_transformation_mode=coord_trans,
+        return self.bb.emit(
+            relax.op.image.resize2d(
+                data, size, layout="NCHW", method=method, coordinate_transformation_mode=coord_trans
+            )
         )
 
     def _addmm(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         y = self.env[node.args[1]]
         z = self.env[node.args[2]]
-        matmul = self.bb.emit_te(topi.matmul, y, z)
+        matmul = self.bb.emit(relax.op.nn.matmul(y, z))
         return self.bb.emit(relax.op.add(x, matmul))
 
     def _split(self, node: fx.node.Node) -> relax.Var:
@@ -432,13 +434,14 @@ class TorchFXTranslator:
             dim = node.kwargs["dim"]
         else:
             dim = 0
-        split_size = x.shape[dim].value // split_size
-        return self.bb.emit_te(topi.split, x, split_size, dim)
+        n_section = x.shape[dim].value // split_size
+        return self.bb.emit(relax.op.split(x, n_section, dim))
 
     def _tril(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         k = node.args[1] if len(node.args) > 1 else 0
-        return self.bb.emit_te(topi.trilu, x, tvm.tir.const(k, "int32"), False)
+        assert isinstance(k, int)
+        return self.bb.emit(relax.op.trilu(x, k, False))
 
     def _new_ones(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
@@ -446,14 +449,18 @@ class TorchFXTranslator:
         size = args[1:]
         if not iterable(size):
             size = (size,)
-        return self.bb.emit_te(topi.full, size, fill_value=1, dtype=self_var.checked_type.dtype)
+        return self.bb.emit(
+            relax.op.full(
+                relax.const(1, self_var.checked_type.dtype), size, self_var.checked_type.dtype
+            )
+        )
 
     def _expand(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
-        return self.bb.emit_te(topi.broadcast_to, args[0], args[1:])
+        return self.bb.emit(relax.op.broadcast_to(args[0], args[1:]))
 
     def _float(self, node: fx.node.Node) -> relax.Var:
-        return self.bb.emit_te(topi.cast, self.env[node.args[0]], "float32")
+        return self.bb.emit(relax.op.cast(self.env[node.args[0]], "float32"))
 
     def _permute(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
@@ -491,17 +498,9 @@ class TorchFXTranslator:
 
     def _view(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
-        infer_idx = -1
-        prod = 1
-        new_shape = list(args[1:])
-        for i in range(len(new_shape)):
-            if new_shape[i] == -1:
-                infer_idx = i
-            else:
-                prod *= new_shape[i]
-        if infer_idx != -1:
-            new_shape[infer_idx] = np.prod(args[0].shape).value // prod
-        return self.bb.emit(relax.op.reshape(args[0], new_shape))
+        if isinstance(args[1], (torch.Size, tuple, list)):
+            return self.bb.emit(relax.op.reshape(args[0], tuple(args[1])))
+        return self.bb.emit(relax.op.reshape(args[0], args[1:]))
 
     def _silu(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -526,7 +525,7 @@ class TorchFXTranslator:
         sub_x = self.bb.emit(relax.op.subtract(grouped_x, mean_x))
         square_x = self.bb.emit(relax.op.multiply(sub_x, sub_x))
         sum_square_x = self.bb.emit(relax.op.sum(square_x, [2, 3, 4], keepdims=True))
-        var_x = self.bb.emit_te(topi.divide, sum_square_x, C // num_groups * H * W)
+        var_x = self._call_binary_op(relax.op.divide, sum_square_x, (C // num_groups * H * W).value)
         var_x_eps = self._call_binary_op(relax.op.add, var_x, eps)
         std_x = self.bb.emit(relax.op.sqrt(var_x_eps))
         norm_x = self.bb.emit(relax.op.divide(sub_x, std_x))
@@ -564,7 +563,7 @@ class TorchFXTranslator:
             # call_module
             nn.Conv2d: self._conv2d,
             nn.Linear: self._linear,
-            nn.ReLU: lambda node: self.bb.emit_te(topi.nn.relu, self.env[node.args[0]]),
+            nn.ReLU: lambda node: self.bb.emit(relax.op.nn.relu(self.env[node.args[0]])),
             nn.MaxPool2d: self._max_pool2d,
             nn.AdaptiveAvgPool2d: self._adaptive_avg_pool2d,
             nn.Flatten: self._flatten,
@@ -581,8 +580,8 @@ class TorchFXTranslator:
             "flatten": self._flatten,
             "size": self._size,
             "cumsum": self._cumsum,
-            "unsqueeze": lambda node: self.bb.emit_te(
-                topi.expand_dims, self.env[node.args[0]], node.args[1], 1
+            "unsqueeze": lambda node: self.bb.emit(
+                relax.op.expand_dims(self.env[node.args[0]], node.args[1])
             ),
             "getattr": self._getattr,
             "getitem": self._getitem,
@@ -607,6 +606,7 @@ class TorchFXTranslator:
             "transpose": self._transpose,
             "softmax": self._softmax,
             "view": self._view,
+            "type": self._type,
             "contiguous": lambda node: self.env[node.args[0]],
         }
 

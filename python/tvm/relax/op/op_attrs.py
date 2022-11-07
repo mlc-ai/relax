@@ -107,3 +107,48 @@ class LayerNormAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.ReduceAttrs")
 class ReduceAttrs(Attrs):
     """Attributes used in reduction operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.CumsumAttrs")
+class CumsumAttrs(Attrs):
+    """Attributes used in cumsum operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.TriluAttrs")
+class TriluAttrs(Attrs):
+    """Attributes used in trilu operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.CastAttrs")
+class CastAttrs(Attrs):
+    """Attributes used in cast operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.TakeAttrs")
+class TakeAttrs(Attrs):
+    """Attributes used in take operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.FullAttrs")
+class FullAttrs(Attrs):
+    """Attributes used in full operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.SplitAttrs")
+class SplitAttrs(Attrs):
+    """Attributes used in split operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.StridedSliceAttrs")
+class StridedSliceAttrs(Attrs):
+    """Attributes used in strided_slice operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.Resize2DAttrs")
+class Resize2DAttrs(Attrs):
+    """Attributes used in image resize2d operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.AdaptivePool2DAttrs")
+class AdaptivePool2DAttrs(Attrs):
+    """Attributes for 2d adaptive pool operator"""

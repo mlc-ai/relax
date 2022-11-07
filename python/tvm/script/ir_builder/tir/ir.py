@@ -1683,6 +1683,7 @@ clz = _op_wrapper(_tir_op.clz)
 copysign = _op_wrapper(_tir_op.copysign)
 cos = _op_wrapper(_tir_op.cos)
 cosh = _op_wrapper(_tir_op.cosh)
+div = _op_wrapper(_tir_op.div)
 erf = _op_wrapper(_tir_op.erf)
 exp = _op_wrapper(_tir_op.exp)
 exp2 = _op_wrapper(_tir_op.exp2)
@@ -1875,6 +1876,7 @@ __all__ = [
     "copysign",
     "cos",
     "cosh",
+    "div",
     "erf",
     "exp",
     "exp2",

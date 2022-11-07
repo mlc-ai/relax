@@ -28,6 +28,7 @@
 namespace tvm {
 namespace relax {
 
+/* relax.nn.max_pool2d */
 TVM_REGISTER_NODE_TYPE(MaxPool2DAttrs);
 
 template <typename AttrType, topi::nn::PoolType mode>
@@ -100,6 +101,96 @@ Expr MakeMaxPool2D(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides
 }
 
 TVM_REGISTER_GLOBAL("relax.op.nn.max_pool2d").set_body_typed(MakeMaxPool2D);
+
+/* relax.nn.adaptive_avg_pool2d */
+TVM_REGISTER_NODE_TYPE(AdaptivePool2DAttrs);
+
+RELAX_REGISTER_OP("relax.nn.adaptive_avg_pool2d")
+    .set_attrs_type<AdaptivePool2DAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor")
+    .set_attr<FInferShape>("FInferShape", InferShapeAdaptiveAvgPool2D)
+    .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast);
+
+Expr MakeAdaptiveAvgPool2D(Expr data, Optional<Array<PrimExpr>> output_size, String layout) {
+  ObjectPtr<AdaptivePool2DAttrs> attrs = make_object<AdaptivePool2DAttrs>();
+  attrs->output_size = std::move(output_size);
+  attrs->layout = std::move(layout);
+
+  const static Op& op = Op::Get("relax.nn.adaptive_avg_pool2d");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.nn.adaptive_avg_pool2d").set_body_typed(MakeAdaptiveAvgPool2D);
+
+Optional<Expr> InferShapeAdaptiveAvgPool2D(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "AdaptiveAvgPool2d op should have 1 argument");
+  }
+
+  const auto* input_shape = call->args[0]->shape().as<ShapeExprNode>();
+  const auto* attrs = call->attrs.as<AdaptivePool2DAttrs>();
+  if (input_shape == nullptr) {
+    return RuntimeDepShape();
+  }
+  if (input_shape->values.size() != 4) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The resize2d operator expects the input data to be a tensor of 4 "
+                          "dimensions. However, the given data has "
+                       << input_shape->values.size() << " dimensions");
+  }
+  if (attrs->layout->size != 4) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "The resize2d operator expects the input layout to be a string of length 4, containing "
+           "letters \"N\", \"C\", \"H\", \"W\". However, the given layout is "
+        << attrs->layout);
+  }
+
+  if (!attrs->output_size.defined()) {
+    return GetRef<ShapeExpr>(input_shape);
+  }
+  int batch_axis = -1;
+  int height_axis = -1;
+  int width_axis = -1;
+  int channel_axis = -1;
+  for (int i = 0; i < 4; ++i) {
+    char letter = attrs->layout.at(i);
+    if (letter == 'N') {
+      batch_axis = i;
+    } else if (letter == 'H') {
+      height_axis = i;
+    } else if (letter == 'W') {
+      width_axis = i;
+    } else if (letter == 'C') {
+      channel_axis = i;
+    }
+  }
+  if (batch_axis == -1 || height_axis == -1 || width_axis == -1 || channel_axis == -1) {
+    diag_ctx.EmitFatal(
+        Diagnostic::Error(call->span)
+        << "The adaptive_avg_pool2d operator expects the input layout to be a string of length 4, "
+           "containing letters \"N\", \"C\", \"H\", \"W\". However, the given layout is "
+        << attrs->layout);
+  }
+
+  Array<PrimExpr> output_size = attrs->output_size.value();
+  if (output_size.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The adaptive_avg_pool2d operator expects the input size to have exactly "
+                          "two elements. However, the given size is "
+                       << output_size << ", which contains " << output_size.size() << " elements");
+  }
+
+  Array<PrimExpr> output_shape;
+  output_shape.resize(4);
+  output_shape.Set(batch_axis, input_shape->values[batch_axis]);
+  output_shape.Set(height_axis, output_size[0]);
+  output_shape.Set(width_axis, output_size[1]);
+  output_shape.Set(channel_axis, input_shape->values[channel_axis]);
+  return ShapeExpr(output_shape);
+}
 
 }  // namespace relax
 }  // namespace tvm
