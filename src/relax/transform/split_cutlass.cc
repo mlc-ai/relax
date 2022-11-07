@@ -206,7 +206,6 @@ class FuncMatcher : public StmtExprVisitor {
     cutlass_annotation =
         (*f)(Array<Array<PrimExpr>>(evaluated_symbols_), Array<Array<Buffer>>(evaluated_buffers_),
              Array<runtime::String>(matched_pattern_names_));
-    LOG(INFO) << "Stitching cutlass pattern " << cutlass_annotation;
     this->VisitStmt(body);
   }
 

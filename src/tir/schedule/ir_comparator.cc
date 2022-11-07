@@ -505,7 +505,6 @@ bool TensorizeComparator::CompareBufferRegion(const BufferRegion& lhs, const Buf
 // Comparator for BufferStoreNode and BufferLoadNode
 template <typename T>
 bool TensorizeComparator::CompareBufferAccess(const T* lhs, const T* rhs) {
-  LOG(INFO) << "OK";
   if (!CompareBuffer(lhs->buffer, rhs->buffer)) return false;
   int offset = static_cast<int>(lhs->indices.size()) - static_cast<int>(rhs->indices.size());
   if (offset < 0) {

@@ -182,6 +182,8 @@ TVM_DLL Pass RunCodegen(Optional<Array<runtime::String>> target_codegens,
 
 TVM_DLL Pass SplitCutlass();
 
+TVM_DLL Pass CutlassCodegen();
+
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm
