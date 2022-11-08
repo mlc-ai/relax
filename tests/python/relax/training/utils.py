@@ -44,7 +44,7 @@ def map_add(bb, call):
     a, b = call.args
     return bb.call_te(topi.add, a, b)
 
-def map_sub(bb, call):
+def map_subtract(bb, call):
     return bb.call_te(topi.subtract, call.args[0], call.args[1])
 
 def map_multiply(bb, call):
@@ -122,7 +122,7 @@ def map_ones(bb, call):
 op_map = {
   "relax.nn.dense": map_dense,
   "relax.add": map_add,
-  "relax.sub": map_sub,
+  "relax.subtract": map_subtract,
   "relax.multiply": map_multiply,
   "relax.transpose": map_transpose,
   "relax.nn.relu": map_relu,

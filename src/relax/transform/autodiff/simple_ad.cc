@@ -133,9 +133,10 @@ class SimpleADMutator : public ExprMutator {
     }
 
     // handle the return values and types
-    Array<Expr> out_expr, out_adjoints;
+    Array<Expr> out_expr, out_adjoints, out_shape, out_adjoints_shape;
     Array<Type> ret_type, out_adjoints_type;
     out_expr.push_back(seq_expr->body);
+    out_shape.push_back(seq_expr->body->shape());
     ret_type.push_back(node->ret_type);
 
     // emit the input adjoints
@@ -151,14 +152,16 @@ class SimpleADMutator : public ExprMutator {
         }
         out_adjoints.push_back(adjoint_var);
         out_adjoints_type.push_back(adjoint_var->checked_type());
+        out_adjoints_shape.push_back(adjoint_var->shape());
       }
     }
 
     out_expr.push_back(Tuple(out_adjoints));
+    out_shape.push_back(Tuple(out_adjoints_shape));
     ret_type.push_back(TupleType(out_adjoints_type));
 
     return Function(node->params, SeqExpr({builder_->EndBlock()}, Tuple(out_expr)),
-                    TupleType(ret_type), node->attrs);
+                    TupleType(ret_type), Tuple(out_shape), node->attrs);
   }
 
   void VisitBinding_(const VarBindingNode* binding) override {
@@ -171,7 +174,7 @@ class SimpleADMutator : public ExprMutator {
       VLOG(2) << "ignored: " << binding->var->name_hint() << std::endl;
       return;
     }
-    
+
     // meet a def
     BindAndEmit(adjoint_var, adjoint_expr_map[binding->var]);
     // back prop.
@@ -252,7 +255,7 @@ class SimpleADMutator : public ExprMutator {
           adjoint_expr_map.Set(v, adjoint_binding_[increment]);
         }
         else {
-          adjoint_expr_map.Set(v, increment);  
+          adjoint_expr_map.Set(v, increment);
         }
       }
       else {
@@ -274,16 +277,16 @@ class SimpleADMutator : public ExprMutator {
       ICHECK(node->tuple->IsInstance<VarNode>()) << "Tuple of TupleGetItem must be binded to a Var" << std::endl;
       ICHECK(!node->tuple->shape().as<TupleGetItemNode>()) << "Error: no nested TupleGetItem" << std::endl;
       ICHECK(node->tuple->shape().as<TupleNode>()) << "Type of tuple of TupleGetItem must be tuple" << std::endl;
-      
+
       const Var& v = GetRef<Var>(node->tuple.as<VarNode>());
       if (adjoint_expr_map.count(v) == 0) {
         const Tuple& init = BuildEmptyNestedTupleExpr(GetRef<Tuple>(node->tuple->shape().as<TupleNode>()));
         init->checked_type_ = v->checked_type();
         adjoint_expr_map.Set(v, init);
       }
-      
+
       ICHECK(adjoint_expr_map[v].as<TupleNode>()) << "adjoint of var is not tuple";
-      adjoint_expr_map.Set(v, 
+      adjoint_expr_map.Set(v,
         DoAddInTuple(GetRef<Tuple>(adjoint_expr_map[v].as<TupleNode>()), node->index, increment)
       );
     }
@@ -313,9 +316,9 @@ class SimpleADMutator : public ExprMutator {
 
   Expr DoAdd(const Expr& src1, const Expr& src2) {
     VLOG(2) << "DoAdd." << std::endl;
-    VLOG(2) << "src1: " << src1 << std::endl; 
-    VLOG(2) << "src2: " << src2 << std::endl; 
-    
+    VLOG(2) << "src1: " << src1 << std::endl;
+    VLOG(2) << "src2: " << src2 << std::endl;
+
     if (zeros_tracker_.count(src1) != 0) {
       return src2;
     }
@@ -341,7 +344,7 @@ class SimpleADMutator : public ExprMutator {
       // use the variable to replace expr to reduce the size of AST
       if (adjoint_binding_.count(src2)) {
         return Call(add_op, {src1, adjoint_binding_[src2]});
-      } 
+      }
       return Call(add_op, {src1, src2});
     }
   }
@@ -404,7 +407,7 @@ class SimpleADMutator : public ExprMutator {
   // gop map
   const OpAttrMap<relay::FPrimalGradient> gradient_op_map =
       Op::GetAttrMap<relay::FPrimalGradient>("FPrimalGradient");
-  
+
   // constant
   const Op& init_op = Op::Get("relax.ones_like");
   const Op& add_op = Op::Get("relax.add");

@@ -7,12 +7,9 @@ from tvm.relax.op import (
 	log,
 	multiply,
 	negative,
-	sub,
+	subtract,
 	transpose,
-	ones_like
-)
-
-from tvm.relax.op.nn import (
+	ones_like,
 	gradrelu_,
 	softmax,
 	sigmoid,
@@ -24,8 +21,8 @@ def add_grad(orig, grad):
 	"""Returns [grad, grad]"""
 	return [collapse_sum_like(grad, orig.args[0]), collapse_sum_like(grad, orig.args[1])]
 
-@register_gradient("relax.sub")
-def sub_grad(orig, grad):
+@register_gradient("relax.subtract")
+def subtract_grad(orig, grad):
 	"""Returns [grad, -grad]"""
 	return [collapse_sum_like(grad, orig.args[0]), collapse_sum_like(negative(grad), orig.args[1])]
 
@@ -80,15 +77,15 @@ def sum_grad(orig, grad):
 @register_gradient("relax.nn.softmax_cross_entropy")
 def softmax_cross_entropy_grad(orig, grad):
 	y_hat = softmax(orig.args[0])
-	return [multiply(grad, sub(y_hat, orig.args[1])), multiply(grad, negative(log(y_hat)))]
-	# return [sub(y_hat, orig.args[1]), negative(log(y_hat))]
+	return [multiply(grad, subtract(y_hat, orig.args[1])), multiply(grad, negative(log(y_hat)))]
+	# return [subtract(y_hat, orig.args[1]), negative(log(y_hat))]
 
 @register_gradient("relax.nn.sigmoid")
 def sigmoid_grad(orig, grad):
 	out = sigmoid(orig.args[0])
-	return [multiply(grad, multiply(out, sub(ones_like(out), out)))]
+	return [multiply(grad, multiply(out, subtract(ones_like(out), out)))]
 
 @register_gradient("relax.nn.tanh")
 def tanh_grad(orig, grad):
 	out = tanh(orig.args[0])
-	return [multiply(grad, sub(ones_like(out), multiply(out, out)))]
+	return [multiply(grad, subtract(ones_like(out), multiply(out, out)))]

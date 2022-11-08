@@ -24,7 +24,7 @@ from utils import LowerToTensorIRPass
 import _gradient
 
 # add
-# sub
+# subtract
 # multiply
 # transpose
 # nn.relu
@@ -54,7 +54,7 @@ def relax_check_gradients(op, input_data, is_output_scalar = False):
         with bb.dataflow():
             if is_output_scalar:
                 out = bb.emit_output(op(*input_list))
-            else: 
+            else:
                 lv0 = bb.emit(op(*input_list))
                 out = bb.emit_output(relax.op.sum(lv0))
         bb.emit_func_output(out)
@@ -62,7 +62,7 @@ def relax_check_gradients(op, input_data, is_output_scalar = False):
     mod = bb.get()
     mod.show()
     lower_mod = LowerToTensorIRPass()(mod)
-    
+
     def forward(*inputs):
         ex_0 = relax.vm.build(lower_mod, target)
         vm_0 = relax.VirtualMachine(ex_0, tvm.cpu())
@@ -83,10 +83,10 @@ def test_add():
     data2_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
     relax_check_gradients(relax.op.add, [data1_numpy, data2_numpy])
 
-def test_sub():
+def test_subtract():
     data1_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
     data2_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
-    relax_check_gradients(relax.op.sub, [data1_numpy, data2_numpy])
+    relax_check_gradients(relax.op.subtract, [data1_numpy, data2_numpy])
 
 def test_transpose():
     data1_numpy = np.random.randint(0, 16, (5, 10)).astype(np.float32)
@@ -94,26 +94,26 @@ def test_transpose():
 
 def test_relu():
     data1_numpy = np.random.uniform(-1, 1, (16, 16)).astype(np.float32)
-    relax_check_gradients(relax.op.nn.relu, [data1_numpy])
+    relax_check_gradients(relax.op.relu, [data1_numpy])
 
 def test_matmul():
     data1_numpy = np.random.randint(0, 16, (7, 8)).astype(np.float32)
     data2_numpy = np.random.randint(0, 16, (8, 10)).astype(np.float32)
-    relax_check_gradients(relax.op.nn.matmul, [data1_numpy, data2_numpy])
+    relax_check_gradients(relax.op.matmul, [data1_numpy, data2_numpy])
 
 def test_softmax_cross_entropy():
     data1_numpy = np.random.randint(1, 16, (10,)).astype(np.float32)
     data2_numpy = np.random.randint(1, 16, (10,)).astype(np.float32)
     data2_numpy /= np.sum(data2_numpy)
-    relax_check_gradients(relax.op.nn.softmax_cross_entropy, [data1_numpy, data2_numpy], True)
+    relax_check_gradients(relax.op.softmax_cross_entropy, [data1_numpy, data2_numpy], True)
 
 def test_sigmoid():
     data_numpy = np.random.randint(1, 16, (10,)).astype(np.float32)
-    relax_check_gradients(relax.op.nn.sigmoid, [data_numpy])
+    relax_check_gradients(relax.op.sigmoid, [data_numpy])
 
 def test_tanh():
     data_numpy = np.random.randint(1, 16, (16, 16)).astype(np.float32)
-    relax_check_gradients(relax.op.nn.tanh, [data_numpy])
+    relax_check_gradients(relax.op.tanh, [data_numpy])
 
 if __name__ == "__main__":
     pytest.main([__file__])

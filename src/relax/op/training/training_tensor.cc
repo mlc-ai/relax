@@ -18,26 +18,17 @@
  */
 
 #include "training_tensor.h"
+#include "../tensor/transform.h"
 
 namespace tvm {
 namespace relax {
 
-RELAX_REGISTER_UNARY_OP_BASE("transpose", InferShapeTranspose, InferTypeUnaryBroadcast);
-RELAX_REGISTER_UNARY_OP_BASE("sum", InferShapeSum, InferTypeSum);
+RELAX_REGISTER_UNARY_OP_BASE("zeros", InferShapeFull, InferTypeFull);
+RELAX_REGISTER_UNARY_OP_BASE("ones", InferShapeFull, InferTypeFull);
 RELAX_REGISTER_UNARY_OP("log");
 RELAX_REGISTER_UNARY_OP("negative");
 RELAX_REGISTER_UNARY_OP("ones_like");
 RELAX_REGISTER_UNARY_OP("zeros_like");
-
-RELAY_REGISTER_OP("relax.zeros")
-    .set_num_inputs(1)
-    .set_attr<FInferShape>("FInferShape", InferShapeFull)
-    .set_attr<FInferType>("FInferType", InferTypeFull);
-    
-RELAY_REGISTER_OP("relax.ones")
-    .set_num_inputs(1)
-    .set_attr<FInferShape>("FInferShape", InferShapeFull)
-    .set_attr<FInferType>("FInferType", InferTypeFull);
 
 RELAX_REGISTER_BINARY_OP_BASE("collapse_sum_like", InferShapeCollapseSumLike, InferTypeCollapseSumLike);
 

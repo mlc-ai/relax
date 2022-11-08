@@ -248,14 +248,6 @@ def softmax(data: Expr, axis=-1) -> Expr:
     """
     return _ffi_api.softmax(data, axis)
 
-def gradrelu_(data: Expr) -> Expr:
-    return _ffi_api.gradrelu_(data)
-
-def cross_entropy(lhs: Expr, rhs: Expr) -> Expr:
-    return _ffi_api.cross_entropy(lhs, rhs)
-
-def softmax_cross_entropy(lhs: Expr, rhs: Expr) -> Expr:
-    return _ffi_api.softmax_cross_entropy(lhs, rhs)
 
 def flatten(data: Expr) -> Expr:
     """Flatten.
@@ -275,11 +267,6 @@ def flatten(data: Expr) -> Expr:
     """
     return _ffi_api.flatten(data)
 
-def sigmoid(data: Expr) -> Expr:
-    return _make.sigmoid(data)
-
-def tanh(data: Expr) -> Expr:
-    return _make.tanh(data)
 
 def max_pool2d(
     data: Expr,
@@ -636,3 +623,18 @@ def adaptive_avg_pool2d(
                 )
         output_size = temp_size
     return _ffi_api.adaptive_avg_pool2d(data, output_size, layout)
+
+def gradrelu_(data: Expr) -> Expr:
+    return _ffi_api.gradrelu_(data)
+
+def cross_entropy(lhs: Expr, rhs: Expr) -> Expr:
+    return _ffi_api.cross_entropy(lhs, rhs)
+
+def softmax_cross_entropy(lhs: Expr, rhs: Expr) -> Expr:
+    return _ffi_api.softmax_cross_entropy(lhs, rhs)
+
+def sigmoid(data: Expr) -> Expr:
+    return _ffi_api.sigmoid(data)
+
+def tanh(data: Expr) -> Expr:
+    return _ffi_api.tanh(data)
