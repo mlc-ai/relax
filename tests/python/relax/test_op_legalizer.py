@@ -75,6 +75,58 @@ def test_conv2d():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_conv2d_with_out_dtype():
+    @I.ir_module
+    class Conv2d:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
+        ) -> R.Tensor(None, "float16", ndim=4):
+            gv: R.Tensor((2, 4, 26, 26), "float16") = R.conv2d(
+                x, w, kernel_size=[3, 3], out_dtype="float16"
+            )
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
+        ) -> R.Tensor(None, "float16", ndim=4):
+            gv = R.call_tir(conv2d, (x, w), (2, 4, 26, 26), dtype="float16")
+            return gv
+
+        @T.prim_func
+        def conv2d(
+            rxplaceholder: T.Buffer[(2, 3, 28, 28), "float32"],
+            rxplaceholder_1: T.Buffer[(4, 3, 3, 3), "float32"],
+            conv2d_nchw: T.Buffer[(2, 4, 26, 26), "float16"],
+        ) -> None:
+            T.func_attr({"global_symbol": "conv2d", "tir.noalias": True})
+            pad_temp = T.alloc_buffer([2, 3, 28, 28], dtype="float32")
+            for i0, i1, i2, i3 in T.grid(2, 3, 28, 28):
+                with T.block("pad_temp"):
+                    i0_1, i1_1, i2_1, i3_1 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+                    T.reads(rxplaceholder[i0_1, i1_1, i2_1, i3_1])
+                    T.writes(pad_temp[i0_1, i1_1, i2_1, i3_1])
+                    pad_temp[i0_1, i1_1, i2_1, i3_1] = rxplaceholder[i0_1, i1_1, i2_1, i3_1]
+            for i0, i1, i2, i3, i4, i5, i6 in T.grid(2, 4, 26, 26, 3, 3, 3):
+                with T.block("conv2d_nchw"):
+                    nn, ff, yy, xx, rc, ry, rx = T.axis.remap(
+                        "SSSSRRR", [i0, i1, i2, i3, i4, i5, i6]
+                    )
+                    T.reads(pad_temp[nn, rc, yy + ry, xx + rx], rxplaceholder_1[ff, rc, ry, rx])
+                    T.writes(conv2d_nchw[nn, ff, yy, xx])
+                    with T.init():
+                        conv2d_nchw[nn, ff, yy, xx] = T.float16(0)
+                    conv2d_nchw[nn, ff, yy, xx] = conv2d_nchw[nn, ff, yy, xx] + T.cast(
+                        pad_temp[nn, rc, yy + ry, xx + rx], "float16"
+                    ) * T.cast(rxplaceholder_1[ff, rc, ry, rx], "float16")
+
+    mod = OperatorLegalizer(Conv2d).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_add():
     @I.ir_module
     class Add:

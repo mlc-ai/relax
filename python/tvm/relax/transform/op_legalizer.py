@@ -31,13 +31,14 @@ from ..block_builder import BlockBuilder
 def _nn_conv2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(
         topi.nn.conv2d,
-        args[0],
-        args[1],
-        attrs.strides,
-        attrs.padding,
-        attrs.dilation,
-        attrs.data_layout,
-        attrs.kernel_layout,
+        input=args[0],
+        filter=args[1],
+        strides=attrs.strides,
+        padding=attrs.padding,
+        dilation=attrs.dilation,
+        data_layout=attrs.data_layout,
+        kernel_layout=attrs.kernel_layout,
+        out_dtype=attrs.out_dtype,
     )
 
 
