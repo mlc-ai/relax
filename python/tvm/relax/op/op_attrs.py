@@ -152,3 +152,9 @@ class Resize2DAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.AdaptivePool2DAttrs")
 class AdaptivePool2DAttrs(Attrs):
     """Attributes for 2d adaptive pool operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.MatmulAttrs")
+class MatmulAttrs(Attrs):
+    """Attributes for matmul operator"""
+

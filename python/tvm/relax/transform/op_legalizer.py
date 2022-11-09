@@ -262,7 +262,11 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
                 if not b_appended:
                     b_indices.append(idx_spatial[-1])
 
-                return a(*a_indices) * b(*b_indices)
+                dtype = attrs.out_dtype
+                if dtype != "":
+                    return a(*a_indices).astype(dtype) * b(*b_indices).astype(dtype)
+                else:
+                    return a(*a_indices) * b(*b_indices)
 
             return te.sum(multiply_compute(k), axis=k)
 

@@ -1431,6 +1431,54 @@ def test_matmul_4_5():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_matmul_4_5_with_out_dtype():
+    @I.ir_module
+    class Matmul:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((6, 2, 3, 5, 7), "float32")
+        ) -> R.Tensor(None, "float16", ndim=5):
+            gv: R.Tensor((6, 2, 3, 4, 7), "float16") = R.matmul(x, y, out_dtype="float16")
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((6, 2, 3, 5, 7), "float32")
+        ) -> R.Tensor(None, "float16", ndim=5):
+            gv = R.call_tir(matmul, (x, y), (6, 2, 3, 4, 7), dtype="float16")
+            return gv
+
+        @T.prim_func
+        def matmul(
+            rxplaceholder: T.Buffer[(2, 3, 4, 5), "float32"],
+            rxplaceholder_1: T.Buffer[(6, 2, 3, 5, 7), "float32"],
+            matmul: T.Buffer[(6, 2, 3, 4, 7), "float16"],
+        ) -> None:
+            T.func_attr({"global_symbol": "matmul", "tir.noalias": True})
+            for i0, i1, i2, i3, i4, i5 in T.grid(6, 2, 3, 4, 7, 5):
+                with T.block("matmul"):
+                    i0_1, i1_1, i2_1, i3_1, i4_1, k = T.axis.remap(
+                        "SSSSSR", [i0, i1, i2, i3, i4, i5]
+                    )
+                    T.reads(
+                        rxplaceholder[i1_1, i2_1, i3_1, k],
+                        rxplaceholder_1[i0_1, i1_1, i2_1, k, i4_1],
+                    )
+                    T.writes(matmul[i0_1, i1_1, i2_1, i3_1, i4_1])
+                    with T.init():
+                        matmul[i0_1, i1_1, i2_1, i3_1, i4_1] = T.float16(0)
+                    matmul[i0_1, i1_1, i2_1, i3_1, i4_1] = matmul[
+                        i0_1, i1_1, i2_1, i3_1, i4_1
+                    ] + T.cast(rxplaceholder[i1_1, i2_1, i3_1, k], "float16") * T.cast(
+                        rxplaceholder_1[i0_1, i1_1, i2_1, k, i4_1], "float16"
+                    )
+
+    mod = OperatorLegalizer(Matmul).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_softmax():
     @I.ir_module
     class Softmax:

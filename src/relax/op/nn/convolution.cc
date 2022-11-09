@@ -131,13 +131,19 @@ Type InferTypeConv2D(const Call& call, DiagnosticContext diag_ctx) {
                        << kernel_type->ndim);
   }
 
-  if (data_type->dtype != kernel_type->dtype && attrs->out_dtype.is_void()) {
+  DataType output_dtype;
+  if (data_type->IsUnknownDtype() || kernel_type->IsUnknownDtype()) {
+    output_dtype = attrs->out_dtype;
+  } else if (data_type->dtype != kernel_type->dtype && attrs->out_dtype.is_void()) {
     diag_ctx.EmitFatal(
         Diagnostic::Error(call->span)
-        << "The operator conv2d expects a given output dtype when the input data and kernel have "
-           "different dtypes. However, there is not a given output dtype");
+        << "Conv2D expects both the input data and kernel to have the same data type when there is "
+           "no specified output dtype. However, the given data has dtype "
+        << data_type->dtype << " while the given kernel has dtype " << kernel_type->dtype);
+  } else {
+    output_dtype = attrs->out_dtype.is_void() ? data_type->dtype : attrs->out_dtype;
   }
-  return DynTensorType(4, attrs->out_dtype.is_void() ? data_type->dtype : attrs->out_dtype);
+  return DynTensorType(4, output_dtype);
 }
 
 }  // namespace relax
