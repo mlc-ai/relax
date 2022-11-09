@@ -349,6 +349,12 @@ class TorchFXTranslator:
     def _cos(self, node: fx.node.Node) -> relax.Var:
         return self.bb.emit(relax.op.cos(self.env[node.args[0]]))
 
+    def _sqrt(self, node: fx.node.Node) -> relax.Var:
+        arg = self.env[node.args[0]]
+        if isinstance(arg, (int, float)):
+            arg = relax.const(arg, "float32")
+        return self.bb.emit(relax.op.sqrt(arg))
+
     def _cat(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
         return self.bb.emit(relax.op.concatenate(args[0], axis=node.kwargs["dim"]))
@@ -588,6 +594,7 @@ class TorchFXTranslator:
             "mul": self._mul,
             "sin": self._sin,
             "cos": self._cos,
+            "sqrt": self._sqrt,
             "cat": self._cat,
             "truediv": self._truediv,
             "floordiv": self._floordiv,
