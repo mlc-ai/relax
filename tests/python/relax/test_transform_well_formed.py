@@ -100,6 +100,29 @@ def test_dataflow_var():
     mod = tvm.IRModule({rx.GlobalVar("foo"): func})
     assert not rx.analysis.well_formed(mod)
 
+def test_param_var():
+    v0 = rx.Var("v0", [m, n], type_anno)
+    v1 = rx.Var("v1", [m, n], type_anno)
+    v2 = rx.Var("v2", [m, n], type_anno)
+    v3 = rx.Var("v3", [m, n], type_anno)
+    bb = rx.BlockBuilder()
+    with bb.function("func1", [v0, v1]):
+        with bb.dataflow():
+            lv0 = bb.emit(rx.op.add(v0, v1))
+            gv0 = bb.emit_output(lv0)
+        bb.emit_func_output(gv0)
+    with bb.function("func2", [v0, v2]):
+        with bb.dataflow():
+            lv0 = bb.emit(rx.op.add(v0, v2))
+            gv0 = bb.emit_output(lv0)
+        bb.emit_func_output(gv0)
+    with bb.function("func3", [v2, v3]):
+        with bb.dataflow():
+            lv0 = bb.emit(rx.op.add(v2, v3))
+            gv0 = bb.emit_output(lv0)
+        bb.emit_func_output(gv0)
+    mod = bb.get()
+    assert not rx.analysis.well_formed(mod)
 
 def test_global_var():
     # Error: GlobalVar GlobalVar0 is not defined

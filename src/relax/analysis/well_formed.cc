@@ -121,9 +121,16 @@ class WellFormedChecker : public relax::ExprVisitor {
     }
   }
 
+  String GetFuncName(Function func) {
+    Optional<String> gsymbol = func->GetAttr<String>(tvm::attr::kGlobalSymbol);
+    ICHECK(gsymbol.defined());
+    return gsymbol.value();
+  }
+
   void VisitExpr_(const FunctionNode* op) {
     // save the var_set_ for local function
     std::unordered_set<Var, ObjectPtrHash, ObjectPtrEqual> previous_var_set_ = var_set_;
+    Function func = GetRef<Function>(op);
     for (Var param : op->params) {
       // register symbolic var defined in the shape annotation of function params
       if (param->shape_) {
@@ -142,6 +149,14 @@ class WellFormedChecker : public relax::ExprVisitor {
       }
 
       this->VisitVarDef(param);
+
+      if (param_var_func_map_.count(param) == 1) {
+        Malformed(Diagnostic::Error(param->span)
+                  << "Parameter variable " << param->name_hint()
+                  << " is repeatedly defined in function " << GetFuncName(param_var_func_map_[param])
+                  << " and function " << GetFuncName(func));
+      }
+      param_var_func_map_.insert({param, func});
     }
     this->VisitBody(op->body);
     var_set_ = previous_var_set_;
@@ -286,6 +301,8 @@ class WellFormedChecker : public relax::ExprVisitor {
   std::unordered_set<GlobalVar, ObjectPtrHash, ObjectPtrEqual> global_var_set_;
   std::unordered_set<Var, ObjectPtrHash, ObjectPtrEqual> var_set_;
   std::unordered_set<DataflowVar, ObjectPtrHash, ObjectPtrEqual> dataflow_var_set_;
+  std::unordered_map<Var, Function, ObjectPtrHash, ObjectPtrEqual> param_var_func_map_;
+
   PrimExprVisitor prim_expr_visitor_;
 };
 
