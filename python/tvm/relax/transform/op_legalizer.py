@@ -38,7 +38,7 @@ def _nn_conv2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
         dilation=attrs.dilation,
         data_layout=attrs.data_layout,
         kernel_layout=attrs.kernel_layout,
-        out_dtype=attrs.out_dtype,
+        out_dtype=attrs.out_dtype if attrs.out_dtype != "" else None,
     )
 
 
