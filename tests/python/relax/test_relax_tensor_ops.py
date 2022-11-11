@@ -107,6 +107,27 @@ def test_conv2d():
     tvm.testing.assert_allclose(out.numpy(), expected)
 
 
+def test_conv2d_with_out_dtype():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 228, 228), "float32"), w: R.Tensor((16, 3, 5, 5), "float32")
+    ) -> R.Tensor(None, "float16", ndim=4):
+        gv: R.Tensor((2, 16, 224, 224), "float16") = R.conv2d(
+            x, w, kernel_size=(5, 5), out_dtype="float16"
+        )
+        return gv
+
+    x = relax.Var("x", [2, 3, 228, 228], relax.DynTensorType(ndim=4, dtype="float32"))
+    w = relax.Var("w", [16, 3, 5, 5], relax.DynTensorType(ndim=4, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, w]):
+        gv = bb.emit(relax.op.conv2d(x, w, kernel_size=(5, 5), out_dtype="float16"))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 def test_dense():
     # Set up
     dtype = "float32"
@@ -523,6 +544,25 @@ def test_matmul_4_5():
     bb = relax.BlockBuilder()
     with bb.function("main", [x, y]):
         gv = bb.emit(relax.op.nn.matmul(x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_matmul_4_5_with_output_dtype():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((6, 2, 3, 5, 7), "float32")
+    ) -> R.Tensor(None, "float16", ndim=5):
+        gv: R.Tensor((6, 2, 3, 4, 7), "float16") = R.matmul(x, y, out_dtype="float16")
+        return gv
+
+    x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
+    y = relax.Var("y", [6, 2, 3, 5, 7], relax.DynTensorType(ndim=5, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.nn.matmul(x, y, out_dtype="float16"))
         bb.emit_func_output(gv)
 
     expected = expected.with_attr("global_symbol", "main")

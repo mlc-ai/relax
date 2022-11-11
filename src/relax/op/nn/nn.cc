@@ -429,6 +429,8 @@ Type InferTypeLayerNorm(const Call& call, DiagnosticContext diag_ctx) {
 }
 
 /* relax.nn.matmul */
+TVM_REGISTER_NODE_TYPE(MatmulAttrs);
+
 RELAX_REGISTER_OP("relax.nn.matmul")
     .set_num_inputs(2)
     .add_argument("a", "Tensor", "The left operand of the matmul.")
@@ -436,9 +438,12 @@ RELAX_REGISTER_OP("relax.nn.matmul")
     .set_attr<FInferShape>("FInferShape", InferShapeMatmul)
     .set_attr<FInferType>("FInferType", InferTypeMatmul);
 
-Expr MakeMatmul(Expr a, Expr b) {
+Expr MakeMatmul(Expr a, Expr b, DataType out_dtype) {
+  ObjectPtr<MatmulAttrs> attrs = make_object<MatmulAttrs>();
+  attrs->out_dtype = out_dtype;
+
   static const Op& op = Op::Get("relax.nn.matmul");
-  return Call(op, {std::move(a), std::move(b)}, Attrs(), {});
+  return Call(op, {std::move(a), std::move(b)}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relax.op.nn.matmul").set_body_typed(MakeMatmul);
@@ -556,6 +561,7 @@ Type InferTypeMatmul(const Call& call, DiagnosticContext diag_ctx) {
 
   const auto* a_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
   const auto* b_type = call->args[1]->checked_type().as<DynTensorTypeNode>();
+  const auto* attrs = call->attrs.as<MatmulAttrs>();
   if (a_type == nullptr || b_type == nullptr) {
     diag_ctx.EmitFatal(
         Diagnostic::Error(call->span)
@@ -566,15 +572,14 @@ Type InferTypeMatmul(const Call& call, DiagnosticContext diag_ctx) {
 
   DataType output_dtype;
   if (a_type->IsUnknownDtype() || b_type->IsUnknownDtype()) {
-    // Todo: do runtime type inference
-    output_dtype = DataType::Void();
-  } else if (a_type->dtype != b_type->dtype) {
+    output_dtype = attrs->out_dtype;
+  } else if (a_type->dtype != b_type->dtype && attrs->out_dtype.is_void()) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "Matmul expects both operands to have the same data types. However, "
-                          "operand `a` has dtype "
+                       << "Matmul expects both operands to have the same data type when there is "
+                          "no specified output dtype. However, operand `a` has dtype "
                        << a_type->dtype << " while `b` has dtype " << b_type->dtype);
   } else {
-    output_dtype = a_type->dtype;
+    output_dtype = attrs->out_dtype.is_void() ? a_type->dtype : attrs->out_dtype;
   }
 
   int a_ndim = a_type->ndim;

@@ -31,13 +31,14 @@ from ..block_builder import BlockBuilder
 def _nn_conv2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(
         topi.nn.conv2d,
-        args[0],
-        args[1],
-        attrs.strides,
-        attrs.padding,
-        attrs.dilation,
-        attrs.data_layout,
-        attrs.kernel_layout,
+        input=args[0],
+        filter=args[1],
+        strides=attrs.strides,
+        padding=attrs.padding,
+        dilation=attrs.dilation,
+        data_layout=attrs.data_layout,
+        kernel_layout=attrs.kernel_layout,
+        out_dtype=attrs.out_dtype if attrs.out_dtype != "" else None,
     )
 
 
@@ -261,7 +262,11 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
                 if not b_appended:
                     b_indices.append(idx_spatial[-1])
 
-                return a(*a_indices) * b(*b_indices)
+                dtype = attrs.out_dtype
+                if dtype != "":
+                    return a(*a_indices).astype(dtype) * b(*b_indices).astype(dtype)
+                else:
+                    return a(*a_indices) * b(*b_indices)
 
             return te.sum(multiply_compute(k), axis=k)
 

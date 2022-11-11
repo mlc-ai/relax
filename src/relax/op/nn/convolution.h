@@ -52,44 +52,10 @@ inline Expr MakeConv(Expr data, Expr weight, Array<PrimExpr> strides, Array<Prim
   return Call(op, {data, weight}, Attrs(attrs), {});
 }
 
-Optional<Expr> InferShapeConv2d(const Call& call, DiagnosticContext diag_ctx) {
-  if (call->args.size() != 2) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Conv2d op should have 2 arguments");
-  }
-  Expr shape0 = call->args[0]->shape();
-  Expr shape1 = call->args[1]->shape();
-  auto* s0 = shape0.as<ShapeExprNode>();
-  auto* s1 = shape1.as<ShapeExprNode>();
-  auto* attrs = call->attrs.as<Conv2DAttrs>();
-  if (s0 && s1) {
-    std::vector<PrimExpr> output_shape;
-    size_t ndim0 = s0->values.size();
-    size_t ndim1 = s1->values.size();
-    if (ndim0 != 4 || ndim1 != 4) {
-      LOG(INFO) << ndim0;
-      LOG(INFO) << ndim1;
-      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                         << "The 2 arguments of Conv2d must be 4D Tensors");
-    }
-    // N
-    output_shape.push_back(s0->values[0]);
-    // C
-    output_shape.push_back(s1->values[0]);
-    // H
-    output_shape.push_back((s0->values[2] + 2 * attrs->padding[0] -
-                            attrs->dilation[0] * (attrs->kernel_size[0] - 1) - 1) /
-                               attrs->strides[0] +
-                           1);
-    // W
-    output_shape.push_back((s0->values[3] + 2 * attrs->padding[1] -
-                            attrs->dilation[1] * (attrs->kernel_size[1] - 1) - 1) /
-                               attrs->strides[1] +
-                           1);
-    return ShapeExpr(Array<PrimExpr>{output_shape.begin(), output_shape.end()});
-  } else {
-    return NullOpt;
-  }
-}
+/* relax.nn.conv2d */
+Optional<Expr> InferShapeConv2D(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeConv2D(const Call& call, DiagnosticContext diag_ctx);
 
 }  // namespace relax
 }  // namespace tvm
