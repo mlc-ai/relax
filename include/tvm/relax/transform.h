@@ -196,6 +196,13 @@ TVM_DLL Pass SplitCutlass();
  */
 TVM_DLL Pass CutlassCodegen();
 
+/*!
+ * \brief Automatic mixed precision pass.
+ *
+ * \return The Pass.
+ */
+TVM_DLL Pass ToMixedPrecision();
+
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm
