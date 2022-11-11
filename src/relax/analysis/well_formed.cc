@@ -42,6 +42,8 @@
 
 #include <unordered_set>
 
+#include "../../printer/text_printer.h"
+
 namespace tvm {
 namespace relax {
 
@@ -121,12 +123,6 @@ class WellFormedChecker : public relax::ExprVisitor {
     }
   }
 
-  String GetFuncName(Function func) {
-    Optional<String> gsymbol = func->GetAttr<String>(tvm::attr::kGlobalSymbol);
-    ICHECK(gsymbol.defined());
-    return gsymbol.value();
-  }
-
   void VisitExpr_(const FunctionNode* op) {
     // save the var_set_ for local function
     std::unordered_set<Var, ObjectPtrHash, ObjectPtrEqual> previous_var_set_ = var_set_;
@@ -152,9 +148,10 @@ class WellFormedChecker : public relax::ExprVisitor {
 
       if (param_var_func_map_.count(param) == 1) {
         Malformed(Diagnostic::Error(param->span)
-                  << "Parameter variable " << param->name_hint()
-                  << " is repeatedly defined in function " << GetFuncName(param_var_func_map_[param])
-                  << " and function " << GetFuncName(func));
+                  << "Relax variable " << param->name_hint()
+                  << " is repeatedly used as parameters in function:\n"
+                  << AsRelaxScript(param_var_func_map_[param], false)
+                  << "\nand function:\n" << AsRelaxScript(func, false));
       }
       param_var_func_map_.insert({param, func});
     }
