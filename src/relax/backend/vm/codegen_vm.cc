@@ -72,6 +72,9 @@ class CodeGenVM : public ExprFunctor<Instruction::Arg(const Expr&)> {
     ICHECK(gsymbol.defined()) << "there should be no local functions in Relax VM codegen phase. "
                                  "Did you forget to apply LambdaLift pass?";
 
+    // var_register_map_ is local in function scope
+    var_register_map_.clear();
+
     Array<String> param_names;
     for (Var param : func_node->params) {
       param_names.push_back(param->name_hint());
