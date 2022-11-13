@@ -48,11 +48,26 @@ DEFAULT_FOLLOW_LIST = [
     "relax.squeeze",
     "relax.unique",
     "relax.nn.relu",
-    "relax.nn.gelu"
+    "relax.nn.gelu",
+    "relax.multiply",
+    "relax.add",
+    "relax.nn.silu",
+    "relax.sqrt",
+    "relax.divide",
+    "relax.subtract",
+    "relax.strided_slice",
+    "relax.sin",
+    "relax.cos",
+    "relax.concatenate",
+    "relax.image.resize2d",
+    "relax.cast",
+    "relax.broadcast_to",
 ]
 DEFAULT_NEVER_LIST = [
     "relax.nn.softmax",
-    "relax.nn.layer_norm"
+    "relax.nn.layer_norm",
+    "relax.sum",
+    "relax.mean"
 ]
 
 # Returns a decorator which registers for every given op, the function under FTVMMixedPrecisionConversionType
@@ -89,7 +104,8 @@ def get_generic_out_dtypes(call_node: "relay.Call", mixed_precision_type: str) -
     if hasattr(call_node.attrs, "out_dtype"):
         # TODO (AndrewZhaoLuo): evaluate consistent support for mixed_type accumulators
         # return ["float32", mixed_precision_type]
-        return [call_node.attrs.out_dtype, mixed_precision_type]
+        out_dtype = "float32" if call_node.attrs.out_dtype == "" else call_node.attrs.out_dtype
+        return [out_dtype, mixed_precision_type]
 
     # [accumulation_dtype, output_dtype] for the operations
     return [mixed_precision_type, mixed_precision_type]

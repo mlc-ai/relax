@@ -72,6 +72,59 @@ def test_relu_conv2d_relu():
     print(mod.script())
 
 
+def test_gemm_add_silu():
+    @I.ir_module
+    class Conv2d:
+        @R.function
+        def main(
+            lv13: R.Tensor((2, 320), "float32"), w1: R.Tensor((320, 1280), "float32"), w2: R.Tensor((2, 1280), "float32")
+        ) -> R.Tensor(None, "float32", ndim=2):
+            lv14: R.Tensor((2, 1280), "float32") = relax.nn.matmul(
+                lv13, w1, out_dtype="float32")
+            lv15: R.Tensor((2, 1280), "float32") = R.add(lv14, w2)
+            lv16: R.Tensor((2, 1280), "float32") = relax.nn.silu(lv15)
+            return lv16
+    mod = ToMixedPrecision()(Conv2d)
+    print(mod.script())
+
+
+def test_concat():
+    @I.ir_module
+    class Conv2d:
+        @R.function
+        def main(
+            lv5: R.Tensor((2, 160), "float32")
+        ) -> R.Tensor(None, "float32", ndim=2):
+            lv6: R.Tensor((2, 160), "float32") = R.sin(lv5)
+            lv7: R.Tensor((2, 160), "float32") = R.cos(lv5)
+            lv8: R.Tensor((2, 320), "float32") = R.concatenate(
+                (lv6, lv7), axis=-1)
+            return lv8
+    mod = ToMixedPrecision()(Conv2d)
+    print(mod.script())
+
+
+def test_concat_matmul():
+    @I.ir_module
+    class Conv2d:
+        @R.function
+        def main(
+            lv10: R.Tensor((2, 160), "float32"),
+            lv12: R.Tensor((2, 160), "float32"),
+            w: R.Tensor((320, 1280), "float32")
+        ) -> R.Tensor(None, "float32", ndim=2):
+            lv13: R.Tensor((2, 320), "float32") = R.concatenate(
+                (lv10, lv12), axis=-1)
+            lv14: R.Tensor((2, 1280), "float32") = relax.nn.matmul(
+                lv13, w, out_dtype="float32")
+            return lv14
+    mod = ToMixedPrecision()(Conv2d)
+    print(mod.script())
+
+
 test_conv2d()
 test_conv2d_relu()
 test_relu_conv2d_relu()
+test_gemm_add_silu()
+test_concat()
+test_concat_matmul()

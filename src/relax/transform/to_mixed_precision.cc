@@ -46,9 +46,7 @@ class ToMixedPrecisionMutator : public ExprMutator {
   void InitVarMap(const relax::Function& func) {
     for (const auto& param : func->params) {
       if (const auto* type = param->checked_type_.as<DynTensorTypeNode>()) {
-        std::unordered_map<std::string, Var> type_var_map;
-        type_var_map[runtime::DLDataType2String(type->dtype)] = param;
-        var_map_[param] = std::move(type_var_map);
+        UpdateVarMap(param, type->dtype, param);
       }
     }
   }
@@ -62,7 +60,8 @@ class ToMixedPrecisionMutator : public ExprMutator {
       if (type_it != it->second.end()) {
         return type_it->second;
       } else {
-        return builder_->Emit(MakeCast(GetRef<Var>(op), type->dtype));
+        relax::Var cur_var = it->second.begin()->second;
+        return builder_->Emit(MakeCast(cur_var, type->dtype));
       }
     } else {
       return ExprMutator::VisitExpr_(op);
@@ -78,7 +77,8 @@ class ToMixedPrecisionMutator : public ExprMutator {
       if (type_it != it->second.end()) {
         return type_it->second;
       } else {
-        return builder_->Emit(MakeCast(GetRef<Var>(op), type->dtype));
+        relax::Var cur_var = it->second.begin()->second;
+        return builder_->Emit(MakeCast(cur_var, type->dtype));
       }
     } else {
       return ExprMutator::VisitExpr_(op);
@@ -86,6 +86,7 @@ class ToMixedPrecisionMutator : public ExprMutator {
   }
 
   void VisitBinding_(const VarBindingNode* binding) override {
+    // LOG(INFO) << ">>>>>> " << binding->var << " " << binding->value;
     auto emit = [this, binding](const Expr& e, const Var& v, DataType dtype) -> relax::Var {
       relax::Var new_var;
       if (this->builder_->CurrentBlockIsDataFlow() && !binding->var.as<DataflowVarNode>()) {
@@ -121,11 +122,13 @@ class ToMixedPrecisionMutator : public ExprMutator {
           DataType accumulation_dtype =
               DataType(String2DLDataType(Downcast<String>(op_descriptor[1])));
           if (category == MIXED_PRECISION_ALWAYS) {
+            // LOG(INFO) << "MIXED_PRECISION_ALWAYS";
             // Cast inputs to fp16
             std::vector<Expr> new_args;
             CastArgsToType(call_node->args, low_precision_type_, &new_args);
             // Cast output according to out_dtype (if necessary)
             if (accumulation_dtype != low_precision_type_) {
+              // LOG(INFO) << "RECAST";
               relax::Var accmulate =
                   emit(relax::Call(call_node->op, new_args, call_node->attrs, call_node->type_args),
                        binding->var, accumulation_dtype);
@@ -139,30 +142,21 @@ class ToMixedPrecisionMutator : public ExprMutator {
               return;
             }
           } else if (category == MIXED_PRECISION_FOLLOW) {
+            // LOG(INFO) << "MIXED_PRECISION_FOLLOW";
             // If all the inputs are fp16 available, we stay fp16, otherwise we cast fp16 inputs to
             // fp32 (if necessary) and outputs fp32
-            bool need_cast = false;
-            for (const relax::Expr arg : call_node->args) {
-              // arg is a tensor
-              const relax::VarNode* var_node = arg.as<relax::VarNode>();
-              ICHECK(var_node != nullptr);
-              auto it = var_map_.find(GetRef<Var>(var_node));
-              ICHECK(it != var_map_.end());
-              if (it->second.find(runtime::DLDataType2String(low_precision_type_)) ==
-                  it->second.end()) {
-                need_cast = true;
-                break;
-              }
-            }
+            bool need_cast = NeedCast(call_node->args);
             // Cast inputs to fp32/fp16 according to need_cast
             std::vector<Expr> new_args;
             CastArgsToType(call_node->args, need_cast ? full_precision_type_ : low_precision_type_,
                            &new_args);
+            // LOG(INFO) << Array<Expr>(new_args);
             relax::Var new_var =
                 emit(relax::Call(call_node->op, new_args, call_node->attrs, call_node->type_args),
                      binding->var, need_cast ? full_precision_type_ : low_precision_type_);
             return;
           } else if (category == MIXED_PRECISION_NEVER) {
+            // LOG(INFO) << "MIXED_PRECISION_NEVER";
             // cast inputs to fp32
             std::vector<Expr> new_args;
             CastArgsToType(call_node->args, full_precision_type_, &new_args);
@@ -173,6 +167,8 @@ class ToMixedPrecisionMutator : public ExprMutator {
           } else {
             LOG(FATAL) << "Unsupported MixedTypeConversionCategory: " << category;
           }
+        } else {
+          LOG(WARNING) << "No FTVMMixedPrecisionConversionType attribute " << op;
         }
       }
     }
@@ -185,27 +181,69 @@ class ToMixedPrecisionMutator : public ExprMutator {
   }
 
  private:
-  void CastArgsToType(const Array<Expr>& args, DataType to_type, std::vector<Expr>* new_args) {
+  bool NeedCast(const Array<Expr>& args) {
     for (const relax::Expr arg : args) {
       // arg is a tensor
-      const relax::VarNode* var_node = arg.as<relax::VarNode>();
-      ICHECK(var_node != nullptr);
-      auto it = var_map_.find(GetRef<Var>(var_node));
-      ICHECK(it != var_map_.end());
-      auto itt = it->second.find(runtime::DLDataType2String(to_type));
-      if (itt == it->second.end()) {
-        // the input var is never casted to to_type before
-        relax::Var casted_var = builder_->Emit(relax::MakeCast(GetRef<Var>(var_node), to_type));
-        new_args->push_back(casted_var);
-        UpdateVarMap(GetRef<Var>(var_node), to_type, casted_var);
-      } else {
-        // the input var is already casted to to_type before
-        new_args->push_back(itt->second);
+      if (const relax::VarNode* var_node = arg.as<relax::VarNode>()) {
+        auto it = var_map_.find(GetRef<Var>(var_node));
+        ICHECK(it != var_map_.end());
+        if (it->second.find(DLDataType2String(low_precision_type_)) == it->second.end()) {
+          return true;
+        }
+      } else if (const relax::TupleNode* tuple_node = arg.as<relax::TupleNode>()) {
+        if (NeedCast(tuple_node->fields)) {
+          return true;
+        }
       }
     }
+    return false;
+  }
+
+  void CastArgsToType(const Array<Expr>& args, DataType to_type, std::vector<Expr>* new_args) {
+    // LOG(INFO) << "CastArgsToType " << args << " to " << to_type;
+    for (const relax::Expr arg : args) {
+      // arg is a tensor
+      if (const relax::VarNode* var_node = arg.as<relax::VarNode>()) {
+        auto it = var_map_.find(GetRef<Var>(var_node));
+        ICHECK(it != var_map_.end());
+        auto itt = it->second.find(runtime::DLDataType2String(to_type));
+        if (itt == it->second.end()) {
+          // the input var is never casted to to_type before
+          relax::Var cur_var = it->second.begin()->second;
+          relax::Var casted_var = builder_->Emit(relax::MakeCast(cur_var, to_type));
+          new_args->push_back(casted_var);
+          UpdateVarMap(GetRef<Var>(var_node), to_type, casted_var);
+        } else {
+          // the input var is already casted to to_type before
+          new_args->push_back(itt->second);
+        }
+      } else if (const relax::ConstantNode* const_node = arg.as<relax::ConstantNode>()) {
+        if (DataType(const_node->data->dtype) != to_type) {
+          // the input constant is not of the right type
+          // we need to cast it
+          relax::Var casted_const =
+              builder_->Emit(relax::MakeCast(GetRef<Constant>(const_node), to_type));
+          new_args->push_back(casted_const);
+        } else {
+          new_args->push_back(arg);
+        }
+      } else if (const relax::TupleNode* tuple_node = arg.as<relax::TupleNode>()) {
+        // the input is a tuple
+        std::vector<Expr> new_tuple;
+        CastArgsToType(tuple_node->fields, to_type, &new_tuple);
+        new_args->push_back(relax::Tuple(new_tuple));
+      } else {
+        new_args->push_back(arg);
+      }
+    }
+    // LOG(INFO) << "Done Casting";
   }
 
   void UpdateVarMap(const Var& var, DataType from_type, const Var& casted_var) {
+    // LOG(INFO) << "UpdateVarMap: " << var << " from_type: " << from_type
+    // << " casted_var: " << casted_var << " "
+    //<< casted_var->checked_type().as<DynTensorTypeNode>()->dtype;
+    ICHECK(from_type == casted_var->checked_type().as<DynTensorTypeNode>()->dtype);
     auto it = var_map_.find(var);
     if (it == var_map_.end()) {
       std::unordered_map<std::string, Var> type_var_map;
