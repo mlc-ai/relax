@@ -87,14 +87,16 @@ class ToMixedPrecisionMutator : public ExprMutator {
 
   void VisitBinding_(const VarBindingNode* binding) override {
     // LOG(INFO) << ">>>>>> " << binding->var << " " << binding->value;
-    auto emit = [this, binding](const Expr& e, const Var& v, DataType dtype) -> relax::Var {
+    auto emit = [this, binding](const Expr& e, const Var& v) -> relax::Var {
       relax::Var new_var;
       if (this->builder_->CurrentBlockIsDataFlow() && !binding->var.as<DataflowVarNode>()) {
         new_var = this->builder_->EmitOutput(e);
       } else {
         new_var = this->builder_->Emit(e);
       }
-      this->UpdateVarMap(v, dtype, new_var);
+      if (const auto* type = new_var->checked_type_.as<DynTensorTypeNode>()) {
+        this->UpdateVarMap(binding->var, type->dtype, new_var);
+      }
       return new_var;
     };
 
@@ -131,14 +133,14 @@ class ToMixedPrecisionMutator : public ExprMutator {
               // LOG(INFO) << "RECAST";
               relax::Var accmulate =
                   emit(relax::Call(call_node->op, new_args, call_node->attrs, call_node->type_args),
-                       binding->var, accumulation_dtype);
-              relax::Var cast_back = emit(relax::MakeCast(accmulate, low_precision_type_),
-                                          binding->var, low_precision_type_);
+                       binding->var);
+              relax::Var cast_back =
+                  emit(relax::MakeCast(accmulate, low_precision_type_), binding->var);
               return;
             } else {
               relax::Var new_var =
                   emit(relax::Call(call_node->op, new_args, call_node->attrs, call_node->type_args),
-                       binding->var, accumulation_dtype);
+                       binding->var);
               return;
             }
           } else if (category == MIXED_PRECISION_FOLLOW) {
@@ -153,7 +155,7 @@ class ToMixedPrecisionMutator : public ExprMutator {
             // LOG(INFO) << Array<Expr>(new_args);
             relax::Var new_var =
                 emit(relax::Call(call_node->op, new_args, call_node->attrs, call_node->type_args),
-                     binding->var, need_cast ? full_precision_type_ : low_precision_type_);
+                     binding->var);
             return;
           } else if (category == MIXED_PRECISION_NEVER) {
             // LOG(INFO) << "MIXED_PRECISION_NEVER";
@@ -162,7 +164,7 @@ class ToMixedPrecisionMutator : public ExprMutator {
             CastArgsToType(call_node->args, full_precision_type_, &new_args);
             relax::Var new_var =
                 emit(relax::Call(call_node->op, new_args, call_node->attrs, call_node->type_args),
-                     binding->var, full_precision_type_);
+                     binding->var);
             return;
           } else {
             LOG(FATAL) << "Unsupported MixedTypeConversionCategory: " << category;
@@ -242,7 +244,7 @@ class ToMixedPrecisionMutator : public ExprMutator {
   void UpdateVarMap(const Var& var, DataType from_type, const Var& casted_var) {
     // LOG(INFO) << "UpdateVarMap: " << var << " from_type: " << from_type
     // << " casted_var: " << casted_var << " "
-    //<< casted_var->checked_type().as<DynTensorTypeNode>()->dtype;
+    // << casted_var->checked_type().as<DynTensorTypeNode>()->dtype;
     ICHECK(from_type == casted_var->checked_type().as<DynTensorTypeNode>()->dtype);
     auto it = var_map_.find(var);
     if (it == var_map_.end()) {
