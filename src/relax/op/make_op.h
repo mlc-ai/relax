@@ -41,6 +41,10 @@ Expr MakeMemKillStorage(Expr storage);
 
 Expr MakeMemKillTensor(Expr tensor);
 
+Expr MakeVMAllocStorage(Expr size, DataType dtype, int64_t runtime_device_index);
+
+Expr MakeVMAllocTensor(Expr storage, Expr shape, int offset, DataType dtype);
+
 }  // namespace relax
 }  // namespace tvm
 
