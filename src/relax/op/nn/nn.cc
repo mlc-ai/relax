@@ -21,6 +21,15 @@
 
 namespace tvm {
 namespace relax {
+
+Optional<Expr> InferShapeDropout(const Call& call, DiagnosticContext diag_ctx);
+Type InferTypeDropout(const Call& call, DiagnosticContext diag_ctx);
+Optional<Expr> InferShapeLayerNorm(const Call& call, DiagnosticContext diag_ctx);
+Type InferTypeLayerNorm(const Call& call, DiagnosticContext diag_ctx);
+Optional<Expr> InferShapeMatmul(const Call& call, DiagnosticContext diag_ctx);
+Type InferTypeMatmul(const Call& call, DiagnosticContext diag_ctx);
+
+// Type InferTypeMatmul(const Call& call, DiagnosticContext diag_ctx);
 TVM_REGISTER_NODE_TYPE(DenseAttrs);
 
 RELAX_REGISTER_OP("relax.nn.dense")
@@ -35,27 +44,78 @@ RELAX_REGISTER_OP("relax.nn.dense")
     .set_num_inputs(2)
     .add_argument("data", "nD Tensor", "Input data.")
     .add_argument("weight", "2D Tensor", "Weight matrix.")
-    .set_attr<FInferShape>("FInferShape", InferShapeDense)
-    .set_attr<FInferType>("FInferType", InferTypeDense);
+    .set_attr<FInferShape>(  //
+        "FInferShape",       //
+        [](const Call& call, DiagnosticContext diag_ctx) -> Optional<Expr> {
+          if (call->args.size() != 2) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dense op should have 2 arguments");
+          }
+          Expr shape0 = call->args[0]->shape();
+          Expr shape1 = call->args[1]->shape();
+          auto* s0 = shape0.as<ShapeExprNode>();
+          auto* s1 = shape1.as<ShapeExprNode>();
+          if (s0 && s1) {
+            std::vector<PrimExpr> output_shape;
+            size_t ndim0 = s0->values.size();
+            size_t ndim1 = s1->values.size();
+            if (ndim0 != 2 || ndim1 != 2) {
+              diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                                 << "The 2 arguments of Dense must be 2D Tensors");
+            }
+            if (!EqualCheck(s0->values[1], s1->values[1])) {
+              diag_ctx.EmitFatal(
+                  Diagnostic::Error(call->span)
+                  << "The 2 arguments of Dense must have the same number of columns");
+            }
+            return ShapeExpr(Array<PrimExpr>{s0->values[0], s1->values[0]});
+          } else {
+            return NullOpt;
+          }
+        })
+    .set_attr<FInferType>(  //
+        "FInferType",       //
+        [](const Call& call, DiagnosticContext diag_ctx) -> Type {
+          if (call->args.size() != 2) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dense op should have 2 arguments");
+          }
+          Type type0 = call->args[0]->checked_type();
+          Type type1 = call->args[1]->checked_type();
+          auto* t0 = type0.as<DynTensorTypeNode>();
+          auto* t1 = type1.as<DynTensorTypeNode>();
+          if (!t0 || !t1) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "The 2 arguments of Dense should be DynTensor");
+          }
 
-Expr MakeDense(Expr data, Expr weight, PrimExpr units, DataType out_dtype) {
-  auto attrs = make_object<DenseAttrs>();
-  attrs->units = units;
-  attrs->out_dtype = out_dtype;
-  static const Op& op = Op::Get("relax.nn.dense");
+          DataType output_dtype;
+          if (t0->IsUnknownDtype() || t1->IsUnknownDtype()) {
+            output_dtype = DataType::Void();
+          } else if (t0->dtype != t1->dtype) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "Data types " << t0->dtype << ", and" << t1->dtype
+                               << " must be equal for Dense");
+          } else {
+            output_dtype = t0->dtype;
+          }
 
-  return Call(op, {data, weight}, Attrs(attrs), {});
-}
+          int output_ndim;
+          if (t0->IsUnknownNdim() || t1->IsUnknownNdim()) {
+            output_ndim = -1;
+          } else {
+            output_ndim = t0->ndim;
+          }
+          return DynTensorType(output_ndim, output_dtype);
+        });
 
-TVM_REGISTER_GLOBAL("relax.op.nn.dense").set_body_typed(MakeDense);
+TVM_REGISTER_GLOBAL("relax.op.nn.dense")
+    .set_body_typed([](Expr data, Expr weight, PrimExpr units, DataType out_dtype) -> Expr {
+      auto attrs = make_object<DenseAttrs>();
+      attrs->units = units;
+      attrs->out_dtype = out_dtype;
+      static const Op& op = Op::Get("relax.nn.dense");
+      return Call(op, {data, weight}, Attrs(attrs), {});
+    });
 TVM_REGISTER_NODE_TYPE(SoftmaxAttrs);
-
-Expr MakeSoftmax(Expr data, int axis) {
-  auto attrs = make_object<SoftmaxAttrs>();
-  attrs->axis = axis;
-  static const Op& op = Op::Get("relax.nn.softmax");
-  return Call(op, {data}, Attrs(attrs), {});
-}
 
 RELAX_REGISTER_OP("relax.nn.softmax")
     .describe(R"code(Softmax layer.
@@ -71,7 +131,12 @@ RELAX_REGISTER_OP("relax.nn.softmax")
     .set_attr<FInferShape>("FInferShape", InferShapeUnaryBroadcast)
     .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast);
 
-TVM_REGISTER_GLOBAL("relax.op.nn.softmax").set_body_typed(MakeSoftmax);
+TVM_REGISTER_GLOBAL("relax.op.nn.softmax").set_body_typed([](Expr data, int axis) -> Expr {
+  auto attrs = make_object<SoftmaxAttrs>();
+  attrs->axis = axis;
+  static const Op& op = Op::Get("relax.nn.softmax");
+  return Call(op, {data}, Attrs(attrs), {});
+});
 
 /* relax.nn.relu */
 RELAX_REGISTER_UNARY_OP("nn.relu");
@@ -89,8 +154,42 @@ RELAX_REGISTER_OP("relax.nn.flatten")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
     .set_attrs_type<FlattenAttrs>()
-    .set_attr<FInferShape>("FInferShape", InferShapeFlatten)
-    .set_attr<FInferType>("FInferType", InferTypeFlatten);
+    .set_attr<FInferShape>(  //
+        "FInferShape",       //
+        [](const Call& call, DiagnosticContext diag_ctx) -> Optional<Expr> {
+          if (call->args.size() != 1) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "Flatten op should have 1 argument");
+          }
+          Expr shape = call->args[0]->shape();
+          auto* s = shape.as<ShapeExprNode>();
+          if (s) {
+            PrimExpr output_dim = 1;
+            for (int i = 1; i < static_cast<int>(s->values.size()); i++) {
+              output_dim *= s->values[i];
+            }
+            return ShapeExpr({s->values[0], output_dim});
+          } else {
+            return NullOpt;
+          }
+        })
+    .set_attr<FInferType>(  //
+        "FInferType",       //
+        [](const Call& call, DiagnosticContext diag_ctx) -> Type {
+          if (call->args.size() != 1) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "Flatten op should have 1 argument");
+          }
+          auto* input_ty = call->args[0]->checked_type().as<DynTensorTypeNode>();
+          if (!input_ty) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "Input should be DynTensor, but got "
+                               << call->args[0]->checked_type()->GetTypeKey());
+          }
+          return DynTensorType(/*ndim=*/2, input_ty->dtype);
+        }
+        //
+    );
 
 TVM_REGISTER_GLOBAL("relax.op.nn.flatten")
     .set_body_typed([](Expr data, int start_dim, int end_dim) -> Expr {
@@ -112,132 +211,131 @@ RELAX_REGISTER_OP("relax.nn.batch_norm")
     .add_argument("beta", "Tensor", "The beta offset factor.")
     .add_argument("moving_mean", "Tensor", "Running mean of input.")
     .add_argument("moving_var", "Tensor", "Running variance of input.")
-    .set_attr<FInferShape>("FInferShape", InferShapeBatchNorm)
-    .set_attr<FInferType>("FInferType", InferTypeBatchNorm);
+    .set_attr<FInferShape>(  //
+        "FInferShape",
+        [](const Call& call, DiagnosticContext diag_ctx) -> Optional<Expr> {
+          if (call->args.size() != 5) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "BatchNorm op should have 5 arguments, but only "
+                               << call->args.size() << "are get.");
+          }
 
-Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,  //
-                   int axis, double epsilon, bool center, bool scale) {
-  ObjectPtr<BatchNormAttrs> attrs = make_object<BatchNormAttrs>();
-  attrs->axis = axis;
-  attrs->epsilon = epsilon;
-  attrs->center = center;
-  attrs->scale = scale;
+          const auto* data_shape = call->args[0]->shape().as<ShapeExprNode>();
+          const auto* mean_shape = call->args[3]->shape().as<ShapeExprNode>();
+          const auto* var_shape = call->args[4]->shape().as<ShapeExprNode>();
+          if (data_shape == nullptr || mean_shape == nullptr || var_shape == nullptr) {
+            return NullOpt;
+          }
 
-  static const Op& op = Op::Get("relax.nn.batch_norm");
-  return Call(op,
-              {std::move(data), std::move(gamma), std::move(beta), std::move(moving_mean),
-               std::move(moving_var)},
-              Attrs{attrs}, {});
-}
+          const auto* attrs = call->attrs.as<BatchNormAttrs>();
+          const auto* gamma_shape = call->args[1]->shape().as<ShapeExprNode>();
+          const auto* beta_shape = call->args[2]->shape().as<ShapeExprNode>();
+          if (attrs->scale && gamma_shape == nullptr) {
+            return NullOpt;
+          }
+          if (attrs->center && beta_shape == nullptr) {
+            return NullOpt;
+          }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.batch_norm").set_body_typed(MakeBatchNorm);
+          return Tuple({GetRef<ShapeExpr>(data_shape), GetRef<ShapeExpr>(mean_shape),
+                        GetRef<ShapeExpr>(var_shape)});
+        })
+    .set_attr<FInferType>(  //
+        "FInferType", [](const Call& call, DiagnosticContext diag_ctx) -> Type {
+          if (call->args.size() != 5) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "BatchNorm op should have 5 arguments, but only "
+                               << call->args.size() << "are get.");
+          }
+          const auto* data_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+          const auto* gamma_type = call->args[1]->checked_type().as<DynTensorTypeNode>();
+          const auto* beta_type = call->args[2]->checked_type().as<DynTensorTypeNode>();
+          const auto* mean_type = call->args[3]->checked_type().as<DynTensorTypeNode>();
+          const auto* var_type = call->args[4]->checked_type().as<DynTensorTypeNode>();
+          const auto* attrs = call->attrs.as<BatchNormAttrs>();
+          int axis = attrs->axis;
+          if (data_type == nullptr) {
+            diag_ctx.EmitFatal(
+                Diagnostic::Error(call->span)
+                << "The op input data should has type DynTensorType, but actually it is "
+                << call->args[0]->checked_type()->GetTypeKey()
+                << ". Please make sure the input has type DynTensorType.");
+          } else if (data_type->ndim <= axis) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "The op axis is " << axis
+                               << " while the input data tensor only has " << data_type->ndim
+                               << " dimensions. Please make sure `axis` is in range [0, "
+                               << data_type->ndim << ").");
+          }
+          if (mean_type == nullptr) {
+            diag_ctx.EmitFatal(
+                Diagnostic::Error(call->span)
+                << "The op input moving mean should has type DynTensorType, but actually it is "
+                << call->args[3]->checked_type()->GetTypeKey()
+                << ". Please make sure the input has type DynTensorType.");
+          } else if (mean_type->ndim != 1 && mean_type->ndim != -1) {
+            diag_ctx.EmitFatal(
+                Diagnostic::Error(call->span)
+                << "The input mean should be a 1-dim tensor, while the actual input mean has "
+                << mean_type->ndim << " dimensions.");
+          }
+          if (var_type == nullptr) {
+            diag_ctx.EmitFatal(
+                Diagnostic::Error(call->span)
+                << "The op input moving variance should has type DynTensorType, but actually it is "
+                << call->args[4]->checked_type()->GetTypeKey()
+                << ". Please make sure the input has type DynTensorType.");
+          } else if (var_type->ndim != 1 && var_type->ndim != -1) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "The input variance should be a 1-dim tensor, while the actual "
+                                  "input variance has "
+                               << var_type->ndim << " dimensions.");
+          }
+          if (gamma_type == nullptr) {
+            diag_ctx.EmitFatal(
+                Diagnostic::Error(call->span)
+                << "The op input gamma should has type DynTensorType, but actually it is "
+                << call->args[1]->checked_type()->GetTypeKey()
+                << ". Please make sure the input has type DynTensorType.");
+          } else if (gamma_type->ndim != 1 && gamma_type->ndim != -1) {
+            diag_ctx.EmitFatal(
+                Diagnostic::Error(call->span)
+                << "The input gamma should be a 1-dim tensor, while the actual input gamma has "
+                << gamma_type->ndim << " dimensions.");
+          }
+          if (beta_type == nullptr) {
+            diag_ctx.EmitFatal(
+                Diagnostic::Error(call->span)
+                << "The op input beta should has type DynTensorType, but actually it is "
+                << call->args[2]->checked_type()->GetTypeKey()
+                << ". Please make sure the input has type DynTensorType.");
+          } else if (beta_type->ndim != 1 && beta_type->ndim != -1) {
+            diag_ctx.EmitFatal(
+                Diagnostic::Error(call->span)
+                << "The input beta should be a 1-dim tensor, while the actual input beta has "
+                << beta_type->ndim << " dimensions.");
+          }
 
-Optional<Expr> InferShapeBatchNorm(const Call& call, DiagnosticContext diag_ctx) {
-  if (call->args.size() != 5) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "BatchNorm op should have 5 arguments, but only " << call->args.size()
-                       << "are get.");
-  }
+          return TupleType({GetRef<DynTensorType>(data_type), GetRef<DynTensorType>(mean_type),
+                            GetRef<DynTensorType>(var_type)});
+          // Todo(ruihang): how to do dtype broadcasting?
+        });
 
-  const auto* data_shape = call->args[0]->shape().as<ShapeExprNode>();
-  const auto* mean_shape = call->args[3]->shape().as<ShapeExprNode>();
-  const auto* var_shape = call->args[4]->shape().as<ShapeExprNode>();
-  if (data_shape == nullptr || mean_shape == nullptr || var_shape == nullptr) {
-    return NullOpt;
-  }
+TVM_REGISTER_GLOBAL("relax.op.nn.batch_norm")
+    .set_body_typed([](Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,
+                       int axis, double epsilon, bool center, bool scale) -> Expr {
+      ObjectPtr<BatchNormAttrs> attrs = make_object<BatchNormAttrs>();
+      attrs->axis = axis;
+      attrs->epsilon = epsilon;
+      attrs->center = center;
+      attrs->scale = scale;
 
-  const auto* attrs = call->attrs.as<BatchNormAttrs>();
-  const auto* gamma_shape = call->args[1]->shape().as<ShapeExprNode>();
-  const auto* beta_shape = call->args[2]->shape().as<ShapeExprNode>();
-  if (attrs->scale && gamma_shape == nullptr) {
-    return NullOpt;
-  }
-  if (attrs->center && beta_shape == nullptr) {
-    return NullOpt;
-  }
-
-  return Tuple(
-      {GetRef<ShapeExpr>(data_shape), GetRef<ShapeExpr>(mean_shape), GetRef<ShapeExpr>(var_shape)});
-}
-
-Type InferTypeBatchNorm(const Call& call, DiagnosticContext diag_ctx) {
-  if (call->args.size() != 5) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "BatchNorm op should have 5 arguments, but only " << call->args.size()
-                       << "are get.");
-  }
-
-  const auto* data_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
-  const auto* gamma_type = call->args[1]->checked_type().as<DynTensorTypeNode>();
-  const auto* beta_type = call->args[2]->checked_type().as<DynTensorTypeNode>();
-  const auto* mean_type = call->args[3]->checked_type().as<DynTensorTypeNode>();
-  const auto* var_type = call->args[4]->checked_type().as<DynTensorTypeNode>();
-
-  const auto* attrs = call->attrs.as<BatchNormAttrs>();
-  int axis = attrs->axis;
-
-  if (data_type == nullptr) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "The op input data should has type DynTensorType, but actually it is "
-                       << call->args[0]->checked_type()->GetTypeKey()
-                       << ". Please make sure the input has type DynTensorType.");
-  } else if (data_type->ndim <= axis) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "The op axis is " << axis << " while the input data tensor only has "
-                       << data_type->ndim << " dimensions. Please make sure `axis` is in range [0, "
-                       << data_type->ndim << ").");
-  }
-  if (mean_type == nullptr) {
-    diag_ctx.EmitFatal(
-        Diagnostic::Error(call->span)
-        << "The op input moving mean should has type DynTensorType, but actually it is "
-        << call->args[3]->checked_type()->GetTypeKey()
-        << ". Please make sure the input has type DynTensorType.");
-  } else if (mean_type->ndim != 1 && mean_type->ndim != -1) {
-    diag_ctx.EmitFatal(
-        Diagnostic::Error(call->span)
-        << "The input mean should be a 1-dim tensor, while the actual input mean has "
-        << mean_type->ndim << " dimensions.");
-  }
-  if (var_type == nullptr) {
-    diag_ctx.EmitFatal(
-        Diagnostic::Error(call->span)
-        << "The op input moving variance should has type DynTensorType, but actually it is "
-        << call->args[4]->checked_type()->GetTypeKey()
-        << ". Please make sure the input has type DynTensorType.");
-  } else if (var_type->ndim != 1 && var_type->ndim != -1) {
-    diag_ctx.EmitFatal(
-        Diagnostic::Error(call->span)
-        << "The input variance should be a 1-dim tensor, while the actual input variance has "
-        << var_type->ndim << " dimensions.");
-  }
-  if (gamma_type == nullptr) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "The op input gamma should has type DynTensorType, but actually it is "
-                       << call->args[1]->checked_type()->GetTypeKey()
-                       << ". Please make sure the input has type DynTensorType.");
-  } else if (gamma_type->ndim != 1 && gamma_type->ndim != -1) {
-    diag_ctx.EmitFatal(
-        Diagnostic::Error(call->span)
-        << "The input gamma should be a 1-dim tensor, while the actual input gamma has "
-        << gamma_type->ndim << " dimensions.");
-  }
-  if (beta_type == nullptr) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "The op input beta should has type DynTensorType, but actually it is "
-                       << call->args[2]->checked_type()->GetTypeKey()
-                       << ". Please make sure the input has type DynTensorType.");
-  } else if (beta_type->ndim != 1 && beta_type->ndim != -1) {
-    diag_ctx.EmitFatal(
-        Diagnostic::Error(call->span)
-        << "The input beta should be a 1-dim tensor, while the actual input beta has "
-        << beta_type->ndim << " dimensions.");
-  }
-
-  return TupleType({GetRef<DynTensorType>(data_type), GetRef<DynTensorType>(mean_type),
-                    GetRef<DynTensorType>(var_type)});
-  // Todo(ruihang): how to do dtype broadcasting?
-}
+      static const Op& op = Op::Get("relax.nn.batch_norm");
+      return Call(op,
+                  {std::move(data), std::move(gamma), std::move(beta), std::move(moving_mean),
+                   std::move(moving_var)},
+                  Attrs{attrs}, {});
+    });
 
 /* relax.nn.dropout */
 TVM_REGISTER_NODE_TYPE(DropoutAttrs);
@@ -246,47 +344,44 @@ RELAX_REGISTER_OP("relax.nn.dropout")
     .set_attrs_type<DropoutAttrs>()
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "Input to which dropout will be applied.")
-    .set_attr<FInferShape>("FInferShape", InferShapeDropout)
-    .set_attr<FInferType>("FInferType", InferTypeDropout);
+    .set_attr<FInferShape>(  //
+        "FInferShape",
+        [](const Call& call, DiagnosticContext diag_ctx) -> Optional<Expr> {
+          if (call->args.size() != 1) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "Dropout op should have 1 argument");
+          }
+          const auto* shape = call->args[0]->shape().as<ShapeExprNode>();
+          if (shape == nullptr) {
+            return Tuple({RuntimeDepShape(), RuntimeDepShape()});
+          }
+          return Tuple({GetRef<ShapeExpr>(shape), GetRef<ShapeExpr>(shape)});
+        })
+    .set_attr<FInferType>(  //
+        "FInferType",       //
+        [](const Call& call, DiagnosticContext diag_ctx) -> Type {
+          if (call->args.size() != 1) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "Dropout op should have 1 argument");
+          }
 
-Expr MakeDropout(Expr data, double rate) {
+          const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+          if (input_type == nullptr) {
+            diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                               << "The op input should has type DynTensorType, but actually it is "
+                               << call->args[0]->checked_type()->GetTypeKey()
+                               << ". Please make sure the input has type DynTensorType.");
+          }
+
+          return TupleType({GetRef<DynTensorType>(input_type), GetRef<DynTensorType>(input_type)});
+        });
+
+TVM_REGISTER_GLOBAL("relax.op.nn.dropout").set_body_typed([](Expr data, double rate) -> Expr {
   ObjectPtr<DropoutAttrs> attrs = make_object<DropoutAttrs>();
   attrs->rate = rate;
-
   static const Op& op = Op::Get("relax.nn.dropout");
   return Call(op, {std::move(data)}, Attrs{attrs}, {});
-}
-
-TVM_REGISTER_GLOBAL("relax.op.nn.dropout").set_body_typed(MakeDropout);
-
-Optional<Expr> InferShapeDropout(const Call& call, DiagnosticContext diag_ctx) {
-  if (call->args.size() != 1) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dropout op should have 1 argument");
-  }
-
-  const auto* shape = call->args[0]->shape().as<ShapeExprNode>();
-  if (shape == nullptr) {
-    return Tuple({RuntimeDepShape(), RuntimeDepShape()});
-  }
-
-  return Tuple({GetRef<ShapeExpr>(shape), GetRef<ShapeExpr>(shape)});
-}
-
-Type InferTypeDropout(const Call& call, DiagnosticContext diag_ctx) {
-  if (call->args.size() != 1) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dropout op should have 1 argument");
-  }
-
-  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
-  if (input_type == nullptr) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "The op input should has type DynTensorType, but actually it is "
-                       << call->args[0]->checked_type()->GetTypeKey()
-                       << ". Please make sure the input has type DynTensorType.");
-  }
-
-  return TupleType({GetRef<DynTensorType>(input_type), GetRef<DynTensorType>(input_type)});
-}
+});
 
 /* relax.nn.layer_norm */
 TVM_REGISTER_NODE_TYPE(LayerNormAttrs);
@@ -300,19 +395,18 @@ RELAX_REGISTER_OP("relax.nn.layer_norm")
     .set_attr<FInferShape>("FInferShape", InferShapeLayerNorm)
     .set_attr<FInferType>("FInferType", InferTypeLayerNorm);
 
-Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axis, double epsilon,
-                   bool center, bool scale) {
-  ObjectPtr<LayerNormAttrs> attrs = make_object<LayerNormAttrs>();
-  attrs->axis = std::move(axis);
-  attrs->epsilon = epsilon;
-  attrs->center = center;
-  attrs->scale = scale;
+TVM_REGISTER_GLOBAL("relax.op.nn.layer_norm")
+    .set_body_typed([](Expr data, Expr gamma, Expr beta, Array<Integer> axis, double epsilon,
+                       bool center, bool scale) -> Expr {
+      ObjectPtr<LayerNormAttrs> attrs = make_object<LayerNormAttrs>();
+      attrs->axis = std::move(axis);
+      attrs->epsilon = epsilon;
+      attrs->center = center;
+      attrs->scale = scale;
 
-  static const Op& op = Op::Get("relax.nn.layer_norm");
-  return Call(op, {std::move(data), std::move(gamma), std::move(beta)}, Attrs{attrs}, {});
-}
-
-TVM_REGISTER_GLOBAL("relax.op.nn.layer_norm").set_body_typed(MakeLayerNorm);
+      static const Op& op = Op::Get("relax.nn.layer_norm");
+      return Call(op, {std::move(data), std::move(gamma), std::move(beta)}, Attrs{attrs}, {});
+    });
 
 Optional<Expr> InferShapeLayerNorm(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 3) {
@@ -445,15 +539,13 @@ RELAX_REGISTER_OP("relax.nn.matmul")
     .set_attr<FInferShape>("FInferShape", InferShapeMatmul)
     .set_attr<FInferType>("FInferType", InferTypeMatmul);
 
-Expr MakeMatmul(Expr a, Expr b, DataType out_dtype) {
-  ObjectPtr<MatmulAttrs> attrs = make_object<MatmulAttrs>();
-  attrs->out_dtype = out_dtype;
-
-  static const Op& op = Op::Get("relax.nn.matmul");
-  return Call(op, {std::move(a), std::move(b)}, Attrs(attrs), {});
-}
-
-TVM_REGISTER_GLOBAL("relax.op.nn.matmul").set_body_typed(MakeMatmul);
+TVM_REGISTER_GLOBAL("relax.op.nn.matmul")
+    .set_body_typed([](Expr a, Expr b, DataType out_dtype) -> Expr {
+      ObjectPtr<MatmulAttrs> attrs = make_object<MatmulAttrs>();
+      attrs->out_dtype = out_dtype;
+      static const Op& op = Op::Get("relax.nn.matmul");
+      return Call(op, {std::move(a), std::move(b)}, Attrs(attrs), {});
+    });
 
 Optional<Expr> InferShapeMatmul(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
