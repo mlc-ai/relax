@@ -27,10 +27,11 @@
 
 #include "../op_common.h"
 #include "../tensor/unary.h"
+
 namespace tvm {
 namespace relax {
 
-Optional<Expr> InferShapeFlatten(const Call& call, DiagnosticContext diag_ctx) {
+inline Optional<Expr> InferShapeFlatten(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Flatten op should have 1 argument");
   }
@@ -47,7 +48,7 @@ Optional<Expr> InferShapeFlatten(const Call& call, DiagnosticContext diag_ctx) {
   }
 }
 
-Type InferTypeFlatten(const Call& call, DiagnosticContext diag_ctx) {
+inline Type InferTypeFlatten(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Flatten op should have 1 argument");
   }
@@ -60,7 +61,7 @@ Type InferTypeFlatten(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(/*ndim=*/2, input_ty->dtype);
 }
 
-Optional<Expr> InferShapeDense(const Call& call, DiagnosticContext diag_ctx) {
+inline Optional<Expr> InferShapeDense(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dense op should have 2 arguments");
   }
@@ -88,7 +89,7 @@ Optional<Expr> InferShapeDense(const Call& call, DiagnosticContext diag_ctx) {
   }
 }
 
-Type InferTypeDense(const Call& call, DiagnosticContext diag_ctx) {
+inline Type InferTypeDense(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dense op should have 2 arguments");
   }

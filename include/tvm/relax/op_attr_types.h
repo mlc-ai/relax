@@ -218,6 +218,17 @@ struct SoftmaxAttrs : public tvm::AttrsNode<SoftmaxAttrs> {
   }
 };
 
+/*! \brief Attributes used in flatten operator */
+struct FlattenAttrs : public tvm::AttrsNode<FlattenAttrs> {
+  int start_dim;
+  int end_dim;
+
+  TVM_DECLARE_ATTRS(FlattenAttrs, "relax.attrs.FlattenAttrs") {
+    TVM_ATTR_FIELD(start_dim).set_default(0);
+    TVM_ATTR_FIELD(end_dim).set_default(-1);
+  }
+};
+
 /*! \brief Attributes used in unique operator */
 struct UniqueAttrs : public tvm::AttrsNode<UniqueAttrs> {
   bool sorted;

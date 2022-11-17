@@ -21,8 +21,8 @@ import tvm
 from tvm.ir.expr import PrimExpr
 from tvm.relay.op.nn.utils import get_pad_tuple2d
 
-from . import _ffi_api
 from ...expr import Expr, ShapeExpr
+from . import _ffi_api
 
 PrimExprLike = Union[int, PrimExpr]
 
@@ -249,23 +249,28 @@ def softmax(data: Expr, axis=-1) -> Expr:
     return _ffi_api.softmax(data, axis)
 
 
-def flatten(data: Expr) -> Expr:
+def flatten(
+    data: Expr,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> Expr:
     """Flatten.
-
-    .. math::
-       out = max(x, 0)
 
     Parameters
     ----------
     data : Expr
         The input data
+    start_dim : int = 0
+        The first dim to flatten
+    end_dim : int = -1
+        The last dim to flatten
 
     Returns
     -------
     result : Expr
         The computed result.
     """
-    return _ffi_api.flatten(data)
+    return _ffi_api.flatten(data, start_dim, end_dim)
 
 
 def max_pool2d(

@@ -82,17 +82,24 @@ RELAX_REGISTER_UNARY_OP("nn.gelu");
 /* relax.nn.silu */
 RELAX_REGISTER_UNARY_OP("nn.silu");
 
+/* relax.nn.flatten */
+
+TVM_REGISTER_NODE_TYPE(FlattenAttrs);
 RELAX_REGISTER_OP("relax.nn.flatten")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
+    .set_attrs_type<FlattenAttrs>()
     .set_attr<FInferShape>("FInferShape", InferShapeFlatten)
     .set_attr<FInferType>("FInferType", InferTypeFlatten);
 
-Expr MakeFlatten(Expr data) {
-  static const Op& op = Op::Get("relax.nn.flatten");
-  return Call(op, {data}, {}, {});
-}
-TVM_REGISTER_GLOBAL("relax.op.nn.flatten").set_body_typed(MakeFlatten);
+TVM_REGISTER_GLOBAL("relax.op.nn.flatten")
+    .set_body_typed([](Expr data, int start_dim, int end_dim) -> Expr {
+      auto attrs = make_object<FlattenAttrs>();
+      attrs->start_dim = start_dim;
+      attrs->end_dim = end_dim;
+      static const Op& op = Op::Get("relax.nn.flatten");
+      return Call(op, {data}, Attrs(attrs), {});
+    });
 
 /* relax.nn.batch_norm */
 TVM_REGISTER_NODE_TYPE(BatchNormAttrs);
