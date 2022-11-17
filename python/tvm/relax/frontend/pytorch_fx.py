@@ -14,13 +14,12 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-from numpy import iterable
+import numpy as np
 import torch
 import tvm
-
-from torch import nn, fx
+from numpy import iterable
+from torch import fx, nn
 from tvm import relax, topi
-import numpy as np
 
 
 class TorchFXTranslator:
@@ -229,6 +228,7 @@ class TorchFXTranslator:
         return self.bb.emit(relax.op.nn.adaptive_avg_pool2d(x, module.output_size, layout="NCHW"))
 
     def _flatten(self, node: fx.node.Node) -> relax.Var:
+        breakpoint()
         x = self.env[node.args[0]]
         if node.target in self.named_modules:
             module = self.named_modules[node.target]
@@ -449,6 +449,12 @@ class TorchFXTranslator:
         assert isinstance(k, int)
         return self.bb.emit(relax.op.trilu(x, k, False))
 
+    def _eq(self, node: fx.node.Node) -> relax.Var:
+        lhs, rhs = self.retrive_args(node)
+        if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
+            return self._call_binary_op(relax.op.equal, lhs, rhs)
+        return lhs == rhs
+
     def _new_ones(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
         self_var = args[0]
@@ -604,6 +610,7 @@ class TorchFXTranslator:
             "addmm": self._addmm,
             "split": self._split,
             "tril": self._tril,
+            "eq": self._eq,
             # call_method
             "new_ones": self._new_ones,
             "expand": self._expand,
@@ -675,10 +682,11 @@ class TorchFXTranslator:
                         self.env[node] = self.convert_map[type(module)](node)
                     elif node.op == "call_function":
                         func_name = node.name.rstrip("0123456789_")
-                        assert (
-                            func_name in self.convert_map
-                        ), f"Unsupported function type {func_name}"
-                        self.env[node] = self.convert_map[func_name](node)
+                        if func_name != "_assert":
+                            assert (
+                                func_name in self.convert_map
+                            ), f"Unsupported function type {func_name}"
+                            self.env[node] = self.convert_map[func_name](node)
                     elif node.op == "call_method":
                         assert (
                             node.target in self.convert_map

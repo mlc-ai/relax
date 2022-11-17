@@ -17,12 +17,14 @@
 # pylint: disable=wildcard-import, redefined-builtin
 """Relax core operators."""
 
+from . import builtin
+
 # Operators
 from .base import *
+from .compare import equal, greater, greater_equal, less, less_equal, not_equal
 from .image import *
-from .tensor import *
+from .nn import *
 from .op_attrs import *
 from .reduce import *
+from .tensor import *
 from .transform import *
-from . import builtin
-from .nn import *
