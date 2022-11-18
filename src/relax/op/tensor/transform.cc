@@ -1111,11 +1111,9 @@ Optional<Expr> InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ct
   for (int i = 1; i <= data_ndim; ++i) {
     PrimExpr prev_len = data_shape->values[data_ndim - i];
     PrimExpr new_len = new_shape[new_ndim - i];
-    if (tir::is_const_int(prev_len, 1)) {
-      continue;
-    } else if (tir::is_const_int(new_len, -1)) {
+    if (tir::is_const_int(new_len, -1)) {
       new_shape.Set(new_ndim - i, prev_len);
-    } else if (ana.CanProve(prev_len != new_len)) {
+    } else if (!tir::is_const_int(prev_len, 1) && ana.CanProve(prev_len != new_len)) {
       diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                          << "The broadcast_to operator expects the input new shape is broadcast "
                             "compatible with the shape of the input data. However, on the last but "

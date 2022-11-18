@@ -624,6 +624,7 @@ class TorchFXTranslator:
             "softmax": self._softmax,
             "view": self._view,
             "type": self._type,
+            "unbind": self._unbind,
             "contiguous": lambda node: self.env[node.args[0]],
         }
 

@@ -201,7 +201,18 @@ RELAX_REGISTER_OP("relax.nn.flatten")
                                << "Input should be DynTensor, but got "
                                << call->args[0]->checked_type()->GetTypeKey());
           }
-          return DynTensorType(/*ndim=*/2, input_ty->dtype);
+          const auto* attrs = call->attrs.as<FlattenAttrs>();
+          int ndim = input_ty->ndim;
+          int start_dim = attrs->start_dim;
+          int end_dim = attrs->end_dim;
+          if (start_dim < 0) {
+            start_dim += ndim;
+          }
+          if (end_dim < 0) {
+            end_dim += ndim;
+          }
+          ndim -= end_dim - start_dim;
+          return DynTensorType(/*ndim=*/ndim, input_ty->dtype);
         }
         //
     );
