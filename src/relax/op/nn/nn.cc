@@ -157,14 +157,33 @@ RELAX_REGISTER_OP("relax.nn.flatten")
             diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                                << "Flatten op should have 1 argument");
           }
-          Expr shape = call->args[0]->shape();
-          auto* s = shape.as<ShapeExprNode>();
-          if (s) {
+          if (auto* s = call->args[0]->shape().as<ShapeExprNode>()) {
+            const auto* attrs = call->attrs.as<FlattenAttrs>();
+            int ndim = s->values.size();
+            int start_dim = attrs->start_dim;
+            int end_dim = attrs->end_dim;
+            if (start_dim < 0) {
+              start_dim += ndim;
+            }
+            if (end_dim < 0) {
+              end_dim += ndim;
+            }
+            ICHECK(0 <= start_dim && start_dim < ndim);
+            ICHECK(0 <= end_dim && end_dim < ndim);
+            ICHECK(start_dim <= end_dim);
             PrimExpr output_dim = 1;
-            for (int i = 1; i < static_cast<int>(s->values.size()); i++) {
+            for (int i = start_dim; i <= end_dim; ++i) {
               output_dim *= s->values[i];
             }
-            return ShapeExpr({s->values[0], output_dim});
+            Array<PrimExpr> new_shape;
+            for (int i = 0; i < start_dim; ++i) {
+              new_shape.push_back(s->values[i]);
+            }
+            new_shape.push_back(output_dim);
+            for (int i = end_dim + 1; i < ndim; ++i) {
+              new_shape.push_back(s->values[i]);
+            }
+            return ShapeExpr(new_shape);
           } else {
             return NullOpt;
           }

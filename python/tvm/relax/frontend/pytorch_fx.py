@@ -228,7 +228,6 @@ class TorchFXTranslator:
         return self.bb.emit(relax.op.nn.adaptive_avg_pool2d(x, module.output_size, layout="NCHW"))
 
     def _flatten(self, node: fx.node.Node) -> relax.Var:
-        breakpoint()
         x = self.env[node.args[0]]
         if node.target in self.named_modules:
             module = self.named_modules[node.target]
@@ -237,8 +236,7 @@ class TorchFXTranslator:
         else:
             start_dim = node.args[1] if len(node.args) >= 2 else 0
             end_dim = node.args[2] if len(node.args) == 3 else -1
-        assert start_dim == 1 and end_dim == -1
-        return self.bb.emit(relax.op.flatten(x))
+        return self.bb.emit(relax.op.flatten(x, start_dim, end_dim))
 
     def _batch_norm_2d(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -508,6 +506,10 @@ class TorchFXTranslator:
         assert dim is not None
         return self.bb.emit(relax.op.nn.softmax(x, dim))
 
+    def _identity(self, node: fx.node.Node) -> relax.Var:
+        x = self.env[node.args[0]]
+        return self.bb.emit(relax.op.identity(x))
+
     def _view(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
         if isinstance(args[1], (torch.Size, tuple, list)):
@@ -586,6 +588,7 @@ class TorchFXTranslator:
             nn.SiLU: self._silu,
             nn.GroupNorm: self._group_norm,
             nn.Softmax: self._softmax,
+            nn.Identity: self._identity,
             # call_function
             "add": self._add,
             "sub": self._sub,

@@ -1091,14 +1091,15 @@ Optional<Expr> InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ct
   }
 
   const auto* data_shape = call->args[0]->shape().as<ShapeExprNode>();
-  const auto* new_shape = call->args[1].as<ShapeExprNode>();
-  if (data_shape == nullptr || new_shape == nullptr) {
+  const auto* _new_shape = call->args[1].as<ShapeExprNode>();
+  if (data_shape == nullptr || _new_shape == nullptr) {
     // Todo: need runtime shape broadcast compatibility check
     return call->args[1];
   }
+  Array<PrimExpr> new_shape = _new_shape->values;
 
   int data_ndim = data_shape->values.size();
-  int new_ndim = new_shape->values.size();
+  int new_ndim = new_shape.size();
   if (new_ndim < data_ndim) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                        << "The broadcast_to operator expects the input new shape to have at least "
@@ -1109,9 +1110,11 @@ Optional<Expr> InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ct
   arith::Analyzer ana;
   for (int i = 1; i <= data_ndim; ++i) {
     PrimExpr prev_len = data_shape->values[data_ndim - i];
-    PrimExpr new_len = new_shape->values[new_ndim - i];
+    PrimExpr new_len = new_shape[new_ndim - i];
     if (tir::is_const_int(prev_len, 1)) {
       continue;
+    } else if (tir::is_const_int(new_len, -1)) {
+      new_shape.Set(new_ndim - i, prev_len);
     } else if (ana.CanProve(prev_len != new_len)) {
       diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                          << "The broadcast_to operator expects the input new shape is broadcast "
@@ -1121,7 +1124,7 @@ Optional<Expr> InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ct
                          << ", which are not compatible");
     }
   }
-  return GetRef<ShapeExpr>(new_shape);
+  return ShapeExpr(new_shape);
 }
 
 Type InferTypeBroadcastTo(const Call& call, DiagnosticContext diag_ctx) {
@@ -1307,6 +1310,27 @@ Type InferTypeStridedSlice(const Call& call, DiagnosticContext diag_ctx) {
 
   return GetRef<DynTensorType>(input_type);
 }
+
+/* relax.identity */
+RELAX_REGISTER_OP("relax.identity")
+    .set_attrs_type<StridedSliceAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferShape>(  //
+        "FInferShape",       //
+        [](const Call& call, DiagnosticContext diag_ctx) -> Optional<Expr> {
+          return call->args[0]->shape();
+        })
+    .set_attr<FInferType>(  //
+        "FInferType",       //
+        [](const Call& call, DiagnosticContext diag_ctx) -> Type {
+          return call->args[0]->checked_type();
+        });
+
+TVM_REGISTER_GLOBAL("relax.op.identity").set_body_typed([](Expr data) -> Expr {
+  const static Op& op = Op::Get("relax.identity");
+  return Call(op, {std::move(data)}, Attrs(), {});
+});
 
 }  // namespace relax
 }  // namespace tvm

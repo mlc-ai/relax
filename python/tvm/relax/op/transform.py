@@ -21,8 +21,8 @@ import tvm
 from tvm import relax
 from tvm.ir.expr import PrimExpr
 
-from . import _ffi_api
 from ..expr import Expr
+from . import _ffi_api
 
 PrimExprLike = Union[int, PrimExpr]
 
@@ -486,3 +486,19 @@ def strided_slice(
     end = convert_int(end)
     strides = convert_int(strides) if strides else None
     return _ffi_api.strided_slice(data, begin, end, strides, axes, slice_mode)
+
+
+def identity(x: Expr) -> Expr:
+    """Identity function.
+
+    Parameters
+    ----------
+    x : relax.Expr
+        The input data.
+
+    Returns
+    -------
+    ret : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.identity(x)
