@@ -473,12 +473,12 @@ Optional<Expr> InferShapeMatmul(const Call& call, DiagnosticContext diag_ctx) {
   bool a_prepended = false;
   bool b_appended = false;
   if (a_ndim == 1) {
-    a_shape.insert(a_shape.begin(), tir::make_const(DataType::Int(32), 1));
+    a_shape.insert(a_shape.begin(), tir::make_const(DataType::Int(64), 1));
     a_ndim = 2;
     a_prepended = true;
   }
   if (b_ndim == 1) {
-    b_shape.insert(b_shape.end(), tir::make_const(DataType::Int(32), 1));
+    b_shape.insert(b_shape.end(), tir::make_const(DataType::Int(64), 1));
     b_ndim = 2;
     b_appended = true;
   }

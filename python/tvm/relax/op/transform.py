@@ -84,7 +84,7 @@ def reshape(
             if isinstance(shape, PrimExpr):
                 temp_shape.append(shape)
             elif isinstance(shape, int):
-                temp_shape.append(tvm.tir.const(shape, "int32"))
+                temp_shape.append(tvm.tir.const(shape, "int64"))
             else:
                 raise RuntimeError(
                     f"The input new shape of reshape operator contains unrecognized dimension {shape}"
@@ -326,7 +326,7 @@ def full(
             if isinstance(shape, PrimExpr):
                 temp_shape.append(shape)
             elif isinstance(shape, int):
-                temp_shape.append(tvm.tir.const(shape, "int32"))
+                temp_shape.append(tvm.tir.const(shape, "int64"))
             else:
                 raise RuntimeError(
                     f"The input new shape of reshape operator contains unrecognized dimension {shape}"
@@ -375,14 +375,14 @@ def split(
             if isinstance(idx, PrimExpr):
                 indices.append(idx)
             elif isinstance(idx, int):
-                indices.append(tvm.tir.const(idx, "int32"))
+                indices.append(tvm.tir.const(idx, "int64"))
             else:
                 raise RuntimeError(
                     f'The input indices of split operator contains unrecognized index "{idx}"'
                 )
         indices_or_sections = indices
     elif isinstance(indices_or_sections, int):
-        indices_or_sections = tvm.tir.IntImm("int32", indices_or_sections)
+        indices_or_sections = tvm.tir.IntImm("int64", indices_or_sections)
     else:
         raise RuntimeError(
             f"The input `indices_or_sections` has unrecognized type {type(indices_or_sections)}"
@@ -417,7 +417,7 @@ def broadcast_to(
             if isinstance(shape, PrimExpr):
                 temp_shape.append(shape)
             elif isinstance(shape, int):
-                temp_shape.append(tvm.tir.const(shape, "int32"))
+                temp_shape.append(tvm.tir.const(shape, "int64"))
             else:
                 raise RuntimeError(
                     f"The input new shape of reshape operator contains unrecognized dimension {shape}"
@@ -475,7 +475,7 @@ def strided_slice(
             if isinstance(x, PrimExpr):
                 res.append(x)
             elif isinstance(x, int):
-                res.append(tvm.tir.const(x, "int32"))
+                res.append(tvm.tir.const(x, "int64"))
             else:
                 raise RuntimeError(
                     f"The input of strided_slice operator contains unrecognized value {x}"

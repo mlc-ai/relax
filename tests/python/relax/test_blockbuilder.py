@@ -403,7 +403,7 @@ def test_emit_te():
         B = te.placeholder((n, m), dtype="float32", name="B")
         C = te.placeholder((n, m), dtype="float32", name="C")
         out = te_func((A, B), {"C": C}, "")
-        return tvm.te.create_prim_func([A, B, C, out])
+        return tvm.te.create_prim_func([A, B, C, out], index_dtype_override="int64")
 
     # check TIR structure matches expected
     assert_structural_equal(mod["te_func"].body, get_tir_func().body)

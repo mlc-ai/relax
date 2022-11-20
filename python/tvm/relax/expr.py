@@ -53,7 +53,10 @@ class ShapeExpr(Expr):
         values: Union[List[PrimExpr], typing.Tuple[PrimExpr, ...], tvm.ir.Array],
         span: Span = None,
     ) -> None:
-        self.__init_handle_by_constructor__(_ffi_api.ShapeExpr, values, span)  # type: ignore
+        values_int64 = []
+        for value in values:
+            values_int64.append(tvm.tir.IntImm("int64", value) if isinstance(value, int) else value)
+        self.__init_handle_by_constructor__(_ffi_api.ShapeExpr, values_int64, span)  # type: ignore
 
     def __getitem__(self, index):
         if index >= len(self):
