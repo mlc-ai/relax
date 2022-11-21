@@ -474,8 +474,7 @@ class SplitMutator : public ExprMutator {
       if (!split_funcs.second.defined()) {
         // no need to split
         ObjectPtr<CallNode> new_call = make_object<CallNode>(*call.operator->());
-        GlobalVar gv = builder_->AddFunction(split_funcs.first, "cutlass_primfunc");
-        new_call->args.Set(0, gv);
+        builder_->UpdateFunction(gv, split_funcs.first);
         return Call(new_call);
       }
       tir::PrimFunc func1 = split_funcs.first;
@@ -498,6 +497,7 @@ class SplitMutator : public ExprMutator {
       }
       GlobalVar gv2 = builder_->AddFunction(func2, "unfused_epilogue");
       Call call2(call_tir_op_, {gv2, Tuple(args2), call->args[2]}, call->attrs, call->type_args);
+      builder_->UpdateFunction(gv, WithoutAttr(func, "global_symbol"));
       return call2;
     }
     return call;

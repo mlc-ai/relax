@@ -22,11 +22,6 @@ def register_pattern_generator(name):
 
 @register_func("tvm.relax.cutlass.op_pattern_stitch")
 def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_names):
-    if len(matched_pattern_names) == 1:
-        assert len(evaluated_symbols) == 1
-        assert len(evaluated_buffers) == 1
-        if matched_pattern_names[0] == "dense_row_row_row":
-            return matched_pattern_names[:1]
     if len(matched_pattern_names) == 3:
         assert len(evaluated_symbols) == 3
         assert len(evaluated_buffers) == 3
@@ -50,6 +45,11 @@ def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_name
                 and C_bias == A_relu
             ):
                 return matched_pattern_names[:3]
+    if len(matched_pattern_names) == 1:
+        assert len(evaluated_symbols) == 1
+        assert len(evaluated_buffers) == 1
+        if matched_pattern_names[0] == "dense_row_row_row":
+            return matched_pattern_names[:1]
     return 0
 
 
