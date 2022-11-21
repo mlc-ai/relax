@@ -59,6 +59,7 @@ from .op import (
     tvm_mma_sync,
     tvm_bmma_sync,
     tvm_fill_fragment,
+    cutlass_gemm,
 )
 from .op import ptx_mma, ptx_mma_sp, mma_store, mma_fill
 from .op import ptx_ldmatrix, ptx_cp_async, ptx_commit_group, ptx_wait_group

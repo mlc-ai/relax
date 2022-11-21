@@ -97,6 +97,24 @@ PrimExpr q_multiply_shift(PrimExpr x, PrimExpr y, PrimExpr q, PrimExpr s, Span s
                    {x, y, q, s}, span);
 }
 
+PrimExpr CutlassGemm(tir::Var a, tir::Var b, tir::Var c,                       //
+                     StringImm dtype_a, StringImm dtype_b, StringImm dtype_c,  //
+                     bool transpose_a, bool transpose_b, bool transpose_c,     //
+                     Span span = Span()) {
+  return tir::Call(DataType::Handle(), tir::builtin::cutlass_gemm(),
+                   {
+                       a,
+                       b,
+                       c,
+                       dtype_a,
+                       dtype_b,
+                       dtype_c,
+                       Integer(transpose_a),
+                       Integer(transpose_b),
+                       Integer(transpose_c),
+                   },
+                   span);
+}
 // The public function with a quick checking path.
 void BinaryOpMatchTypes(PrimExpr& lhs, PrimExpr& rhs, Span span) {  // NOLINT(*)
   CHECK(lhs.defined()) << "ValueError: `lhs` is null in the binary operator";
@@ -1021,5 +1039,7 @@ TVM_REGISTER_GLOBAL("tir._OpIfThenElse")
 TVM_REGISTER_GLOBAL("tir.const_true").set_body_typed([](DataType t, Span span) {
   return const_true(t.lanes(), span);
 });
+
+TVM_REGISTER_GLOBAL("tir.cutlass_gemm").set_body_typed(CutlassGemm);
 
 }  // namespace tvm
