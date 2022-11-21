@@ -690,31 +690,6 @@ def tvm_load_matrix_sync(fragment, m, n, k, index, buffer_ptr, stride, layout):
     )
 
 
-def cutlass_gemm(
-    a,
-    b,
-    c,
-    dtype_a,
-    dtype_b,
-    dtype_c,
-    transpose_a,
-    transpose_b,
-    transpose_c,
-):
-    return _ffi_api.cutlass_gemm(
-        a,
-        b,
-        c,
-        dtype_a,
-        dtype_b,
-        dtype_c,
-        transpose_a,
-        transpose_b,
-        transpose_c,
-        None,
-    )
-
-
 def tvm_mma_sync(
     fragment_d, index_d, fragment_a, index_a, fragment_b, index_b, fragment_c, index_c
 ):

@@ -180,8 +180,20 @@ TVM_DLL Pass RemoveUnusedFunctions(Array<runtime::String> entry_functions);
 TVM_DLL Pass RunCodegen(Optional<Array<runtime::String>> target_codegens,
                         Array<runtime::String> entry_functions);
 
+/*!
+ * \brief Split a PrimFunc into 2 parts: the first part is a TIR PrimFunc which is
+ *        matched with some cutlass kernels, and the second part is the rest of the
+ *        original PrimFunc that is not fused with cutlass kernels.
+ *
+ * \return The Pass.
+ */
 TVM_DLL Pass SplitCutlass();
 
+/*!
+ * \brief Inject the cutlass code into the PrimFunc that is matched with cutlass kernels.
+ *
+ * \return The Pass.
+ */
 TVM_DLL Pass CutlassCodegen();
 
 }  // namespace transform

@@ -7,7 +7,7 @@ from tvm.script.ir_builder import IRBuilder
 from tvm.script.ir_builder import ir as I
 from tvm.script.ir_builder import relax as R
 from tvm.script.ir_builder import tir as T
-from tvm.tir import StringImm, cutlass_gemm
+from tvm.tir import StringImm
 
 import tvm.relax.cutlass.pattern
 
