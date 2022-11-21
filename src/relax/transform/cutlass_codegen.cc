@@ -25,9 +25,10 @@
 namespace tvm {
 namespace relax {
 
-const static constexpr char* kCSource = "c_source";
-const static constexpr char* kCSourceFmtCuda = "cu";
 const static constexpr char* kCutlassCodegen = "cutlass_codegen";
+const static constexpr char* kCSource = "c_source";
+const static constexpr char* kCSourceFmt = "c_source_fmt";
+const static constexpr char* kCSourceFmtCuda = "cu";
 const static constexpr char* kGeneratedCode = R"""(
 #define CUTLASS_ENABLE_CUBLAS 1
 #define CUTLASS_NAMESPACE cutlass
@@ -114,8 +115,8 @@ ExternFunc CodegenWithCutlass(const tir::PrimFuncNode* pf, String global_symbol)
   StringReplace(&source, "{global_symbol}", global_symbol);
   ExternFunc ret(global_symbol);
   ret = WithAttrs(std::move(ret), Map<String, ObjectRef>{
-                                      {String(kCutlassCodegen), String(source)},
-                                      {String(kCSource), String(kCSourceFmtCuda)},
+                                      {String(kCSource), String(source)},
+                                      {String(kCSourceFmt), String(kCSourceFmtCuda)},
                                   });
   return ret;
 }
