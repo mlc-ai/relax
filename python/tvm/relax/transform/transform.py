@@ -231,7 +231,8 @@ def RunCodegen(
     """
     if entry_functions is None:
         entry_functions = ["main"]
-    return _ffi_api.RunCodegen(target_codegens, entry_functions)  # type: ignore
+    # type: ignore
+    return _ffi_api.RunCodegen(target_codegens, entry_functions)
 
 
 def FoldConstant() -> tvm.ir.transform.Pass:
@@ -343,6 +344,10 @@ def MetaScheduleTuneIRMod(
 
 def CutlassCodegen() -> tvm.ir.transform.Pass:
     return _ffi_api.CutlassCodegen()
+
+
+def SplitCutlass() -> tvm.ir.transform.Pass:
+    return _ffi_api.SplitCutlass()
 
 
 def _wrap_class_function_pass(pass_cls, pass_info):
@@ -476,7 +481,8 @@ def function_pass(
 
     required = required if required else []
     if not isinstance(required, (list, tuple)):
-        raise TypeError("Required is expected to be the type of " + "list/tuple.")
+        raise TypeError(
+            "Required is expected to be the type of " + "list/tuple.")
 
     def create_function_pass(pass_arg):
         """Internal function that creates a function pass"""
@@ -625,11 +631,13 @@ def dataflowblock_pass(
     """
 
     if opt_level is None:
-        raise ValueError("Please provide opt_level for the dataflowblock pass.")
+        raise ValueError(
+            "Please provide opt_level for the dataflowblock pass.")
 
     required = required if required else []
     if not isinstance(required, (list, tuple)):
-        raise TypeError("Required is expected to be the type of " + "list/tuple.")
+        raise TypeError(
+            "Required is expected to be the type of " + "list/tuple.")
 
     def create_dataflowblock_pass(pass_arg):
         """Internal function that creates a dataflowblock pass"""
@@ -638,7 +646,8 @@ def dataflowblock_pass(
         if inspect.isclass(pass_arg):
             return _wrap_class_dataflowblock_pass(pass_arg, info)
         if not isinstance(pass_arg, (types.FunctionType, types.LambdaType)):
-            raise TypeError("pass_func must be a callable for DataflowBlock pass")
+            raise TypeError(
+                "pass_func must be a callable for DataflowBlock pass")
         return _ffi_api.MakeDataflowBlockPass(pass_arg, info)  # type: ignore
 
     if pass_func:
