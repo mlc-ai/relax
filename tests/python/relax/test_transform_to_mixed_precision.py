@@ -19,7 +19,7 @@ import pytest
 import tvm
 from tvm import relax
 from tvm.relax.transform import ToMixedPrecision, OperatorLegalizer
-from tvm.script._parser import ir as I, relax as R, tir as T
+from tvm.script.parser import ir as I, relax as R, tir as T
 import tvm.testing
 import tvm.relax.transform.mixed_precision
 
