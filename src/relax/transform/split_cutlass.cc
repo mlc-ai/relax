@@ -404,8 +404,7 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     }
   }
   new_buffer_map1.Set(new_params1.back(), matcher.intermediate_buffer);
-  PrimFunc func1 =
-      PrimFunc(new_params1, body1, func->ret_type, new_buffer_map1, NullOpt, func->attrs);
+  PrimFunc func1 = PrimFunc(new_params1, body1, func->ret_type, new_buffer_map1, func->attrs);
   func1 = WithAttr(func1, "cutlass_kernel", matcher.cutlass_annotation);
   // Step 4. Craft the second function.
   Array<Var> new_params2;
@@ -428,8 +427,7 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
       new_buffer_map2.Set(kv.first, kv.second);
     }
   }
-  PrimFunc func2 =
-      PrimFunc(new_params2, body2, func->ret_type, new_buffer_map2, NullOpt, func->attrs);
+  PrimFunc func2 = PrimFunc(new_params2, body2, func->ret_type, new_buffer_map2, func->attrs);
   func2 = WithoutAttr(func2, "cutlass_codegen");
   return {func1, func2};
 }
