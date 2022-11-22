@@ -366,6 +366,17 @@ def SplitCutlass() -> tvm.ir.transform.Pass:
     return _ffi_api.SplitCutlass()
 
 
+def ToMixedPrecision() -> tvm.ir.transform.Pass:
+    """Automatic mixed precision pass.
+
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass for mixed precision.
+    """
+    return _ffi_api.ToMixedPrecision()
+
+
 def _wrap_class_function_pass(pass_cls, pass_info):
     """Wrap a python class as function pass."""
 

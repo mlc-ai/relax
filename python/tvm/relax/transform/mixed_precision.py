@@ -46,7 +46,9 @@ DEFAULT_FOLLOW_LIST = [
     "relax.reshape",
     "relax.expand_dims",
     "relax.squeeze",
-    "relax.unique"
+    "relax.unique",
+    "relax.nn.relu",
+    "relax.nn.gelu"
 ]
 DEFAULT_NEVER_LIST = [
     "relax.nn.softmax",
@@ -87,7 +89,7 @@ def get_generic_out_dtypes(call_node: "relay.Call", mixed_precision_type: str) -
     if hasattr(call_node.attrs, "out_dtype"):
         # TODO (AndrewZhaoLuo): evaluate consistent support for mixed_type accumulators
         # return ["float32", mixed_precision_type]
-        return [mixed_precision_type, mixed_precision_type]
+        return [call_node.attrs.out_dtype, mixed_precision_type]
 
     # [accumulation_dtype, output_dtype] for the operations
     return [mixed_precision_type, mixed_precision_type]
