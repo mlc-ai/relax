@@ -73,6 +73,11 @@ Optional<Expr> InferShapeCast(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeCast(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.wrap_param */
+Optional<Expr> InferShapeWrapParam(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeWrapParam(const Call& call, DiagnosticContext diag_ctx);
+
 /* relax.take */
 Optional<Expr> InferShapeTake(const Call& call, DiagnosticContext diag_ctx);
 
