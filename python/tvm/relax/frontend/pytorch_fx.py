@@ -41,8 +41,7 @@ class TorchFXTranslator:
         elif input_type in ["float16", "torch.float16"]:
             return "float16"
         else:
-            raise NotImplementedError(
-                "input_type {} is not handled yet".format(input_type))
+            raise NotImplementedError("input_type {} is not handled yet".format(input_type))
 
     @staticmethod
     def _fetch_attr(model, target: str):
@@ -115,8 +114,7 @@ class TorchFXTranslator:
         if axis < 0:
             axis += ndim
         if axis < 0 or axis >= ndim:
-            raise ValueError(
-                "axis %d is out of bounds for array of dimension %d" % (axis, ndim))
+            raise ValueError("axis %d is out of bounds for array of dimension %d" % (axis, ndim))
         return axis
 
     def _conv2d(self, node: fx.node.Node) -> relax.Var:
@@ -131,7 +129,7 @@ class TorchFXTranslator:
         conv2d = self.bb.emit(
             relax.op.nn.conv2d(
                 x,
-                weight,
+                relax.op.wrap_param(weight),
                 kernel_size,
                 strides=module.stride,
                 padding=module.padding,
@@ -140,7 +138,7 @@ class TorchFXTranslator:
                 channels=out_channels,
                 data_layout="NCHW",
                 kernel_layout="OIHW",
-                out_dtype="float32"
+                out_dtype="float32",
             )
         )
 
@@ -155,7 +153,7 @@ class TorchFXTranslator:
             )
             bias = self.params[module.bias] = reshaped_bias
 
-        return self.bb.emit(relax.op.add(conv2d, bias))
+        return self.bb.emit(relax.op.add(conv2d, relax.op.wrap_param(bias)))
 
     def _linear(self, node: fx.node.Node) -> relax.Var:
 
@@ -168,7 +166,7 @@ class TorchFXTranslator:
             )
 
         weight_T = self.params_transpose[module.weight]
-        dense = self._matmul_impl(x, weight_T)
+        dense = self._matmul_impl(x, relax.op.wrap_param(weight_T))
 
         if module.bias is None:
             return dense
@@ -181,7 +179,7 @@ class TorchFXTranslator:
             )
             bias = self.params[module.bias] = reshaped_bias
 
-        return self.bb.emit(relax.op.add(dense, bias))
+        return self.bb.emit(relax.op.add(dense, relax.op.wrap_param(bias)))
 
     def _relu(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -205,10 +203,8 @@ class TorchFXTranslator:
         kernel = kernel if isinstance(kernel, tuple) else (kernel, kernel)
         stride = kernel if stride is None else stride
         stride = stride if isinstance(stride, tuple) else (stride, stride)
-        padding = padding if isinstance(padding, tuple) else (
-            padding, padding, padding, padding)
-        dilation = dilation if isinstance(
-            dilation, tuple) else (dilation, dilation)
+        padding = padding if isinstance(padding, tuple) else (padding, padding, padding, padding)
+        dilation = dilation if isinstance(dilation, tuple) else (dilation, dilation)
 
         return self.bb.emit(
             relax.op.nn.max_pool2d(
@@ -226,7 +222,7 @@ class TorchFXTranslator:
         module = self.named_modules[node.target]
         weight = self.params[module.weight]
         x = self.bb.emit(relax.op.cast(x, "int32"))
-        return self.bb.emit(relax.op.take(weight, x, axis=0))
+        return self.bb.emit(relax.op.take(relax.op.wrap_param(weight), x, axis=0))
 
     def _adaptive_avg_pool2d(self, node: fx.node.Node) -> relax.Var:
         module = self.named_modules[node.target]
@@ -252,15 +248,20 @@ class TorchFXTranslator:
         weight = self.params[module.weight]
         bias = self.params[module.bias]
         dtype = self._convert_data_type(str(module.running_mean.dtype))
-        running_mean = relax.const(
-            module.running_mean.cpu().detach().numpy(), dtype)
-        running_var = relax.const(
-            module.running_var.cpu().detach().numpy(), dtype)
+        running_mean = relax.const(module.running_mean.cpu().detach().numpy(), dtype)
+        running_var = relax.const(module.running_var.cpu().detach().numpy(), dtype)
         eps = module.eps
 
         res_tuple = self.bb.emit(
             relax.op.nn.batch_norm(
-                x, weight, bias, running_mean, running_var, axis=1, epsilon=eps)
+                x,
+                relax.op.wrap_param(weight),
+                relax.op.wrap_param(bias),
+                running_mean,
+                running_var,
+                axis=1,
+                epsilon=eps,
+            )
         )
 
         return self.bb.emit(relax.TupleGetItem(res_tuple, 0))
@@ -323,8 +324,7 @@ class TorchFXTranslator:
                     i = i + 1
                 elif isinstance(index, slice):
                     begin.append(0 if index.start is None else index.start)
-                    end.append(
-                        x.shape_[i] if index.stop is None else index.stop)
+                    end.append(x.shape_[i] if index.stop is None else index.stop)
                     stride.append(1 if index.step is None else index.step)
                     axes.append(i)
                     i = i + 1
@@ -332,15 +332,13 @@ class TorchFXTranslator:
                     expand_dim.append(i)
                     i = i + 1
                 else:
-                    raise ValueError(
-                        "Unsupported index type: " + str(type(index)))
+                    raise ValueError("Unsupported index type: " + str(type(index)))
             while i < len(x.shape_):
                 begin.append(0)
                 end.append(x.shape_[i])
                 axes.append(i)
                 i = i + 1
-            sliced = self.bb.emit(relax.op.strided_slice(
-                x, begin, end, stride, axes))
+            sliced = self.bb.emit(relax.op.strided_slice(x, begin, end, stride, axes))
             sliced_shape = list(sliced.shape_)
             for i in expand_dim:
                 sliced_shape.insert(i, 1)
@@ -418,8 +416,7 @@ class TorchFXTranslator:
         if size is None:
             shape = self.shape_of(data)
             assert isinstance(shape, relax.ShapeExpr)
-            size = tuple(int(shape[i].value * scale_factor)
-                         for i in range(2, len(shape)))
+            size = tuple(int(shape[i].value * scale_factor) for i in range(2, len(shape)))
 
         if method.startswith("nearest"):
             method = "nearest_neighbor"
@@ -470,8 +467,7 @@ class TorchFXTranslator:
             size = (size,)
         return self.bb.emit(
             relax.op.full(
-                relax.const(
-                    1, self_var.checked_type.dtype), size, self_var.checked_type.dtype
+                relax.const(1, self_var.checked_type.dtype), size, self_var.checked_type.dtype
             )
         )
 
@@ -505,8 +501,7 @@ class TorchFXTranslator:
     def _transpose(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
         full_idx = [i for i in range(len(args[0].shape))]
-        full_idx[args[1]], full_idx[args[2]
-                                    ] = full_idx[args[2]], full_idx[args[1]]
+        full_idx[args[1]], full_idx[args[2]] = full_idx[args[2]], full_idx[args[1]]
         return self.bb.emit(relax.op.transpose(args[0], full_idx))
 
     def _softmax(self, node: fx.node.Node) -> relax.Var:
@@ -544,16 +539,12 @@ class TorchFXTranslator:
         N, C, H, W = shape[0], shape[1], shape[2], shape[3]
         assert C == num_channels
         assert C % num_groups == 0
-        grouped_x = self.bb.emit(relax.op.reshape(
-            x, [N, num_groups, C // num_groups, H, W]))
-        mean_x = self.bb.emit(relax.op.mean(
-            grouped_x, [2, 3, 4], keepdims=True))
+        grouped_x = self.bb.emit(relax.op.reshape(x, [N, num_groups, C // num_groups, H, W]))
+        mean_x = self.bb.emit(relax.op.mean(grouped_x, [2, 3, 4], keepdims=True))
         sub_x = self.bb.emit(relax.op.subtract(grouped_x, mean_x))
         square_x = self.bb.emit(relax.op.multiply(sub_x, sub_x))
-        sum_square_x = self.bb.emit(relax.op.sum(
-            square_x, [2, 3, 4], keepdims=True))
-        var_x = self._call_binary_op(
-            relax.op.divide, sum_square_x, (C // num_groups * H * W).value)
+        sum_square_x = self.bb.emit(relax.op.sum(square_x, [2, 3, 4], keepdims=True))
+        var_x = self._call_binary_op(relax.op.divide, sum_square_x, (C // num_groups * H * W).value)
         var_x_eps = self._call_binary_op(relax.op.add, var_x, eps)
         std_x = self.bb.emit(relax.op.sqrt(var_x_eps))
         norm_x = self.bb.emit(relax.op.divide(sub_x, std_x))
@@ -563,10 +554,11 @@ class TorchFXTranslator:
             bias = self.params[module.bias]
             weight_reshape = self.bb.emit(
                 relax.op.reshape(
-                    weight, (1, num_groups, C // num_groups, 1, 1))
+                    relax.op.wrap_param(weight), (1, num_groups, C // num_groups, 1, 1)
+                )
             )
             bias_reshape = self.bb.emit(
-                relax.op.reshape(bias, (1, num_groups, C // num_groups, 1, 1))
+                relax.op.reshape(relax.op.wrap_param(bias), (1, num_groups, C // num_groups, 1, 1))
             )
             norm_x = self.bb.emit(relax.op.multiply(norm_x, weight_reshape))
             norm_x = self.bb.emit(relax.op.add(norm_x, bias_reshape))
@@ -580,14 +572,20 @@ class TorchFXTranslator:
             gamma = self.params[module.weight]
             beta = self.params[module.bias]
         else:
-            gamma = relax.const(torch.ones_like(
-                module.normalized_shape), x.checked_type)
-            beta = relax.const(torch.zeros_like(
-                module.normalized_shape), x.checked_type)
+            gamma = relax.const(torch.ones_like(module.normalized_shape), x.checked_type)
+            beta = relax.const(torch.zeros_like(module.normalized_shape), x.checked_type)
         dim_num = len(module.normalized_shape)
         axis = tuple(range(-dim_num, 0))
 
-        return self.bb.emit(relax.op.nn.layer_norm(x, gamma, beta, axis=axis, epsilon=module.eps))
+        return self.bb.emit(
+            relax.op.nn.layer_norm(
+                x,
+                relax.op.wrap_param(gamma),
+                relax.op.wrap_param(beta),
+                axis=axis,
+                epsilon=module.eps,
+            )
+        )
 
     def create_convert_map(self):
         self.convert_map = {
@@ -664,17 +662,19 @@ class TorchFXTranslator:
         # Create input variables.
         inputs = {}
         for name, (shape, dtype) in input_info.items():
-            input_var = relax.Var(
-                name, shape, relax.DynTensorType(len(shape), dtype))
+            input_var = relax.Var(name, shape, relax.DynTensorType(len(shape), dtype))
             inputs[name] = input_var
 
         # Translate model parameters.
         for _, param in model.named_parameters():
             ndim = len(param.data.shape)
             dtype = self._convert_data_type(str(param.data.dtype))
-            self.params[param] = relax.const(
-                param.data.cpu().numpy(), relax.DynTensorType(ndim, dtype)
-            )
+            if dtype == "float32" or dtype == "float16":
+                self.params[param] = relax.const(
+                    param.data.cpu().numpy(), relax.DynTensorType(ndim, dtype)
+                )
+            else:
+                raise ValueError("Unsupported data type for model parameters: %s" % dtype)
 
         # Initialize the block builder with a function and a dataflow block.
         self.bb = relax.BlockBuilder()
@@ -693,8 +693,7 @@ class TorchFXTranslator:
                         output = self.bb.emit_output(self.env[node.args[0]])
                         break
                     elif node.op == "get_attr":
-                        self.env[node] = TorchFXTranslator._fetch_attr(
-                            model, node.target)
+                        self.env[node] = TorchFXTranslator._fetch_attr(model, node.target)
                     elif node.op == "call_module":
                         module = self.named_modules[node.target]
                         assert (

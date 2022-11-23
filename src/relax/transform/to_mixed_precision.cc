@@ -169,6 +169,12 @@ class ToMixedPrecisionMutator : public ExprMutator {
           } else {
             LOG(FATAL) << "Unsupported MixedTypeConversionCategory: " << category;
           }
+        } else if (op->name == "relax.wrap_param") {
+          // Handle wrap_param op
+          const auto* constant = call_node->args[0].as<ConstantNode>();
+          ICHECK(constant != nullptr);
+          const_map_[binding->var] = GetRef<Constant>(constant);
+          return;
         } else {
           LOG(WARNING) << "No FTVMMixedPrecisionConversionType attribute " << op;
         }
@@ -188,9 +194,19 @@ class ToMixedPrecisionMutator : public ExprMutator {
       // arg is a tensor
       if (const relax::VarNode* var_node = arg.as<relax::VarNode>()) {
         auto it = var_map_.find(GetRef<Var>(var_node));
-        ICHECK(it != var_map_.end());
-        if (it->second.find(DLDataType2String(low_precision_type_)) == it->second.end()) {
-          return true;
+        if (it != var_map_.end()) {
+          if (it->second.find(DLDataType2String(low_precision_type_)) == it->second.end()) {
+            return true;
+          }
+        }
+        // var is a param wrapper
+        auto itt = const_map_.find(GetRef<Var>(var_node));
+        if (itt != const_map_.end()) {
+          if (DLDataType2String(
+                  itt->second->checked_type().as<relax::DynTensorTypeNode>()->dtype) !=
+              runtime::DLDataType2String(low_precision_type_)) {
+            return true;
+          }
         }
       } else if (const relax::TupleNode* tuple_node = arg.as<relax::TupleNode>()) {
         if (NeedCast(tuple_node->fields)) {
@@ -207,17 +223,32 @@ class ToMixedPrecisionMutator : public ExprMutator {
       // arg is a tensor
       if (const relax::VarNode* var_node = arg.as<relax::VarNode>()) {
         auto it = var_map_.find(GetRef<Var>(var_node));
-        ICHECK(it != var_map_.end());
-        auto itt = it->second.find(runtime::DLDataType2String(to_type));
-        if (itt == it->second.end()) {
-          // the input var is never casted to to_type before
-          relax::Var cur_var = it->second.begin()->second;
-          relax::Var casted_var = builder_->Emit(relax::MakeCast(cur_var, to_type));
-          new_args->push_back(casted_var);
-          UpdateVarMap(GetRef<Var>(var_node), to_type, casted_var);
+        if (it != var_map_.end()) {
+          auto itt = it->second.find(runtime::DLDataType2String(to_type));
+          if (itt == it->second.end()) {
+            // the input var is never casted to to_type before
+            relax::Var cur_var = it->second.begin()->second;
+            relax::Var casted_var = builder_->Emit(relax::MakeCast(cur_var, to_type));
+            new_args->push_back(casted_var);
+            UpdateVarMap(GetRef<Var>(var_node), to_type, casted_var);
+          } else {
+            // the input var is already casted to to_type before
+            new_args->push_back(itt->second);
+          }
         } else {
-          // the input var is already casted to to_type before
-          new_args->push_back(itt->second);
+          auto itt = const_map_.find(GetRef<Var>(var_node));
+          if (itt != const_map_.end()) {
+            if (DLDataType2String(
+                    itt->second->checked_type().as<relax::DynTensorTypeNode>()->dtype) ==
+                runtime::DLDataType2String(to_type)) {
+              new_args->push_back(itt->second);
+            } else {
+              relax::Var casted_var = builder_->Emit(relax::MakeCast(itt->second, to_type));
+              new_args->push_back(casted_var);
+            }
+          } else {
+            LOG(FATAL) << "Unknown var " << GetRef<Var>(var_node);
+          }
         }
       } else if (const relax::ConstantNode* const_node = arg.as<relax::ConstantNode>()) {
         if (DataType(const_node->data->dtype) != to_type) {
@@ -261,6 +292,7 @@ class ToMixedPrecisionMutator : public ExprMutator {
   std::unordered_map<relax::Var, std::unordered_map<std::string, relax::Var>, ObjectPtrHash,
                      ObjectPtrEqual>
       var_map_;
+  std::unordered_map<relax::Var, relax::Constant, ObjectPtrHash, ObjectPtrEqual> const_map_;
 };  // namespace relax
 
 Expr ToMixedPrecision(const relax::Function& f) {
