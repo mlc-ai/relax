@@ -136,8 +136,17 @@ class BlockBuilderNode::ExprNormalizer : public ExprFunctor<Expr(const Expr&)> {
     }
 
     // only do shape/type inference if the Call does not have shape/type
-    if (call->shape_ && call->checked_type_.defined()) {
+    if (call->shape_.defined() && call->checked_type_.defined()) {
+      CheckShapeTypeConsistency(call->shape_, call->checked_type_);
       return call;
+    }
+
+    // Update the type prior to updating the shape, since the shape inference may need the updated
+    // type in cases of Call for ExternFunc.
+    if (!call->checked_type_.defined()) {
+      // type inference
+      auto inferred_type = InferType(call, this->builder_->diag_ctx_, this->builder_->context_mod_);
+      UpdateType(call, inferred_type);
     }
 
     if (!call->shape_) {
@@ -149,11 +158,7 @@ class BlockBuilderNode::ExprNormalizer : public ExprFunctor<Expr(const Expr&)> {
       }
     }
 
-    if (!call->checked_type_.defined()) {
-      // type inference
-      auto inferred_type = InferType(call, this->builder_->diag_ctx_, this->builder_->context_mod_);
-      UpdateType(call, inferred_type);
-    }
+    CheckShapeTypeConsistency(call->shape_, call->checked_type_);
     return call;
   }
 
@@ -375,7 +380,9 @@ class BlockBuilderNode::ExprNormalizer : public ExprFunctor<Expr(const Expr&)> {
   Optional<Expr> InferShape(const Call& call, DiagnosticContext diag_ctx, IRModule ctx_mod) {
     if (call->op.as<ExternFuncNode>()) {
       // call_packed: return RuntimeDepShape
-      return RuntimeDepShape();
+      bool is_shape_type =
+          call->checked_type().defined() && call->checked_type_->IsInstance<ShapeTypeNode>();
+      return is_shape_type ? Optional<Expr>(NullOpt) : RuntimeDepShape();
     } else if (call->op.as<OpNode>()) {
       // primitive op: look up FInferShape attribute
       Op op = Downcast<Op>(call->op);
@@ -482,6 +489,33 @@ class BlockBuilderNode::ExprNormalizer : public ExprFunctor<Expr(const Expr&)> {
     }
 
     return Type();
+  }
+
+  // Helper function to check if the provided shape and type is consistent.
+  // Throw internal exceptions if they are not consistent.
+  void CheckShapeTypeConsistency(const Optional<ObjectRef>& opt_shape, const Type& type) {
+    if (!type.defined()) {
+      ICHECK(!opt_shape.defined());
+      return;
+    }
+
+    if (const auto* dyn_tensor_type = type.as<DynTensorTypeNode>()) {
+      // `opt_shape` should either be a relax::Expr or undefined.
+      if (const auto* shape = opt_shape.as<ExprNode>()) {
+        ICHECK(shape->checked_type()->IsInstance<ShapeTypeNode>());
+      } else {
+        ICHECK(!opt_shape.defined());
+      }
+
+      const auto* shape_expr = opt_shape.as<ShapeExprNode>();
+      if (dyn_tensor_type->IsUnknownNdim()) {
+        ICHECK(shape_expr == nullptr);
+      } else if (shape_expr != nullptr) {
+        ICHECK(dyn_tensor_type->ndim == static_cast<int>(shape_expr->values.size()));
+      }
+    } else if (type->IsInstance<ShapeTypeNode>()) {
+      ICHECK(!opt_shape.defined());
+    }
   }
 
   // Helper function to get the shape of a Tuple based on its fields

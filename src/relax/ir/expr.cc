@@ -17,6 +17,7 @@
  * under the License.
  */
 #include <tvm/relax/expr.h>
+#include <tvm/relax/type.h>
 
 namespace tvm {
 
@@ -26,7 +27,9 @@ RelayExpr RelayExprNode::shape() const {
   }
   static const Op& op = Op::Get("relax.shape_of");
   RelayExpr self = GetRef<RelayExpr>(this);
-  return relay::Call(op, {self}, {}, {});
+  relay::Call call_shape_of(op, {self}, {}, {});
+  call_shape_of->checked_type_ = relax::ShapeType();
+  return call_shape_of;
 }
 
 TVM_REGISTER_GLOBAL("ir.RelayExprShape").set_body_method<RelayExpr>(&RelayExprNode::shape);
