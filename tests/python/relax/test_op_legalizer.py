@@ -1734,6 +1734,57 @@ def test_matmul_4_5_with_out_dtype():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_matmul_3_3_with_symbolic_broadcast_dim():
+    a = tvm.tir.Var("a", dtype="int64")
+
+    @I.ir_module
+    class Matmul:
+        @R.function
+        def main(
+            x: R.Tensor((a, 3, 4), "float32"), y: R.Tensor((1, 4, 5), "float32")
+        ) -> R.Tensor(None, "float32", ndim=3):
+            gv: R.Tensor((a, 3, 5), "float32") = R.matmul(x, y)
+            return gv
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def main(
+            x: R.Tensor((a, 3, 4), "float32"), y: R.Tensor((1, 4, 5), "float32")
+        ) -> R.Tensor(None, "float32", ndim=3):
+            gv = R.call_tir(matmul, (x, y), (a, 3, 5), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def matmul(
+            var_rxplaceholder: T.handle,
+            rxplaceholder: T.Buffer[(T.int64(1), T.int64(4), T.int64(5)), "float32"],
+            var_matmul: T.handle,
+        ):
+            T.func_attr({"global_symbol": "matmul", "tir.noalias": True})
+            a = T.var("int64")
+            rxplaceholder_1 = T.match_buffer(
+                var_rxplaceholder, [a, T.int64(3), T.int64(4)], dtype="float32"
+            )
+            matmul = T.match_buffer(var_matmul, [a, T.int64(3), T.int64(5)], dtype="float32")
+            for i0, i1, i2, i3 in T.grid(a, T.int64(3), T.int64(5), T.int64(4)):
+                with T.block("matmul"):
+                    i0_1, i1_1, i2_1, k = T.axis.remap("SSSR", [i0, i1, i2, i3])
+                    T.reads(rxplaceholder_1[i0_1, i1_1, k], rxplaceholder[T.int64(0), k, i2_1])
+                    T.writes(matmul[i0_1, i1_1, i2_1])
+                    with T.init():
+                        matmul[i0_1, i1_1, i2_1] = T.float32(0)
+                    matmul[i0_1, i1_1, i2_1] = (
+                        matmul[i0_1, i1_1, i2_1]
+                        + rxplaceholder_1[i0_1, i1_1, k] * rxplaceholder[T.int64(0), k, i2_1]
+                    )
+
+    mod = OperatorLegalizer(Matmul).transform()
+    # TVMScript and Relax function now have limited support on understanding symbolic variables. So
+    # at this moment we only compare the the generated PrimFunc.
+    tvm.ir.assert_structural_equal(mod["matmul"], Expected["matmul"])
+
+
 def test_softmax():
     @I.ir_module
     class Softmax:
