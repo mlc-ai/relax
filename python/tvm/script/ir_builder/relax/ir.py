@@ -125,7 +125,7 @@ def tensor(
 
 Object = ObjectType()  # pylint: disable=invalid-name
 Shape = ShapeType()  # pylint: disable=invalid-name
-Void = TupleType(None)  # pylint: disable=invalid-name
+Void = TupleType([])  # pylint: disable=invalid-name
 
 ############################### Function ################################
 
