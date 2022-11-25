@@ -218,13 +218,15 @@ class RemoveUnusedVars : public ExprMutator {
             for (size_t i = prev_size; i < unused.size(); ++i) {
               users.erase(unused[i]);
               // remove def site.
+              auto updated = Map<Var, Array<Var>>();
               for (auto kv : users) {  // remove use site.
                 auto it = std::find(kv.second.begin(), kv.second.end(), unused[i]);
                 if (it != kv.second.end()) {
                   kv.second.erase(it);
-                  users.Set(kv.first, std::move(kv.second));
+                  updated.Set(kv.first, std::move(kv.second));
                 }
               }
+              users = std::move(Merge(users, updated));
             }
           } while (prev_size != unused.size());  // changed? => continue.
 
