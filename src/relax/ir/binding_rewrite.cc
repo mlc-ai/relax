@@ -204,6 +204,7 @@ class RemoveUnusedVars : public ExprMutator {
           do {
             prev_size = unused.size();
 
+            std::vector<Var> users_keys;
             for (const auto& kv : users) {
               // var -> [users...]
               // var is unused iff
@@ -212,21 +213,22 @@ class RemoveUnusedVars : public ExprMutator {
               if (kv.second.empty() &&  // kv.first is not used by fn outputs.
                   fn_outputs.end() == std::find(fn_outputs.begin(), fn_outputs.end(), kv.first)) {
                 unused.push_back(kv.first);
+              } else {
+                users_keys.push_back(kv.first);
               }
             }
 
             for (size_t i = prev_size; i < unused.size(); ++i) {
               users.erase(unused[i]);
               // remove def site.
-              auto updated = Map<Var, Array<Var>>();
-              for (auto kv : users) {  // remove use site.
-                auto it = std::find(kv.second.begin(), kv.second.end(), unused[i]);
-                if (it != kv.second.end()) {
-                  kv.second.erase(it);
-                  updated.Set(kv.first, std::move(kv.second));
+              for (const auto& key: users_keys) {  // remove use site.
+                Array<Var> cur_users = users[key];
+                auto it = std::find(cur_users.begin(), cur_users.end(), unused[i]);
+                if (it != cur_users.end()) {
+                  cur_users.erase(it);
+                  users.Set(key, std::move(cur_users));
                 }
               }
-              users = std::move(Merge(users, updated));
             }
           } while (prev_size != unused.size());  // changed? => continue.
 
