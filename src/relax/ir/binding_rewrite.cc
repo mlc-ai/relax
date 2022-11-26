@@ -222,7 +222,7 @@ class RemoveUnusedVars : public ExprMutator {
               users.erase(unused[i]);
               // remove def site.
               for (const auto& key: users_keys) {  // remove use site.
-                ICHECK(users.count(key)) << "remove unused algorithm internal error.";
+                ICHECK(users.count(key)) << "the key " << key << " is expected to be in the mapping users.";
                 Array<Var> cur_users = users[key];
                 auto it = std::find(cur_users.begin(), cur_users.end(), unused[i]);
                 if (it != cur_users.end()) {
