@@ -103,7 +103,8 @@ Pass MetaScheduleApplyDatabase(Optional<String> work_dir, String mod_eq_name) {
       String path_tuning_record = work_dir.value() + "/database_tuning_record.json";
       LOG(WARNING) << "Creating JSONDatabase. Workload at: " << path_workload
                    << ", Tuning records at: " << path_tuning_record;
-      database = meta_schedule::Database::JSONDatabase(path_workload, path_tuning_record, true, mod_eq_name);
+      database = meta_schedule::Database::JSONDatabase(path_workload, path_tuning_record, true,
+                                                       mod_eq_name);
     }
 
     Map<GlobalVar, BaseFunc> result;

@@ -56,7 +56,7 @@ def extract_tasks(
     mod: Union[IRModule, "relax.Function"],
     target: Target,
     params: Optional[Dict[str, NDArray]] = None,
-    module_equality = "structural",
+    module_equality="structural",
 ) -> List[ExtractedTask]:
     """Extract tuning tasks from a relax program.
 

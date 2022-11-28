@@ -95,7 +95,7 @@ void InlinePostBlocks(Schedule sch, Trace anchor_trace, Target target) {
   }
 }
 
-std::unordered_set<std::string> GetLocalOnlyBlockNames(Schedule sch,Trace anchor_trace) {
+std::unordered_set<std::string> GetLocalOnlyBlockNames(Schedule sch, Trace anchor_trace) {
   static auto kind_get_block = InstructionKind::Get("GetBlock");
   std::unordered_set<std::string> get_block_names;
   for (const auto& inst : anchor_trace->insts) {
@@ -107,7 +107,7 @@ std::unordered_set<std::string> GetLocalOnlyBlockNames(Schedule sch,Trace anchor
   }
   std::unordered_set<std::string> local_only_block_names;
   for (auto name : GetBlockNames(sch->mod())) {
-    if(!get_block_names.count(name)){
+    if (!get_block_names.count(name)) {
       local_only_block_names.insert(name);
     }
   }
@@ -129,7 +129,8 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
   // Blocks and loops that appear in the anchor trace but are not part of the target schedule.
   std::unordered_set<BlockRV, ObjectHash, ObjectEqual> foreign_blocks;
   std::unordered_set<LoopRV, ObjectHash, ObjectEqual> foreign_loops;
-  std::unordered_set<std::string> local_only_block_names = GetLocalOnlyBlockNames(sch, anchor_trace);
+  std::unordered_set<std::string> local_only_block_names =
+      GetLocalOnlyBlockNames(sch, anchor_trace);
   // Instructions in the anchor trace can be applied only if all inputs are part of the target
   // schedule.
   auto is_inst_applicable = [&foreign_blocks, &foreign_loops](Instruction inst) {
@@ -202,15 +203,14 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
       // outputs matches with the "old" outputs, and truncating the new outputs accordingly.
       ICHECK(inst->outputs.size() <= outputs.size());
       Array<ObjectRef> new_outputs;
-      for(const auto& output : outputs){
+      for (const auto& output : outputs) {
         std::string block_name = sch->Get(Downcast<BlockRV>(output))->name_hint;
         if (!local_only_block_names.count(block_name)) {
           new_outputs.push_back(output);
         }
       }
       ICHECK(new_outputs.size() == inst->outputs.size());
-      TranslateAddOutputRVs(
-          inst->outputs, new_outputs, &rv_map);
+      TranslateAddOutputRVs(inst->outputs, new_outputs, &rv_map);
     } else {
       TranslateAddOutputRVs(inst->outputs, outputs, &rv_map);
     }
