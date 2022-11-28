@@ -16,8 +16,11 @@
 # under the License.
 # pylint: disable=line-too-long,unused-argument
 """Default behavior for ops in mixed_precision pass. Import this file to use."""
+import copy
 from typing import List
 
+from tvm.relay import Call
+from tvm.relax.op import dense, matmul, conv2d
 from tvm.relay.op import register_mixed_precision_conversion
 
 # MIXED_PRECISION_ALWAYS ops should always be done in lower precision due to the speed and memory
@@ -31,11 +34,7 @@ MIXED_PRECISION_NEVER = 2
 # Default lists inspired from TF's classifications:
 # github.com/tensorflow/tensorflow/blob/v2.5.0/tensorflow/core/grappler/optimizers/auto_mixed_precision_lists.h
 # They have a bias toward Nvidia Tensor Cores so modify lists per your hardware choice.
-DEFAULT_ALWAYS_LIST = [
-    "relax.nn.dense",
-    "relax.nn.conv2d",
-    "relax.nn.matmul"
-]
+DEFAULT_ALWAYS_LIST = ["relax.nn.dense", "relax.nn.conv2d", "relax.nn.matmul"]
 DEFAULT_FOLLOW_LIST = [
     "relax.nn.flatten",
     "relax.nn.batch_norm",
@@ -63,12 +62,7 @@ DEFAULT_FOLLOW_LIST = [
     "relax.cast",
     "relax.broadcast_to",
 ]
-DEFAULT_NEVER_LIST = [
-    "relax.nn.softmax",
-    "relax.nn.layer_norm",
-    "relax.sum",
-    "relax.mean"
-]
+DEFAULT_NEVER_LIST = ["relax.nn.softmax", "relax.nn.layer_norm", "relax.sum", "relax.mean"]
 
 # Returns a decorator which registers for every given op, the function under FTVMMixedPrecisionConversionType
 
@@ -81,49 +75,74 @@ def register_func_to_op_list(list_ops: List):
     return decorator
 
 
-def get_generic_out_dtypes(call_node: "relay.Call", mixed_precision_type: str) -> List[str]:
+def get_generic_out_dtypes(call_node: "relay.Call", expected_out_dtype: str) -> List:
     """A function which returns output dtypes in a way which works for most ops.
 
     Parameters
     ---------
     call_node: relay.Call
         The call node containing the op.
-    mixed_precision_type: str
-        The target type to run the operation in.
+
+    expected_out_dtype: str
+        The output dtype to use.
+
     Returns
     -------
-    output_dtypes : [str, str]
-        A list of two strings. The first represents the datatype used for accumulation
-        in the operation. The second represents the actual output datatype.
+    output_dtypes : [str]
+        A list of output dtype.
     """
-    # Assume support accumulation dtypes <---> has out_dtype attr.
-    # This is because there is no better way right now to tell which ops support accumulating
-    # at different data types.
-    # Some discussion here about making this better is here:
-    # https://discuss.tvm.apache.org/t/rfc-relay-fp32-fp16-model-support/9994/4?u=andrewzhaoluo
     if hasattr(call_node.attrs, "out_dtype"):
-        # TODO (AndrewZhaoLuo): evaluate consistent support for mixed_type accumulators
-        # return ["float32", mixed_precision_type]
-        out_dtype = "float32" if call_node.attrs.out_dtype == "" else call_node.attrs.out_dtype
-        return [out_dtype, mixed_precision_type]
-
-    # [accumulation_dtype, output_dtype] for the operations
-    return [mixed_precision_type, mixed_precision_type]
+        if call_node.op.name == "relax.nn.dense":
+            adjust_call = dense(
+                call_node.args[0],
+                call_node.args[1],
+                units=call_node.attrs.units,
+                out_dtype=expected_out_dtype,
+            )
+        elif call_node.op.name == "relax.nn.conv2d":
+            adjust_call = conv2d(
+                call_node.args[0],
+                call_node.args[1],
+                channels=call_node.attrs.channels,
+                kernel_size=call_node.attrs.kernel_size,
+                strides=call_node.attrs.strides,
+                padding=call_node.attrs.padding,
+                dilation=call_node.attrs.dilation,
+                groups=call_node.attrs.groups,
+                data_layout=call_node.attrs.data_layout,
+                kernel_layout=call_node.attrs.kernel_layout,
+                out_layout=call_node.attrs.out_layout,
+                out_dtype=expected_out_dtype,
+            )
+        elif call_node.op.name == "relax.nn.matmul":
+            adjust_call = matmul(
+                call_node.args[0],
+                call_node.args[1],
+                out_dtype=expected_out_dtype,
+            )
+        else:
+            raise ValueError("Unsupported op for get_generic_out_dtypes", call_node.op.name)
+        return [
+            True,
+            adjust_call,
+        ]
+    else:
+        return [False, call_node]
 
 
 # Functions for FTVMMixedPrecisionConversionType which
 # Take in CallNodes and a DType and returns a conversion type,
 # an accumulation dtype, and an output_dtype.
 @register_func_to_op_list(list_ops=DEFAULT_ALWAYS_LIST)
-def generic_always_op(call_node: "relay.Call", mixed_precision_type: str) -> List:
-    return [MIXED_PRECISION_ALWAYS] + get_generic_out_dtypes(call_node, mixed_precision_type)
+def generic_always_op(call_node: "relay.Call", expected_out_dtype: str) -> List:
+    return [MIXED_PRECISION_ALWAYS] + get_generic_out_dtypes(call_node, expected_out_dtype)
 
 
 @register_func_to_op_list(list_ops=DEFAULT_FOLLOW_LIST)
-def generic_follow_op(call_node: "relay.Call", mixed_precision_type: str) -> List:
-    return [MIXED_PRECISION_FOLLOW] + get_generic_out_dtypes(call_node, mixed_precision_type)
+def generic_follow_op(call_node: "relay.Call", expected_out_dtype: str) -> List:
+    return [MIXED_PRECISION_FOLLOW] + get_generic_out_dtypes(call_node, expected_out_dtype)
 
 
 @register_func_to_op_list(list_ops=DEFAULT_NEVER_LIST)
-def generic_never_op(call_node: "relay.Call", mixed_precision_type: str) -> List:
-    return [MIXED_PRECISION_NEVER] + get_generic_out_dtypes(call_node, mixed_precision_type)
+def generic_never_op(call_node: "relay.Call", expected_out_dtype: str) -> List:
+    return [MIXED_PRECISION_NEVER] + get_generic_out_dtypes(call_node, expected_out_dtype)
