@@ -56,6 +56,7 @@ def extract_tasks(
     mod: Union[IRModule, "relax.Function"],
     target: Target,
     params: Optional[Dict[str, NDArray]] = None,
+    module_equality = "structural",
 ) -> List[ExtractedTask]:
     """Extract tuning tasks from a relax program.
 
@@ -82,7 +83,7 @@ def extract_tasks(
         target = Target(target)
     if params:
         mod = BindParams("main", params)(mod)
-    return list(_extract_task_func(mod, target))
+    return list(_extract_task_func(mod, target, module_equality))
 
 
 def extracted_tasks_to_tune_contexts(
@@ -158,6 +159,7 @@ def tune_relax(
     space: SpaceGenerator.SpaceGeneratorType = "post-order-apply",
     strategy: SearchStrategy.SearchStrategyType = "evolutionary",
     seed: Optional[int] = None,
+    module_equality: str = "structural",
 ) -> Database:
     """Tune a Relax program.
 
@@ -202,7 +204,7 @@ def tune_relax(
         The database that contains the tuning records
     """
     tasks, task_weights = extracted_tasks_to_tune_contexts(
-        extracted_tasks=extract_tasks(mod, target, params),
+        extracted_tasks=extract_tasks(mod, target, params, module_equality),
         work_dir=work_dir,
         space=space,
         strategy=strategy,
@@ -221,6 +223,7 @@ def tune_relax(
         cost_model=cost_model,
         measure_callbacks=measure_callbacks,
         task_scheduler=task_scheduler,
+        module_equality=module_equality,
     )
 
 
@@ -243,6 +246,7 @@ def _tune_relax(
     space: SpaceGenerator.SpaceGeneratorType = "post-order-apply",
     strategy: SearchStrategy.SearchStrategyType = "evolutionary",
     seed: Optional[int] = None,
+    module_equality: str = "structural",
 ) -> Database:
     """Interface with tuning api to tune a Relax program.
 
@@ -306,6 +310,7 @@ def _tune_relax(
         space=space,
         strategy=strategy,
         seed=seed,
+        module_equality=module_equality,
     )
     # Return original IRModule
     # This pass only makes optimization decision
