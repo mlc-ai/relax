@@ -290,6 +290,7 @@ def FuseTIR() -> tvm.ir.transform.Pass:
 
 def MetaScheduleApplyDatabase(
     work_dir: Optional[str] = None,
+    module_equality: str = "structural",
 ) -> tvm.ir.transform.Pass:
     """Apply the best schedule from tuning database.
     work_dir : Optional[str]
@@ -300,7 +301,7 @@ def MetaScheduleApplyDatabase(
     ret : tvm.transform.Pass
         The registered pass
     """
-    return _ffi_api.MetaScheduleApplyDatabase(work_dir)  # type: ignore
+    return _ffi_api.MetaScheduleApplyDatabase(work_dir, module_equality)  # type: ignore
 
 
 def MetaScheduleTuneTIR(

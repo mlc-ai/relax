@@ -322,6 +322,7 @@ def compile_relax(
     mod: IRModule,
     target: Union[Target, str],
     params: Optional[Dict[str, NDArray]],
+    module_equality: str = "structural",
 ) -> "relax.vm.Executable":
     """Compile a relax program with a MetaSchedule database.
 
@@ -352,6 +353,6 @@ def compile_relax(
         mod = BindParams("main", params)(mod)
 
     with target, database, PassContext(opt_level=3):
-        relax_mod = MetaScheduleApplyDatabase()(mod)
+        relax_mod = MetaScheduleApplyDatabase()(mod, module_equality)
         relax_ex = relax_build(relax_mod, target=target)
     return relax_ex
