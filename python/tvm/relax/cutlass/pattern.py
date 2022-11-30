@@ -292,7 +292,7 @@ GRAPH_PATTERN_CODE_LIST[
           cutlass::gemm::GemmShape<32, 32, 32>,
           cutlass::gemm::GemmShape<16, 8, 8>,
 
-          cutlass::epilogue::thread::LinearCombinationBias<
+          cutlass::epilogue::thread::LinearCombination<
             cutlass::half_t,
             8,
             cutlass::half_t,
@@ -313,7 +313,7 @@ GRAPH_PATTERN_CODE_LIST[
         cutlass::half_t beta(0.0);
         cutlass::layout::ColumnMajor::Stride::Index lda(K);
         cutlass::layout::ColumnMajor::Stride::Index ldb(N);
-        cutlass::layout::ColumnMajor::Stride::Index ld_bias(N);
+        cutlass::layout::ColumnMajor::Stride::Index ld_bias(0);
         cutlass::layout::ColumnMajor::Stride::Index ldc(N);
         cutlass::half_t* a = reinterpret_cast<cutlass::half_t*>(A->data);
         cutlass::half_t* b = reinterpret_cast<cutlass::half_t*>(B->data);
@@ -418,7 +418,7 @@ GRAPH_PATTERN_CODE_LIST[
         cutlass::half_t beta(0.0);
         cutlass::layout::ColumnMajor::Stride::Index lda(K);
         cutlass::layout::ColumnMajor::Stride::Index ldb(N);
-        cutlass::layout::ColumnMajor::Stride::Index ld_bias(N);
+        cutlass::layout::ColumnMajor::Stride::Index ld_bias(0);
         cutlass::layout::ColumnMajor::Stride::Index ldc(N);
         cutlass::half_t* a = reinterpret_cast<cutlass::half_t*>(A->data);
         cutlass::half_t* b = reinterpret_cast<cutlass::half_t*>(B->data);
