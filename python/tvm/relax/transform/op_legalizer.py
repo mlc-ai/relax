@@ -82,18 +82,7 @@ def _nn_relu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Exp
 def _nn_gelu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     def gelu(x):
         dtype = x.dtype
-        return te.compute(
-            x.shape,
-            lambda *i: cast(0.5, dtype)
-            * x(*i)
-            * (
-                cast(1, dtype)
-                + te.tanh(
-                    cast(math.sqrt(2) / math.pi, dtype)
-                    * (x(*i) + cast(0.044715, dtype) * te.power(x(*i), 3))
-                )
-            ),
-        )
+        return x * (cast(0.5, dtype) + topi.erf(x * cast(0.5**0.5, dtype)) * cast(0.5, dtype))
 
     return bb.call_te(gelu, args[0])
 
