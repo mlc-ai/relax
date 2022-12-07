@@ -248,15 +248,15 @@ def constructBatchGEMM(b, m, n, k, GLOBAL_SYMBOL="BatchHGEMM"):
                 )
                 A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
                 B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                D = T.alloc_buffer((b, m, n), C_TYPE)
+                C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
                 with T.grid(b, m, n, k) as (lb, l0, l1, l2):
                     with T.block("batch_dense_row_row_row"):
                         vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
                         T.reads(A[vb, vi, vk], B[vk, vj])
-                        T.writes(D[vb, vi, vj])
+                        T.writes(C[vb, vi, vj])
                         with T.init():
-                            T.buffer_store(D, T.cast(0.0, C_TYPE), [vb, vi, vj])
-                        T.buffer_store(D, D[vb, vi, vj] + A[vb, vi, vk] * B[vk, vj], [vb, vi, vj])
+                            T.buffer_store(C, T.cast(0.0, C_TYPE), [vb, vi, vj])
+                        T.buffer_store(C, C[vb, vi, vj] + A[vb, vi, vk] * B[vk, vj], [vb, vi, vj])
             with R.function():
                 R.func_name("main")
                 A = R.arg("A", R.tensor((b, m, k), A_TYPE))  # pylint: disable=invalid-name
@@ -335,9 +335,145 @@ def test_cutlass_batch_dense2():
     np.testing.assert_allclose(result.numpy(), A @ B, rtol=1e-2)
 
 
+def constructBatchGEMM_bias(b, m, n, k, GLOBAL_SYMBOL="BatchHGEMM_bias"):
+    from tvm.script.ir_builder import IRBuilder
+    from tvm.script.ir_builder import ir as I
+    from tvm.script.ir_builder import relax as R
+    from tvm.script.ir_builder import tir as T
+
+    with IRBuilder() as ib:  # pylint: disable=invalid-name
+        with I.ir_module() as frame:
+            with T.prim_func():
+                T.func_name(GLOBAL_SYMBOL)
+                T.func_attr(
+                    {
+                        "global_symbol": GLOBAL_SYMBOL,
+                    }
+                )
+                A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
+                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
+                bias = T.arg("bias", T.buffer_decl((1, n), C_TYPE))  # pylint: disable=invalid-name
+                C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
+
+                D = T.alloc_buffer((b, m, n), C_TYPE)
+                with T.grid(b, m, n, k) as (lb, l0, l1, l2):
+                    with T.block("batch_dense_row_row_row"):
+                        vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
+                        T.reads(A[vb, vi, vk], B[vk, vj])
+                        T.writes(D[vb, vi, vj])
+                        with T.init():
+                            T.buffer_store(D, T.cast(0.0, C_TYPE), [vb, vi, vj])
+                        T.buffer_store(D, D[vb, vi, vj] + A[vb, vi, vk] * B[vk, vj], [vb, vi, vj])
+                with T.grid(b, m, n) as (lb, i, j):
+                    with T.block("bias"):
+                        vb, vi, vj = T.axis.remap("SSS", [lb, i, j])
+                        T.reads(D[vb, vi, vj], bias[0, vj])
+                        T.writes(C[vb, vi, vj])
+                        T.buffer_store(C, D[vb, vi, vj] + bias[0, vj], [vb, vi, vj])
+            with R.function():
+                R.func_name("main")
+                A = R.arg("A", R.tensor((b, m, k), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
+                bias = R.arg("bias", R.tensor((1, n), C_TYPE))  # pylint: disable=invalid-name
+                C = R.call_tir(
+                    frame.global_vars[GLOBAL_SYMBOL],
+                    args=[A, B, bias],
+                    shape=(b, m, n),
+                    dtype=C_TYPE,
+                )
+                R.func_ret_value(C)
+    mod = ib.get()
+    return mod
+
+
+def test_cutlass_batch_dense_bias():
+    b, m, n, k = 2, 128, 128, 128
+    build(constructBatchGEMM_bias(b, m, n, k))
+    dev = tvm.cuda()
+    A = np.random.rand(b, m, k).astype("float16") * 5
+    B = np.random.rand(k, n).astype("float16") * 5
+    bias = np.random.rand(1, n).astype("float16") * 5
+    A_tvm = tvm.nd.array(A, dev)
+    B_tvm = tvm.nd.array(B, dev)
+    bias_tvm = tvm.nd.array(bias, dev)
+    executable = tvm.runtime.load_module(PKG_FILE)
+    result = f_run(executable, dev, A_tvm, B_tvm, bias_tvm)
+    np.testing.assert_allclose(result.numpy(), A @ B + bias, rtol=1e-2)
+
+
+def constructBatchGEMM2_bias(b, m, n, k, GLOBAL_SYMBOL="BatchHGEMM2_bias"):
+    from tvm.script.ir_builder import IRBuilder
+    from tvm.script.ir_builder import ir as I
+    from tvm.script.ir_builder import relax as R
+    from tvm.script.ir_builder import tir as T
+
+    with IRBuilder() as ib:  # pylint: disable=invalid-name
+        with I.ir_module() as frame:
+            with T.prim_func():
+                T.func_name(GLOBAL_SYMBOL)
+                T.func_attr(
+                    {
+                        "global_symbol": GLOBAL_SYMBOL,
+                    }
+                )
+                A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
+                B = T.arg("B", T.buffer_decl((b, k, n), B_TYPE))  # pylint: disable=invalid-name
+                bias = T.arg("bias", T.buffer_decl((1, n), C_TYPE))  # pylint: disable=invalid-name
+                C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
+
+                D = T.alloc_buffer((b, m, n), C_TYPE)
+                with T.grid(b, m, n, k) as (lb, l0, l1, l2):
+                    with T.block("batch_dense_row_row_row2"):
+                        vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
+                        T.reads(A[vb, vi, vk], B[vb, vk, vj])
+                        T.writes(D[vb, vi, vj])
+                        with T.init():
+                            T.buffer_store(D, T.cast(0.0, C_TYPE), [vb, vi, vj])
+                        T.buffer_store(
+                            D, D[vb, vi, vj] + A[vb, vi, vk] * B[vb, vk, vj], [vb, vi, vj]
+                        )
+                with T.grid(b, m, n) as (lb, i, j):
+                    with T.block("bias"):
+                        vb, vi, vj = T.axis.remap("SSS", [lb, i, j])
+                        T.reads(D[vb, vi, vj], bias[0, vj])
+                        T.writes(C[vb, vi, vj])
+                        T.buffer_store(C, D[vb, vi, vj] + bias[0, vj], [vb, vi, vj])
+            with R.function():
+                R.func_name("main")
+                A = R.arg("A", R.tensor((b, m, k), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((b, k, n), B_TYPE))  # pylint: disable=invalid-name
+                bias = R.arg("bias", R.tensor((1, n), C_TYPE))  # pylint: disable=invalid-name
+                C = R.call_tir(
+                    frame.global_vars[GLOBAL_SYMBOL],
+                    args=[A, B, bias],
+                    shape=(b, m, n),
+                    dtype=C_TYPE,
+                )
+                R.func_ret_value(C)
+    mod = ib.get()
+    return mod
+
+
+def test_cutlass_batch_dense2_bias():
+    b, m, n, k = 2, 128, 128, 128
+    build(constructBatchGEMM2_bias(b, m, n, k))
+    dev = tvm.cuda()
+    A = np.random.rand(b, m, k).astype("float16") * 5
+    B = np.random.rand(b, k, n).astype("float16") * 5
+    bias = np.random.rand(1, n).astype("float16") * 5
+    A_tvm = tvm.nd.array(A, dev)
+    B_tvm = tvm.nd.array(B, dev)
+    bias_tvm = tvm.nd.array(bias, dev)
+    executable = tvm.runtime.load_module(PKG_FILE)
+    result = f_run(executable, dev, A_tvm, B_tvm, bias_tvm)
+    np.testing.assert_allclose(result.numpy(), A @ B + bias, rtol=1e-2)
+
+
 if __name__ == "__main__":
     test_cutlass_dense()
     test_cutlass_dense_bias()
     test_cutlass_dense_bias_relu()
     test_cutlass_batch_dense()
     test_cutlass_batch_dense2()
+    test_cutlass_batch_dense_bias()
+    test_cutlass_batch_dense2_bias()
