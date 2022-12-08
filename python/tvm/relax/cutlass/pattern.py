@@ -60,6 +60,28 @@ def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_name
             A_bias, B_bias, C_bias = evaluated_buffers[1]
             if m_dense == m_bias and n_dense == n_bias and C_dense == A_bias:
                 return matched_pattern_names[:2]
+        if (
+            matched_pattern_names[0] == "batch_dense_row_row_row"
+            and matched_pattern_names[1] == "batch_bias_row"
+        ):
+            # dense_row_row_row + bias_row
+            b_dense, m_dense, n_dense, k_dense = evaluated_symbols[0]
+            b_bias, m_bias, n_bias = evaluated_symbols[1]
+            A_dense, B_dense, C_dense = evaluated_buffers[0]
+            A_bias, B_bias, C_bias = evaluated_buffers[1]
+            if b_dense == b_bias and m_dense == m_bias and n_dense == n_bias and C_dense == A_bias:
+                return matched_pattern_names[:2]
+        if (
+            matched_pattern_names[0] == "batch_dense_row_row_row_2"
+            and matched_pattern_names[1] == "batch_bias_row"
+        ):
+            # dense_row_row_row + bias_row
+            b_dense, m_dense, n_dense, k_dense = evaluated_symbols[0]
+            b_bias, m_bias, n_bias = evaluated_symbols[1]
+            A_dense, B_dense, C_dense = evaluated_buffers[0]
+            A_bias, B_bias, C_bias = evaluated_buffers[1]
+            if b_dense == b_bias and m_dense == m_bias and n_dense == n_bias and C_dense == A_bias:
+                return matched_pattern_names[:2]
     if len(matched_pattern_names) >= 1:
         assert len(evaluated_symbols) >= 1
         assert len(evaluated_buffers) >= 1
@@ -133,6 +155,27 @@ def bias_row():
     return ib.get()["bias_row"]
 
 
+@register_pattern_generator("batch_bias_row")
+def batch_bias_row():
+    batch = tir.Var("b", "int32")
+    m = tir.Var("m", "int32")
+    n = tir.Var("n", "int32")
+    with IRBuilder() as ib:
+        with I.ir_module() as frame:
+            with T.prim_func():
+                T.func_name("batch_bias_row")
+                A = T.arg("A", T.buffer_decl((batch, m, n), A_TYPE))  # pylint: disable=invalid-name
+                B = T.arg("B", T.buffer_decl((0, n), B_TYPE))  # pylint: disable=invalid-name
+                C = T.arg("C", T.buffer_decl((batch, m, n), C_TYPE))  # pylint: disable=invalid-name
+                with T.grid(batch, m, n) as (lb, l0, l1):
+                    with T.block("batch_bias_row"):
+                        b, i, j = T.axis.remap("SSS", [lb, l0, l1])
+                        T.reads(A[b, i, j], B[0, j])
+                        T.writes(C[b, i, j])
+                        T.buffer_store(C, A[b, i, j] + B[0, j], [b, i, j])
+    return ib.get()["batch_bias_row"]
+
+
 @register_pattern_generator("relu")
 def relu():
     m = tir.Var("m", "int32")
@@ -161,23 +204,23 @@ def batch_dense_row_row_row():
     with IRBuilder() as ib:
         with I.ir_module() as frame:
             with T.prim_func():
-                T.func_name("batched_dense_row_row_row")
+                T.func_name("batch_dense_row_row_row")
                 A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
                 B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
                 C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
                 with T.grid(b, m, n, k) as (lb, l0, l1, l2):
-                    with T.block("dense_row_row_row"):
+                    with T.block("batch_dense_row_row_row"):
                         vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
                         T.reads(A[vb, vi, vk], B[vk, vj])
                         T.writes(C[vb, vi, vj])
                         with T.init():
                             T.buffer_store(C, T.cast(0.0, C_TYPE), [vb, vi, vj])
                         T.buffer_store(C, C[vb, vi, vj] + A[vb, vi, vk] * B[vk, vj], [vb, vi, vj])
-    return ib.get()["batched_dense_row_row_row"]
+    return ib.get()["batch_dense_row_row_row"]
 
 
 @register_pattern_generator("batch_dense_row_row_row_2")
-def batch_dense_row_row_row():
+def batch_dense_row_row_row_2():
     b = tir.Var("b", "int32")
     m = tir.Var("m", "int32")
     n = tir.Var("n", "int32")
@@ -185,12 +228,12 @@ def batch_dense_row_row_row():
     with IRBuilder() as ib:
         with I.ir_module() as frame:
             with T.prim_func():
-                T.func_name("batched_dense_row_row_row")
+                T.func_name("batch_dense_row_row_row_2")
                 A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
                 B = T.arg("B", T.buffer_decl((b, k, n), B_TYPE))  # pylint: disable=invalid-name
                 C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
                 with T.grid(b, m, n, k) as (lb, l0, l1, l2):
-                    with T.block("dense_row_row_row"):
+                    with T.block("batch_dense_row_row_row_2"):
                         vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
                         T.reads(A[vb, vi, vk], B[vb, vk, vj])
                         T.writes(C[vb, vi, vj])
@@ -199,7 +242,7 @@ def batch_dense_row_row_row():
                         T.buffer_store(
                             C, C[vb, vi, vj] + A[vb, vi, vk] * B[vb, vk, vj], [vb, vi, vj]
                         )
-    return ib.get()["batched_dense_row_row_row"]
+    return ib.get()["batch_dense_row_row_row_2"]
 
 
 @register_func("tvm.relax.cutlass.get_graph_pattern_code")
@@ -585,6 +628,104 @@ GRAPH_PATTERN_CODE_LIST[
 """
 
 GRAPH_PATTERN_CODE_LIST[
+    "batch_dense_row_row_row/batch_bias_row"
+] = """
+      #define CUTLASS_ENABLE_CUBLAS 1
+      #define CUTLASS_NAMESPACE cutlass
+      #define CUTLASS_ENABLE_TENSOR_CORE_MMA 1
+      #define NDEBUG
+
+      #include <cutlass/cutlass.h>
+      #include <cutlass/gemm/device/gemm_batched.h>
+      #include <cutlass/layout/matrix.h>
+      #include <cutlass/numeric_types.h>
+
+      #include <fstream>
+      #include <iostream>
+      #include <sstream>
+      #include <vector>
+
+      #define DMLC_USE_LOGGING_LIBRARY <tvm/runtime/logging.h>
+
+      #include <tvm/runtime/logging.h>
+      #include <tvm/runtime/ndarray.h>
+      #include <tvm/runtime/packed_func.h>
+
+      namespace {
+
+      using namespace tvm;
+      using namespace tvm::runtime;
+
+      // simple specialized impl, can be replaced by
+      // call into libraries.
+      void _BHGEMM(NDArray A, NDArray B, NDArray Bias, NDArray C) {
+        // A: [Batch, M, K], B: [K, N], Bias: [1, N], C: [Batch, M, N]
+        CHECK_EQ(A->ndim, 3);
+        CHECK_EQ(B->ndim, 2);
+        CHECK_EQ(Bias->ndim, 2);
+        CHECK_EQ(C->ndim, 3);
+        CHECK_EQ(A->shape[2], B->shape[0]);
+        CHECK_EQ(Bias->shape[0], 1);
+        CHECK_EQ(Bias->shape[1], B->shape[1]);
+        int Batch = A->shape[0];
+        int M = A->shape[1];
+        int K = A->shape[2];
+        int N = B->shape[1];
+        CHECK_EQ(C->shape[0], Batch);
+        CHECK_EQ(C->shape[1], M);
+        CHECK_EQ(C->shape[2], N);
+        CHECK_EQ(A.DataType(), DataType::Float(16));
+        CHECK_EQ(B.DataType(), DataType::Float(16));
+        CHECK_EQ(C.DataType(), DataType::Float(16));
+
+        // Define the GEMM operation
+        using Gemm = cutlass::gemm::device::GemmBatched<
+            cutlass::half_t,            // ElementA
+            cutlass::layout::RowMajor,  // LayoutA
+            cutlass::half_t,            // ElementB
+            cutlass::layout::RowMajor,  // LayoutB
+            cutlass::half_t,            // ElementOutput
+            cutlass::layout::RowMajor,  // LayoutOutput
+            cutlass::half_t,
+            cutlass::arch::OpClassTensorOp,
+            cutlass::arch::Sm75
+        >;
+        Gemm gemm_op;
+        cutlass::half_t alpha(1.0);
+        cutlass::half_t beta(0.0);
+        cutlass::layout::ColumnMajor::Stride::Index lda(K);
+        cutlass::layout::ColumnMajor::Stride::Index batch_stride_A(M * K);
+        cutlass::layout::ColumnMajor::Stride::Index ldb(N);
+        cutlass::layout::ColumnMajor::Stride::Index batch_stride_B(0);
+        cutlass::layout::ColumnMajor::Stride::Index ld_bias(0);
+        cutlass::layout::ColumnMajor::Stride::Index batch_stride_bias(0);
+        cutlass::layout::ColumnMajor::Stride::Index ldc(N);
+        cutlass::layout::ColumnMajor::Stride::Index batch_stride_C(M * N);
+        cutlass::half_t* a = reinterpret_cast<cutlass::half_t*>(A->data);
+        cutlass::half_t* b = reinterpret_cast<cutlass::half_t*>(B->data);
+        cutlass::half_t* c = reinterpret_cast<cutlass::half_t*>(C->data);
+        cutlass::half_t* bias = reinterpret_cast<cutlass::half_t*>(Bias->data);
+        cutlass::Status status = gemm_op({
+            {M, N, K},           //
+            {a, lda},            //
+            batch_stride_A,      //
+            {b, ldb},            //
+            batch_stride_B,      //
+            {bias, ld_bias},     //
+            batch_stride_bias,   //
+            {c, ldc},            //
+            batch_stride_C,      //
+            {alpha, beta},       //
+            Batch                //
+        });
+        CHECK(status == cutlass::Status::kSuccess);
+      }
+
+      }  // namespace
+      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM); 
+"""
+
+GRAPH_PATTERN_CODE_LIST[
     "batch_dense_row_row_row_2"
 ] = """
       #define CUTLASS_ENABLE_CUBLAS 1
@@ -665,6 +806,105 @@ GRAPH_PATTERN_CODE_LIST[
             batch_stride_C,   //
             {alpha, beta},    //
             Batch             //
+        });
+        CHECK(status == cutlass::Status::kSuccess);
+      }
+
+      }  // namespace
+      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM); 
+"""
+
+GRAPH_PATTERN_CODE_LIST[
+    "batch_dense_row_row_row_2/batch_bias_row"
+] = """
+      #define CUTLASS_ENABLE_CUBLAS 1
+      #define CUTLASS_NAMESPACE cutlass
+      #define CUTLASS_ENABLE_TENSOR_CORE_MMA 1
+      #define NDEBUG
+
+      #include <cutlass/cutlass.h>
+      #include <cutlass/gemm/device/gemm_batched.h>
+      #include <cutlass/layout/matrix.h>
+      #include <cutlass/numeric_types.h>
+
+      #include <fstream>
+      #include <iostream>
+      #include <sstream>
+      #include <vector>
+
+      #define DMLC_USE_LOGGING_LIBRARY <tvm/runtime/logging.h>
+
+      #include <tvm/runtime/logging.h>
+      #include <tvm/runtime/ndarray.h>
+      #include <tvm/runtime/packed_func.h>
+
+      namespace {
+
+      using namespace tvm;
+      using namespace tvm::runtime;
+
+      // simple specialized impl, can be replaced by
+      // call into libraries.
+      void _BHGEMM(NDArray A, NDArray B, NDArray Bias, NDArray C) {
+        // A: [Batch, M, K], B: [Batch, K, N], Bias: [1, N], C: [Batch, M, N]
+        CHECK_EQ(A->ndim, 3);
+        CHECK_EQ(B->ndim, 3);
+        CHECK_EQ(Bias->ndim, 2);
+        CHECK_EQ(C->ndim, 3);
+        CHECK_EQ(A->shape[0], B->shape[0]);
+        CHECK_EQ(A->shape[2], B->shape[1]);
+        CHECK_EQ(Bias->shape[0], 1);
+        CHECK_EQ(Bias->shape[1], B->shape[1]);
+        int Batch = A->shape[0];
+        int M = A->shape[1];
+        int K = A->shape[2];
+        int N = B->shape[1];
+        CHECK_EQ(C->shape[0], Batch);
+        CHECK_EQ(C->shape[1], M);
+        CHECK_EQ(C->shape[2], N);
+        CHECK_EQ(A.DataType(), DataType::Float(16));
+        CHECK_EQ(B.DataType(), DataType::Float(16));
+        CHECK_EQ(C.DataType(), DataType::Float(16));
+
+        // Define the GEMM operation
+        using Gemm = cutlass::gemm::device::GemmBatched<
+            cutlass::half_t,            // ElementA
+            cutlass::layout::RowMajor,  // LayoutA
+            cutlass::half_t,            // ElementB
+            cutlass::layout::RowMajor,  // LayoutB
+            cutlass::half_t,            // ElementOutput
+            cutlass::layout::RowMajor,  // LayoutOutput
+            cutlass::half_t,
+            cutlass::arch::OpClassTensorOp,
+            cutlass::arch::Sm75
+        >;
+        Gemm gemm_op;
+        cutlass::half_t alpha(1.0);
+        cutlass::half_t beta(0.0);
+        cutlass::layout::ColumnMajor::Stride::Index lda(K);
+        cutlass::layout::ColumnMajor::Stride::Index batch_stride_A(M * K);
+        cutlass::layout::ColumnMajor::Stride::Index ldb(N);
+        cutlass::layout::ColumnMajor::Stride::Index batch_stride_B(K * N);
+        cutlass::layout::ColumnMajor::Stride::Index ld_bias(0);
+        cutlass::layout::ColumnMajor::Stride::Index batch_stride_bias(0);
+        cutlass::layout::ColumnMajor::Stride::Index ldc(N);
+        cutlass::layout::ColumnMajor::Stride::Index batch_stride_C(M * N);
+        cutlass::half_t* a = reinterpret_cast<cutlass::half_t*>(A->data);
+        cutlass::half_t* b = reinterpret_cast<cutlass::half_t*>(B->data);
+        cutlass::half_t* c = reinterpret_cast<cutlass::half_t*>(C->data);
+        cutlass::half_t* bias = reinterpret_cast<cutlass::half_t*>(Bias->data);
+        cutlass::Status status = gemm_op({
+            {M, N, K},           //
+            {a, lda},            //
+            batch_stride_A,      //
+            {b, ldb},            //
+            batch_stride_B,      //
+            {bias, ld_bias},     //
+            batch_stride_bias,   //
+            {c, ldc},            //
+            batch_stride_C,      //
+            {alpha, beta},       //
+            Batch                //
         });
         CHECK(status == cutlass::Status::kSuccess);
       }
