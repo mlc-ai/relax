@@ -23,7 +23,6 @@
  * \brief Header of internal operator functions
  * to assist in creating ops in C++
  */
-
 #ifndef TVM_RELAX_OP_MAKE_OP_H_
 #define TVM_RELAX_OP_MAKE_OP_H_
 
@@ -45,7 +44,8 @@ Expr MakeVMAllocStorage(Expr size, DataType dtype, int64_t runtime_device_index)
 
 Expr MakeVMAllocTensor(Expr storage, Expr shape, int offset, DataType dtype);
 
+Expr MakeCast(Expr data, DataType dtype);
+
 }  // namespace relax
 }  // namespace tvm
-
 #endif  // TVM_RELAX_OP_MAKE_OP_H_

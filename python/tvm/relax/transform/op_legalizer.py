@@ -84,7 +84,8 @@ def _nn_gelu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Exp
             x.shape,
             lambda *i: 0.5
             * x(*i)
-            * (1 + te.tanh(math.sqrt(2 / math.pi) * (x(*i) + 0.044715 * te.power(x(*i), 3)))),
+            * (1 + te.tanh(math.sqrt(2 / math.pi) *
+               (x(*i) + 0.044715 * te.power(x(*i), 3)))),
         )
 
     return bb.call_te(gelu, args[0])
@@ -213,7 +214,8 @@ def _nn_layer_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shap
         for dim in axis:
             shape_prod = shape_prod * x.shape[dim.value]
         mean = topi.sum(x, axis=axis, keepdims=True) / shape_prod
-        var = topi.sum((x - mean) * (x - mean), axis=axis, keepdims=True) / shape_prod
+        var = topi.sum((x - mean) * (x - mean), axis=axis,
+                       keepdims=True) / shape_prod
         return gamma * ((x - mean) / topi.sqrt(var + eps)) + beta
 
     return bb.call_te(layer_norm, args[0], args[1], args[2], axis=attrs.axis, eps=attrs.epsilon)
@@ -235,7 +237,8 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
         b_shape.append(1)
 
     is_a_larger = len(a_shape) > len(b_shape)
-    offset = len(a_shape) - len(b_shape) if is_a_larger else len(b_shape) - len(a_shape)
+    offset = len(a_shape) - \
+        len(b_shape) if is_a_larger else len(b_shape) - len(a_shape)
 
     def matmul(a, b):
         def matmul_compute(*idx_spatial):
@@ -253,8 +256,10 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
                 for i in range(offset, len(output_shape) - (2 - a_prepended - b_appended)):
                     a_idx = i if is_a_larger else i - offset
                     b_idx = i if not is_a_larger else i - offset
-                    a_indices.append(idx_spatial[i] if a_shape[a_idx] > 1 else 0)
-                    b_indices.append(idx_spatial[i] if b_shape[b_idx] > 1 else 0)
+                    a_indices.append(
+                        idx_spatial[i] if a_shape[a_idx] > 1 else 0)
+                    b_indices.append(
+                        idx_spatial[i] if b_shape[b_idx] > 1 else 0)
                 if not a_prepended:
                     a_indices.append(idx_spatial[-2 + b_appended])
                 a_indices.append(idx_reduce)
@@ -295,7 +300,8 @@ def _sum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
 
 def _mean(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     shape_prod = tvm.tir.const(1, "int32")
-    axis = attrs.axis if attrs.axis is not None else range(0, len(args[0].shape))
+    axis = attrs.axis if attrs.axis is not None else range(
+        0, len(args[0].shape))
     for dim in axis:
         shape_prod = shape_prod * args[0].shape[dim.value]
     sum_var = bb.emit_te(topi.sum, args[0], axis, attrs.keepdims)
