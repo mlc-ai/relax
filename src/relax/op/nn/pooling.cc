@@ -17,33 +17,31 @@
  * under the License.
  */
 
-/*!
- * \file unary.h
- * \brief shape and type deduction for unary operators.
- */
+#include "pooling.h"
 
-#ifndef TVM_RELAX_OP_TENSOR_UNARY_H_
-#define TVM_RELAX_OP_TENSOR_UNARY_H_
-
-#include <tvm/relax/expr.h>
-#include <tvm/relax/type.h>
-
-#include <vector>
-
-#include "../op_common.h"
-
+#include "../tensor/unary.h"
 namespace tvm {
 namespace relax {
 
-Expr InferShapeUnique(const Call& call, DiagnosticContext diag_ctx);
+RELAY_REGISTER_OP("relax.nn.max_pool2d")
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor")
+    .set_attrs_type<MaxPool2dAttrs>()
+    .set_attr<FInferShape>("FInferShape", InferShapeMaxPool2d)
+    .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast);
 
-Type InferTypeUnique(const Call& call, DiagnosticContext diag_ctx);
+Expr MakeMaxPool2d(Expr data, Array<PrimExpr> kernel_size, Array<PrimExpr> stride,
+                   Array<PrimExpr> padding, Array<PrimExpr> dilation) {
+  auto attrs = make_object<MaxPool2dAttrs>();
+  attrs->kernel_size = kernel_size;
+  attrs->stride = stride;
+  attrs->padding = padding;
+  attrs->dilation = dilation;
+  static const Op& op = Op::Get("relax.nn.max_pool2d");
+  return Call(op, {data}, Attrs(attrs));
+}
 
-Expr InferShapeUnaryBroadcast(const Call& call, DiagnosticContext diag_ctx);
-
-Type InferTypeUnaryBroadcast(const Call& call, DiagnosticContext diag_ctx);
+TVM_REGISTER_GLOBAL("relax.op.nn.max_pool2d").set_body_typed(MakeMaxPool2d);
 
 }  // namespace relax
 }  // namespace tvm
-
-#endif  // TVM_RELAX_OP_TENSOR_UNARY_H_
