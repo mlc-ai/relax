@@ -765,6 +765,49 @@ Type InferTypeCast(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(input_type->ndim, attrs->dtype);
 }
 
+/* relax.wrap_param */
+TVM_REGISTER_NODE_TYPE(WrapParamAttrs);
+
+RELAX_REGISTER_OP("relax.wrap_param")
+    .set_attrs_type<WrapParamAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor")
+    .set_attr<FInferShape>("FInferShape", InferShapeWrapParam)
+    .set_attr<FInferType>("FInferType", InferTypeWrapParam);
+
+Expr MakeWrapParam(Expr data, DataType dtype) {
+  ObjectPtr<WrapParamAttrs> attrs = make_object<WrapParamAttrs>();
+  attrs->dtype = dtype;
+
+  static const Op& op = Op::Get("relax.wrap_param");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.wrap_param").set_body_typed(MakeWrapParam);
+
+Optional<Expr> InferShapeWrapParam(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "WrapParam op should have 1 argument");
+  }
+  return call->args[0]->shape();
+}
+
+Type InferTypeWrapParam(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "WrapParam op should have 1 argument");
+  }
+
+  const auto* input_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  if (input_type == nullptr) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The op input should has type DynTensorType, but actually it is "
+                       << call->args[0]->checked_type()->GetTypeKey()
+                       << ". Please make sure the input has type DynTensorType.");
+  }
+  const auto* attrs = call->attrs.as<WrapParamAttrs>();
+  return DynTensorType(input_type->ndim, attrs->dtype);
+}
+
 /* relax.take */
 TVM_REGISTER_NODE_TYPE(TakeAttrs);
 

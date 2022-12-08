@@ -434,6 +434,15 @@ struct CastAttrs : public tvm::AttrsNode<CastAttrs> {
   }
 };  // struct CastAttrs.
 
+/*! \brief Attributes used in cast operator */
+struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
+  DataType dtype;
+
+  TVM_DECLARE_ATTRS(CastAttrs, "relax.attrs.WrapParamAttrs") {
+    TVM_ATTR_FIELD(dtype).describe("Target data type");
+  }
+};  // struct CastAttrs.
+
 /*! \brief Attributes used in take operator */
 struct TakeAttrs : public tvm::AttrsNode<TakeAttrs> {
   Optional<Integer> axis;

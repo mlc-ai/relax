@@ -38,6 +38,8 @@ class TorchFXTranslator:
         input_type = input_type.lower()
         if input_type in ["float", "float32", "torch.float32"]:
             return "float32"
+        elif input_type in ["float16", "torch.float16"]:
+            return "float16"
         else:
             raise NotImplementedError("input_type {} is not handled yet".format(input_type))
 
@@ -127,7 +129,7 @@ class TorchFXTranslator:
         conv2d = self.bb.emit(
             relax.op.nn.conv2d(
                 x,
-                weight,
+                relax.op.wrap_param(weight),
                 kernel_size,
                 strides=module.stride,
                 padding=module.padding,
@@ -136,6 +138,7 @@ class TorchFXTranslator:
                 channels=out_channels,
                 data_layout="NCHW",
                 kernel_layout="OIHW",
+                out_dtype="float32",
             )
         )
 
@@ -150,7 +153,7 @@ class TorchFXTranslator:
             )
             bias = self.params[module.bias] = reshaped_bias
 
-        return self.bb.emit(relax.op.add(conv2d, bias))
+        return self.bb.emit(relax.op.add(conv2d, relax.op.wrap_param(bias)))
 
     def _linear(self, node: fx.node.Node) -> relax.Var:
 
@@ -163,7 +166,7 @@ class TorchFXTranslator:
             )
 
         weight_T = self.params_transpose[module.weight]
-        dense = self._matmul_impl(x, weight_T)
+        dense = self._matmul_impl(x, relax.op.wrap_param(weight_T))
 
         if module.bias is None:
             return dense
@@ -176,7 +179,7 @@ class TorchFXTranslator:
             )
             bias = self.params[module.bias] = reshaped_bias
 
-        return self.bb.emit(relax.op.add(dense, bias))
+        return self.bb.emit(relax.op.add(dense, relax.op.wrap_param(bias)))
 
     def _relu(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -219,7 +222,7 @@ class TorchFXTranslator:
         module = self.named_modules[node.target]
         weight = self.params[module.weight]
         x = self.bb.emit(relax.op.cast(x, "int32"))
-        return self.bb.emit(relax.op.take(weight, x, axis=0))
+        return self.bb.emit(relax.op.take(relax.op.wrap_param(weight), x, axis=0))
 
     def _adaptive_avg_pool2d(self, node: fx.node.Node) -> relax.Var:
         module = self.named_modules[node.target]
@@ -250,7 +253,15 @@ class TorchFXTranslator:
         eps = module.eps
 
         res_tuple = self.bb.emit(
-            relax.op.nn.batch_norm(x, weight, bias, running_mean, running_var, axis=1, epsilon=eps)
+            relax.op.nn.batch_norm(
+                x,
+                relax.op.wrap_param(weight),
+                relax.op.wrap_param(bias),
+                running_mean,
+                running_var,
+                axis=1,
+                epsilon=eps,
+            )
         )
 
         return self.bb.emit(relax.TupleGetItem(res_tuple, 0))
@@ -381,7 +392,7 @@ class TorchFXTranslator:
         return res
 
     def _matmul_impl(self, a: relax.Expr, b: relax.Expr):
-        return self.bb.emit(relax.op.nn.matmul(a, b))
+        return self.bb.emit(relax.op.nn.matmul(a, b, out_dtype="float32"))
 
     def _gelu(self, node: fx.node.Node) -> relax.Var:
         return self.bb.emit(relax.op.gelu(self.env[node.args[0]]))
@@ -429,7 +440,7 @@ class TorchFXTranslator:
         x = self.env[node.args[0]]
         y = self.env[node.args[1]]
         z = self.env[node.args[2]]
-        matmul = self.bb.emit(relax.op.nn.matmul(y, z))
+        matmul = self.bb.emit(relax.op.nn.matmul(y, z, out_dtype="float32"))
         return self.bb.emit(relax.op.add(x, matmul))
 
     def _split(self, node: fx.node.Node) -> relax.Var:
@@ -466,6 +477,9 @@ class TorchFXTranslator:
 
     def _float(self, node: fx.node.Node) -> relax.Var:
         return self.bb.emit(relax.op.cast(self.env[node.args[0]], "float32"))
+
+    def _half(self, node: fx.node.Node) -> relax.Var:
+        return self.bb.emit(relax.op.cast(self.env[node.args[0]], "float16"))
 
     def _permute(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
@@ -539,10 +553,12 @@ class TorchFXTranslator:
             weight = self.params[module.weight]
             bias = self.params[module.bias]
             weight_reshape = self.bb.emit(
-                relax.op.reshape(weight, (1, num_groups, C // num_groups, 1, 1))
+                relax.op.reshape(
+                    relax.op.wrap_param(weight), (1, num_groups, C // num_groups, 1, 1)
+                )
             )
             bias_reshape = self.bb.emit(
-                relax.op.reshape(bias, (1, num_groups, C // num_groups, 1, 1))
+                relax.op.reshape(relax.op.wrap_param(bias), (1, num_groups, C // num_groups, 1, 1))
             )
             norm_x = self.bb.emit(relax.op.multiply(norm_x, weight_reshape))
             norm_x = self.bb.emit(relax.op.add(norm_x, bias_reshape))
@@ -561,7 +577,15 @@ class TorchFXTranslator:
         dim_num = len(module.normalized_shape)
         axis = tuple(range(-dim_num, 0))
 
-        return self.bb.emit(relax.op.nn.layer_norm(x, gamma, beta, axis=axis, epsilon=module.eps))
+        return self.bb.emit(
+            relax.op.nn.layer_norm(
+                x,
+                relax.op.wrap_param(gamma),
+                relax.op.wrap_param(beta),
+                axis=axis,
+                epsilon=module.eps,
+            )
+        )
 
     def create_convert_map(self):
         self.convert_map = {
@@ -607,6 +631,7 @@ class TorchFXTranslator:
             "new_ones": self._new_ones,
             "expand": self._expand,
             "float": self._float,
+            "half": self._half,
             "permute": self._permute,
             "reshape": self._reshape,
             "transpose": self._transpose,
@@ -644,9 +669,12 @@ class TorchFXTranslator:
         for _, param in model.named_parameters():
             ndim = len(param.data.shape)
             dtype = self._convert_data_type(str(param.data.dtype))
-            self.params[param] = relax.const(
-                param.data.cpu().numpy(), relax.DynTensorType(ndim, dtype)
-            )
+            if dtype == "float32" or dtype == "float16":
+                self.params[param] = relax.const(
+                    param.data.cpu().numpy(), relax.DynTensorType(ndim, dtype)
+                )
+            else:
+                raise ValueError("Unsupported data type for model parameters: %s" % dtype)
 
         # Initialize the block builder with a function and a dataflow block.
         self.bb = relax.BlockBuilder()
