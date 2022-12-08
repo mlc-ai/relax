@@ -135,6 +135,11 @@ Optional<Expr> InferShapeLayerNorm(const Call& call, DiagnosticContext diag_ctx)
 
 Type InferTypeLayerNorm(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.nn.matmul */
+Optional<Expr> InferShapeMatmul(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeMatmul(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_NN_NN_H_
