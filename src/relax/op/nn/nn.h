@@ -125,6 +125,16 @@ Optional<Expr> InferShapeBatchNorm(const Call& call, DiagnosticContext diag_ctx)
 
 Type InferTypeBatchNorm(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.nn.dropout */
+Optional<Expr> InferShapeDropout(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeDropout(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.nn.layer_norm */
+Optional<Expr> InferShapeLayerNorm(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeLayerNorm(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_NN_NN_H_

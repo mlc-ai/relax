@@ -102,3 +102,18 @@ class SqueezeAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.ConcatenateAttrs")
 class ConcatenateAttrs(Attrs):
     """Attributes for concatenate operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.DropoutAttrs")
+class DropoutAttrs(Attrs):
+    """Attributes for dropout operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.LayerNormAttrs")
+class LayerNormAttrs(Attrs):
+    """Attributes used in layer_norm operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.ReduceAttrs")
+class ReduceAttrs(Attrs):
+    """Attributes used in reduction operator"""

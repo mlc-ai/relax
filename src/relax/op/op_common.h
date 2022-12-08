@@ -71,6 +71,22 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
       .add_argument("e", "Tensor", "The input tensor.")               \
       .set_attr<FInferShape>("FInferShape", InferShapeUnaryBroadcast) \
       .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast)
+
+#define RELAX_REGISTER_REDUCTION_OP(OpName)                                         \
+  TVM_REGISTER_GLOBAL("relax.op." OpName)                                           \
+      .set_body_typed([](Expr data, Optional<Array<Integer>> axis, bool keepdims) { \
+        ObjectPtr<ReduceAttrs> attrs = make_object<ReduceAttrs>();                  \
+        attrs->axis = std::move(axis);                                              \
+        attrs->keepdims = keepdims;                                                 \
+        static const Op& op = Op::Get("relax." OpName);                             \
+        return Call(op, {std::move(data)}, Attrs{attrs}, {});                       \
+      });                                                                           \
+  RELAX_REGISTER_OP("relax." OpName)                                                \
+      .set_num_inputs(1)                                                            \
+      .add_argument("expr", "Tensor", "The input tensor")                           \
+      .set_attr<FInferShape>("FInferShape", InferShapeReduction)                    \
+      .set_attr<FInferType>("FInferType", InferTypeReduction)
+
 }  // namespace relax
 }  // namespace tvm
 

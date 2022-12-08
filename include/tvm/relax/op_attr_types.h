@@ -340,6 +340,67 @@ struct ConcatenateAttrs : public tvm::AttrsNode<ConcatenateAttrs> {
   }
 };  // struct ConcatenateAttrs
 
+/*! \brief Attributes used in dropout operator */
+struct DropoutAttrs : public tvm::AttrsNode<DropoutAttrs> {
+  double rate;
+
+  TVM_DECLARE_ATTRS(DropoutAttrs, "relax.attrs.DropoutAttrs") {
+    TVM_ATTR_FIELD(rate)
+        .describe("Fraction of the input that gets dropped out during training time")
+        .set_default(0.5);
+  }
+};  // struct DropoutAttrs
+
+/*! \brief Attributes used in layer_norm operator */
+struct LayerNormAttrs : public tvm::AttrsNode<LayerNormAttrs> {
+  Array<Integer> axis;
+  double epsilon;
+  bool center;
+  bool scale;
+
+  TVM_DECLARE_ATTRS(LayerNormAttrs, "relax.attrs.LayerNormAttrs") {
+    TVM_ATTR_FIELD(axis).set_default(Array<Integer>{Integer(-1)});
+    TVM_ATTR_FIELD(epsilon)
+        .describe("Small float added to variance to avoid dividing by zero")
+        .set_default(1e-5);
+    TVM_ATTR_FIELD(center)
+        .describe("If True, add offset of beta to normalized tensor. If False, beta is ignored")
+        .set_default(true);
+    TVM_ATTR_FIELD(scale)
+        .describe(
+            "If True, multiply by gamma. If False, gamma is not used. "
+            "When the next layer is piecewise linear (also, e.g., nn.relu), "
+            "this can be disabled since the scaling will be done by the next layer.")
+        .set_default(true);
+  }
+};  // struct LayerNormAttrs
+
+/*! \brief Attributes for reduction operators */
+struct ReduceAttrs : public tvm::AttrsNode<ReduceAttrs> {
+  Optional<Array<Integer>> axis;
+  bool keepdims;
+
+  TVM_DECLARE_ATTRS(ReduceAttrs, "relax.attrs.ReduceAttrs") {
+    TVM_ATTR_FIELD(axis)
+        .set_default(Optional<Array<Integer>>{NullOpt})
+        .describe(R"code(The axis or axes along which to perform the reduction.
+
+      The default, `axis=()`, will compute over all elements into a
+      scalar array with shape `(1,)`.
+
+      If `axis` is int, a reduction is performed on a particular axis.
+
+      If `axis` is a tuple of ints, a reduction is performed on all the axes
+      specified in the tuple.
+
+      If `exclude` is true, reduction will be performed on the axes that are
+      NOT in axis instead.)code");
+    TVM_ATTR_FIELD(keepdims).set_default(false).describe(
+        "If this is set to `True`, the reduced axes are left "
+        "in the result as dimension with size one.");
+  }
+};  // struct ReduceAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_
