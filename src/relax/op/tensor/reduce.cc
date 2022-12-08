@@ -84,7 +84,7 @@ Optional<Expr> InferShapeReduction(const Call& call, DiagnosticContext diag_ctx)
     if (!appeared_axes[i]) {
       output_shape.push_back(shape->values[i]);
     } else if (attrs->keepdims) {
-      output_shape.push_back(tir::make_const(DataType::Int(32), 1));
+      output_shape.push_back(tir::make_const(DataType::Int(64), 1));
     }
   }
   return ShapeExpr(std::move(output_shape));

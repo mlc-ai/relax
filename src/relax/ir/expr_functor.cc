@@ -469,7 +469,7 @@ Expr ExprMutator::VisitExpr_(const SeqExprNode* op) {
 }
 
 void ExprMutator::VisitBinding_(const VarBindingNode* binding) {
-  Expr new_value = this->VisitExpr(binding->value);
+  Expr new_value = this->builder_->Normalize(this->VisitExpr(binding->value));
   Var new_var = this->VisitVarDef(binding->var);
 
   auto emit = [this](VarBinding b) {

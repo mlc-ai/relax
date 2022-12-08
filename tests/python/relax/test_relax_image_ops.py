@@ -21,7 +21,7 @@ import tvm
 from tvm import relax
 from tvm.error import DiagnosticError
 from tvm.relax.testing import transform
-from tvm.script._parser import relax as R
+from tvm.script import relax as R
 import tvm.testing
 
 

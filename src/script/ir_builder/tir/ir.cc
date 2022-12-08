@@ -43,7 +43,7 @@ Buffer BufferDecl(Array<PrimExpr> shape, DataType dtype, String buffer_name, Opt
     buffer_data = data.value();
   }
   if (!elem_offset.defined() && offset_factor) {
-    DataType shape_dtype = shape.empty() ? DataType::Int(32) : shape[0]->dtype;
+    DataType shape_dtype = shape.empty() ? DataType::Int(64) : shape[0]->dtype;
     elem_offset = tvm::tir::Var("elem_offset", shape_dtype);
   }
   return Buffer(buffer_data, dtype, shape, strides.value_or(Array<PrimExpr>()),
@@ -110,6 +110,20 @@ tvm::Type FuncRet(tvm::Type ret_type) {
 Buffer MatchBuffer(ObjectRef param, Array<PrimExpr> shape, DataType dtype, Optional<Var> data,
                    Array<PrimExpr> strides, PrimExpr elem_offset, String storage_scope, int align,
                    int offset_factor, String buffer_type_str, Array<IntImm> axis_separators) {
+  if (!elem_offset.defined()) {
+    DataType shape_dtype;
+    if (param->IsInstance<tvm::tir::VarNode>()) {
+      shape_dtype = shape.empty() ? DataType::Int(64) : shape[0]->dtype;
+    } else if (const auto* buffer_load = param.as<tvm::tir::BufferLoadNode>()) {
+      shape_dtype = buffer_load->buffer->elem_offset->dtype;
+    } else if (const auto* buffer_region = param.as<tvm::tir::BufferRegionNode>()) {
+      shape_dtype = buffer_region->buffer->elem_offset->dtype;
+    } else {
+      LOG(FATAL) << "ValueError: Unexpected type for TIR MatchBuffer.";
+    }
+    elem_offset = offset_factor ? tvm::tir::Var("elem_offset", shape_dtype)
+                                : tvm::tir::make_const(shape_dtype, 0);
+  }
   Buffer buffer = BufferDecl(shape, dtype, "", data, strides, elem_offset, storage_scope, align,
                              offset_factor, buffer_type_str, axis_separators);
   if (const auto* var = param.as<tvm::tir::VarNode>()) {

@@ -542,5 +542,13 @@ PrimExpr IndexDataTypeNormalizer::VisitExpr_(const VarNode* op) {
   return GetRef<PrimExpr>(op);
 }
 
+PrimExpr IndexDataTypeNormalizer::VisitExpr_(const CastNode* op) {
+  if (is_enabled_) {
+    PrimExpr value = IndexDataTypeNormalizer::VisitExpr(op->value);
+    return value->dtype == target_data_type_ ? value : Cast(target_data_type_, value);
+  }
+  return IndexDataTypeRewriter::VisitExpr_(op);
+}
+
 }  // namespace tir
 }  // namespace tvm
