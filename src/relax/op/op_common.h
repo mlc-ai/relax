@@ -47,12 +47,14 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
  *
  * \param OpName the name of registry.
  */
+#define RELAX_REGISTER_OP RELAY_REGISTER_OP
+
 #define RELAX_REGISTER_BINARY_BROADCAST_OP(OpName)                                \
   TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr lhs, Expr rhs) { \
     static const Op& op = Op::Get("relax." OpName);                               \
     return Call(op, {lhs, rhs}, Attrs(), {});                                     \
   });                                                                             \
-  RELAY_REGISTER_OP("relax." OpName)                                              \
+  RELAX_REGISTER_OP("relax." OpName)                                              \
       .set_num_inputs(2)                                                          \
       .add_argument("lhs", "Tensor", "The left hand side tensor.")                \
       .add_argument("rhs", "Tensor", "The right hand side tensor.")               \
@@ -64,7 +66,7 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
     static const Op& op = Op::Get("relax." OpName);                   \
     return Call(op, {e}, Attrs(), {});                                \
   });                                                                 \
-  RELAY_REGISTER_OP("relax." OpName)                                  \
+  RELAX_REGISTER_OP("relax." OpName)                                  \
       .set_num_inputs(1)                                              \
       .add_argument("e", "Tensor", "The input tensor.")               \
       .set_attr<FInferShape>("FInferShape", InferShapeUnaryBroadcast) \

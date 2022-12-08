@@ -18,12 +18,12 @@
 """Relax transformation passes for testing"""
 
 from tvm import ir
-from tvm import relax
+from tvm import relax, relay
 from tvm.ir.module import IRModule
 from tvm.ir.transform import PassContext
 from tvm.target import Target
 from tvm.ir import transform
-from tvm.relax import PyExprMutator
+from tvm.relax import PyExprMutator, ShapeExpr
 from tvm.relax.expr import Call
 from tvm.relay.backend.te_compiler import select_implementation
 
@@ -47,7 +47,10 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
         lowering pass
     """
 
-    def __init__(self, target: Target):
+    def __init__(
+        self,
+        target: Target,
+    ):
         self.target = target
 
     def transform_module(self, mod: IRModule, ctx: PassContext) -> IRModule:
@@ -86,14 +89,33 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
                     relay_op = ir.Op.get(relay_op_name)
 
                     te_inputs = [relax.expr.te_tensor(arg) for arg in call_node.args]
+
+                    # convert relax attr -> relay attr
+                    relax_op_attrs = call_node.attrs
+                    relay_op_attrs = None
+                    if relax_op_attrs:
+                        relax_attr_name = relax_op_attrs.get_name()
+                        # Note: convert `tvm.runtime.container.String` to string
+                        attrs_dict = {str(key): val for key, val in dict(relax_op_attrs).items()}
+                        relay_attr_name = "relay." + relax_attr_name[6:]
+                        relay_op_attrs = ir.attrs.make_node(relay_attr_name, **attrs_dict)
+
+                    out_type = call_node.checked_type
+                    if isinstance(out_type, relax.DynTensorType):
+                        # Ruihang: in case `call_node.checked_type` is relax.DynTensorType, we need
+                        # to convert it to relay.TensorType
+                        assert isinstance(call_node.shape, ShapeExpr)
+                        out_type = relay.TensorType(call_node.shape.values, out_type.dtype)
+
                     best_impl_tuple = select_implementation(
                         relay_op,
-                        call_node.attrs,
+                        relay_op_attrs,
                         te_inputs,
-                        call_node.checked_type,
+                        out_type,
                         target,
                         use_autotvm=False,
                     )
+
                     compute_func = best_impl_tuple[0].compute
                     # Extract the name of the operator without the prefix
                     # e.g., for relay op "nn.conv2d", name_hint would be conv2d
@@ -101,11 +123,12 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
 
                     return self.builder_.call_te(
                         compute_func,
-                        call_node.attrs,
+                        relay_op_attrs,
                         call_node.args,
-                        call_node.attrs,
+                        out_type,
                         primfunc_name_hint=name_hint,
                     )
+
                 else:
                     return call_node
 
@@ -120,4 +143,9 @@ class LowerWithRelayOpStrategyPass(transform.Pass):
                 new_mod = new_mod.with_attrs(mod.attrs) if mod.attrs else new_mod
                 return new_mod
 
-        return Lowerer().transform()
+        # Relax only supports MetaSchedule
+        new_config = dict(ctx.config)
+        new_config["relay.backend.use_meta_schedule"] = True
+        ctx.config = new_config
+        with target, ctx:
+            return Lowerer().transform()
