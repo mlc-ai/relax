@@ -27,6 +27,7 @@
 namespace tvm {
 namespace relax {
 
+/* relax.nn.max_pool2d */
 Optional<Expr> InferShapeMaxPool2d(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "MaxPool2d op should have 1 argument");
@@ -56,6 +57,9 @@ Optional<Expr> InferShapeMaxPool2d(const Call& call, DiagnosticContext diag_ctx)
     return NullOpt;
   }
 }
+
+/* relax.nn.adaptive_avg_pool2d */
+Optional<Expr> InferShapeAdaptiveAvgPool2D(const Call& call, DiagnosticContext diag_ctx);
 
 }  // namespace relax
 }  // namespace tvm

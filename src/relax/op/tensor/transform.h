@@ -58,6 +58,46 @@ Optional<Expr> InferShapeConcatenate(const Call& call, DiagnosticContext diag_ct
 
 Type InferTypeConcatenate(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.cumsum */
+Optional<Expr> InferShapeCumsum(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeCumsum(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.trilu */
+Optional<Expr> InferShapeTrilu(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeTrilu(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.cast */
+Optional<Expr> InferShapeCast(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeCast(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.take */
+Optional<Expr> InferShapeTake(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeTake(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.full */
+Optional<Expr> InferShapeFull(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeFull(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.split */
+Optional<Expr> InferShapeSplit(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeSplit(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.broadcast_to */
+Optional<Expr> InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeBroadcastTo(const Call& call, DiagnosticContext diag_ctx);
+
+/* relax.strided_slice */
+Optional<Expr> InferShapeStridedSlice(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeStridedSlice(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 
