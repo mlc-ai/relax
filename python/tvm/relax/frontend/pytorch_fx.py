@@ -14,7 +14,6 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-from numpy import iterable
 import torch
 import tvm
 
@@ -293,7 +292,7 @@ class TorchFXTranslator:
 
     def _getitem(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
-        if iterable(x):
+        if isinstance(x, (list, tuple, relax.ShapeExpr, relax.Tuple)):
             return x[node.args[1]]
         elif isinstance(x, relax.Var):
             if isinstance(x.shape, relax.Tuple):
@@ -453,7 +452,7 @@ class TorchFXTranslator:
         args = self.retrive_args(node)
         self_var = args[0]
         size = args[1:]
-        if not iterable(size):
+        if not isinstance(size, (list, tuple)):
             size = (size,)
         return self.bb.emit(
             relax.op.full(

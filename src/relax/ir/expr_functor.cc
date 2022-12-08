@@ -575,8 +575,8 @@ void ExprMutator::ReEmitBinding(const VarBindingNode* binding, Expr new_value) {
 }
 
 void ExprMutator::VisitBinding_(const MatchShapeNode* binding) {
-  Expr new_value = this->VisitExpr(binding->value);
-  Expr new_pattern = this->VisitExpr(ShapeExpr(binding->pattern));
+  Expr new_value = this->builder_->Normalize(this->VisitExpr(binding->value));
+  Expr new_pattern = this->builder_->Normalize(this->VisitExpr(ShapeExpr(binding->pattern)));
 
   Var new_var;
   if (binding->var.defined()) {
