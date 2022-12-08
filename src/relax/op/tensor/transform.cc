@@ -140,18 +140,18 @@ Optional<Expr> InferShapeReshape(const Call& call, DiagnosticContext diag_ctx) {
   }
 
   int ndim = shape->values.size();
-  PrimExpr shape_prod = tir::make_const(tvm::DataType::Int(32), 1);
+  PrimExpr shape_prod = tir::make_const(tvm::DataType::Int(64), 1);
   for (int i = 0; i < ndim; ++i) {
     shape_prod = shape_prod * shape->values[i];
   }
 
   int dim_to_infer = -1;
   int new_ndim = new_shape->values.size();
-  PrimExpr new_shape_prod = tir::make_const(tvm::DataType::Int(32), 1);
+  PrimExpr new_shape_prod = tir::make_const(tvm::DataType::Int(64), 1);
   arith::Analyzer ana;
   for (int i = 0; i < new_ndim; ++i) {
     PrimExpr dim_len = new_shape->values[i];
-    if (ana.CanProveEqual(dim_len, tir::make_const(tvm::DataType::Int(32), -1))) {
+    if (ana.CanProveEqual(dim_len, tir::make_const(tvm::DataType::Int(64), -1))) {
       if (dim_to_infer != -1) {
         diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                            << "Reshape op accepts at most one \"-1\" in the new shape. However, "
@@ -159,7 +159,7 @@ Optional<Expr> InferShapeReshape(const Call& call, DiagnosticContext diag_ctx) {
                            << dim_to_infer << " and " << i << " are both \"-1\"");
       }
       dim_to_infer = i;
-    } else if (ana.CanProveEqual(dim_len, tir::make_const(tvm::DataType::Int(32), 0))) {
+    } else if (ana.CanProveEqual(dim_len, tir::make_const(tvm::DataType::Int(64), 0))) {
       diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                          << "Reshape op does not accept \"0\" in the new shape. However, the new "
                             "shape on dimension "
@@ -264,7 +264,7 @@ Optional<Expr> InferShapeExpandDims(const Call& call, DiagnosticContext diag_ctx
                             "- at least two indices refers to dim "
                          << dim << ". Please make sure the indices do not duplicate.");
     }
-    output_shape.Set(dim, tvm::tir::make_const(tvm::DataType::Int(32), 1));
+    output_shape.Set(dim, tvm::tir::make_const(tvm::DataType::Int(64), 1));
   }
 
   for (int i = 0, p = 0; i < output_ndim; ++i) {
@@ -327,7 +327,7 @@ Optional<Expr> InferShapeSqueeze(const Call& call, DiagnosticContext diag_ctx) {
   const auto* shape = call->args[0]->shape().as<ShapeExprNode>();
   const auto* attrs = call->attrs.as<SqueezeAttrs>();
   if (shape == nullptr) {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 
   int ndim = shape->values.size();
@@ -348,7 +348,7 @@ Optional<Expr> InferShapeSqueeze(const Call& call, DiagnosticContext diag_ctx) {
                            << "\" at the position " << i
                            << " of the axis indices of operator squeeze is out of range.");
       }
-      if (ana.CanProve(shape->values[dim] != tir::make_const(DataType::Int(32), 1))) {
+      if (ana.CanProve(shape->values[dim] != tir::make_const(DataType::Int(64), 1))) {
         diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                            << "Squeeze expects all axis indices to correspond to axes with "
                               "dimension length 1. However, the input data on given axis index "
@@ -358,10 +358,10 @@ Optional<Expr> InferShapeSqueeze(const Call& call, DiagnosticContext diag_ctx) {
     }
   } else {
     for (int i = 0; i < ndim; ++i) {
-      bool is_one = ana.CanProveEqual(shape->values[i], tir::make_const(DataType::Int(32), 1));
-      bool isnt_one = ana.CanProve(shape->values[i] != tir::make_const(DataType::Int(32), 1));
+      bool is_one = ana.CanProveEqual(shape->values[i], tir::make_const(DataType::Int(64), 1));
+      bool isnt_one = ana.CanProve(shape->values[i] != tir::make_const(DataType::Int(64), 1));
       if (!is_one && !isnt_one) {
-        return NullOpt;
+        return RuntimeDepShape();
       } else if (is_one) {
         removed_axis.insert(i);
       }
@@ -400,9 +400,7 @@ Type InferTypeSqueeze(const Call& call, DiagnosticContext diag_ctx) {
     }
   } else {
     Optional<Expr> out_shape = InferShapeSqueeze(call, diag_ctx);
-    if (out_shape.defined()) {
-      const auto* shape = out_shape.value().as<ShapeExprNode>();
-      ICHECK_NOTNULL(shape);
+    if (const auto* shape = out_shape.value().as<ShapeExprNode>()) {
       return DynTensorType(shape->values.size(), input_type->dtype);
     } else {
       return DynTensorType(-1, input_type->dtype);
@@ -507,7 +505,7 @@ Optional<Expr> InferShapeConcatenate(const Call& call, DiagnosticContext diag_ct
 
   for (int dim = 0; dim < output_ndim; ++dim) {
     if (dim == concat_axis) {
-      PrimExpr concat_dim_len = tir::make_const(DataType::Int(32), 0);
+      PrimExpr concat_dim_len = tir::make_const(DataType::Int(64), 0);
       for (int i = 0; i < n_tensor; ++i) {
         PrimExpr dim_len = ana.Simplify(Downcast<ShapeExpr>(tuple_shape->fields[i])->values[dim]);
         concat_dim_len = concat_dim_len + dim_len;
@@ -539,7 +537,7 @@ Optional<Expr> InferShapeConcatenate(const Call& call, DiagnosticContext diag_ct
         }
       }
       if (static_len != -1) {
-        output_shape.push_back(tir::make_const(DataType::Int(32), static_len));
+        output_shape.push_back(tir::make_const(DataType::Int(64), static_len));
       } else if (!runtime_dep_dim) {
         ICHECK(symbolic_len.defined());
         output_shape.push_back(symbolic_len);
@@ -651,7 +649,7 @@ Optional<Expr> InferShapeCumsum(const Call& call, DiagnosticContext diag_ctx) {
     return GetRef<ShapeExpr>(shape);
   }
 
-  PrimExpr prod = tir::make_const(DataType::Int(32), 1);
+  PrimExpr prod = tir::make_const(DataType::Int(64), 1);
   for (const PrimExpr& shape_dim : shape->values) {
     prod = prod * shape_dim;
   }
@@ -992,7 +990,7 @@ Optional<Expr> InferShapeSplit(const Call& call, DiagnosticContext diag_ctx) {
   PrimExpr len_axis = input_shape->values[axis];
   if (const auto* p_indices = attrs->indices_or_sections.as<ArrayNode>()) {
     Array<PrimExpr> indices = GetRef<Array<PrimExpr>>(p_indices);
-    PrimExpr zero = tir::make_const(DataType::Int(32), 0);
+    PrimExpr zero = tir::make_const(DataType::Int(64), 0);
 
     output_shape.reserve(indices.size() + 1);
     indices.insert(indices.begin(), zero);
@@ -1028,7 +1026,7 @@ Optional<Expr> InferShapeSplit(const Call& call, DiagnosticContext diag_ctx) {
     }
     // Todo(relax-team): need runtime divisibility check for the cases where `len_axis` is symbolic
 
-    PrimExpr n_section_expr = tir::make_const(DataType::Int(32), n_section);
+    PrimExpr n_section_expr = tir::make_const(DataType::Int(64), n_section);
     Array<PrimExpr> shape = input_shape->values;
     shape.erase(shape.begin() + axis);
     shape.insert(shape.begin() + axis, tvm::floordiv(len_axis, n_section_expr));
@@ -1217,7 +1215,7 @@ Optional<Expr> InferShapeStridedSlice(const Call& call, DiagnosticContext diag_c
   } else {
     strides.reserve(n_axis);
     for (int i = 0; i < n_axis; ++i) {
-      strides.push_back(tir::make_const(DataType::Int(32), 1));
+      strides.push_back(tir::make_const(DataType::Int(64), 1));
     }
   }
 
@@ -1271,7 +1269,7 @@ Optional<Expr> InferShapeStridedSlice(const Call& call, DiagnosticContext diag_c
     PrimExpr stride = strides[i];
 
     if (attrs->slice_mode == "size") {
-      stride = tir::make_const(DataType::Int(32), 1);
+      stride = tir::make_const(DataType::Int(64), 1);
       end = begin + ends[i];
     } else {
       if (attrs->slice_mode != "end") {

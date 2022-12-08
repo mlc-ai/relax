@@ -70,11 +70,11 @@ def convert_to_expr(value: Union[PrimExpr, Expr, Tuple[PrimExpr, Expr]]) -> Expr
     if not isinstance(value, tuple):
         return convert_to_object(value)
     value = list(value)
+    if all([isinstance(f, (PrimExpr, int)) for f in value]):
+        return ShapeExpr(value)
     for i, v in enumerate(value):
         value[i] = convert_to_expr(v)
-    if all([isinstance(f, PrimExpr) for f in value]):
-        return ShapeExpr(value)
-    elif all([isinstance(f, Expr) for f in value]):  # type: ignore
+    if all([isinstance(f, Expr) for f in value]):  # type: ignore
         return rx_Tuple(value)
     else:
         raise TypeError("Return types, with mixed PrimExpr and Relax Expr, is not supported.")

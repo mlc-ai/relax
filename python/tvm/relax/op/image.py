@@ -107,7 +107,7 @@ def resize2d(
             if isinstance(shape, PrimExpr):
                 temp_size.append(shape)
             elif isinstance(shape, int):
-                temp_size.append(tvm.tir.const(shape, "int32"))
+                temp_size.append(tvm.tir.const(shape, "int64"))
             else:
                 raise RuntimeError(
                     f"The input new shape of reshape operator contains unrecognized dimension {shape}"
