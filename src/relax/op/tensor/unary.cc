@@ -85,6 +85,12 @@ Type InferTypeUnaryBroadcast(const Call& call, DiagnosticContext diag_ctx) {
   return GetRef<DynTensorType>(input_ty);
 }
 
+/* relax.sin */
+RELAX_REGISTER_UNARY_OP("sin");
+
+/* relax.cos */
+RELAX_REGISTER_UNARY_OP("cos");
+
 TVM_REGISTER_NODE_TYPE(UniqueAttrs);
 
 RELAX_REGISTER_OP("relax.unique")

@@ -192,5 +192,11 @@ Type InferTypeBinaryBroadcast(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(output_ndim, output_dtype);
 }
 
+/* relax.divide */
+RELAX_REGISTER_BINARY_BROADCAST_OP("divide");
+
+/* relax.floor_divide */
+RELAX_REGISTER_BINARY_BROADCAST_OP("floor_divide");
+
 }  // namespace relax
 }  // namespace tvm
