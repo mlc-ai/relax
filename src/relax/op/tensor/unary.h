@@ -34,15 +34,12 @@
 
 namespace tvm {
 namespace relax {
-
+// Unique
 Expr InferShapeUnique(const Call& call, DiagnosticContext diag_ctx);
-
 Type InferTypeUnique(const Call& call, DiagnosticContext diag_ctx);
-
+// UnaryBroadcast
 Expr InferShapeUnaryBroadcast(const Call& call, DiagnosticContext diag_ctx);
-
 Type InferTypeUnaryBroadcast(const Call& call, DiagnosticContext diag_ctx);
-
 }  // namespace relax
 }  // namespace tvm
 

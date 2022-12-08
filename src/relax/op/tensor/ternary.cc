@@ -27,7 +27,7 @@
 namespace tvm {
 namespace relax {
 
-RELAY_REGISTER_OP("relax.ewise_fma")
+RELAX_REGISTER_OP("relax.ewise_fma")
     .set_num_inputs(3)
     .add_argument("e1", "Expr", "The input expression")
     .add_argument("e2", "Expr", "The input expression")

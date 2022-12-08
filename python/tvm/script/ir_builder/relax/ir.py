@@ -31,12 +31,16 @@ from tvm.relax.op import (
     assert_op,
     builtin,
     call_tir,
+    concatenate,
     ewise_fma,
+    expand_dims,
     invoke_closure,
     make_closure,
     multiply,
     print,
+    reshape,
     shape_of,
+    squeeze,
     unique,
     memory,
 )
@@ -47,6 +51,7 @@ from tvm.tir import PrimExpr
 
 from ..tir import var as _tir_var
 from . import _ffi_api, frame
+
 
 ############################## Tensor Type ##############################
 
@@ -418,10 +423,12 @@ __all__ = [
     "builtin",
     "call_packed",
     "call_tir",
+    "concatenate",
     "const",
     "create_shaped_tuple",
     "dataflow",
     "emit",
+    "expand_dims",
     "emit_match_shape",
     "ewise_fma",
     "func_attr",
@@ -435,6 +442,8 @@ __all__ = [
     "multiply",
     "output",
     "print",
+    "reshape",
+    "squeeze",
     "unique",
     "shape_of",
     "tensor",
