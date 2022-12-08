@@ -494,32 +494,45 @@ def test_gelu():
         @T.prim_func
         def gelu(
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
-            compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
-        ) -> None:
+            T_multiply: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+        ):
             T.func_attr({"global_symbol": "gelu", "tir.noalias": True})
+            T_multiply_1 = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            compute = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            T_multiply_2 = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            T_add = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_multiply"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[ax0, ax1])
+                    T.writes(T_multiply_1[ax0, ax1])
+                    T_multiply_1[ax0, ax1] = rxplaceholder[ax0, ax1] * T.float32(
+                        0.70710678118654757
+                    )
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
-                    T.reads(rxplaceholder[i0_1, i1_1])
+                    T.reads(T_multiply_1[i0_1, i1_1])
                     T.writes(compute[i0_1, i1_1])
-                    compute[i0_1, i1_1] = (
-                        T.float32(0.5)
-                        * rxplaceholder[i0_1, i1_1]
-                        * (
-                            T.float32(1)
-                            + T.tanh(
-                                T.float32(0.79788456080286541)
-                                * (
-                                    rxplaceholder[i0_1, i1_1]
-                                    + T.float32(0.044714999999999998)
-                                    * T.power(
-                                        rxplaceholder[i0_1, i1_1], T.float32(3), dtype="float32"
-                                    )
-                                ),
-                                dtype="float32",
-                            )
-                        )
-                    )
+                    compute[i0_1, i1_1] = T.erf(T_multiply_1[i0_1, i1_1], dtype="float32")
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_multiply_1"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(compute[ax0, ax1])
+                    T.writes(T_multiply_2[ax0, ax1])
+                    T_multiply_2[ax0, ax1] = compute[ax0, ax1] * T.float32(0.5)
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_add"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(T_multiply_2[ax0, ax1])
+                    T.writes(T_add[ax0, ax1])
+                    T_add[ax0, ax1] = T.float32(0.5) + T_multiply_2[ax0, ax1]
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_multiply_2"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[ax0, ax1], T_add[ax0, ax1])
+                    T.writes(T_multiply[ax0, ax1])
+                    T_multiply[ax0, ax1] = rxplaceholder[ax0, ax1] * T_add[ax0, ax1]
 
     mod = OperatorLegalizer(Gelu).transform()
     tvm.ir.assert_structural_equal(mod, Expected)
