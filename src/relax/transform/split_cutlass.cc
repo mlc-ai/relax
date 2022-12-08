@@ -378,6 +378,7 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     }
   }
   if (!has_second_func) {
+    func = WithAttr(func, "cutlass_codegen", Bool(true));
     return {WithAttr(func, "cutlass_kernel", matcher.cutlass_annotation), NullOpt};
   }
   // Step 2. Split the function into two functions.
@@ -406,6 +407,7 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
   new_buffer_map1.Set(new_params1.back(), matcher.intermediate_buffer);
   PrimFunc func1 = PrimFunc(new_params1, body1, func->ret_type, new_buffer_map1, func->attrs);
   func1 = WithAttr(func1, "cutlass_kernel", matcher.cutlass_annotation);
+  func1 = WithAttr(func1, "cutlass_codegen", Bool(true));
   // Step 4. Craft the second function.
   Array<Var> new_params2;
   std::vector<int> arg_partition2;

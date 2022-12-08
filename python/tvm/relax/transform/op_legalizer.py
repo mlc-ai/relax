@@ -21,6 +21,7 @@ import tvm
 from tvm import ir, te, topi
 from tvm.ir import Attrs
 from tvm.ir.module import IRModule
+from tvm.tir.generic import cast
 
 from ..analysis import remove_all_unused
 from ..expr import Call, Expr, Function, Tuple, TupleGetItem
@@ -80,11 +81,18 @@ def _nn_relu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Exp
 
 def _nn_gelu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     def gelu(x):
+        dtype = x.dtype
         return te.compute(
             x.shape,
-            lambda *i: 0.5
+            lambda *i: cast(0.5, dtype)
             * x(*i)
-            * (1 + te.tanh(math.sqrt(2 / math.pi) * (x(*i) + 0.044715 * te.power(x(*i), 3)))),
+            * (
+                cast(1, dtype)
+                + te.tanh(
+                    cast(math.sqrt(2) / math.pi, dtype)
+                    * (x(*i) + cast(0.044715, dtype) * te.power(x(*i), 3))
+                )
+            ),
         )
 
     return bb.call_te(gelu, args[0])

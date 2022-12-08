@@ -22,6 +22,7 @@
  */
 
 #include <tvm/relax/expr_functor.h>
+#include <tvm/relax/op_attr_types.h>
 #include <tvm/relax/transform.h>
 
 #include "../op/make_op.h"
@@ -35,14 +36,16 @@ enum MixedTypeConversionCategory : int {
   MIXED_PRECISION_NEVER = 2
 };
 
-// Return array is of type : [MixedTypeConversionCategory (int), String, String]
-// The fields are          : [ConversionCategory, accumulation_datatype, output_datatype]
-// Call is a call node, DataType is the mixed precision type
+// Return array is of type : [MixedTypeConversionCategory (int), bool, Call]
+// Call is a call node, out_dtype_str is the expected output_dtype string
 using FTVMMixedPrecisionConversionType = runtime::TypedPackedFunc<Array<ObjectRef>(
-    const Call& call_node, const std::string& target_dtype_str)>;
+    const Call& call_node, const std::string& out_dtype_str)>;
 
 class ToMixedPrecisionMutator : public ExprMutator {
  public:
+  explicit ToMixedPrecisionMutator(DLDataType output_dtype)
+      : expected_output_dtype_(output_dtype) {}
+
   void InitVarMap(const relax::Function& func) {
     for (const auto& param : func->params) {
       if (const auto* type = param->checked_type_.as<DynTensorTypeNode>()) {
@@ -112,7 +115,7 @@ class ToMixedPrecisionMutator : public ExprMutator {
         if (attr_map.count(op)) {
           FTVMMixedPrecisionConversionType func = attr_map[op];
           Array<ObjectRef> op_descriptor =
-              func(GetRef<Call>(call_node), DLDataType2String(low_precision_type_));
+              func(GetRef<Call>(call_node), DLDataType2String(expected_output_dtype_));
           ICHECK(op_descriptor.size() == 3)
               << "got the wrong number of returned arguments (expected 3 got "
               << op_descriptor.size() << ") from FTVMMixedPrecisionConversionType for "
@@ -121,21 +124,23 @@ class ToMixedPrecisionMutator : public ExprMutator {
           int64_t op_conversion_type = Downcast<Integer>(op_descriptor[0])->value;
           MixedTypeConversionCategory category =
               static_cast<MixedTypeConversionCategory>(op_conversion_type);
-          DataType accumulation_dtype =
-              DataType(String2DLDataType(Downcast<String>(op_descriptor[1])));
+          bool out_dtype_adjustable = Downcast<Bool>(op_descriptor[1])->value;
+          Call adjusted_call = Downcast<Call>(op_descriptor[2]);
           if (category == MIXED_PRECISION_ALWAYS) {
             // LOG(INFO) << "MIXED_PRECISION_ALWAYS";
             // Cast inputs to fp16
             std::vector<Expr> new_args;
             CastArgsToType(call_node->args, low_precision_type_, &new_args);
-            // Cast output according to out_dtype (if necessary)
-            if (accumulation_dtype != low_precision_type_) {
-              // LOG(INFO) << "RECAST";
-              relax::Var accmulate =
-                  emit(relax::Call(call_node->op, new_args, call_node->attrs, call_node->type_args),
-                       binding->var);
-              relax::Var cast_back =
-                  emit(relax::MakeCast(accmulate, low_precision_type_), binding->var);
+            if (out_dtype_adjustable) {
+              // Cast output according to out_dtype
+              relax::Var accmulate = emit(
+                  relax::Call(call_node->op, new_args, adjusted_call->attrs, call_node->type_args),
+                  binding->var);
+              if (expected_output_dtype_ != low_precision_type_) {
+                // LOG(INFO) << "RECAST";
+                relax::Var cast_back =
+                    emit(relax::MakeCast(accmulate, low_precision_type_), binding->var);
+              }
               return;
             } else {
               relax::Var new_var =
@@ -293,25 +298,26 @@ class ToMixedPrecisionMutator : public ExprMutator {
                      ObjectPtrEqual>
       var_map_;
   std::unordered_map<relax::Var, relax::Constant, ObjectPtrHash, ObjectPtrEqual> const_map_;
+  DataType expected_output_dtype_;
 };  // namespace relax
 
-Expr ToMixedPrecision(const relax::Function& f) {
-  ToMixedPrecisionMutator mutator;
+Expr ToMixedPrecision(const relax::Function& f, const runtime::String& out_dtype) {
+  ToMixedPrecisionMutator mutator(runtime::String2DLDataType(out_dtype));
   mutator.InitVarMap(f);
   return mutator.VisitExpr(f);
 }
 
 namespace transform {
 
-Pass ToMixedPrecision() {
+Pass ToMixedPrecisionPass(const runtime::String& out_dtype) {
   runtime::TypedPackedFunc<Function(Function, IRModule, PassContext)> pass_func =
       [=](Function f, IRModule m, PassContext pc) {
-        return Downcast<Function>(ToMixedPrecision(f));
+        return Downcast<Function>(ToMixedPrecision(f, out_dtype));
       };
   return CreateFunctionPass(pass_func, 0, "ToMixedPrecision", {});
 }
 
-TVM_REGISTER_GLOBAL("relax.transform.ToMixedPrecision").set_body_typed(ToMixedPrecision);
+TVM_REGISTER_GLOBAL("relax.transform.ToMixedPrecision").set_body_typed(ToMixedPrecisionPass);
 
 }  // namespace transform
 
