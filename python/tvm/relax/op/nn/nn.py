@@ -526,7 +526,7 @@ def layer_norm(
     return _ffi_api.layer_norm(data, gamma, beta, axis, epsilon, center, scale)
 
 
-def matmul(a: Expr, b: Expr) -> Expr:
+def matmul(a: Expr, b: Expr, out_dtype: str = "") -> Expr:
     """
     General matrix multiplication of two tensors.
 
@@ -554,13 +554,15 @@ def matmul(a: Expr, b: Expr) -> Expr:
         The left operand of the matmul.
     b : relax.Expr
         The right operand of the matmul.
+    out_dtype: str
+        The data type of the matmul result
 
     Returns
     -------
     result : relax.Expr
         The result of the matmul.
     """
-    return _ffi_api.matmul(a, b)
+    return _ffi_api.matmul(a, b, out_dtype)
 
 
 def adaptive_avg_pool2d(

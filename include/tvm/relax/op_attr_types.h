@@ -566,6 +566,15 @@ struct AdaptivePool2DAttrs : public tvm::AttrsNode<AdaptivePool2DAttrs> {
   }
 };  // struct AdaptivePool2DAttrs
 
+/*! \brief Attributes for matmul operator */
+struct MatmulAttrs : public tvm::AttrsNode<MatmulAttrs> {
+  DataType out_dtype;
+
+  TVM_DECLARE_ATTRS(MatmulAttrs, "relax.attrs.MatmulAttrs") {
+    TVM_ATTR_FIELD(out_dtype).describe("The data type of the output tensor");
+  }
+};  // struct MatmulAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_
