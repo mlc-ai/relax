@@ -53,7 +53,7 @@ inline Expr MakeConv(Expr data, Expr weight, Array<PrimExpr> strides, Array<Prim
 }
 
 /* relax.nn.conv2d */
-Optional<Expr> InferShapeConv2D(const Call& call, DiagnosticContext diag_ctx);
+Expr InferShapeConv2D(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeConv2D(const Call& call, DiagnosticContext diag_ctx);
 

@@ -125,7 +125,7 @@ Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr movi
 
 TVM_REGISTER_GLOBAL("relax.op.nn.batch_norm").set_body_typed(MakeBatchNorm);
 
-Optional<Expr> InferShapeBatchNorm(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeBatchNorm(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 5) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                        << "BatchNorm op should have 5 arguments, but only " << call->args.size()
@@ -136,17 +136,17 @@ Optional<Expr> InferShapeBatchNorm(const Call& call, DiagnosticContext diag_ctx)
   const auto* mean_shape = call->args[3]->shape().as<ShapeExprNode>();
   const auto* var_shape = call->args[4]->shape().as<ShapeExprNode>();
   if (data_shape == nullptr || mean_shape == nullptr || var_shape == nullptr) {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 
   const auto* attrs = call->attrs.as<BatchNormAttrs>();
   const auto* gamma_shape = call->args[1]->shape().as<ShapeExprNode>();
   const auto* beta_shape = call->args[2]->shape().as<ShapeExprNode>();
   if (attrs->scale && gamma_shape == nullptr) {
-    return NullOpt;
+    return RuntimeDepShape();
   }
   if (attrs->center && beta_shape == nullptr) {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 
   return Tuple(
@@ -252,7 +252,7 @@ Expr MakeDropout(Expr data, double rate) {
 
 TVM_REGISTER_GLOBAL("relax.op.nn.dropout").set_body_typed(MakeDropout);
 
-Optional<Expr> InferShapeDropout(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeDropout(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dropout op should have 1 argument");
   }
@@ -307,7 +307,7 @@ Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axis, double
 
 TVM_REGISTER_GLOBAL("relax.op.nn.layer_norm").set_body_typed(MakeLayerNorm);
 
-Optional<Expr> InferShapeLayerNorm(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeLayerNorm(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 3) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "LayerNorm op should have 3 arguments");
   }
@@ -448,7 +448,7 @@ Expr MakeMatmul(Expr a, Expr b, DataType out_dtype) {
 
 TVM_REGISTER_GLOBAL("relax.op.nn.matmul").set_body_typed(MakeMatmul);
 
-Optional<Expr> InferShapeMatmul(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeMatmul(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Matmul operator should have 2 arguments");
   }

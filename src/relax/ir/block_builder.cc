@@ -178,8 +178,16 @@ class BlockBuilderNode::ExprNormalizer : public ExprFunctor<Expr(const Expr&)> {
     }
 
     // only do shape/type inference if the Call does not have shape/type
-    if (call->shape_ && call->checked_type_.defined()) {
+    if (call->shape_.defined() && call->checked_type_.defined()) {
       return call;
+    }
+
+    // Update the type prior to updating the shape, since the shape inference may need the updated
+    // type in cases of Call for ExternFunc.
+    if (!call->checked_type_.defined()) {
+      // type inference
+      auto inferred_type = InferType(call, this->builder_->diag_ctx_, this->builder_->context_mod_);
+      UpdateType(call, inferred_type);
     }
 
     if (!call->shape_) {
@@ -191,11 +199,7 @@ class BlockBuilderNode::ExprNormalizer : public ExprFunctor<Expr(const Expr&)> {
       }
     }
 
-    if (!call->checked_type_.defined()) {
-      // type inference
-      auto inferred_type = InferType(call, this->builder_->diag_ctx_, this->builder_->context_mod_);
-      UpdateType(call, inferred_type);
-    }
+    CheckShapeTypeConsistency(call->shape_, call->checked_type_);
     return call;
   }
 
@@ -445,8 +449,30 @@ class BlockBuilderNode::ExprNormalizer : public ExprFunctor<Expr(const Expr&)> {
   // Helper function to infer the shape of a Call.
   Optional<Expr> InferShape(const Call& call, DiagnosticContext diag_ctx, IRModule ctx_mod) {
     if (call->op.as<ExternFuncNode>()) {
-      // call_packed: return RuntimeDepShape
-      return RuntimeDepShape();
+      std::function<Expr(const Type&)> f_create_type = [&f_create_type](const Type& type) -> Expr {
+        if (!type.defined() || type->IsInstance<ShapeTypeNode>() ||
+            type->IsInstance<FuncTypeNode>() || type->IsInstance<ObjectTypeNode>()) {
+          return Expr();
+        }
+        if (const auto* tuple_type = type.as<TupleTypeNode>()) {
+          if (tuple_type->fields.size() == 0) {
+            // VoidType (i.e. empty TupleType) does not have shape
+            return Expr();
+          }
+          Array<Expr> fields;
+          fields.reserve(tuple_type->fields.size());
+          for (const Type& field_type : tuple_type->fields) {
+            fields.push_back(f_create_type(field_type));
+          }
+          return Tuple(fields);
+        } else if (type->IsInstance<DynTensorTypeNode>()) {
+          return RuntimeDepShape();
+        } else {
+          LOG(FATAL) << "Unsupported relax type: " << type->GetTypeKey();
+          throw;
+        }
+      };
+      return f_create_type(call->checked_type_);
     } else if (call->op.as<OpNode>()) {
       // primitive op: look up FInferShape attribute
       Op op = Downcast<Op>(call->op);
@@ -536,67 +562,6 @@ class BlockBuilderNode::ExprNormalizer : public ExprFunctor<Expr(const Expr&)> {
     LOG(FATAL) << "ValueError: the CallNode's op has to be either an OpNode, or has "
                << " Callable (i.e., PackedFuncType or FuncType) as its checked_type_";
     throw;
-  }
-
-  // Helper function to check if the provided shape and type is consistent.
-  // Throw internal exceptions if they are not consistent.
-  void CheckShapeTypeConsistency(const Optional<ObjectRef>& opt_shape, const Type& type) {
-    if (!type.defined() || type->IsInstance<ShapeTypeNode>() || type->IsInstance<FuncTypeNode>() ||
-        type->IsInstance<ObjectTypeNode>()) {
-      ICHECK(!opt_shape.defined())
-          << "When the type of an Expr is undefined/ShapeType/FuncType/ObjectType, the shape of "
-             "this Expr is expected to be undefined. However, the actual shape is defined and is "
-          << opt_shape.value();
-    } else if (const auto* dyn_tensor_type = type.as<DynTensorTypeNode>()) {
-      // `opt_shape` should either be a relax::Expr or undefined.
-      if (opt_shape.defined()) {
-        const auto* shape = opt_shape.as<ExprNode>();
-        ICHECK(shape != nullptr) << "The shape of an Expr, if defined, is expected to be a Relax "
-                                    "Expr. However, the actual shape is not a Relax Expr and is "
-                                 << opt_shape.value()->GetTypeKey();
-        ICHECK(shape->checked_type()->IsInstance<ShapeTypeNode>())
-            << "The shape of an Expr, if defined, is expected to be a Relax Expr which has type "
-               "ShapeType. However, the actual shape has type "
-            << shape->checked_type()->GetTypeKey();
-      }
-
-      const auto* shape_expr = opt_shape.as<ShapeExprNode>();
-      if (dyn_tensor_type->IsUnknownNdim()) {
-        ICHECK(shape_expr == nullptr)
-            << "When the type of an Expr is DynTensorType with unknown ndim, the shape of the Expr "
-               "is expected not to be a ShapeExpr. However, the actual shape is ShapeExpr "
-            << GetRef<ShapeExpr>(shape_expr);
-      } else if (shape_expr != nullptr) {
-        ICHECK(dyn_tensor_type->ndim == static_cast<int>(shape_expr->values.size()))
-            << "When the type of an Expr is DynTensorType with known ndim and the shape of that "
-               "Expr is a ShapeExpr, the ShapeExpr should have as many values as the ndim "
-               "indicates. However, the actual Expr type has ndim "
-            << dyn_tensor_type->ndim << " while the actual Expr shape is "
-            << GetRef<ShapeExpr>(shape_expr) << ", which has length " << shape_expr->values.size();
-      }
-    } else if (const auto* tuple_type = type.as<TupleTypeNode>()) {
-      const auto* tuple_shape = opt_shape.as<TupleNode>();
-      if (tuple_shape == nullptr) {
-        ICHECK(tuple_type->fields.size() == 0)
-            << "When the type of an Expr is TupleType and the shape of that Expr is not a Tuple, "
-               "it means that the type should be a VoidType, which is represented as an empty "
-               "TupleType. However, here the shape is not a tuple while the type has "
-            << tuple_type->fields.size() << " field(s).";
-      } else {
-        ICHECK_EQ(tuple_shape->fields.size(), tuple_type->fields.size())
-            << "When the type of an Expr is TupleType and the shape of that Expr is a Tuple, the "
-               "two should have the same number of fields. However, the type has "
-            << tuple_type->fields.size() << " field(s) while the shape has "
-            << tuple_shape->fields.size() << " field(s)";
-        int n_field = tuple_shape->fields.size();
-        // Recursively check the consistency.
-        for (int i = 0; i < n_field; ++i) {
-          CheckShapeTypeConsistency(tuple_shape->fields[i], tuple_type->fields[i]);
-        }
-      }
-    } else {
-      LOG(FATAL) << "Unsupported relax type: " << type->GetTypeKey();
-    }
   }
 
   // Helper function to check if the provided shape and type is consistent.

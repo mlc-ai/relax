@@ -33,7 +33,7 @@ namespace relax {
 
 TVM_REGISTER_NODE_TYPE(ReduceAttrs);
 
-Optional<Expr> InferShapeReduction(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeReduction(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Reduction op should have 1 argument1");
   }

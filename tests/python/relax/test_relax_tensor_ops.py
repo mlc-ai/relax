@@ -73,7 +73,7 @@ def test_unary_ops(op_name: str):
     relax_nn = relax.nn
     relax_op = getattr(relax_nn, op_name)
     Z = relax_op(X)
-    f = relax.Function([X], Z, ret_type=tensor_type)
+    f = relax.Function([X], Z, ret_type=tensor_type, ret_shape=relax.RuntimeDepShape())
     out = relax_build_and_run(f, inputs)
 
     tvm.testing.assert_allclose(out.numpy(), expected)
@@ -101,7 +101,7 @@ def test_conv2d():
     D = relax.Var("data", data_shape, tensor_type)
     W = relax.Var("weight", weight_shape, tensor_type)
     Z = relax.nn.conv2d(D, W, kernel_size=kernel_size)
-    f = relax.Function([D, W], Z, ret_type=tensor_type)
+    f = relax.Function([D, W], Z, ret_type=tensor_type, ret_shape=relax.RuntimeDepShape())
     out = relax_build_and_run(f, inputs)
 
     tvm.testing.assert_allclose(out.numpy(), expected)
@@ -151,7 +151,7 @@ def test_dense():
     X = relax.Var("x", X_shape, tensor_type)
     Y = relax.Var("y", Y_shape, tensor_type)
     Z = relax.nn.dense(X, Y)
-    f = relax.Function([X, Y], Z, ret_type=tensor_type)
+    f = relax.Function([X, Y], Z, ret_type=tensor_type, ret_shape=relax.RuntimeDepShape())
     out = relax_build_and_run(f, inputs)
 
     tvm.testing.assert_allclose(out.numpy(), expected)
@@ -177,7 +177,7 @@ def test_max_pool2d():
 
     X = relax.Var("x", X_shape, tensor_type)
     Z = relax.nn.max_pool2d(X, pool_size=pool_size)
-    f = relax.Function([X], Z, ret_type=tensor_type)
+    f = relax.Function([X], Z, ret_type=tensor_type, ret_shape=relax.RuntimeDepShape())
     out = relax_build_and_run(f, inputs)
 
     tvm.testing.assert_allclose(out.numpy(), expected)

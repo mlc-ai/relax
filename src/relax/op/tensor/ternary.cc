@@ -93,9 +93,6 @@ Expr InferShapeEwiseFMA(const Call& call, DiagnosticContext diag_ctx) {
     size_t ndim1 = s1->values.size();
     size_t ndim2 = s2->values.size();
     if (ndim0 != ndim1 || ndim1 != ndim2) {
-      LOG(INFO) << ndim0;
-      LOG(INFO) << ndim1;
-      LOG(INFO) << ndim2;
       diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                          << "The 3 arguments of EwiseFMA must have the same number of dimensions");
     }
