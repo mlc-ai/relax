@@ -30,7 +30,7 @@
 namespace tvm {
 namespace relax {
 
-Optional<Expr> InferShapeFlatten(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeFlatten(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Flatten op should have 1 argument");
   }
@@ -43,7 +43,7 @@ Optional<Expr> InferShapeFlatten(const Call& call, DiagnosticContext diag_ctx) {
     }
     return ShapeExpr({s->values[0], output_dim});
   } else {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 }
 
@@ -60,7 +60,7 @@ Type InferTypeFlatten(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(/*ndim=*/2, input_ty->dtype);
 }
 
-Optional<Expr> InferShapeDense(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeDense(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Dense op should have 2 arguments");
   }
@@ -73,8 +73,6 @@ Optional<Expr> InferShapeDense(const Call& call, DiagnosticContext diag_ctx) {
     size_t ndim0 = s0->values.size();
     size_t ndim1 = s1->values.size();
     if (ndim0 != 2 || ndim1 != 2) {
-      LOG(INFO) << ndim0;
-      LOG(INFO) << ndim1;
       diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                          << "The 2 arguments of Dense must be 2D Tensors");
     }
@@ -84,7 +82,7 @@ Optional<Expr> InferShapeDense(const Call& call, DiagnosticContext diag_ctx) {
     }
     return ShapeExpr(Array<PrimExpr>{s0->values[0], s1->values[0]});
   } else {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 }
 
@@ -121,22 +119,22 @@ Type InferTypeDense(const Call& call, DiagnosticContext diag_ctx) {
 }
 
 /* relax.nn.batch_norm */
-Optional<Expr> InferShapeBatchNorm(const Call& call, DiagnosticContext diag_ctx);
+Expr InferShapeBatchNorm(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeBatchNorm(const Call& call, DiagnosticContext diag_ctx);
 
 /* relax.nn.dropout */
-Optional<Expr> InferShapeDropout(const Call& call, DiagnosticContext diag_ctx);
+Expr InferShapeDropout(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeDropout(const Call& call, DiagnosticContext diag_ctx);
 
 /* relax.nn.layer_norm */
-Optional<Expr> InferShapeLayerNorm(const Call& call, DiagnosticContext diag_ctx);
+Expr InferShapeLayerNorm(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeLayerNorm(const Call& call, DiagnosticContext diag_ctx);
 
 /* relax.nn.matmul */
-Optional<Expr> InferShapeMatmul(const Call& call, DiagnosticContext diag_ctx);
+Expr InferShapeMatmul(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeMatmul(const Call& call, DiagnosticContext diag_ctx);
 

@@ -49,7 +49,7 @@ Expr MakeTranspose(Expr data, Optional<Array<Integer>> axes) {
 
 TVM_REGISTER_GLOBAL("relax.op.transpose").set_body_typed(MakeTranspose);
 
-Optional<Expr> InferShapeTranspose(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeTranspose(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Transpose op should have 1 argument");
   }
@@ -57,7 +57,7 @@ Optional<Expr> InferShapeTranspose(const Call& call, DiagnosticContext diag_ctx)
   const auto* shape = call->args[0]->shape().as<ShapeExprNode>();
   const auto* attrs = call->attrs.as<TransposeAttrs>();
   if (shape == nullptr) {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 
   int ndim = shape->values.size();
@@ -125,7 +125,7 @@ Expr MakeReshape(Expr data, Expr new_shape) {
 
 TVM_REGISTER_GLOBAL("relax.op.reshape").set_body_typed(MakeReshape);
 
-Optional<Expr> InferShapeReshape(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeReshape(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Reshape op should have 1 argument");
   }
@@ -230,7 +230,7 @@ Expr MakeExpandDims(Expr data, Array<Integer> axis) {
 
 TVM_REGISTER_GLOBAL("relax.op.expand_dims").set_body_typed(MakeExpandDims);
 
-Optional<Expr> InferShapeExpandDims(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeExpandDims(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "ExpandDims op should have 1 argument");
   }
@@ -238,7 +238,7 @@ Optional<Expr> InferShapeExpandDims(const Call& call, DiagnosticContext diag_ctx
   const auto* shape = call->args[0]->shape().as<ShapeExprNode>();
   const auto* attrs = call->attrs.as<ExpandDimsAttrs>();
   if (shape == nullptr) {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 
   int ndim = shape->values.size();
@@ -319,7 +319,7 @@ Expr MakeSqueeze(Expr data, Optional<Array<Integer>> axis) {
 
 TVM_REGISTER_GLOBAL("relax.op.squeeze").set_body_typed(MakeSqueeze);
 
-Optional<Expr> InferShapeSqueeze(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeSqueeze(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Squeeze op should have 1 argument");
   }
@@ -428,7 +428,7 @@ Expr MakeConcatenate(Expr data, Optional<Integer> axis) {
 
 TVM_REGISTER_GLOBAL("relax.op.concatenate").set_body_typed(MakeConcatenate);
 
-Optional<Expr> InferShapeConcatenate(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeConcatenate(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Concatenate op should have 1 argument");
   }
@@ -634,7 +634,7 @@ Expr MakeCumsum(Expr data, Optional<Integer> axis) {
 
 TVM_REGISTER_GLOBAL("relax.op.cumsum").set_body_typed(MakeCumsum);
 
-Optional<Expr> InferShapeCumsum(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeCumsum(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Cumsum op should have 1 argument");
   }
@@ -698,7 +698,7 @@ Expr MakeTrilu(Expr data, int k, bool is_upper) {
 
 TVM_REGISTER_GLOBAL("relax.op.trilu").set_body_typed(MakeTrilu);
 
-Optional<Expr> InferShapeTrilu(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeTrilu(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Trilu op should have 1 argument");
   }
@@ -742,7 +742,7 @@ Expr MakeCast(Expr data, DataType dtype) {
 
 TVM_REGISTER_GLOBAL("relax.op.cast").set_body_typed(MakeCast);
 
-Optional<Expr> InferShapeCast(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeCast(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Cast op should have 1 argument");
   }
@@ -785,7 +785,7 @@ Expr MakeWrapParam(Expr data, DataType dtype) {
 
 TVM_REGISTER_GLOBAL("relax.op.wrap_param").set_body_typed(MakeWrapParam);
 
-Optional<Expr> InferShapeWrapParam(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeWrapParam(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "WrapParam op should have 1 argument");
   }
@@ -831,7 +831,7 @@ Expr MakeTake(Expr data, Expr indices, Optional<Integer> axis, int batch_dims, S
 
 TVM_REGISTER_GLOBAL("relax.op.take").set_body_typed(MakeTake);
 
-Optional<Expr> InferShapeTake(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeTake(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Take op should have 2 arguments");
   }
@@ -927,7 +927,7 @@ Expr MakeFull(Expr fill_value, Expr shape, DataType dtype) {
 
 TVM_REGISTER_GLOBAL("relax.op.full").set_body_typed(MakeFull);
 
-Optional<Expr> InferShapeFull(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeFull(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Full op should have 2 arguments");
   }
@@ -1006,7 +1006,7 @@ Expr MakeSplit(Expr data, ObjectRef indices_or_sections, int axis) {
 
 TVM_REGISTER_GLOBAL("relax.op.split").set_body_typed(MakeSplit);
 
-Optional<Expr> InferShapeSplit(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeSplit(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Split op should have 1 argument");
   }
@@ -1126,7 +1126,7 @@ Expr MakeBroadcastTo(Expr data, Expr shape) {
 
 TVM_REGISTER_GLOBAL("relax.op.broadcast_to").set_body_typed(MakeBroadcastTo);
 
-Optional<Expr> InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "BroadcastTo op should have 2 arguments");
   }
@@ -1227,7 +1227,7 @@ Expr MakeStridedSlice(Expr data,                          //
 
 TVM_REGISTER_GLOBAL("relax.op.strided_slice").set_body_typed(MakeStridedSlice);
 
-Optional<Expr> InferShapeStridedSlice(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeStridedSlice(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "StridedSlice op should have 1 argument");
   }

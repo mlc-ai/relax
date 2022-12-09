@@ -42,6 +42,7 @@ def test_simple():
         fused_add_exp_squeeze = bb.get().get_global_var("fused_add_exp_squeeze")
 
         x = relax.Var("x", [10, 20], relax.DynTensorType(2, "float32"))
+        p0 = relax.Var("p0", (), relax.DynTensorType(0, "float32"))
         with bb.function("main", [x, p0]):
             with bb.dataflow():
                 gv = bb.emit_output(relax.Call(fused_add_exp_squeeze, [x, p0]))
@@ -448,6 +449,7 @@ def test_fuse_tuple_output():
         fused_add_exp = bb.get().get_global_var("fused_add_exp")
 
         x = relax.Var("x", [10, 20], relax.DynTensorType(2, "float32"))
+        p0 = relax.Var("p0", (), relax.DynTensorType(0, "float32"))
         with bb.function("main", [x, p0]):
             with bb.dataflow():
                 gv = bb.emit_output(relax.Call(fused_add_exp, [x, p0]))

@@ -60,7 +60,7 @@ with the layer input to produce a tensor of outputs.
     .set_attr<FInferShape>("FInferShape", InferShapeConv2D)
     .set_attr<FInferType>("FInferType", InferTypeConv2D);
 
-Optional<Expr> InferShapeConv2D(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeConv2D(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Conv2d op should have 2 arguments");
   }
@@ -93,7 +93,7 @@ Optional<Expr> InferShapeConv2D(const Call& call, DiagnosticContext diag_ctx) {
                            1);
     return ShapeExpr(Array<PrimExpr>{output_shape.begin(), output_shape.end()});
   } else {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 }
 

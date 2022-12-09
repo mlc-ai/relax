@@ -30,7 +30,7 @@ namespace tvm {
 namespace relax {
 
 /* relax.resize2d */
-Optional<Expr> InferShapeResize2d(const Call& call, DiagnosticContext diag_ctx);
+Expr InferShapeResize2d(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeResize2d(const Call& call, DiagnosticContext diag_ctx);
 

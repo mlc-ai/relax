@@ -33,7 +33,7 @@ namespace tvm {
 namespace relax {
 
 /* relax reduction operators */
-Optional<Expr> InferShapeReduction(const Call& call, DiagnosticContext diag_ctx);
+Expr InferShapeReduction(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeReduction(const Call& call, DiagnosticContext diag_ctx);
 

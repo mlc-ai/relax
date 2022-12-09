@@ -57,7 +57,7 @@ Expr MakeResize2D(Expr data, Array<PrimExpr> size, Array<FloatImm> roi, String l
 
 TVM_REGISTER_GLOBAL("relax.op.resize2d").set_body_typed(MakeResize2D);
 
-Optional<Expr> InferShapeResize2d(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeResize2d(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Resize2d op should have 1 argument");
   }

@@ -76,6 +76,37 @@ Array<te::Tensor> Pool2DCompute(const Attrs& attrs, const Array<te::Tensor>& inp
   }
 }
 
+Expr InferShapeMaxPool2d(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "MaxPool2d op should have 1 argument");
+  }
+  auto attrs = call->attrs.as<MaxPool2DAttrs>();
+  Expr shape = call->args[0]->shape();
+  auto* s = shape.as<ShapeExprNode>();
+  if (s) {
+    Array<PrimExpr> output_shape;
+    for (int i = 0; i < static_cast<int>(s->values.size()); i++) {
+      if (i == static_cast<int>(s->values.size()) - 2) {
+        output_shape.push_back((s->values[i] + 2 * attrs->padding[0] -
+                                attrs->dilation[0] * (attrs->pool_size[0] - 1) - 1) /
+                                   attrs->strides[0] +
+                               1);
+      } else if (i == static_cast<int>(s->values.size()) - 1) {
+        output_shape.push_back((s->values[i] + 2 * attrs->padding[1] -
+                                attrs->dilation[1] * (attrs->pool_size[1] - 1) - 1) /
+                                   attrs->strides[1] +
+                               1);
+      } else {
+        output_shape.push_back(s->values[i]);
+      }
+    }
+    return ShapeExpr(Array<PrimExpr>{output_shape.begin(), output_shape.end()});
+  } else {
+    return RuntimeDepShape();
+  }
+}
+
+
 RELAX_REGISTER_OP("relax.nn.max_pool2d")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
@@ -123,7 +154,7 @@ Expr MakeAdaptiveAvgPool2D(Expr data, Optional<Array<PrimExpr>> output_size, Str
 
 TVM_REGISTER_GLOBAL("relax.op.nn.adaptive_avg_pool2d").set_body_typed(MakeAdaptiveAvgPool2D);
 
-Optional<Expr> InferShapeAdaptiveAvgPool2D(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeAdaptiveAvgPool2D(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                        << "AdaptiveAvgPool2d op should have 1 argument");
