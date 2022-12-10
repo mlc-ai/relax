@@ -487,7 +487,9 @@ class SplitMutator : public ExprMutator {
       }
       ShapeExpr shape1(func1->buffer_map[func1->params.back()]->shape);
       GlobalVar gv1 = builder_->AddFunction(func1, "cutlass_primfunc");
-      Call call1(call_tir_op_, {gv1, Tuple(args1), shape1}, call->attrs, call->type_args);
+      tir::Buffer intermediate_buffer = func1->buffer_map.at(func1->params.back());
+      DataType dtype = intermediate_buffer->dtype;
+      Call call1(call_tir_op_, {gv1, Tuple(args1), shape1}, call->attrs, {DynTensorType(intermediate_buffer->shape.size(), dtype)});
       Var call_var1 = builder_->Emit(call1);
       // emit the second call to the rest of the function
       Array<Expr> args2;

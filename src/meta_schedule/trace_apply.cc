@@ -201,7 +201,6 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
       // violates the assumption made by TranslateAddOutputRVs: old_outputs.size() ==
       // new_outputs.size(). We workaround this problem by assuming that the prefix of the "new"
       // outputs matches with the "old" outputs, and truncating the new outputs accordingly.
-      ICHECK(inst->outputs.size() <= outputs.size());
       Array<ObjectRef> new_outputs;
       for (const auto& output : outputs) {
         std::string block_name = sch->Get(Downcast<BlockRV>(output))->name_hint;
@@ -209,8 +208,12 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
           new_outputs.push_back(output);
         }
       }
-      ICHECK(new_outputs.size() == inst->outputs.size());
-      TranslateAddOutputRVs(inst->outputs, new_outputs, &rv_map);
+      ICHECK(new_outputs.size() <= inst->outputs.size());
+      for (size_t i = new_outputs.size(); i < inst->outputs.size();i++){
+        foreign_blocks.insert(Downcast<BlockRV>(inst->outputs[i]));
+      }
+        TranslateAddOutputRVs({inst->outputs.begin(), inst->outputs.begin() + new_outputs.size()},
+                              new_outputs, &rv_map);
     } else {
       TranslateAddOutputRVs(inst->outputs, outputs, &rv_map);
     }
