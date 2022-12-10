@@ -97,7 +97,7 @@ int FindDecomposePoint(const StmtSRef& block_sref) {
       return i;
     }
   }
-  return -1;
+  return n-1;
 }
 
 }  // namespace tir
