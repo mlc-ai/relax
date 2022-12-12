@@ -113,6 +113,7 @@ def enumerate_conv2d_operators(
     tile_descriptions,
     data_type,
     alignment_constraints,
+    layout_constraints,
     swizzling_functor=SwizzlingFunctor.Identity4,
 ):
     """Exhaustively instantiate all kernels from a given configuration."""
@@ -269,6 +270,9 @@ class CutlassConv2DProfiler:
             out_dtype,
             data_dtype,
             weight_dtype,
+            "NHWC",
+            "NHWC",
+            "NHWC",
             partial(enumerate_conv2d_operators, conv_kind, stride_support, split_k_slices),
             lambda align: all([dim % align == 0 for dim in [IC, OC]]),
             use_3xtf32,

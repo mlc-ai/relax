@@ -10,14 +10,6 @@ from tvm.contrib.cutlass.gen_gemm import CutlassGemmProfiler
 # "cutlass.dense_bias_gelu_fp16": (EpilogueFunctor.LinearCombinationGelu, False),
 # "cutlass.dense_bias_gelu_fp32": (EpilogueFunctor.LinearCombinationGelu, False),
 # "cutlass.batch_matmul": (EpilogueFunctor.LinearCombination, False),
-# "cutlass.conv2d_bias_hardswish": (EpilogueFunctor.LinearCombinationHardSwish, False),
-# "cutlass.conv2d_bias_silu": (EpilogueFunctor.LinearCombinationSilu, False),
-# "cutlass.conv2d_bias_sigmoid": (EpilogueFunctor.LinearCombinationSigmoid, False),
-# "cutlass.conv2d_bias_relu": (EpilogueFunctor.LinearCombinationRelu, True),
-# "cutlass.conv2d_bias": (EpilogueFunctor.LinearCombinationBias, True),
-# "cutlass.conv2d": (EpilogueFunctor.LinearCombination, False),
-# "cutlass.conv2d_transpose": (EpilogueFunctor.LinearCombination, False),
-# "cutlass.conv2d_backward_weight": (EpilogueFunctor.LinearCombination, False),
 
 
 @click.command()
@@ -32,9 +24,9 @@ from tvm.contrib.cutlass.gen_gemm import CutlassGemmProfiler
 @click.option("--layoutb", default="row", help="Layout of B")
 @click.option("--layoutc", default="row", help="Layout of C")
 @click.option("--op_type", default="cutlass.dense", help="Epilogue pattern")
-@click.option("--tmpdir", default="/tmp", help="Temp directory")
-def main(m, n, k, sm, typea, typeb, typec, layouta, layoutb, layoutc, op_type, tmpdir):
-    cutlass_profiler = CutlassGemmProfiler(sm, _get_cutlass_path(), tmpdir)
+@click.option("--bin_dir", default="./bin", help="Directory to store generated binaries")
+def main(m, n, k, sm, typea, typeb, typec, layouta, layoutb, layoutc, op_type, bin_dir):
+    cutlass_profiler = CutlassGemmProfiler(sm, _get_cutlass_path(), bin_dir)
     name, cutlass_op_def = select_gemm_kernel(
         cutlass_profiler,
         op_type,

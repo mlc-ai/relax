@@ -232,9 +232,9 @@ class FuncMatcher : public StmtExprVisitor {
   // Find an op that matches this block
   bool BlockPatternMatch(const For& top) {
     auto f = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern_list");
-    auto g = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern");
+    auto g = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern_func");
     CHECK(f != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern_list";
-    CHECK(g != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern";
+    CHECK(g != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern_func";
     Array<runtime::String> pattern_list = (*f)();
 
     for (const runtime::String& pattern : pattern_list) {

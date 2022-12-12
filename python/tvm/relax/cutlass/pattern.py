@@ -107,8 +107,8 @@ def get_op_pattern_list():
     return OP_PATTERN_LIST
 
 
-@register_func("tvm.relax.cutlass.get_op_pattern")
-def get_op_pattern(name):
+@register_func("tvm.relax.cutlass.get_op_pattern_func")
+def get_op_pattern_func(name):
     return OP_PATTERN_GENERATOR_LIST[name]()
 
 

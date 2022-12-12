@@ -18,4 +18,5 @@
 """Relax Cutlass Integraton."""
 
 from .pattern import *
-from .profiler import *
+from .gemm_profiler import *
+from .conv_profiler import *
