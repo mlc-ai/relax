@@ -1000,7 +1000,7 @@ Expr MakeOnes(Expr shape, DataType dtype) {
 
 TVM_REGISTER_GLOBAL("relax.op.ones").set_body_typed(MakeOnes);
 
-Optional<Expr> InferShapeOnesZeros(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeOnesZeros(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                        << "Ones or zeros op should have 1 argument");
@@ -1065,7 +1065,7 @@ Expr MakeFullLike(Expr data, Expr fill_value) {
 
 TVM_REGISTER_GLOBAL("relax.op.full_like").set_body_typed(MakeFullLike);
 
-Optional<Expr> InferShapeFullLike(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeFullLike(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "full_like op should have 2 arguments");
   }
@@ -1083,7 +1083,7 @@ Optional<Expr> InferShapeFullLike(const Call& call, DiagnosticContext diag_ctx) 
   if (s) {
     return ShapeExpr(s->values);
   } else {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 }
 
@@ -1136,7 +1136,7 @@ Expr MakeCollapseSumLike(Expr data, Expr collapse_target) {
 
 TVM_REGISTER_GLOBAL("relax.op.collapse_sum_like").set_body_typed(MakeCollapseSumLike);
 
-Optional<Expr> InferShapeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "collapse_sum_like op should have 2 arguments");
   }
@@ -1146,13 +1146,13 @@ Optional<Expr> InferShapeCollapseSumLike(const Call& call, DiagnosticContext dia
   if (s) {
     return ShapeExpr(s->values);
   } else {
-    return NullOpt;
+    return RuntimeDepShape();
   }
 }
 
 Type InferTypeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "full_like op should have 2 arguments");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "collapse_sum_like op should have 2 arguments");
   }
 
   auto* input_ty = call->args[1]->checked_type().as<DynTensorTypeNode>();
@@ -1181,9 +1181,9 @@ Expr MakeCollapseSumTo(Expr data, Expr shape) {
 TVM_REGISTER_GLOBAL("relax.op.collapse_sum_to").set_body_typed(MakeCollapseSumTo);
 
 
-Optional<Expr> InferShapeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx) {
+Expr InferShapeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Full op should have 2 arguments");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "collapse_sum_to op should have 2 arguments");
   }
 
   return call->args[1];
@@ -1191,7 +1191,7 @@ Optional<Expr> InferShapeCollapseSumTo(const Call& call, DiagnosticContext diag_
 
 Type InferTypeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Full op should have 2 arguments");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "collapse_sum_to op should have 2 arguments");
   }
 
   const auto* orig_type = call->args[0]->checked_type().as<DynTensorTypeNode>();

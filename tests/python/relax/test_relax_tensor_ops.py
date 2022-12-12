@@ -22,6 +22,7 @@ import tvm
 from tvm import relay, relax
 from tvm.error import DiagnosticError
 from tvm.relax.testing import transform
+from tvm.relax.transform import OperatorLegalizer
 from tvm.script import relax as R
 import tvm.testing
 
@@ -47,6 +48,13 @@ def relax_build_and_run(f, inputs):
         ex = relax.vm.build(mod, target)
         vm = relax.VirtualMachine(ex, dev)
         return vm["default"](*inputs)
+
+
+def run_relax_module(module, *input):
+    mod = OperatorLegalizer(module).transform()
+    ex = relax.vm.build(mod, tvm.target.Target("llvm"))
+    vm = relax.VirtualMachine(ex, tvm.cpu())
+    return vm["main"](*input)
 
 
 @pytest.mark.parametrize("op_name", ["relu", "softmax"])
@@ -361,6 +369,70 @@ def test_cos():
 
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_log():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.log(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.log(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+    data_numpy = np.random.randint(1, 16, (2, 3)).astype(np.float32)
+    expected_output = np.log(data_numpy)
+    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy))
+    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
+
+
+def test_tanh():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.tanh(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.tanh(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+    data_numpy = np.random.randint(1, 16, (2, 3)).astype(np.float32)
+    expected_output = np.tanh(data_numpy)
+    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy))
+    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
+
+
+
+def test_negative():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.negative(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.negative(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+    data_numpy = np.random.randint(1, 16, (2, 3)).astype(np.float32)
+    expected_output = np.negative(data_numpy)
+    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy))
+    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
 
 
 def test_floor_divide():
