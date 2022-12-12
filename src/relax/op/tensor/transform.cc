@@ -1107,7 +1107,7 @@ Type InferTypeFullLike(const Call& call, DiagnosticContext diag_ctx) {
   }
   if (!fill_value_type->IsUnknownNdim() && fill_value_type->ndim != 0) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "Full operator expects the input fill value to be a scalar tensor "
+                       << "Full like operator expects the input fill value to be a scalar tensor "
                           "(0-rank tensor). However, the input fill value has rank "
                        << fill_value_type->ndim);
   }

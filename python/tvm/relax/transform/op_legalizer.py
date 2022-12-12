@@ -18,7 +18,7 @@ from typing import List
 import math
 
 import tvm
-from tvm import ir, te, topi
+from tvm import ir, te, topi, relax
 from tvm.ir import Attrs
 from tvm.ir.module import IRModule
 from tvm.tir.generic import cast
@@ -167,7 +167,7 @@ def _zeros(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr)
         topi.full,
         args[0],
         attrs.dtype if attrs.dtype is not None else args[0].checked_type.dtype,
-        0.0,
+        relax.const(0.0),
     )
 
 
@@ -176,7 +176,7 @@ def _ones(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
         topi.full,
         args[0],
         attrs.dtype if attrs.dtype is not None else args[0].checked_type.dtype,
-        1.0,
+        relax.const(1.0),
     )
 
 
@@ -185,11 +185,11 @@ def _full_like(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
 
 
 def _ones_like(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
-    return bb.call_te(topi.full_like, args[0], 1.0)
+    return bb.call_te(topi.full_like, args[0], relax.const(1.0))
 
 
 def _zeros_like(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
-    return bb.call_te(topi.full_like, args[0], 0.0)
+    return bb.call_te(topi.full_like, args[0], relax.const(0.0))
 
 
 def _collapse_sum_like(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):

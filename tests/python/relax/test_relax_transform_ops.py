@@ -413,17 +413,18 @@ def test_full():
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-test_full()
+
 def test_full_like():
     @R.function
-    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
-        gv: R.Tensor((2, 3), "float32") = R.full_like(x)
+    def expected(x: R.Tensor((2, 3), "float32"), y: R.Tensor((), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.full_like(x, y)
         return gv
 
     x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [], relax.DynTensorType(ndim=0, dtype="float32"))
     bb = relax.BlockBuilder()
-    with bb.function("main", [x]):
-        gv = bb.emit(relax.op.full_like(x))
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.full_like(x, y))
         bb.emit_func_output(gv)
 
     expected = expected.with_attr("global_symbol", "main")
@@ -479,209 +480,196 @@ def test_zeros_like():
 
 
 def test_ones():
-    # here the function does not need the argument
-    # but now relax does not support no argument functions
     @R.function
-    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+    def expected() -> R.Tensor(None, "float32", ndim=2):
         gv: R.Tensor((2, 3), "float32") = R.ones((2, 3))
         return gv
 
-    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
     bb = relax.BlockBuilder()
-    with bb.function("main", [x]):
+    with bb.function("main", []):
         gv = bb.emit(relax.op.ones((2, 3)))
         bb.emit_func_output(gv)
 
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-    data_numpy = np.zeros((2, 3)).astype(np.float32)
     expected_output = np.ones((2, 3))
-    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy))
+    result = run_relax_module(bb.get())
     np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
-# test_ones()
 
 
-# def test_ones():
-#     expected_output = np.ones((16, 16))
-#     result = run_relax(R.ones, extra_op_args=[(16, 16)])
-#     np.testing.assert_array_equal(expected_output, result.numpy())
+def test_zeros():
+    @R.function
+    def expected() -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.zeros((2, 3))
+        return gv
 
-# def test_full_like():
-#     @R.function
-#     def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
-#         gv: R.Tensor((2, 3), "float32") = R.full_like(x)
-#         return gv
+    bb = relax.BlockBuilder()
+    with bb.function("main", []):
+        gv = bb.emit(relax.op.zeros((2, 3)))
+        bb.emit_func_output(gv)
 
-#     x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
-#     bb = relax.BlockBuilder()
-#     with bb.function("main", [x]):
-#         gv = bb.emit(relax.op.full_like(x))
-#         bb.emit_func_output(gv)
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-#     expected = expected.with_attr("global_symbol", "main")
-#     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
-
-#     data_numpy = np.zeros((16, 16)).astype(np.float32)
-#     fill_value = np.array(3).astype(np.float32)
-#     expected_output = np.full_like(data_numpy, fill_value)
-#     result = run_relax_module(bb.get(), tvm.nd.array(data_numpy), tvm.nd.array(fill_value))
-#     np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
-
-# def test_zeros():
-#     expected_output = np.zeros((16, 16))
-#     result = run_relax(R.zeros, extra_op_args=[(16, 16)])
-#     np.testing.assert_array_equal(expected_output, result.numpy())
-# def test_full_like():
-#     @R.function
-#     def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
-#         gv: R.Tensor((2, 3), "float32") = R.full_like(x)
-#         return gv
-
-#     x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
-#     bb = relax.BlockBuilder()
-#     with bb.function("main", [x]):
-#         gv = bb.emit(relax.op.full_like(x))
-#         bb.emit_func_output(gv)
-
-#     expected = expected.with_attr("global_symbol", "main")
-#     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
-
-#     data_numpy = np.zeros((16, 16)).astype(np.float32)
-#     fill_value = np.array(3).astype(np.float32)
-#     expected_output = np.full_like(data_numpy, fill_value)
-#     result = run_relax_module(bb.get(), tvm.nd.array(data_numpy), tvm.nd.array(fill_value))
-#     np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
+    expected_output = np.zeros((2, 3))
+    result = run_relax_module(bb.get())
+    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
 
 
-# def test_collapse_sum_like():
-#     data1_numpy = np.random.randint(0, 16, (3, 5, 7)).astype(np.float32)
-#     data2_numpy = np.zeros((1, 1, 7)).astype(np.float32)
-#     expected_output1 = np.sum(data1_numpy, (0, 1), keepdims=True)
-#     result = run_relax(R.collapse_sum_like, data1_numpy, data2_numpy)
-#     np.testing.assert_array_equal(expected_output1, result.numpy())
+def test_collapse_sum_like():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32"), y: R.Tensor((1, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((1, 3), "float32") = R.collapse_sum_like(x, y)
+        return gv
 
-#     data3_numpy = np.zeros((7,)).astype(np.float32)
-#     expected_output2 = np.sum(data1_numpy, (0, 1), keepdims=False)
-#     result = run_relax(R.collapse_sum_like, data1_numpy, data3_numpy)
-#     np.testing.assert_array_equal(expected_output2, result.numpy())
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [1, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    z = relax.Var("z", [3], relax.DynTensorType(ndim=1, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.collapse_sum_like(x, y))
+        bb.emit_func_output(gv)
 
-# def test_full_like():
-#     @R.function
-#     def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
-#         gv: R.Tensor((2, 3), "float32") = R.full_like(x)
-#         return gv
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-#     x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
-#     bb = relax.BlockBuilder()
-#     with bb.function("main", [x]):
-#         gv = bb.emit(relax.op.full_like(x))
-#         bb.emit_func_output(gv)
+    data1_numpy = np.random.randint(0, 16, (2, 3)).astype(np.float32)
+    data2_numpy = np.zeros((1, 3)).astype(np.float32)
+    data3_numpy = np.zeros((3,)).astype(np.float32)
 
-#     expected = expected.with_attr("global_symbol", "main")
-#     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+    # test for keepdims=True
+    expected_output1 = np.sum(data1_numpy, 0, keepdims=True)
+    result = run_relax_module(bb.get(), tvm.nd.array(data1_numpy), tvm.nd.array(data2_numpy))
+    np.testing.assert_allclose(expected_output1, result.numpy(), rtol=1e-6, atol=1e-6)
 
-#     data_numpy = np.zeros((16, 16)).astype(np.float32)
-#     fill_value = np.array(3).astype(np.float32)
-#     expected_output = np.full_like(data_numpy, fill_value)
-#     result = run_relax_module(bb.get(), tvm.nd.array(data_numpy), tvm.nd.array(fill_value))
-#     np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, z]):
+        gv = bb.emit(relax.op.collapse_sum_like(x, z))
+        bb.emit_func_output(gv)
 
-# def test_collapse_sum_to():
-#     data_numpy = np.random.randint(0, 16, (3, 5, 7)).astype(np.float32)
-#     expected_output1 = np.sum(data_numpy, (0, 1), keepdims=True)
-#     result = run_relax(R.collapse_sum_to, data_numpy, extra_op_args=[(1, 1, 7)])
-#     np.testing.assert_array_equal(expected_output1, result.numpy())
-
-#     expected_output2 = np.sum(data_numpy, (0, 1), keepdims=False)
-#     result = run_relax(R.collapse_sum_to, data_numpy, extra_op_args=[(7,)])
-#     np.testing.assert_array_equal(expected_output2, result.numpy())
+    # test for keepdims=False
+    expected_output2 = np.sum(data1_numpy, 0, keepdims=False)
+    result = run_relax_module(bb.get(), tvm.nd.array(data1_numpy), tvm.nd.array(data3_numpy))
+    np.testing.assert_allclose(expected_output2, result.numpy(), rtol=1e-6, atol=1e-6)
 
 
+def test_collapse_sum_to():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((1, 3), "float32") = R.collapse_sum_to(x, (1, 3))
+        return gv
 
-# def test_split_by_indices():
-#     @R.function
-#     def expected(x: R.Tensor((2, 10, 4), "float32")):
-#         gv = R.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1)
-#         return gv
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.collapse_sum_to(x, (1, 3)))
+        bb.emit_func_output(gv)
 
-#     x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
-#     bb = relax.BlockBuilder()
-#     with bb.function("main", [x]):
-#         gv = bb.emit(
-#             relax.op.transform.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1)
-#         )
-#         bb.emit_func_output(gv)
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-#     expected = expected.with_attr("global_symbol", "main")
-#     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+    data1_numpy = np.random.randint(0, 16, (2, 3)).astype(np.float32)
 
+    # test for keepdims=True
+    expected_output1 = np.sum(data1_numpy, 0, keepdims=True)
+    result = run_relax_module(bb.get(), tvm.nd.array(data1_numpy))
+    np.testing.assert_allclose(expected_output1, result.numpy(), rtol=1e-6, atol=1e-6)
 
-# def test_split_by_n_section():
-#     @R.function
-#     def expected(x: R.Tensor((2, 10, 4), "float32")):
-#         gv = R.split(x, indices_or_sections=5, axis=1)
-#         return gv
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.collapse_sum_to(x, (3,)))
+        bb.emit_func_output(gv)
 
-#     x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
-#     bb = relax.BlockBuilder()
-#     with bb.function("main", [x]):
-#         gv = bb.emit(relax.op.transform.split(x, indices_or_sections=5, axis=1))
-#         bb.emit_func_output(gv)
-
-#     expected = expected.with_attr("global_symbol", "main")
-#     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+    # test for keepdims=False
+    expected_output2 = np.sum(data1_numpy, 0, keepdims=False)
+    result = run_relax_module(bb.get(), tvm.nd.array(data1_numpy))
+    np.testing.assert_allclose(expected_output2, result.numpy(), rtol=1e-6, atol=1e-6)
 
 
-# def test_split_by_n_section_not_divisible():
-#     x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
-#     bb = relax.BlockBuilder()
-#     with pytest.raises(DiagnosticError):
-#         with bb.function("main", [x]):
-#             gv = bb.emit(relax.op.transform.split(x, indices_or_sections=3, axis=1))
-#             bb.emit_func_output(gv)
+def test_split_by_indices():
+    @R.function
+    def expected(x: R.Tensor((2, 10, 4), "float32")):
+        gv = R.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1)
+        return gv
+
+    x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(
+            relax.op.transform.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1)
+        )
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
-# def test_broadcast_to():
-#     @R.function
-#     def expected(x: R.Tensor((2, 1, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
-#         gv: R.Tensor((4, 2, 5, 3), "float32") = R.broadcast_to(x, (4, 2, 5, 3))
-#         return gv
+def test_split_by_n_section():
+    @R.function
+    def expected(x: R.Tensor((2, 10, 4), "float32")):
+        gv = R.split(x, indices_or_sections=5, axis=1)
+        return gv
 
-#     bb = relax.BlockBuilder()
-#     x = relax.Var("x", (2, 1, 3), relax.DynTensorType(3, "float32"))
-#     with bb.function("main", [x]):
-#         gv = bb.emit(relax.op.transform.broadcast_to(x, (4, 2, 5, 3)))
-#         bb.emit_func_output(gv)
+    x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.split(x, indices_or_sections=5, axis=1))
+        bb.emit_func_output(gv)
 
-#     expected = expected.with_attr("global_symbol", "main")
-#     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
-
-
-# def test_strided_slice():
-#     @R.function
-#     def expected(x: R.Tensor((8, 9, 10, 10), "float32")) -> R.Tensor(None, "float32", ndim=4):
-#         gv: R.Tensor((4, 9, 10, 3), "float32") = R.strided_slice(
-#             x,
-#             begin=[1, 0, 8],
-#             end=[8, 9, 0],
-#             strides=[2, 1, -3],
-#             axes=[0, 1, -1],
-#             slice_mode="end",
-#         )
-#         return gv
-
-#     bb = relax.BlockBuilder()
-#     x = relax.Var("x", (8, 9, 10, 10), relax.DynTensorType(4, "float32"))
-#     with bb.function("main", [x]):
-#         gv = bb.emit(
-#             relax.op.transform.strided_slice(x, [1, 0, 8], [8, 9, 0], [2, 1, -3], [0, 1, -1])
-#         )
-#         bb.emit_func_output(gv)
-
-#     expected = expected.with_attr("global_symbol", "main")
-#     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
-# # if __name__ == "__main__":
-# #     pytest.main([__file__])
+def test_split_by_n_section_not_divisible():
+    x = relax.Var("x", [2, 10, 4], relax.DynTensorType(ndim=3, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with pytest.raises(DiagnosticError):
+        with bb.function("main", [x]):
+            gv = bb.emit(relax.op.transform.split(x, indices_or_sections=3, axis=1))
+            bb.emit_func_output(gv)
+
+
+def test_broadcast_to():
+    @R.function
+    def expected(x: R.Tensor((2, 1, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((4, 2, 5, 3), "float32") = R.broadcast_to(x, (4, 2, 5, 3))
+        return gv
+
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", (2, 1, 3), relax.DynTensorType(3, "float32"))
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.transform.broadcast_to(x, (4, 2, 5, 3)))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_strided_slice():
+    @R.function
+    def expected(x: R.Tensor((8, 9, 10, 10), "float32")) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((4, 9, 10, 3), "float32") = R.strided_slice(
+            x,
+            begin=[1, 0, 8],
+            end=[8, 9, 0],
+            strides=[2, 1, -3],
+            axes=[0, 1, -1],
+            slice_mode="end",
+        )
+        return gv
+
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", (8, 9, 10, 10), relax.DynTensorType(4, "float32"))
+    with bb.function("main", [x]):
+        gv = bb.emit(
+            relax.op.transform.strided_slice(x, [1, 0, 8], [8, 9, 0], [2, 1, -3], [0, 1, -1])
+        )
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])
