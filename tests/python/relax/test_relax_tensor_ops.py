@@ -112,7 +112,7 @@ def test_conv2d_with_out_dtype():
     def expected(
         x: R.Tensor((2, 3, 228, 228), "float32"), w: R.Tensor((16, 3, 5, 5), "float32")
     ) -> R.Tensor(None, "float16", ndim=4):
-        gv: R.Tensor((2, 16, 224, 224), "float16") = R.conv2d(
+        gv: R.Tensor((2, 16, 224, 224), "float16") = R.nn.conv2d(
             x, w, kernel_size=(5, 5), out_dtype="float16"
         )
         return gv
@@ -121,7 +121,7 @@ def test_conv2d_with_out_dtype():
     w = relax.Var("w", [16, 3, 5, 5], relax.DynTensorType(ndim=4, dtype="float32"))
     bb = relax.BlockBuilder()
     with bb.function("main", [x, w]):
-        gv = bb.emit(relax.op.conv2d(x, w, kernel_size=(5, 5), out_dtype="float16"))
+        gv = bb.emit(relax.op.nn.conv2d(x, w, kernel_size=(5, 5), out_dtype="float16"))
         bb.emit_func_output(gv)
 
     expected = expected.with_attr("global_symbol", "main")
@@ -302,7 +302,7 @@ def test_batch_norm():
 def test_gelu():
     @R.function
     def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
-        gv: R.Tensor((2, 3), "float32") = R.gelu(x)
+        gv: R.Tensor((2, 3), "float32") = R.nn.gelu(x)
         return gv
 
     x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
@@ -318,7 +318,7 @@ def test_gelu():
 def test_silu():
     @R.function
     def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
-        gv: R.Tensor((2, 3), "float32") = R.silu(x)
+        gv: R.Tensor((2, 3), "float32") = R.nn.silu(x)
         return gv
 
     x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
@@ -452,7 +452,7 @@ def test_divide():
 def test_dropout():
     @R.function
     def expected(x: R.Tensor((2, 3), "float32")):
-        gv = R.dropout(x, rate=0.5)
+        gv = R.nn.dropout(x, rate=0.5)
         return gv
 
     x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
@@ -472,7 +472,7 @@ def test_layer_norm():
         gamma: R.Tensor((4, 5), "float32"),
         beta: R.Tensor((4, 5), "float32"),
     ) -> R.Tensor(None, "float32", ndim=4):
-        gv: R.Tensor((2, 3, 4, 5), "float32") = R.layer_norm(x, gamma, beta, axis=[-2, -1])
+        gv: R.Tensor((2, 3, 4, 5), "float32") = R.nn.layer_norm(x, gamma, beta, axis=[-2, -1])
         return gv
 
     x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
@@ -508,7 +508,7 @@ def test_matmul_2_2():
     def expected(
         x: R.Tensor((3, 4), "float32"), y: R.Tensor((4, 5), "float32")
     ) -> R.Tensor(None, "float32", ndim=2):
-        gv: R.Tensor((3, 5), "float32") = R.matmul(x, y)
+        gv: R.Tensor((3, 5), "float32") = R.nn.matmul(x, y)
         return gv
 
     x = relax.Var("x", [3, 4], relax.DynTensorType(ndim=2, dtype="float32"))
@@ -527,7 +527,7 @@ def test_matmul_1_1():
     def expected(
         x: R.Tensor((4,), "float32"), y: R.Tensor((4,), "float32")
     ) -> R.Tensor(None, "float32", ndim=0):
-        gv: R.Tensor((), "float32") = R.matmul(x, y)
+        gv: R.Tensor((), "float32") = R.nn.matmul(x, y)
         return gv
 
     x = relax.Var("x", [4], relax.DynTensorType(ndim=1, dtype="float32"))
@@ -546,7 +546,7 @@ def test_matmul_1_4():
     def expected(
         x: R.Tensor((4,), "float32"), y: R.Tensor((2, 3, 4, 5), "float32")
     ) -> R.Tensor(None, "float32", ndim=3):
-        gv: R.Tensor((2, 3, 5), "float32") = R.matmul(x, y)
+        gv: R.Tensor((2, 3, 5), "float32") = R.nn.matmul(x, y)
         return gv
 
     x = relax.Var("x", [4], relax.DynTensorType(ndim=1, dtype="float32"))
@@ -565,7 +565,7 @@ def test_matmul_4_1():
     def expected(
         x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((5,), "float32")
     ) -> R.Tensor(None, "float32", ndim=3):
-        gv: R.Tensor((2, 3, 4), "float32") = R.matmul(x, y)
+        gv: R.Tensor((2, 3, 4), "float32") = R.nn.matmul(x, y)
         return gv
 
     x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
@@ -584,7 +584,7 @@ def test_matmul_4_5():
     def expected(
         x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((6, 2, 3, 5, 7), "float32")
     ) -> R.Tensor(None, "float32", ndim=5):
-        gv: R.Tensor((6, 2, 3, 4, 7), "float32") = R.matmul(x, y)
+        gv: R.Tensor((6, 2, 3, 4, 7), "float32") = R.nn.matmul(x, y)
         return gv
 
     x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
@@ -603,7 +603,7 @@ def test_matmul_4_5_with_output_dtype():
     def expected(
         x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((6, 2, 3, 5, 7), "float32")
     ) -> R.Tensor(None, "float16", ndim=5):
-        gv: R.Tensor((6, 2, 3, 4, 7), "float16") = R.matmul(x, y, out_dtype="float16")
+        gv: R.Tensor((6, 2, 3, 4, 7), "float16") = R.nn.matmul(x, y, out_dtype="float16")
         return gv
 
     x = relax.Var("x", [2, 3, 4, 5], relax.DynTensorType(ndim=4, dtype="float32"))
@@ -640,7 +640,7 @@ def test_matmul_fail_on_not_broadcastable():
 def test_adaptive_avg_pool2d():
     @R.function
     def expected(x: R.Tensor((2, 64, 8, 9), "float32")) -> R.Tensor(None, "float32", ndim=4):
-        gv: R.Tensor((2, 64, 7, 7), "float32") = R.adaptive_avg_pool2d(x, output_size=[7, 7])
+        gv: R.Tensor((2, 64, 7, 7), "float32") = R.nn.adaptive_avg_pool2d(x, output_size=[7, 7])
         return gv
 
     x = relax.Var("x", [2, 64, 8, 9], relax.DynTensorType(ndim=4, dtype="float32"))
@@ -693,7 +693,7 @@ def test_cross_entropy():
     def expected(
         predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")
     ) -> R.Tensor(None, "float32", ndim=0):
-        gv: R.Tensor((), "float32") = R.cross_entropy(predictions, targets)
+        gv: R.Tensor((), "float32") = R.nn.cross_entropy(predictions, targets)
         return gv
 
     predictions = relax.Var("predictions", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
@@ -712,7 +712,7 @@ def test_softmax_cross_entropy():
     def expected(
         predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")
     ) -> R.Tensor(None, "float32", ndim=0):
-        gv: R.Tensor((), "float32") = R.softmax_cross_entropy(predictions, targets)
+        gv: R.Tensor((), "float32") = R.nn.softmax_cross_entropy(predictions, targets)
         return gv
 
     predictions = relax.Var("predictions", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))

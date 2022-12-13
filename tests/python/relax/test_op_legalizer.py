@@ -31,7 +31,7 @@ def test_conv2d():
         def main(
             x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
         ) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((2, 4, 26, 26), "float32") = R.conv2d(x, w, kernel_size=[3, 3])
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(x, w, kernel_size=[3, 3])
             return gv
 
     @I.ir_module
@@ -86,7 +86,7 @@ def test_conv2d_with_out_dtype():
         def main(
             x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
         ) -> R.Tensor(None, "float16", ndim=4):
-            gv: R.Tensor((2, 4, 26, 26), "float16") = R.conv2d(
+            gv: R.Tensor((2, 4, 26, 26), "float16") = R.nn.conv2d(
                 x, w, kernel_size=[3, 3], out_dtype="float16"
             )
             return gv
@@ -609,7 +609,7 @@ def test_relu():
         def main(
             x: R.Tensor((T.int64(2), T.int64(3)), "float32")
         ) -> R.Tensor(None, "float32", ndim=2):
-            gv: R.Tensor((T.int64(2), T.int64(3)), "float32") = R.relu(x)
+            gv: R.Tensor((T.int64(2), T.int64(3)), "float32") = R.nn.relu(x)
             return gv
 
     @I.ir_module
@@ -645,7 +645,7 @@ def test_gelu():
         def main(
             x: R.Tensor((T.int64(2), T.int64(3)), "float32")
         ) -> R.Tensor(None, "float32", ndim=2):
-            gv: R.Tensor((T.int64(2), T.int64(3)), "float32") = R.gelu(x)
+            gv: R.Tensor((T.int64(2), T.int64(3)), "float32") = R.nn.gelu(x)
             return gv
 
     @I.ir_module
@@ -711,7 +711,7 @@ def test_silu():
         def main(
             x: R.Tensor((T.int64(2), T.int64(3)), "float32")
         ) -> R.Tensor(None, "float32", ndim=2):
-            gv: R.Tensor((T.int64(2), T.int64(3)), "float32") = R.silu(x)
+            gv: R.Tensor((T.int64(2), T.int64(3)), "float32") = R.nn.silu(x)
             return gv
 
     @I.ir_module
@@ -1680,7 +1680,7 @@ def test_max_pool2d():
     class MaxPool2D:
         @R.function
         def main(x: R.Tensor((4, 6, 112, 112), "float32")) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((4, 6, 56, 56), "float32") = R.max_pool2d(
+            gv: R.Tensor((4, 6, 56, 56), "float32") = R.nn.max_pool2d(
                 x,
                 pool_size=[3, 3],
                 strides=[2, 2],
@@ -1750,7 +1750,7 @@ def test_layer_norm():
             gamma: R.Tensor((4, 5), "float32"),
             beta: R.Tensor((4, 5), "float32"),
         ) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((2, 3, 4, 5), "float32") = R.layer_norm(x, gamma, beta, axis=[-2, -1])
+            gv: R.Tensor((2, 3, 4, 5), "float32") = R.nn.layer_norm(x, gamma, beta, axis=[-2, -1])
             return gv
 
     @I.ir_module
@@ -1949,7 +1949,7 @@ def test_matmul_1_4():
         def main(
             x: R.Tensor((4,), "float32"), y: R.Tensor((2, 3, 4, 5), "float32")
         ) -> R.Tensor(None, "float32", ndim=3):
-            gv: R.Tensor((2, 3, 5), "float32") = R.matmul(x, y)
+            gv: R.Tensor((2, 3, 5), "float32") = R.nn.matmul(x, y)
             return gv
 
     @I.ir_module
@@ -1991,7 +1991,7 @@ def test_matmul_4_1():
         def main(
             x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((5,), "float32")
         ) -> R.Tensor(None, "float32", ndim=3):
-            gv: R.Tensor((2, 3, 4), "float32") = R.matmul(x, y)
+            gv: R.Tensor((2, 3, 4), "float32") = R.nn.matmul(x, y)
             return gv
 
     @I.ir_module
@@ -2033,7 +2033,7 @@ def test_matmul_1_1():
         def main(
             x: R.Tensor((4,), "float32"), y: R.Tensor((4,), "float32")
         ) -> R.Tensor(None, "float32", ndim=0):
-            gv: R.Tensor((), "float32") = R.matmul(x, y)
+            gv: R.Tensor((), "float32") = R.nn.matmul(x, y)
             return gv
 
     @I.ir_module
@@ -2072,7 +2072,7 @@ def test_matmul_4_5():
         def main(
             x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((6, 2, 3, 5, 7), "float32")
         ) -> R.Tensor(None, "float32", ndim=5):
-            gv: R.Tensor((6, 2, 3, 4, 7), "float32") = R.matmul(x, y)
+            gv: R.Tensor((6, 2, 3, 4, 7), "float32") = R.nn.matmul(x, y)
             return gv
 
     @I.ir_module
@@ -2126,7 +2126,7 @@ def test_matmul_4_5_with_out_dtype():
         def main(
             x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((6, 2, 3, 5, 7), "float32")
         ) -> R.Tensor(None, "float16", ndim=5):
-            gv: R.Tensor((6, 2, 3, 4, 7), "float16") = R.matmul(x, y, out_dtype="float16")
+            gv: R.Tensor((6, 2, 3, 4, 7), "float16") = R.nn.matmul(x, y, out_dtype="float16")
             return gv
 
     @I.ir_module
@@ -2182,7 +2182,7 @@ def test_matmul_3_3_with_symbolic_broadcast_dim():
         def main(
             x: R.Tensor((a, 3, 4), "float32"), y: R.Tensor((1, 4, 5), "float32")
         ) -> R.Tensor(None, "float32", ndim=3):
-            gv: R.Tensor((a, 3, 5), "float32") = R.matmul(x, y)
+            gv: R.Tensor((a, 3, 5), "float32") = R.nn.matmul(x, y)
             return gv
 
     @tvm.script.ir_module
@@ -2229,7 +2229,7 @@ def test_softmax():
     class Softmax:
         @R.function
         def main(x: R.Tensor((2, 3, 16, 32), "float32")) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((2, 3, 16, 32), "float32") = R.softmax(x, axis=-2)
+            gv: R.Tensor((2, 3, 16, 32), "float32") = R.nn.softmax(x, axis=-2)
             return gv
 
     @I.ir_module
@@ -2306,7 +2306,7 @@ def test_adaptive_avg_pool2d():
     class AdaptiveAvgPool2D:
         @R.function
         def main(x: R.Tensor((2, 64, 7, 7), "float32")) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((2, 64, 1, 1), "float32") = R.adaptive_avg_pool2d(x, output_size=[1, 1])
+            gv: R.Tensor((2, 64, 1, 1), "float32") = R.nn.adaptive_avg_pool2d(x, output_size=[1, 1])
             return gv
 
     @I.ir_module
@@ -2359,7 +2359,7 @@ def test_cross_entropy():
     class CrossEntropy:
         @R.function
         def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
-            gv: R.Tensor((), "float32") = R.cross_entropy(predictions, targets)
+            gv: R.Tensor((), "float32") = R.nn.cross_entropy(predictions, targets)
             return gv
 
     @I.ir_module
@@ -2418,7 +2418,7 @@ def test_softmax_cross_entropy():
     class SoftmaxCrossEntropy:
         @R.function
         def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
-            gv: R.Tensor((), "float32") = R.softmax_cross_entropy(predictions, targets)
+            gv: R.Tensor((), "float32") = R.nn.softmax_cross_entropy(predictions, targets)
             return gv
 
     @I.ir_module
@@ -2600,7 +2600,7 @@ def test_image_resize2d():
     class Resize2D:
         @R.function
         def main(x: R.Tensor((2, 8, 8, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((2, 16, 16, 3), "float32") = R.resize2d(
+            gv: R.Tensor((2, 16, 16, 3), "float32") = R.image.resize2d(
                 x,
                 size=[16, 16],
                 layout="NHWC",

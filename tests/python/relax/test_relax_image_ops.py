@@ -28,7 +28,7 @@ import tvm.testing
 def test_resize2d():
     @R.function
     def expected(x: R.Tensor((2, 14, 14, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
-        gv: R.Tensor((2, 28, 28, 3), "float32") = R.resize2d(x, size=[28, 28], layout="NHWC")
+        gv: R.Tensor((2, 28, 28, 3), "float32") = R.image.resize2d(x, size=[28, 28], layout="NHWC")
         return gv
 
     bb = relax.BlockBuilder()

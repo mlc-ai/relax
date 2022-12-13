@@ -27,7 +27,7 @@ def test_conv2d():
         def main(
             x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
         ) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((2, 4, 26, 26), "float32") = R.conv2d(
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
                 x, w, kernel_size=[3, 3], out_dtype="float32"
             )
             return gv
@@ -43,10 +43,10 @@ def test_conv2d_relu():
         def main(
             x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
         ) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((2, 4, 26, 26), "float32") = R.conv2d(
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
                 x, w, kernel_size=[3, 3], out_dtype="float32"
             )
-            gv2: R.Tensor((2, 4, 26, 26), "float32") = R.relu(gv)
+            gv2: R.Tensor((2, 4, 26, 26), "float32") = R.nn.relu(gv)
             return gv2
 
     mod = ToMixedPrecision()(Conv2d)
@@ -60,11 +60,11 @@ def test_relu_conv2d_relu():
         def main(
             x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
         ) -> R.Tensor(None, "float32", ndim=4):
-            x0: R.Tensor((2, 3, 28, 28), "float32") = R.relu(x)
-            gv: R.Tensor((2, 4, 26, 26), "float32") = R.conv2d(
+            x0: R.Tensor((2, 3, 28, 28), "float32") = R.nn.relu(x)
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
                 x0, w, kernel_size=[3, 3], out_dtype="float32"
             )
-            gv2: R.Tensor((2, 4, 26, 26), "float32") = R.relu(gv)
+            gv2: R.Tensor((2, 4, 26, 26), "float32") = R.nn.relu(gv)
             return gv2
 
     mod = ToMixedPrecision()(Conv2d)
