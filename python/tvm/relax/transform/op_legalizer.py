@@ -87,6 +87,14 @@ def _sqrt(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.sqrt, args[0])
 
 
+def _sigmoid(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.sigmoid, args[0])
+
+
+def _less(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.less, args[0], args[1])
+
+
 def _nn_relu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.nn.relu, args[0])
 
@@ -127,14 +135,14 @@ def _concatenate(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape:
 def _expand_dims(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     output_ndim = len(output_shape)
 
-    def expand_dims(data, axis):
+    def te_expand_dims(data, axis):
         data_dims = []
         for i in range(output_ndim):
             if i not in axis and (i - output_ndim) not in axis:
                 data_dims.append(i)
         return te.compute(output_shape, lambda *idx: data(*[idx[dim] for dim in data_dims]))
 
-    return bb.call_te(expand_dims, args[0], attrs.axis)
+    return bb.call_te(te_expand_dims, args[0], attrs.axis, primfunc_name_hint="expand_dims")
 
 
 def _cumsum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
@@ -225,6 +233,10 @@ def _strided_slice(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shap
     )
 
 
+def _where(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.where, args[0], args[1], args[2])
+
+
 def _nn_max_pool2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(
         topi.nn.pool2d,
@@ -255,7 +267,7 @@ def _nn_batch_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shap
 
 
 def _nn_layer_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
-    def layer_norm(x, gamma, beta, axis, eps):
+    def te_layer_norm(x, gamma, beta, axis, eps):
         shape_prod = tvm.tir.const(1, "int32")
         for dim in axis:
             shape_prod = shape_prod * x.shape[dim.value]
@@ -263,7 +275,15 @@ def _nn_layer_norm(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shap
         var = topi.sum((x - mean) * (x - mean), axis=axis, keepdims=True) / shape_prod
         return gamma * ((x - mean) / topi.sqrt(var + eps)) + beta
 
-    return bb.call_te(layer_norm, args[0], args[1], args[2], axis=attrs.axis, eps=attrs.epsilon)
+    return bb.call_te(
+            te_layer_norm,
+            args[0],
+            args[1],
+            args[2],
+            axis=attrs.axis,
+            eps=attrs.epsilon,
+            primfunc_name_hint="layer_norm"
+        )
 
 
 def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
@@ -284,7 +304,7 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
     is_a_larger = len(a_shape) > len(b_shape)
     offset = len(a_shape) - len(b_shape) if is_a_larger else len(b_shape) - len(a_shape)
 
-    def matmul(a, b):
+    def te_matmul(a, b):
         def matmul_compute(*idx_spatial):
             k = te.reduce_axis((0, a_shape[-1]), name="k")
 
@@ -323,7 +343,7 @@ def _nn_matmul(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: E
 
         return te.compute(output_shape, lambda *idx: matmul_compute(*idx), name="matmul")
 
-    return bb.call_te(matmul, a, b)
+    return bb.call_te(te_matmul, a, b, primfunc_name_hint="matmul")
 
 
 def _nn_softmax(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
@@ -338,6 +358,20 @@ def _nn_adaptive_max_pool2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, ou
     return bb.call_te(
         topi.nn.adaptive_pool, args[0], attrs.output_size, pool_type="avg", layout=attrs.layout
     )
+
+
+def _te_cross_entropy(x, y):
+    return -topi.sum(topi.log(x) * y)
+
+
+def _nn_cross_entropy(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(_te_cross_entropy, args[0], args[1],  primfunc_name_hint="cross_entropy")
+
+
+def _nn_softmax_cross_entropy(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    def te_softmax_cross_entropy(x, y):
+        return _te_cross_entropy(topi.nn.softmax(x), y)
+    return bb.call_te(te_softmax_cross_entropy, args[0], args[1], primfunc_name_hint="softmax_cross_entropy")
 
 
 def _sum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
@@ -379,6 +413,8 @@ op_legalization_map = {
     ir.Op.get("relax.sin"): _sin,
     ir.Op.get("relax.cos"): _cos,
     ir.Op.get("relax.sqrt"): _sqrt,
+    ir.Op.get("relax.sigmoid"): _sigmoid,
+    ir.Op.get("relax.less"): _less,
     ir.Op.get("relax.nn.relu"): _nn_relu,
     ir.Op.get("relax.nn.gelu"): _nn_gelu,
     ir.Op.get("relax.nn.silu"): _nn_silu,
@@ -400,6 +436,7 @@ op_legalization_map = {
     ir.Op.get("relax.collapse_sum_to"): _collapse_sum_to,
     ir.Op.get("relax.split"): _split,
     ir.Op.get("relax.strided_slice"): _strided_slice,
+    ir.Op.get("relax.where"): _where,
     ir.Op.get("relax.broadcast_to"): _broadcast_to,
     ir.Op.get("relax.nn.max_pool2d"): _nn_max_pool2d,
     ir.Op.get("relax.nn.batch_norm"): _nn_batch_norm,
@@ -408,6 +445,8 @@ op_legalization_map = {
     ir.Op.get("relax.nn.softmax"): _nn_softmax,
     ir.Op.get("relax.nn.flatten"): _nn_flatten,
     ir.Op.get("relax.nn.adaptive_avg_pool2d"): _nn_adaptive_max_pool2d,
+    ir.Op.get("relax.nn.cross_entropy"): _nn_cross_entropy,
+    ir.Op.get("relax.nn.softmax_cross_entropy"): _nn_softmax_cross_entropy,
     ir.Op.get("relax.sum"): _sum,
     ir.Op.get("relax.mean"): _mean,
     ir.Op.get("relax.image.resize2d"): _image_resize2d,

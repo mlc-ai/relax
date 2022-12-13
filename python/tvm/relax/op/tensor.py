@@ -222,6 +222,40 @@ def log(data: Expr) -> Expr:
     return _ffi_api.log(data)
 
 
+def sigmoid(data: Expr) -> Expr:
+    """Compute elementwise sigmoid of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.sigmoid(data)
+
+
+def less(lhs: Expr, rhs: Expr) -> Expr:
+    """Broadcasted elementwise test for (lhs < rhs).
+
+    Parameters
+    ----------
+    lhs : relax.Expr
+        The left hand side input data
+    rhs : relax.Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.less(lhs, rhs)
+
+
 def unique(
     data: Expr,
     sorted: bool = True,

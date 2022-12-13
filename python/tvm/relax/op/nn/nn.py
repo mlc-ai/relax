@@ -625,3 +625,41 @@ def adaptive_avg_pool2d(
                 )
         output_size = temp_size
     return _ffi_api.adaptive_avg_pool2d(data, output_size, layout)
+
+
+def cross_entropy(predictions: Expr, targets: Expr) -> Expr:
+    """CrossEntropy without logits.
+
+    Parameters
+    ----------
+    predictions : relax.Expr
+      The predictions.
+
+    targets : relax.Expr
+      The targets.
+
+    Returns
+    -------
+    result : relax.Expr
+      The computed result.
+    """
+    return _ffi_api.cross_entropy(predictions, targets)
+
+
+def softmax_cross_entropy(predictions: Expr, targets: Expr) -> Expr:
+    """Computes the softmax cross entropy between predictions and targets.
+
+    Parameters
+    ----------
+    predictions : relax.Expr
+      The predictions.
+
+    targets : relax.Expr
+      The targets.
+
+    Returns
+    -------
+    result : relax.Expr
+      The computed result.
+    """
+    return _ffi_api.softmax_cross_entropy(predictions, targets)

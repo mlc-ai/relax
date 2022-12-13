@@ -602,5 +602,25 @@ def test_strided_slice():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_where():
+    @R.function
+    def expected(condition: R.Tensor((2, 1), "bool"),
+            x: R.Tensor((2, 3), "float32"),
+            y: R.Tensor((2, 1), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.where(condition, x, y)
+        return gv
+
+    bb = relax.BlockBuilder()
+    condition = relax.Var("condition", (2, 1), relax.DynTensorType(2, "bool"))
+    x = relax.Var("x", (2, 3), relax.DynTensorType(2, "float32"))
+    y = relax.Var("y", (2, 1), relax.DynTensorType(2, "float32"))
+    with bb.function("main", [condition, x, y]):
+        gv = bb.emit(relax.op.transform.where(condition, x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

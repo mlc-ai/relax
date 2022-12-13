@@ -611,5 +611,87 @@ Type InferTypeMatmul(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(output_ndim, output_dtype);
 }
 
+/* relax.nn.cross_entropy */
+RELAX_REGISTER_OP("relax.nn.cross_entropy")
+    .set_num_inputs(2)
+    .add_argument("predictions", "Tensor", "The predictions.")
+    .add_argument("targets", "Tensor", "The targets.")
+    .set_attr<FInferShape>("FInferShape", InferShapeCrossEntropy)
+    .set_attr<FInferType>("FInferType", InferTypeCrossEntropy);
+
+Expr MakeCrossEntropy(Expr predictions, Expr targets) {
+  static const Op& op = Op::Get("relax.nn.cross_entropy");
+  return Call(op, {std::move(predictions), std::move(targets)}, {}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.nn.cross_entropy").set_body_typed(MakeCrossEntropy);
+
+/* relax.nn.softmax_cross_entropy */
+RELAX_REGISTER_OP("relax.nn.softmax_cross_entropy")
+    .set_num_inputs(2)
+    .add_argument("predictions", "Tensor", "The predictions.")
+    .add_argument("targets", "Tensor", "The targets.")
+    .set_attr<FInferShape>("FInferShape", InferShapeCrossEntropy)
+    .set_attr<FInferType>("FInferType", InferTypeCrossEntropy);
+
+Expr MakeSoftmaxCrossEntropy(Expr predictions, Expr targets) {
+  static const Op& op = Op::Get("relax.nn.softmax_cross_entropy");
+  return Call(op, {std::move(predictions), std::move(targets)}, {}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.nn.softmax_cross_entropy").set_body_typed(MakeSoftmaxCrossEntropy);
+
+Expr InferShapeCrossEntropy(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "CrossEntropy op should have 2 arguments");
+  }
+  Expr shape0 = call->args[0]->shape();
+  Expr shape1 = call->args[1]->shape();
+  auto* s0 = shape0.as<ShapeExprNode>();
+  auto* s1 = shape1.as<ShapeExprNode>();
+  if (s0 && s1) {
+    size_t ndim0 = s0->values.size();
+    size_t ndim1 = s1->values.size();
+    if (ndim0 != ndim1) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "The 2 arguments of CrossEntropy should be of the same dimension.");
+    }
+    arith::Analyzer ana;
+    Array<PrimExpr> predictions_shape = s0->values;
+    Array<PrimExpr> targets_shape = s1->values;
+    if (ana.CanProve(predictions_shape[ndim0-1] != targets_shape[ndim1-1])) {
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "The last dimension size of the 2 arguments of CrossEntropy must be equal.");
+    }
+    return ShapeExpr(Array<PrimExpr>{});
+  } else {
+    return RuntimeDepShape();;
+  }
+}
+
+Type InferTypeCrossEntropy(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "CrossEntropy op should have 2 arguments");
+  }
+  Type type0 = call->args[0]->checked_type();
+  Type type1 = call->args[1]->checked_type();
+  auto* t0 = type0.as<DynTensorTypeNode>();
+  auto* t1 = type1.as<DynTensorTypeNode>();
+  if (!t0 || !t1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "The 2 arguments of CrossEntropy should be DynTensor");
+  }
+
+  DataType output_dtype;
+  if (t0->IsUnknownDtype() || t1->IsUnknownDtype()) {
+    output_dtype = DataType::Void();
+  } else if (t0->dtype != t1->dtype) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Data types " << t0->dtype << ", and"
+                                                     << t1->dtype << " must be equal for CrossEntropy");
+  } else {
+    output_dtype = t0->dtype;
+  }
+
+  return DynTensorType(/*ndim=*/0, output_dtype);
+}
+
 }  // namespace relax
 }  // namespace tvm
