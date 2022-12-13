@@ -260,6 +260,7 @@ class BlockBuilder(Object):
             The parameters of the function.
             If params is None, it means deferring initialization of function parameters
             until emit_func_output.
+            Params could be an empty list to support functions without argument.
 
         attrs : Dict[str, Object], optional
             The function attrs
@@ -269,9 +270,7 @@ class BlockBuilder(Object):
         ret: FunctionScope
             A FunctionScope for building a Relax function node.
         """
-        if not params:
-            params = None
-        elif isinstance(params, rx.Var):
+        if isinstance(params, rx.Var):
             params = [params]
         elif isinstance(params, (list, tuple)):
             for param in params:
