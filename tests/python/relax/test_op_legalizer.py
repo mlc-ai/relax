@@ -328,6 +328,67 @@ def test_floor_divide():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_log():
+    @I.ir_module
+    class Log:
+        @R.function
+        def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.log(x)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def expected(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "expected"})
+            gv = R.call_tir(log, (x,), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def log(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "log", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("compute"):
+                    i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[i0_1, i1_1])
+                    T.writes(compute[i0_1, i1_1])
+                    compute[i0_1, i1_1] = T.log(rxplaceholder[i0_1, i1_1], dtype="float32")
+
+    mod = OperatorLegalizer(Log).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_negative():
+    @I.ir_module
+    class Negative:
+        @R.function
+        def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.negative(x)
+            return gv
+
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def expected(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "expected"})
+            gv = R.call_tir(negative, (x,), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def negative(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "negative", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("compute"):
+                    i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[i0_1, i1_1])
+                    T.writes(compute[i0_1, i1_1])
+                    compute[i0_1, i1_1] = rxplaceholder[i0_1, i1_1] * T.float32(-1)
+
+    mod = OperatorLegalizer(Negative).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_sin():
     @I.ir_module
     class Sin:
@@ -397,6 +458,36 @@ def test_cos():
                     compute[i0_1, i1_1] = T.cos(rxplaceholder[i0_1, i1_1], dtype="float32")
 
     mod = OperatorLegalizer(Cos).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_tanh():
+    @I.ir_module
+    class Tanh:
+        @R.function
+        def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.tanh(x)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def expected(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "expected"})
+            gv = R.call_tir(tanh, (x,), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def tanh(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "tanh", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("compute"):
+                    i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[i0_1, i1_1])
+                    T.writes(compute[i0_1, i1_1])
+                    compute[i0_1, i1_1] = T.tanh(rxplaceholder[i0_1, i1_1], dtype="float32")
+
+    mod = OperatorLegalizer(Tanh).transform()
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
@@ -1167,6 +1258,220 @@ def test_full():
                     T_full[ax0, ax1] = T.Cast("float32", rxplaceholder[()])
 
     mod = OperatorLegalizer(Full).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_full_like():
+    @I.ir_module
+    class FullLike:
+        @R.function
+        def main(x: R.Tensor((2, 3), "float32"), y: R.Tensor((), "float32")) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.full_like(x, y)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3), dtype="float32"), y: R.Tensor((), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "main"})
+            gv = R.call_tir(full_like, (x, y), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def full_like(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_1: T.Buffer[(), "float32"], T_full_like: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "full_like", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_full_like"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder_1[()])
+                    T.writes(T_full_like[ax0, ax1])
+                    T_full_like[ax0, ax1] = rxplaceholder_1[()]
+
+    mod = OperatorLegalizer(FullLike).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_ones_like():
+    @I.ir_module
+    class OnesLike:
+        @R.function
+        def main(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.ones_like(x)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "main"})
+            gv = R.call_tir(full_like, (x, R.const(1.0)), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def full_like(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_1: T.Buffer[(), "float32"], T_full_like: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "full_like", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_full_like"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder_1[()])
+                    T.writes(T_full_like[ax0, ax1])
+                    T_full_like[ax0, ax1] = rxplaceholder_1[()]
+
+    mod = OperatorLegalizer(OnesLike).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_zeros_like():
+    @I.ir_module
+    class ZerosLike:
+        @R.function
+        def main(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.zeros_like(x)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "main"})
+            gv = R.call_tir(full_like, (x, R.const(0.0)), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def full_like(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_1: T.Buffer[(), "float32"], T_full_like: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "full_like", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_full_like"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder_1[()])
+                    T.writes(T_full_like[ax0, ax1])
+                    T_full_like[ax0, ax1] = rxplaceholder_1[()]
+
+    mod = OperatorLegalizer(ZerosLike).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_ones():
+    @I.ir_module
+    class Ones:
+        @R.function
+        def main() -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.ones((2, 3))
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main() -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "main"})
+            gv = R.call_tir(full, (R.const(1.0),), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def full(rxplaceholder: T.Buffer[(), "float32"], T_full: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "full", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_full"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[()])
+                    T.writes(T_full[ax0, ax1])
+                    T_full[ax0, ax1] = rxplaceholder[()]
+
+    mod = OperatorLegalizer(Ones).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_zeros():
+    @I.ir_module
+    class Zeros:
+        @R.function
+        def main() -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.zeros((2, 3))
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main() -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "expected"})
+            gv = R.call_tir(full, (R.const(0.0),), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def full(rxplaceholder: T.Buffer[(), "float32"], T_full: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "full", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_full"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[()])
+                    T.writes(T_full[ax0, ax1])
+                    T_full[ax0, ax1] = rxplaceholder[()]
+
+    mod = OperatorLegalizer(Zeros).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_collapse_sum_like():
+    @I.ir_module
+    class CollapseSumLike:
+        @R.function
+        def main(x: R.Tensor((2, 3), "float32"), y: R.Tensor((1, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((1, 3), "float32") = R.collapse_sum_like(x, y)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3), dtype="float32"), y: R.Tensor((1, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "expected"})
+            gv = R.call_tir(collapse_sum, (x,), (1, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def collapse_sum(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_red: T.Buffer[(T.int64(1), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "collapse_sum", "tir.noalias": True})
+            for i0, i1, i2 in T.grid(T.int64(1), T.int64(3), T.int64(2)):
+                with T.block("rxplaceholder_red"):
+                    ax0, ax1, k0 = T.axis.remap("SSR", [i0, i1, i2])
+                    T.reads(rxplaceholder[k0, ax1])
+                    T.writes(rxplaceholder_red[ax0, ax1])
+                    with T.init():
+                        rxplaceholder_red[ax0, ax1] = T.float32(0)
+                    rxplaceholder_red[ax0, ax1] = rxplaceholder_red[ax0, ax1] + rxplaceholder[k0, ax1]
+
+    mod = OperatorLegalizer(CollapseSumLike).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_collapse_sum_to():
+    @I.ir_module
+    class CollapseSumTo:
+        @R.function
+        def main(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((1, 3), "float32") = R.collapse_sum_to(x, (1, 3))
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
+            R.func_attr({"global_symbol": "main"})
+            gv = R.call_tir(collapse_sum, (x,), (1, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def collapse_sum(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_red: T.Buffer[(T.int64(1), T.int64(3)), "float32"]):
+            T.func_attr({"global_symbol": "collapse_sum", "tir.noalias": True})
+            for i0, i1, i2 in T.grid(T.int64(1), T.int64(3), T.int64(2)):
+                with T.block("rxplaceholder_red"):
+                    ax0, ax1, k0 = T.axis.remap("SSR", [i0, i1, i2])
+                    T.reads(rxplaceholder[k0, ax1])
+                    T.writes(rxplaceholder_red[ax0, ax1])
+                    with T.init():
+                        rxplaceholder_red[ax0, ax1] = T.float32(0)
+                    rxplaceholder_red[ax0, ax1] = rxplaceholder_red[ax0, ax1] + rxplaceholder[k0, ax1]
+
+    mod = OperatorLegalizer(CollapseSumTo).transform()
     tvm.ir.assert_structural_equal(mod, Expected)
 
 

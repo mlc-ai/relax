@@ -45,13 +45,6 @@ def relax_build_and_run(f, inputs):
         return vm["default"](*inputs).numpy()
 
 
-def run_relax_module(module, *input):
-    mod = OperatorLegalizer(module).transform()
-    ex = relax.vm.build(mod, tvm.target.Target("llvm"))
-    vm = relax.VirtualMachine(ex, tvm.cpu())
-    return vm["main"](*input)
-
-
 def test_transpose():
     dtype = "float32"
     input_shape = [1, 2, 3, 4]
@@ -430,12 +423,6 @@ def test_full_like():
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-    data_numpy = np.zeros((2, 3)).astype(np.float32)
-    fill_value = np.array(3).astype(np.float32)
-    expected_output = np.full_like(data_numpy, fill_value)
-    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy), tvm.nd.array(fill_value))
-    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
-
 
 def test_ones_like():
     @R.function
@@ -451,11 +438,6 @@ def test_ones_like():
 
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
-
-    data_numpy = np.zeros((2, 3)).astype(np.float32)
-    expected_output = np.ones_like(data_numpy)
-    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy))
-    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
 
 
 def test_zeros_like():
@@ -473,11 +455,6 @@ def test_zeros_like():
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-    data_numpy = np.zeros((2, 3)).astype(np.float32)
-    expected_output = np.zeros_like(data_numpy)
-    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy))
-    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
-
 
 def test_ones():
     @R.function
@@ -492,10 +469,6 @@ def test_ones():
 
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
-
-    expected_output = np.ones((2, 3))
-    result = run_relax_module(bb.get())
-    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
 
 
 def test_zeros():
@@ -512,10 +485,6 @@ def test_zeros():
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-    expected_output = np.zeros((2, 3))
-    result = run_relax_module(bb.get())
-    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
-
 
 def test_collapse_sum_like():
     @R.function
@@ -525,7 +494,6 @@ def test_collapse_sum_like():
 
     x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
     y = relax.Var("y", [1, 3], relax.DynTensorType(ndim=2, dtype="float32"))
-    z = relax.Var("z", [3], relax.DynTensorType(ndim=1, dtype="float32"))
     bb = relax.BlockBuilder()
     with bb.function("main", [x, y]):
         gv = bb.emit(relax.op.collapse_sum_like(x, y))
@@ -533,25 +501,6 @@ def test_collapse_sum_like():
 
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
-
-    data1_numpy = np.random.randint(0, 16, (2, 3)).astype(np.float32)
-    data2_numpy = np.zeros((1, 3)).astype(np.float32)
-    data3_numpy = np.zeros((3,)).astype(np.float32)
-
-    # test for keepdims=True
-    expected_output1 = np.sum(data1_numpy, 0, keepdims=True)
-    result = run_relax_module(bb.get(), tvm.nd.array(data1_numpy), tvm.nd.array(data2_numpy))
-    np.testing.assert_allclose(expected_output1, result.numpy(), rtol=1e-6, atol=1e-6)
-
-    bb = relax.BlockBuilder()
-    with bb.function("main", [x, z]):
-        gv = bb.emit(relax.op.collapse_sum_like(x, z))
-        bb.emit_func_output(gv)
-
-    # test for keepdims=False
-    expected_output2 = np.sum(data1_numpy, 0, keepdims=False)
-    result = run_relax_module(bb.get(), tvm.nd.array(data1_numpy), tvm.nd.array(data3_numpy))
-    np.testing.assert_allclose(expected_output2, result.numpy(), rtol=1e-6, atol=1e-6)
 
 
 def test_collapse_sum_to():
@@ -568,23 +517,6 @@ def test_collapse_sum_to():
 
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
-
-    data1_numpy = np.random.randint(0, 16, (2, 3)).astype(np.float32)
-
-    # test for keepdims=True
-    expected_output1 = np.sum(data1_numpy, 0, keepdims=True)
-    result = run_relax_module(bb.get(), tvm.nd.array(data1_numpy))
-    np.testing.assert_allclose(expected_output1, result.numpy(), rtol=1e-6, atol=1e-6)
-
-    bb = relax.BlockBuilder()
-    with bb.function("main", [x]):
-        gv = bb.emit(relax.op.collapse_sum_to(x, (3,)))
-        bb.emit_func_output(gv)
-
-    # test for keepdims=False
-    expected_output2 = np.sum(data1_numpy, 0, keepdims=False)
-    result = run_relax_module(bb.get(), tvm.nd.array(data1_numpy))
-    np.testing.assert_allclose(expected_output2, result.numpy(), rtol=1e-6, atol=1e-6)
 
 
 def test_split_by_indices():

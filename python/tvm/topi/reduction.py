@@ -251,15 +251,32 @@ def prod(data, axis=None, keepdims=False):
 
 
 def collapse_sum(data, target_shape):
-    """Python correspondence of the topi operator collapse_sum.
+    """Return a summation of data to the given shape.
+
+    collapse_sum is intended as the backward operator of topi broadcast operators in the automatic
+    differentiation process.
+
+    We expect that data is the result of broadcasting some tensor of target_shape in some
+    broadcast operation. Thus target_shape and data.shape must follow broadcast rules.
+
+    During computation, the axes of data.shape and target_shape are checked from right to left.
+    For every axis, if it either:
+    - exist in data but not in target_shape, or
+    - is larger than 1 in data and equals to 1 in target_shape,
+
+    data will be summed over this axis.
 
     Parameters
     ----------
     data : tvm.te.Tensor
-        The input tvm tensor
+        The input tensor.
+
+    shape : Tuple[int]
+        The shape to collapse to.
 
     Returns
     -------
     ret : tvm.te.Tensor
+        The result tensor after summation.
     """
     return cpp.collapse_sum(data, target_shape)

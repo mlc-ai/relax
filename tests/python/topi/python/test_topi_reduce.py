@@ -182,6 +182,6 @@ def test_complex_reduce(target, dev):
     foo(data_tvm, out_tvm)
     tvm.testing.assert_allclose(out_tvm.numpy(), out_npy, 1e-3, 1e-3)
 
-# todo
+
 if __name__ == "__main__":
     tvm.testing.main()

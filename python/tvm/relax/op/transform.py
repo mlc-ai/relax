@@ -87,7 +87,7 @@ def reshape(
     data : relax.Expr
         The input data to the operator.
 
-    newshape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+    newshape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], relax.Expr]
         The new shape. Should be compatible with the original shape.
     Returns
     -------
@@ -383,7 +383,7 @@ def ones(
 
     Parameters
     ----------
-    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], relax.Expr]
         The shape of the target.
 
     dtype : Optional[Union[str, tvm.DataType]]
@@ -409,7 +409,7 @@ def zeros(
 
     Parameters
     ----------
-    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], relax.Expr]
         The shape of the target.
 
     dtype : Optional[Union[str, tvm.DataType]]
@@ -517,10 +517,10 @@ def broadcast_to(
 
     Parameters
     ----------
-    data : relay.Expr
+    data : relax.Expr
         The input tensor.
 
-    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], relax.Expr]
         Provide the shape to broadcast to.
 
     Returns
@@ -600,15 +600,15 @@ def collapse_sum_like(data: Expr, collapse_target: Expr) -> Expr:
 
     Parameters
     ----------
-    data : Expr
+    data : relax.Expr
         The input tensor.
 
-    collapse_target : Expr
+    collapse_target : relax.Expr
         The tensor whose shape is the shape to collapse to.
 
     Returns
     -------
-    result : Expr
+    result : relax.Expr
         The result tensor after summation.
     """
     return _ffi_api.collapse_sum_like(data, collapse_target)
@@ -635,16 +635,16 @@ def collapse_sum_to(
 
     Parameters
     ----------
-    data : Expr
+    data : relax.Expr
         The input tensor.
 
-    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], relax.Expr]
         The shape to collapse to.
 
     Returns
     -------
-    result : Expr
-        The result tensor after summation.
+    result : relax.Expr
+        The result tensor of the given shape after summation.
     """
     shape = _convert_shape_to_expr(shape)
     return _ffi_api.collapse_sum_to(data, shape)

@@ -50,13 +50,6 @@ def relax_build_and_run(f, inputs):
         return vm["default"](*inputs)
 
 
-def run_relax_module(module, *input):
-    mod = OperatorLegalizer(module).transform()
-    ex = relax.vm.build(mod, tvm.target.Target("llvm"))
-    vm = relax.VirtualMachine(ex, tvm.cpu())
-    return vm["main"](*input)
-
-
 @pytest.mark.parametrize("op_name", ["relu", "softmax"])
 def test_unary_ops(op_name: str):
     # Set up
@@ -386,11 +379,6 @@ def test_log():
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-    data_numpy = np.random.randint(1, 16, (2, 3)).astype(np.float32)
-    expected_output = np.log(data_numpy)
-    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy))
-    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
-
 
 def test_tanh():
     @R.function
@@ -407,12 +395,6 @@ def test_tanh():
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-    data_numpy = np.random.randint(1, 16, (2, 3)).astype(np.float32)
-    expected_output = np.tanh(data_numpy)
-    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy))
-    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
-
-
 
 def test_negative():
     @R.function
@@ -428,11 +410,6 @@ def test_negative():
 
     expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
-
-    data_numpy = np.random.randint(1, 16, (2, 3)).astype(np.float32)
-    expected_output = np.negative(data_numpy)
-    result = run_relax_module(bb.get(), tvm.nd.array(data_numpy))
-    np.testing.assert_allclose(expected_output, result.numpy(), rtol=1e-6, atol=1e-6)
 
 
 def test_floor_divide():
