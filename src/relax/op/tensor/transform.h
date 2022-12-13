@@ -108,6 +108,11 @@ Expr InferShapeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx);
 
 Type InferTypeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx);
 
+/* relax.where */
+Expr InferShapeWhere(const Call& call, DiagnosticContext diag_ctx);
+
+Type InferTypeWhere(const Call& call, DiagnosticContext diag_ctx);
+
 /* relax.split */
 Expr InferShapeSplit(const Call& call, DiagnosticContext diag_ctx);
 

@@ -527,6 +527,81 @@ def test_sqrt():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_sigmoid():
+    @I.ir_module
+    class Sigmoid:
+        @R.function
+        def main(
+            x: R.Tensor((T.int64(2), T.int64(3)), "float32")
+        ) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((T.int64(2), T.int64(3)), "float32") = R.sigmoid(x)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(
+            x: R.Tensor((T.int64(2), T.int64(3)), "float32")
+        ) -> R.Tensor(None, "float32", ndim=2):
+            gv = R.call_tir(sigmoid, (x,), (T.int64(2), T.int64(3)), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def sigmoid(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"]
+        ):
+            T.func_attr({"global_symbol": "sigmoid", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("compute"):
+                    i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[i0_1, i1_1])
+                    T.writes(compute[i0_1, i1_1])
+                    compute[i0_1, i1_1] = T.sigmoid(rxplaceholder[i0_1, i1_1], dtype="float32")
+
+    mod = OperatorLegalizer(Sigmoid).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_less():
+    @I.ir_module
+    class Less:
+        @R.function
+        def main(
+            x: R.Tensor((T.int64(2), T.int64(3)), "float32"),
+            y: R.Tensor((T.int64(2), T.int64(3)), "float32")
+        ) -> R.Tensor(None, "bool", ndim=2):
+            gv: R.Tensor((T.int64(2), T.int64(3)), "bool") = R.less(x, y)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(
+            x: R.Tensor((T.int64(2), T.int64(3)), "float32"),
+            y: R.Tensor((T.int64(2), T.int64(3)), "float32")
+        ) -> R.Tensor(None, "bool", ndim=2):
+            gv = R.call_tir(less, (x, y), (2, 3), dtype="bool")
+            return gv
+
+        @T.prim_func
+        def less(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            T_less: T.Buffer[(T.int64(2), T.int64(3)), "bool"]
+        ):
+            T.func_attr({"global_symbol": "less", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_less"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[ax0, ax1], rxplaceholder_1[ax0, ax1])
+                    T.writes(T_less[ax0, ax1])
+                    T_less[ax0, ax1] = rxplaceholder[ax0, ax1] < rxplaceholder_1[ax0, ax1]
+
+    mod = OperatorLegalizer(Less).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_relu():
     @I.ir_module
     class Relu:
@@ -1507,6 +1582,52 @@ def test_broadcast_to():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_where():
+    @I.ir_module
+    class Where:
+        @R.function
+        def main(
+            condition: R.Tensor((2, 1), "bool"),
+            x: R.Tensor((2, 3), "float32"),
+            y: R.Tensor((2, 1), "float32")
+        ) -> R.Tensor(None, "float32", ndim=2):
+            gv: R.Tensor((2, 3), "float32") = R.where(condition, x, y)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(
+            condition: R.Tensor((2, 1), "bool"),
+            x: R.Tensor((2, 3), "float32"),
+            y: R.Tensor((2, 1), "float32")
+        ) -> R.Tensor(None, "float32", ndim=2):
+            gv = R.call_tir(where, (condition, x, y), (2, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def where(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(1)), "bool"],
+            rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            rxplaceholder_2: T.Buffer[(T.int64(2), T.int64(1)), "float32"],
+            T_where: T.Buffer[(T.int64(2), T.int64(3)), "float32"]
+        ):
+            T.func_attr({"global_symbol": "where", "tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_where"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[ax0, T.int64(0)], rxplaceholder_1[ax0, ax1], rxplaceholder_2[ax0, T.int64(0)])
+                    T.writes(T_where[ax0, ax1])
+                    T_where[ax0, ax1] = T.Select(
+                        0 < T.Cast("int32", rxplaceholder[ax0, T.int64(0)]),
+                        rxplaceholder_1[ax0, ax1],
+                        rxplaceholder_2[ax0, T.int64(0)]
+                    )
+
+    mod = OperatorLegalizer(Where).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_strided_slice():
     @I.ir_module
     class StridedSlice:
@@ -2230,6 +2351,161 @@ def test_adaptive_avg_pool2d():
                     ] * T.float32(0.020408163265306121)
 
     mod = OperatorLegalizer(AdaptiveAvgPool2D).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_cross_entropy():
+    @I.ir_module
+    class CrossEntropy:
+        @R.function
+        def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
+            gv: R.Tensor((), "float32") = R.cross_entropy(predictions, targets)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
+            gv: R.Tensor((), "float32") = R.call_tir(cross_entropy, (predictions, targets), (), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def cross_entropy(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            T_multiply: T.Buffer[(), "float32"]
+        ):
+            T.func_attr({"global_symbol": "cross_entropy", "tir.noalias": True})
+            compute = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            T_multiply_1 = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            T_multiply_red = T.alloc_buffer([], dtype="float32")
+
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("compute"):
+                    i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[i0_1, i1_1])
+                    T.writes(compute[i0_1, i1_1])
+                    compute[i0_1, i1_1] = T.log(rxplaceholder[i0_1, i1_1], dtype="float32")
+
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_multiply"):
+                    ax0, ax1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(compute[ax0, ax1], rxplaceholder_1[ax0, ax1])
+                    T.writes(T_multiply_1[ax0, ax1])
+                    T_multiply_1[ax0, ax1] = compute[ax0, ax1] * rxplaceholder_1[ax0, ax1]
+
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_multiply_red"):
+                    k0, k1 = T.axis.remap("RR", [i0, i1])
+                    T.reads(T_multiply_1[k0, k1])
+                    T.writes(T_multiply_red[()])
+                    with T.init():
+                        T_multiply_red[()] = T.float32(0)
+                    T_multiply_red[()] = T_multiply_red[()] + T_multiply_1[k0, k1]
+
+            with T.block("T_multiply_1"):
+                vi = T.axis.spatial(1, T.int64(0))
+                T.reads(T_multiply_red[()])
+                T.writes(T_multiply[()])
+                T_multiply[()] = T_multiply_red[()] * T.float32(-1)
+
+    mod = OperatorLegalizer(CrossEntropy).transform()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_softmax_cross_entropy():
+    @I.ir_module
+    class SoftmaxCrossEntropy:
+        @R.function
+        def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
+            gv: R.Tensor((), "float32") = R.softmax_cross_entropy(predictions, targets)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
+            gv: R.Tensor((), "float32") = R.call_tir(softmax_cross_entropy, (predictions, targets), (), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def softmax_cross_entropy(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            T_multiply: T.Buffer[(), "float32"]
+        ):
+            T.func_attr({"global_symbol": "softmax_cross_entropy", "tir.noalias": True})
+            T_softmax_maxelem = T.alloc_buffer([T.int64(2)], dtype="float32")
+            T_softmax_exp = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            T_softmax_expsum = T.alloc_buffer([T.int64(2)], dtype="float32")
+            T_softmax_norm = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            compute = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            T_multiply_1 = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
+            T_multiply_red = T.alloc_buffer([], dtype="float32")
+
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_softmax_maxelem"):
+                    i0_1, k = T.axis.remap("SR", [i0, i1])
+                    T.reads(rxplaceholder[i0_1, k])
+                    T.writes(T_softmax_maxelem[i0_1])
+                    with T.init():
+                        T_softmax_maxelem[i0_1] = T.float32(-3.4028234663852886e+38)
+                    T_softmax_maxelem[i0_1] = T.max(T_softmax_maxelem[i0_1], rxplaceholder[i0_1, k])
+
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_softmax_exp"):
+                    i0_2, i1_1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[i0_2, i1_1], T_softmax_maxelem[i0_2])
+                    T.writes(T_softmax_exp[i0_2, i1_1])
+                    T_softmax_exp[i0_2, i1_1] = T.exp(rxplaceholder[i0_2, i1_1] - T_softmax_maxelem[i0_2], dtype="float32")
+
+            for i0_3, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_softmax_expsum"):
+                    i0_4, k = T.axis.remap("SR", [i0_3, i1])
+                    T.reads(T_softmax_exp[i0_4, k])
+                    T.writes(T_softmax_expsum[i0_4])
+                    with T.init():
+                        T_softmax_expsum[i0_4] = T.float32(0)
+                    T_softmax_expsum[i0_4] = T_softmax_expsum[i0_4] + T_softmax_exp[i0_4, k]
+
+            for i0_5, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_softmax_norm"):
+                    i0_6, i1_2 = T.axis.remap("SS", [i0_5, i1])
+                    T.reads(T_softmax_exp[i0_6, i1_2], T_softmax_expsum[i0_6])
+                    T.writes(T_softmax_norm[i0_6, i1_2])
+                    T.block_attr({"axis":1})
+                    T_softmax_norm[i0_6, i1_2] = T_softmax_exp[i0_6, i1_2] / T_softmax_expsum[i0_6]
+
+            for i0_7, i1_3 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("compute"):
+                    i0_8, i1_4 = T.axis.remap("SS", [i0_7, i1_3])
+                    T.reads(T_softmax_norm[i0_8, i1_4])
+                    T.writes(compute[i0_8, i1_4])
+                    compute[i0_8, i1_4] = T.log(T_softmax_norm[i0_8, i1_4], dtype="float32")
+
+            for i0_9, i1_5 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_multiply"):
+                    ax0, ax1 = T.axis.remap("SS", [i0_9, i1_5])
+                    T.reads(compute[ax0, ax1], rxplaceholder_1[ax0, ax1])
+                    T.writes(T_multiply_1[ax0, ax1])
+                    T_multiply_1[ax0, ax1] = compute[ax0, ax1] * rxplaceholder_1[ax0, ax1]
+
+            for i0_10, i1_6 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("T_multiply_red"):
+                    k0, k1 = T.axis.remap("RR", [i0_10, i1_6])
+                    T.reads(T_multiply_1[k0, k1])
+                    T.writes(T_multiply_red[()])
+                    with T.init():
+                        T_multiply_red[()] = T.float32(0)
+                    T_multiply_red[()] = T_multiply_red[()] + T_multiply_1[k0, k1]
+
+            with T.block("T_multiply_1"):
+                vi = T.axis.spatial(1, T.int64(0))
+                T.reads(T_multiply_red[()])
+                T.writes(T_multiply[()])
+                T_multiply[()] = T_multiply_red[()] * T.float32(-1)
+
+    mod = OperatorLegalizer(SoftmaxCrossEntropy).transform()
     tvm.ir.assert_structural_equal(mod, Expected)
 
 

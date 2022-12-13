@@ -648,3 +648,44 @@ def collapse_sum_to(
     """
     shape = _convert_shape_to_expr(shape)
     return _ffi_api.collapse_sum_to(data, shape)
+
+
+def where(condition: Expr, x: Expr, y: Expr) -> Expr:
+    """Selecting elements from either x or y depending on the value of the
+    condition.
+
+    .. note::
+        Shapes of condition, x, and y must be broadcastable to a common shape.
+        Semantics follow numpy where function
+        https://numpy.org/doc/stable/reference/generated/numpy.where.html
+
+    Parameters
+    ----------
+    condition : relax.Expr
+        Where True, yield x, otherwise yield y
+
+    x : relax.Expr
+        The first array or scalar to be selected.
+
+    y : relax.Expr
+        The second array or scalar to be selected.
+
+    Returns
+    -------
+    result : relax.Expr
+        The selected array. The output shape is the broadcasted shape from
+        condition, x, and y.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        x = [[1, 2], [3, 4]]
+        y = [[5, 6], [7, 8]]
+        condition = [[0, 1], [-1, 0]]
+        relax.where(conditon, x, y) = [[5, 2], [3, 8]]
+
+        condition = [[1], [0]]
+        relax.where(conditon, x, y) = [[1, 2], [7, 8]]
+    """
+    return _ffi_api.where(condition, x, y)

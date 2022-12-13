@@ -653,5 +653,78 @@ def test_adaptive_avg_pool2d():
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
+def test_sigmoid():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.sigmoid(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.op.sigmoid(x))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_less():
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3), "float32"), y: R.Tensor((2, 1), "float32")
+    ) -> R.Tensor(None, "bool", ndim=2):
+        gv: R.Tensor((2, 3), "bool") = R.less(x, y)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [2, 1], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.less(x, y))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_cross_entropy():
+    @R.function
+    def expected(
+        predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")
+    ) -> R.Tensor(None, "float32", ndim=0):
+        gv: R.Tensor((), "float32") = R.cross_entropy(predictions, targets)
+        return gv
+
+    predictions = relax.Var("predictions", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    targets = relax.Var("targets", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [predictions, targets]):
+        gv = bb.emit(relax.op.nn.cross_entropy(predictions, targets))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_softmax_cross_entropy():
+    @R.function
+    def expected(
+        predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")
+    ) -> R.Tensor(None, "float32", ndim=0):
+        gv: R.Tensor((), "float32") = R.softmax_cross_entropy(predictions, targets)
+        return gv
+
+    predictions = relax.Var("predictions", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    targets = relax.Var("targets", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [predictions, targets]):
+        gv = bb.emit(relax.op.nn.softmax_cross_entropy(predictions, targets))
+        bb.emit_func_output(gv)
+
+    expected = expected.with_attr("global_symbol", "main")
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
