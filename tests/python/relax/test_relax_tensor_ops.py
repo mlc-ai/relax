@@ -22,7 +22,6 @@ import tvm
 from tvm import relay, relax
 from tvm.error import DiagnosticError
 from tvm.relax.testing import transform
-from tvm.relax.transform import OperatorLegalizer
 from tvm.script import relax as R
 import tvm.testing
 
