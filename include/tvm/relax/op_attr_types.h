@@ -464,7 +464,7 @@ struct TakeAttrs : public tvm::AttrsNode<TakeAttrs> {
   }
 };  // struct TakeAttrs
 
-/*! \brief Attributes used in full, ones, and zero operators */
+/*! \brief Attributes used in full, ones, and zeros operators */
 struct InitAttrs : public tvm::AttrsNode<InitAttrs> {
   DataType dtype;
 

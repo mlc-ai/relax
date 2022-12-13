@@ -348,7 +348,7 @@ inline Tensor collapse_sum(const Tensor& data, Array<PrimExpr> target_shape) {
     } else if (oshape[o_ax] == 1) {
       --o_ax;
     } else {
-      ICHECK(0) << "Shapes of collapse_sum do not match: data.shape = " << data->shape
+      ICHECK(false) << "Shapes of collapse_sum do not match: data.shape = " << data->shape
                 << ", target_shape = " << target_shape;
     }
   }

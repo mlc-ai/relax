@@ -27,7 +27,7 @@ from ..expr import Expr
 PrimExprLike = Union[int, PrimExpr]
 
 
-def _handle_shape(input_shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]) -> Expr:
+def _convert_shape_to_expr(input_shape: Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]) -> Expr:
     if isinstance(input_shape, (PrimExpr, int)):
         input_shape = [input_shape]
     if isinstance(input_shape, (tuple, list)):
@@ -94,7 +94,7 @@ def reshape(
     result : relax.Expr
         The reshaped result.
     """
-    newshape = _handle_shape(newshape)
+    newshape = _convert_shape_to_expr(newshape)
     return _ffi_api.reshape(data, newshape)
 
 
@@ -337,12 +337,11 @@ def full(
     fill_value : relax.Expr
         The value to fill. Must be a scalar.
 
-    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
+    shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], relax.Expr]
         The shape of the target.
 
-    dtype : Optional[str]
+    dtype : Optional[Union[str, tvm.DataType]]
         The data type of the target.
-
         If dtype is not given, the dtype of the target would be the dtype of fill_value.
 
     Returns
@@ -350,14 +349,9 @@ def full(
     result : relax.Expr
         The result tensor.
     """
-    shape = _handle_shape(shape)
+    shape = _convert_shape_to_expr(shape)
 
-    if dtype is None:
-        # currently tvm.DataType cannot identify "void"
-        # so leave dtype to be None so it will be converted into void type in PackedFunc calling process
-        # dtype = tvm.DataType("void")
-        dtype = None
-    elif isinstance(dtype, str):
+    if isinstance(dtype, str):
         dtype = tvm.DataType(dtype)
     return _ffi_api.full(fill_value, shape, dtype)
 
@@ -392,9 +386,8 @@ def ones(
     shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
         The shape of the target.
 
-    dtype : Optional[str]
+    dtype : Optional[Union[str, tvm.DataType]]
         The data type of the target.
-
         If dtype is not given, the dtype of the target would be float32.
 
     Returns
@@ -402,7 +395,7 @@ def ones(
     result : relax.Expr
         The result tensor.
     """
-    shape = _handle_shape(shape)
+    shape = _convert_shape_to_expr(shape)
     if isinstance(dtype, str):
         dtype = tvm.DataType(dtype)
     return _ffi_api.ones(shape, dtype)
@@ -419,9 +412,8 @@ def zeros(
     shape : Union[PrimExprLike, List[PrimExprLike], Tuple[PrimExprLike], Expr]
         The shape of the target.
 
-    dtype : Optional[str]
+    dtype : Optional[Union[str, tvm.DataType]]
         The data type of the target.
-
         If dtype is not given, the dtype of the target would be float32.
 
     Returns
@@ -429,7 +421,7 @@ def zeros(
     result : relax.Expr
         The result tensor.
     """
-    shape = _handle_shape(shape)
+    shape = _convert_shape_to_expr(shape)
     if isinstance(dtype, str):
         dtype = tvm.DataType(dtype)
     return _ffi_api.zeros(shape, dtype)
@@ -536,7 +528,7 @@ def broadcast_to(
     result : relay.Expr
         The result tensor.
     """
-    shape = _handle_shape(shape)
+    shape = _convert_shape_to_expr(shape)
     return _ffi_api.broadcast_to(data, shape)
 
 
@@ -654,5 +646,5 @@ def collapse_sum_to(
     result : Expr
         The result tensor after summation.
     """
-    shape = _handle_shape(shape)
+    shape = _convert_shape_to_expr(shape)
     return _ffi_api.collapse_sum_to(data, shape)
