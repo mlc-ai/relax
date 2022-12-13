@@ -2600,7 +2600,7 @@ def test_image_resize2d():
     class Resize2D:
         @R.function
         def main(x: R.Tensor((2, 8, 8, 3), "float32")) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((2, 16, 16, 3), "float32") = R.resize2d(
+            gv: R.Tensor((2, 16, 16, 3), "float32") = R.image.resize2d(
                 x,
                 size=[16, 16],
                 layout="NHWC",

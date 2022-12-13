@@ -121,7 +121,7 @@ def test_conv2d_with_out_dtype():
     w = relax.Var("w", [16, 3, 5, 5], relax.DynTensorType(ndim=4, dtype="float32"))
     bb = relax.BlockBuilder()
     with bb.function("main", [x, w]):
-        gv = bb.emit(relax.op.conv2d(x, w, kernel_size=(5, 5), out_dtype="float16"))
+        gv = bb.emit(relax.op.nn.conv2d(x, w, kernel_size=(5, 5), out_dtype="float16"))
         bb.emit_func_output(gv)
 
     expected = expected.with_attr("global_symbol", "main")
