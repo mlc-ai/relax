@@ -122,5 +122,48 @@ RELAX_REGISTER_BINARY_BROADCAST_OP("divide");
 /* relax.floor_divide */
 RELAX_REGISTER_BINARY_BROADCAST_OP("floor_divide");
 
+/* relax.less */
+RELAX_REGISTER_OP("relax.less")
+    .set_num_inputs(2)
+    .add_argument("lhs", "Tensor", "The left operand of less.")
+    .add_argument("rhs", "Tensor", "The right operand of less.")
+    .set_attr<FInferShape>("FInferShape", InferShapeBinaryBroadcast)
+    .set_attr<FInferType>("FInferType", InferTypeLess);
+
+TVM_REGISTER_GLOBAL("relax.op.less").set_body_typed([](Expr lhs, Expr rhs) {
+  static const Op& op = Op::Get("relax.less");
+  return Call(op, {lhs, rhs}, Attrs(), {});
+});
+
+Type InferTypeLess(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Less op should have 2 arguments");
+  }
+  Type lhs_type = call->args[0]->checked_type();
+  Type rhs_type = call->args[1]->checked_type();
+  auto* t0 = lhs_type.as<DynTensorTypeNode>();
+  auto* t1 = rhs_type.as<DynTensorTypeNode>();
+  if (!t0 || !t1) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Both lhs and rhs should be DynTensor for broadcasting, but got "
+                       << lhs_type->GetTypeKey() << " and " << rhs_type->GetTypeKey());
+  }
+
+  if (t0->dtype != t1->dtype) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Data types " << t0->dtype << " and " << t1->dtype
+                       << " must be equal for broadcasting operators");
+  }
+
+  int output_ndim;
+  if (t0->IsUnknownNdim() || t1->IsUnknownNdim()) {
+    output_ndim = -1;
+  } else {
+    output_ndim = std::max(t0->ndim, t1->ndim);
+  }
+  return DynTensorType(output_ndim, DataType::Bool());
+}
+
 }  // namespace relax
 }  // namespace tvm

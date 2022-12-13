@@ -1212,6 +1212,104 @@ Type InferTypeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx) {
   return DynTensorType(ndim, orig_type->dtype);
 }
 
+/* relax.where */
+RELAX_REGISTER_OP("relax.where")
+    .set_num_inputs(3)
+    .add_argument("condition", "Tensor", "Where True, yield x, otherwise yield y.")
+    .add_argument("x", "Tensor", "The first array or scalar to be selected.")
+    .add_argument("y", "Tensor", "The second array or scalar to be selected.")
+    .set_attr<FInferShape>("FInferShape", InferShapeWhere)
+    .set_attr<FInferType>("FInferType", InferTypeWhere);
+
+Expr MakeWhere(Expr condition, Expr x, Expr y) {
+  static const Op& op = Op::Get("relax.where");
+  return Call(op, {std::move(condition), std::move(x), std::move(y)}, {}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.where").set_body_typed(MakeWhere);
+
+Expr InferShapeWhere(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 3) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Where op should have 3 arguments.");
+  }
+
+  auto binary_broadcast = [&](Expr shape0, Expr shape1) -> Expr {
+    auto* s0 = shape0.as<ShapeExprNode>();
+    auto* s1 = shape1.as<ShapeExprNode>();
+
+    if (!s0 || !s1) {
+      return RuntimeDepShape();
+    }
+
+    std::vector<PrimExpr> output_shape;
+    size_t ndim0 = s0->values.size();
+    size_t ndim1 = s1->values.size();
+    size_t i = 1;
+    for (; i <= std::min(ndim0, ndim1); ++i) {
+      PrimExpr dim0 = s0->values[ndim0 - i];
+      PrimExpr dim1 = s1->values[ndim1 - i];
+      if (EqualConstInt(dim0, 1)) {
+        output_shape.push_back(dim1);
+      } else if (EqualConstInt(dim1, 1)) {
+        output_shape.push_back(dim0);
+      } else if (EqualCheck(dim0, dim1)) {
+        output_shape.push_back(dim0);
+      } else {
+        return RuntimeDepShape();
+      }
+    }
+    size_t max_ndim = std::max(ndim0, ndim1);
+    auto& longer_shape = (ndim0 > ndim1) ? s0 : s1;
+    for (; i <= max_ndim; ++i) {
+      output_shape.push_back(longer_shape->values[max_ndim - i]);
+    }
+    return ShapeExpr(Array<PrimExpr>(output_shape.rbegin(), output_shape.rend()));
+  };
+
+  return binary_broadcast(
+    binary_broadcast(call->args[1]->shape(), call->args[2]->shape()),
+    call->args[0]->shape()
+  );
+  // TODO(chaofanlin): runtime shape inference
+}
+
+Type InferTypeWhere(const Call& call, DiagnosticContext diag_ctx) {
+  if (call->args.size() != 3) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Where op should have 3 arguments.");
+  }
+
+  Type condition_type = call->args[0]->checked_type();
+  Type x_type = call->args[1]->checked_type();
+  Type y_type = call->args[2]->checked_type();
+  auto* t0 = condition_type.as<DynTensorTypeNode>();
+  auto* t1 = x_type.as<DynTensorTypeNode>();
+  auto* t2 = y_type.as<DynTensorTypeNode>();
+  if (!t0 || !t1 || !t2) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "All three arguments of where: condtion, x and y should be DynTensor for broadcasting, but got "
+                       << condition_type->GetTypeKey()  << ", " << x_type->GetTypeKey() << " and " << y_type->GetTypeKey());
+  }
+
+  DataType output_dtype;
+  if (t1->IsUnknownDtype() || t2->IsUnknownDtype()) {
+    output_dtype = DataType::Void();
+  } else if (t1->dtype != t2->dtype) {
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Data types " << t1->dtype << " and " << t2->dtype
+                       << " must be equal for broadcasting operators");
+  } else {
+    output_dtype = t1->dtype;
+  }
+
+  int output_ndim;
+  if (t0->IsUnknownNdim() || t1->IsUnknownNdim() || t2->IsUnknownNdim()) {
+    output_ndim = -1;
+  } else {
+    output_ndim = std::max(std::max(t0->ndim, t1->ndim), t2->ndim);
+  }
+  return DynTensorType(output_ndim, output_dtype);
+}
+
 /* relax.split */
 TVM_REGISTER_NODE_TYPE(SplitAttrs);
 

@@ -39,6 +39,8 @@ namespace relax {
 Type InferTypeBinaryBroadcast(const Call& call, DiagnosticContext diag_ctx);
 Expr InferShapeBinaryBroadcast(const Call& call, DiagnosticContext diag_ctx);
 
+Type InferTypeLess(const Call& call, DiagnosticContext diag_ctx);
+
 }  // namespace relax
 }  // namespace tvm
 

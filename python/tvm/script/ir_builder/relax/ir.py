@@ -85,6 +85,11 @@ from tvm.relax.op import (
     unique,
     memory,
     variance,
+    where,
+    less,
+    sigmoid,
+    cross_entropy,
+    softmax_cross_entropy,
 )
 from tvm.relax.ty import ObjectType, ShapeType, DynTensorType
 from tvm.relax.utils import convert_to_expr
@@ -532,4 +537,9 @@ __all__ = [
     "tensor",
     "zeros",
     "zeros_like",
+    "where",
+    "less",
+    "sigmoid",
+    "cross_entropy",
+    "softmax_cross_entropy",
 ]

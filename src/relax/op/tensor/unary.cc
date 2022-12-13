@@ -73,6 +73,9 @@ RELAX_REGISTER_UNARY_OP("negative");
 /* relax.tanh */
 RELAX_REGISTER_UNARY_OP("tanh");
 
+/* relax.sigmoid */
+RELAX_REGISTER_UNARY_OP("sigmoid");
+
 TVM_REGISTER_NODE_TYPE(UniqueAttrs);
 
 RELAX_REGISTER_OP("relax.unique")

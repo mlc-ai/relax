@@ -87,6 +87,14 @@ def _sqrt(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.sqrt, args[0])
 
 
+def _sigmoid(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.sigmoid, args[0])
+
+
+def _less(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.less, args[0], args[1])
+
+
 def _nn_relu(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.nn.relu, args[0])
 
@@ -225,6 +233,10 @@ def _strided_slice(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shap
     )
 
 
+def _where(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(topi.where, args[0], args[1], args[2])
+
+
 def _nn_max_pool2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(
         topi.nn.pool2d,
@@ -340,6 +352,20 @@ def _nn_adaptive_max_pool2d(bb: BlockBuilder, args: List[Expr], attrs: Attrs, ou
     )
 
 
+def _cross_entropy(x, y):
+    return -topi.sum(topi.log(x) * y)
+
+
+def _nn_cross_entropy(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    return bb.call_te(cross_entropy, args[0], args[1])
+
+
+def _nn_softmax_cross_entropy(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
+    def softmax_cross_entropy(x, y):
+        return cross_entropy(topi.nn.softmax(x), y)
+    return bb.call_te(softmax_cross_entropy, args[0], args[1])
+
+
 def _sum(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     return bb.call_te(topi.sum, args[0], attrs.axis, attrs.keepdims)
 
@@ -379,6 +405,8 @@ op_legalization_map = {
     ir.Op.get("relax.sin"): _sin,
     ir.Op.get("relax.cos"): _cos,
     ir.Op.get("relax.sqrt"): _sqrt,
+    ir.Op.get("relax.sigmoid"): _sigmoid,
+    ir.Op.get("relax.less"): _less,
     ir.Op.get("relax.nn.relu"): _nn_relu,
     ir.Op.get("relax.nn.gelu"): _nn_gelu,
     ir.Op.get("relax.nn.silu"): _nn_silu,
@@ -400,6 +428,7 @@ op_legalization_map = {
     ir.Op.get("relax.collapse_sum_to"): _collapse_sum_to,
     ir.Op.get("relax.split"): _split,
     ir.Op.get("relax.strided_slice"): _strided_slice,
+    ir.Op.get("relax.where"): _where,
     ir.Op.get("relax.broadcast_to"): _broadcast_to,
     ir.Op.get("relax.nn.max_pool2d"): _nn_max_pool2d,
     ir.Op.get("relax.nn.batch_norm"): _nn_batch_norm,
@@ -408,6 +437,8 @@ op_legalization_map = {
     ir.Op.get("relax.nn.softmax"): _nn_softmax,
     ir.Op.get("relax.nn.flatten"): _nn_flatten,
     ir.Op.get("relax.nn.adaptive_avg_pool2d"): _nn_adaptive_max_pool2d,
+    ir.Op.get("relax.nn.cross_entropy"): _nn_cross_entropy,
+    ir.Op.get("relax.nn.softmax_cross_entropy"): _nn_softmax_cross_entropy,
     ir.Op.get("relax.sum"): _sum,
     ir.Op.get("relax.mean"): _mean,
     ir.Op.get("relax.image.resize2d"): _image_resize2d,
