@@ -129,6 +129,14 @@ class CodeGenVM : public ExprFunctor<Instruction::Arg(const Expr&)> {
         return EmitAllocClosure(call);
       } else if (call_node->op == invoke_closure_op_) {
         return EmitInvokeClosure(call);
+      } else if (call_node->op == get_captured_cuda_graph_op_) {
+        return EmitGetCapturedCUDAGraph(call_node);
+      } else if (call_node->op == cuda_graph_begin_capture_op_) {
+        return EmitCUDAGraphBeginCapture(call_node);
+      } else if (call_node->op == cuda_graph_end_capture_op_) {
+        return EmitCUDAGraphEndCapture(call_node);
+      } else if (call_node->op == cuda_graph_launch_op_) {
+        return EmitCUDAGraphLaunch(call_node);
       } else {
         // every "normal" operator is lowered to a global var in the IRModule. The Attrs for those
         // ops are handled in a pass when lowering them to TIR.
@@ -514,6 +522,38 @@ class CodeGenVM : public ExprFunctor<Instruction::Arg(const Expr&)> {
     return ret;
   }
 
+  Instruction::Arg EmitGetCapturedCUDAGraph(const CallNode* call) {
+    auto gv = Downcast<GlobalVar>(call->args[0]);
+    auto func_name = gv->name_hint;
+    TVMRetValue func_name_constant;
+    func_name_constant = func_name;
+    auto func_name_index = builder_->EmitConstant(func_name_constant);
+    size_t dst_register = NewRegister();
+
+    builder_->EmitCall("vm.builtin.get_captured_cuda_graph", {
+      Instruction::Arg(Instruction::kRegister, Instruction::kVMRegister),
+      Instruction::Arg(Instruction::kConstIdx, func_name_index)},
+                       dst_register);
+    return Instruction::Arg(Instruction::kRegister, dst_register);
+  }
+
+  Instruction::Arg EmitCUDAGraphBeginCapture(const CallNode* call) {
+    size_t dst_register = NewRegister();
+    builder_->EmitCall("vm.builtin.cuda_graph_begin_capture", {}, dst_register);
+    return Instruction::Arg(Instruction::kRegister, dst_register);
+  }
+
+  Instruction::Arg EmitCUDAGraphEndCapture(const CallNode* call) {
+    size_t dst_register = NewRegister();
+    builder_->EmitCall("vm.builtin.cuda_graph_end_capture", {}, dst_register);
+    return Instruction::Arg(Instruction::kRegister, dst_register);
+  }
+
+  Instruction::Arg EmitCUDAGraphLaunch(const CallNode* call) {
+    size_t dst_register = NewRegister();
+    builder_->EmitCall("vm.builtin.cuda_graph_launch", ConvertArgs(GetRef<Call>(call)), dst_register);
+    return Instruction::Arg(Instruction::kRegister, dst_register);
+  }
   /*! \brief A counter for naming local functions. */
   size_t local_func_counter_ = 0;
   /*! \brief Internal ExecBuilder. */
@@ -533,6 +573,10 @@ class CodeGenVM : public ExprFunctor<Instruction::Arg(const Expr&)> {
   const Op& assert_op_ = Op::Get("relax.assert_op");
   const Op& make_closure_op_ = Op::Get("relax.make_closure");
   const Op& invoke_closure_op_ = Op::Get("relax.invoke_closure");
+  const Op& get_captured_cuda_graph_op_ = Op::Get("relax.vm.builtin.get_captured_cuda_graph");
+  const Op& cuda_graph_begin_capture_op_ = Op::Get("relax.vm.builtin.cuda_graph_begin_capture");
+  const Op& cuda_graph_end_capture_op_ = Op::Get("relax.vm.builtin.cuda_graph_end_capture");
+  const Op& cuda_graph_launch_op_ = Op::Get("relax.vm.builtin.cuda_graph_launch");
 };
 
 void VMCodeGen::CodeGen(IRModule rx_mod) {

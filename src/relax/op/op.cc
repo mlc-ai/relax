@@ -413,5 +413,49 @@ TVM_REGISTER_OP("relax.vm.call_tir_dyn")
                   "The input arguments (list of tensors and last argument is ShapeExpr)")
     .set_attr<FInferStructInfo>("FInferStructInfo", ReturnVoidStructInfo);
 
+// vm builtins for cuda graph
+
+TVM_REGISTER_OP("relax.vm.builtin.cuda_graph_begin_capture")
+    .set_num_inputs(0)
+    .set_attr<FInferStructInfo>("FInferStructInfo", ReturnVoidStructInfo);
+
+Expr MakeVMCUDAGraphBeginCapture() {
+  static const Op& op = Op::Get("relax.vm.builtin.cuda_graph_begin_capture");
+  return Call(op, {}, Attrs(), {});
+}
+
+TVM_REGISTER_OP("relax.vm.builtin.cuda_graph_end_capture")
+    .set_num_inputs(0)
+    .set_attr<FInferStructInfo>("FInferStructInfo", ReturnVoidStructInfo);
+
+Expr MakeVMCUDAGraphEndCapture() {
+  static const Op& op = Op::Get("relax.vm.builtin.cuda_graph_end_capture");
+  return Call(op, {}, Attrs(), {});
+}
+
+StructInfo InferGetCapturedCUDAGraphStructureInfo(const Call& call, const BlockBuilder& ctx) {
+  const auto* func_struct_info = call->args[0]->struct_info_.value().as<FuncStructInfoNode>();
+  ICHECK(func_struct_info);
+  return TupleStructInfo({ObjectStructInfo(), func_struct_info->ret});
+}
+
+TVM_REGISTER_OP("relax.vm.builtin.get_captured_cuda_graph")
+    .set_num_inputs(1)
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferGetCapturedCUDAGraphStructureInfo);
+
+Expr MakeVMGetCapturedCUDAGraph(GlobalVar func) {
+  static const Op& op = Op::Get("relax.vm.builtin.get_captured_cuda_graph");
+  return Call(op, {func}, Attrs(), {});
+}
+
+TVM_REGISTER_OP("relax.vm.builtin.cuda_graph_launch")
+    .set_num_inputs(1)
+    .set_attr<FInferStructInfo>("FInferStructInfo", ReturnVoidStructInfo);
+
+Expr MakeVMCUDAGraphLaunch(Expr graph) {
+  static const Op& op = Op::Get("relax.vm.builtin.cuda_graph_launch");
+  return Call(op, {graph}, Attrs(), {});
+}
+
 }  // namespace relax
 }  // namespace tvm

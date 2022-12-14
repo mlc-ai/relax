@@ -38,6 +38,14 @@ struct InitAttrs : public tvm::AttrsNode<InitAttrs> {
   }
 };  // struct InitAttrs
 
+Expr MakeVMCUDAGraphBeginCapture();
+
+Expr MakeVMCUDAGraphEndCapture();
+
+Expr MakeVMGetCapturedCUDAGraph(GlobalVar func);
+
+Expr MakeVMCUDAGraphLaunch(Expr graph);
+
 }  // namespace relax
 }  // namespace tvm
 
