@@ -17,11 +17,8 @@
 
 import pytest
 import tvm
-from tvm import relax
-from tvm.error import DiagnosticError
 from tvm.relax.transform import OperatorLegalizer
 from tvm.script import ir as I, relax as R, tir as T
-import tvm.testing
 
 
 def test_conv2d():
@@ -49,7 +46,7 @@ def test_conv2d():
             rxplaceholder_1: T.Buffer[(T.int64(4), T.int64(3), T.int64(3), T.int64(3)), "float32"],
             conv2d_nchw: T.Buffer[(T.int64(2), T.int64(4), T.int64(26), T.int64(26)), "float32"],
         ):
-            T.func_attr({"global_symbol": "conv2d", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             pad_temp = T.alloc_buffer(
                 [T.int64(2), T.int64(3), T.int64(28), T.int64(28)], dtype="float32"
             )
@@ -106,7 +103,7 @@ def test_conv2d_with_out_dtype():
             rxplaceholder_1: T.Buffer[(T.int64(4), T.int64(3), T.int64(3), T.int64(3)), "float32"],
             conv2d_nchw: T.Buffer[(T.int64(2), T.int64(4), T.int64(26), T.int64(26)), "float16"],
         ):
-            T.func_attr({"global_symbol": "conv2d", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             pad_temp = T.alloc_buffer(
                 [T.int64(2), T.int64(3), T.int64(28), T.int64(28)], dtype="float32"
             )
@@ -162,7 +159,7 @@ def test_add():
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             T_add: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "add", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_add"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -201,7 +198,7 @@ def test_subtract():
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             T_subtract: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "subtract", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_subtract"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -240,7 +237,7 @@ def test_multiply():
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             T_multiply: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "multiply", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_multiply"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -277,7 +274,7 @@ def test_divide():
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(1)), "float32"],
             T_divide: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "divide", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_divide"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -314,7 +311,7 @@ def test_floor_divide():
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(1)), "float32"],
             T_floor_divide: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "floor_divide", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_floor_divide"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -339,14 +336,18 @@ def test_log():
     @I.ir_module
     class Expected:
         @R.function
-        def expected(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "expected"})
+        def expected(
+            x: R.Tensor((2, 3), dtype="float32")
+        ) -> R.Tensor(None, dtype="float32", ndim=2):
             gv = R.call_tir(log, (x,), (2, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def log(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "log", "tir.noalias": True})
+        def log(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
@@ -366,18 +367,21 @@ def test_negative():
             gv: R.Tensor((2, 3), "float32") = R.negative(x)
             return gv
 
-
     @I.ir_module
     class Expected:
         @R.function
-        def expected(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "expected"})
+        def expected(
+            x: R.Tensor((2, 3), dtype="float32")
+        ) -> R.Tensor(None, dtype="float32", ndim=2):
             gv = R.call_tir(negative, (x,), (2, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def negative(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "negative", "tir.noalias": True})
+        def negative(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
@@ -413,7 +417,7 @@ def test_sin():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "sin", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
@@ -449,7 +453,7 @@ def test_cos():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ) -> None:
-            T.func_attr({"global_symbol": "cos", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
@@ -472,14 +476,18 @@ def test_tanh():
     @I.ir_module
     class Expected:
         @R.function
-        def expected(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "expected"})
+        def expected(
+            x: R.Tensor((2, 3), dtype="float32")
+        ) -> R.Tensor(None, dtype="float32", ndim=2):
             gv = R.call_tir(tanh, (x,), (2, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def tanh(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "tanh", "tir.noalias": True})
+        def tanh(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
@@ -515,7 +523,7 @@ def test_sqrt():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ) -> None:
-            T.func_attr({"global_symbol": "sqrt", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
@@ -549,9 +557,9 @@ def test_sigmoid():
         @T.prim_func
         def sigmoid(
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
-            compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"]
+            compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "sigmoid", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
@@ -569,7 +577,7 @@ def test_less():
         @R.function
         def main(
             x: R.Tensor((T.int64(2), T.int64(3)), "float32"),
-            y: R.Tensor((T.int64(2), T.int64(3)), "float32")
+            y: R.Tensor((T.int64(2), T.int64(3)), "float32"),
         ) -> R.Tensor(None, "bool", ndim=2):
             gv: R.Tensor((T.int64(2), T.int64(3)), "bool") = R.less(x, y)
             return gv
@@ -579,7 +587,7 @@ def test_less():
         @R.function
         def main(
             x: R.Tensor((T.int64(2), T.int64(3)), "float32"),
-            y: R.Tensor((T.int64(2), T.int64(3)), "float32")
+            y: R.Tensor((T.int64(2), T.int64(3)), "float32"),
         ) -> R.Tensor(None, "bool", ndim=2):
             gv = R.call_tir(less, (x, y), (2, 3), dtype="bool")
             return gv
@@ -588,9 +596,9 @@ def test_less():
         def less(
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
-            T_less: T.Buffer[(T.int64(2), T.int64(3)), "bool"]
+            T_less: T.Buffer[(T.int64(2), T.int64(3)), "bool"],
         ):
-            T.func_attr({"global_symbol": "less", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_less"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -626,7 +634,7 @@ def test_relu():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ) -> None:
-            T.func_attr({"global_symbol": "relu", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
@@ -662,7 +670,7 @@ def test_gelu():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             T_multiply: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "gelu", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             T_multiply_1 = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
             compute = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
             T_multiply_2 = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
@@ -729,7 +737,7 @@ def test_silu():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ) -> None:
-            T.func_attr({"global_symbol": "sigmoid", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("compute"):
                     i0_1, i1_1 = T.axis.remap("SS", [i0, i1])
@@ -743,7 +751,7 @@ def test_silu():
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             T_multiply: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ) -> None:
-            T.func_attr({"global_symbol": "multiply", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_multiply"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -775,7 +783,7 @@ def test_reshape():
             rxplaceholder: T.Buffer[(T.int64(1), T.int64(2), T.int64(3), T.int64(4)), "float32"],
             T_reshape: T.Buffer[(T.int64(8), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "reshape", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(8), T.int64(3)):
                 with T.block("T_reshape"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -819,7 +827,7 @@ def test_reshape_dim_inference():
             rxplaceholder: T.Buffer[(T.int64(1), T.int64(2), T.int64(3), T.int64(4)), "float32"],
             T_reshape: T.Buffer[(T.int64(8), T.int64(1), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "reshape", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2 in T.grid(T.int64(8), T.int64(1), T.int64(3)):
                 with T.block("T_reshape"):
                     ax0, ax1, ax2 = T.axis.remap("SSS", [i0, i1, i2])
@@ -865,7 +873,7 @@ def test_transpose():
             rxplaceholder: T.Buffer[(T.int64(1), T.int64(2), T.int64(3), T.int64(4)), "float32"],
             T_transpose: T.Buffer[(T.int64(2), T.int64(4), T.int64(3), T.int64(1)), "float32"],
         ):
-            T.func_attr({"global_symbol": "transpose", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3 in T.grid(T.int64(2), T.int64(4), T.int64(3), T.int64(1)):
                 with T.block("T_transpose"):
                     ax0, ax1, ax2, ax3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
@@ -907,7 +915,7 @@ def test_concatenate():
             rxplaceholder_2: T.Buffer[(T.int64(1), T.int64(4), T.int64(3)), "float32"],
             T_concat: T.Buffer[(T.int64(1), T.int64(9), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "concatenate", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2 in T.grid(T.int64(1), T.int64(9), T.int64(3)):
                 with T.block("T_concat"):
                     ax0, ax1, ax2 = T.axis.remap("SSS", [i0, i1, i2])
@@ -953,7 +961,7 @@ def test_cumsum():
             var_rxplaceholder: T.handle,
             out_buf: T.Buffer[(T.int64(2), T.int64(3), T.int64(4)), "float32"],
         ):
-            T.func_attr({"global_symbol": "cumsum", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             rxplaceholder = T.match_buffer(
                 var_rxplaceholder,
                 [T.int64(2), T.int64(3), T.int64(4)],
@@ -1081,7 +1089,7 @@ def test_cumsum_without_specified_axis():
 
         @T.prim_func
         def cumsum(var_rxplaceholder: T.handle, out_buf: T.Buffer[T.int64(24), "float32"]):
-            T.func_attr({"global_symbol": "cumsum", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             rxplaceholder = T.match_buffer(
                 var_rxplaceholder,
                 [T.int64(2), T.int64(3), T.int64(4)],
@@ -1153,7 +1161,7 @@ def test_expand_dims():
                 "float32",
             ],
         ):
-            T.func_attr({"global_symbol": "expand_dims", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3, i4, i5, i6, i7 in T.grid(
                 T.int64(2),
                 T.int64(1),
@@ -1198,7 +1206,7 @@ def test_trilu():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3), T.int64(4)), "float32"],
             trilu: T.Buffer[(T.int64(2), T.int64(3), T.int64(4)), "float32"],
         ):
-            T.func_attr({"global_symbol": "trilu", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2 in T.grid(T.int64(2), T.int64(3), T.int64(4)):
                 with T.block("trilu"):
                     i0_1, i1_1, i2_1 = T.axis.remap("SSS", [i0, i1, i2])
@@ -1232,7 +1240,7 @@ def test_cast():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3), T.int64(4)), "float32"],
             compute: T.Buffer[(T.int64(2), T.int64(3), T.int64(4)), "int32"],
         ):
-            T.func_attr({"global_symbol": "cast", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2 in T.grid(T.int64(2), T.int64(3), T.int64(4)):
                 with T.block("compute"):
                     i0_1, i1_1, i2_1 = T.axis.remap("SSS", [i0, i1, i2])
@@ -1271,7 +1279,7 @@ def test_take():
                 (T.int64(2), T.int64(3), T.int64(4), T.int64(2), T.int64(4)), "float32"
             ],
         ):
-            T.func_attr({"global_symbol": "take", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3, i4 in T.grid(
                 T.int64(2), T.int64(3), T.int64(4), T.int64(2), T.int64(4)
             ):
@@ -1324,7 +1332,7 @@ def test_full():
             rxplaceholder: T.Buffer[(), "int32"],
             T_full: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "full", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_full"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -1340,21 +1348,28 @@ def test_full_like():
     @I.ir_module
     class FullLike:
         @R.function
-        def main(x: R.Tensor((2, 3), "float32"), y: R.Tensor((), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        def main(
+            x: R.Tensor((2, 3), "float32"), y: R.Tensor((), "float32")
+        ) -> R.Tensor(None, "float32", ndim=2):
             gv: R.Tensor((2, 3), "float32") = R.full_like(x, y)
             return gv
 
     @I.ir_module
     class Expected:
         @R.function
-        def main(x: R.Tensor((2, 3), dtype="float32"), y: R.Tensor((), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "main"})
+        def main(
+            x: R.Tensor((2, 3), dtype="float32"), y: R.Tensor((), dtype="float32")
+        ) -> R.Tensor(None, dtype="float32", ndim=2):
             gv = R.call_tir(full_like, (x, y), (2, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def full_like(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_1: T.Buffer[(), "float32"], T_full_like: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "full_like", "tir.noalias": True})
+        def full_like(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            rxplaceholder_1: T.Buffer[(), "float32"],
+            T_full_like: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_full_like"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -1378,13 +1393,16 @@ def test_ones_like():
     class Expected:
         @R.function
         def main(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "main"})
             gv = R.call_tir(full_like, (x, R.const(1.0)), (2, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def full_like(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_1: T.Buffer[(), "float32"], T_full_like: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "full_like", "tir.noalias": True})
+        def full_like(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            rxplaceholder_1: T.Buffer[(), "float32"],
+            T_full_like: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_full_like"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -1408,13 +1426,16 @@ def test_zeros_like():
     class Expected:
         @R.function
         def main(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "main"})
             gv = R.call_tir(full_like, (x, R.const(0.0)), (2, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def full_like(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_1: T.Buffer[(), "float32"], T_full_like: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "full_like", "tir.noalias": True})
+        def full_like(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            rxplaceholder_1: T.Buffer[(), "float32"],
+            T_full_like: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_full_like"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -1438,13 +1459,15 @@ def test_ones():
     class Expected:
         @R.function
         def main() -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "main"})
             gv = R.call_tir(full, (R.const(1.0),), (2, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def full(rxplaceholder: T.Buffer[(), "float32"], T_full: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "full", "tir.noalias": True})
+        def full(
+            rxplaceholder: T.Buffer[(), "float32"],
+            T_full: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_full"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -1468,13 +1491,15 @@ def test_zeros():
     class Expected:
         @R.function
         def main() -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "expected"})
             gv = R.call_tir(full, (R.const(0.0),), (2, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def full(rxplaceholder: T.Buffer[(), "float32"], T_full: T.Buffer[(T.int64(2), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "full", "tir.noalias": True})
+        def full(
+            rxplaceholder: T.Buffer[(), "float32"],
+            T_full: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_full"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -1490,21 +1515,27 @@ def test_collapse_sum_like():
     @I.ir_module
     class CollapseSumLike:
         @R.function
-        def main(x: R.Tensor((2, 3), "float32"), y: R.Tensor((1, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        def main(
+            x: R.Tensor((2, 3), "float32"), y: R.Tensor((1, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=2):
             gv: R.Tensor((1, 3), "float32") = R.collapse_sum_like(x, y)
             return gv
 
     @I.ir_module
     class Expected:
         @R.function
-        def main(x: R.Tensor((2, 3), dtype="float32"), y: R.Tensor((1, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "expected"})
+        def main(
+            x: R.Tensor((2, 3), dtype="float32"), y: R.Tensor((1, 3), dtype="float32")
+        ) -> R.Tensor(None, dtype="float32", ndim=2):
             gv = R.call_tir(collapse_sum, (x,), (1, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def collapse_sum(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_red: T.Buffer[(T.int64(1), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "collapse_sum", "tir.noalias": True})
+        def collapse_sum(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            rxplaceholder_red: T.Buffer[(T.int64(1), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2 in T.grid(T.int64(1), T.int64(3), T.int64(2)):
                 with T.block("rxplaceholder_red"):
                     ax0, ax1, k0 = T.axis.remap("SSR", [i0, i1, i2])
@@ -1512,7 +1543,9 @@ def test_collapse_sum_like():
                     T.writes(rxplaceholder_red[ax0, ax1])
                     with T.init():
                         rxplaceholder_red[ax0, ax1] = T.float32(0)
-                    rxplaceholder_red[ax0, ax1] = rxplaceholder_red[ax0, ax1] + rxplaceholder[k0, ax1]
+                    rxplaceholder_red[ax0, ax1] = (
+                        rxplaceholder_red[ax0, ax1] + rxplaceholder[k0, ax1]
+                    )
 
     mod = OperatorLegalizer(CollapseSumLike).transform()
     tvm.ir.assert_structural_equal(mod, Expected)
@@ -1530,13 +1563,15 @@ def test_collapse_sum_to():
     class Expected:
         @R.function
         def main(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=2):
-            R.func_attr({"global_symbol": "main"})
             gv = R.call_tir(collapse_sum, (x,), (1, 3), dtype="float32")
             return gv
 
         @T.prim_func
-        def collapse_sum(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], rxplaceholder_red: T.Buffer[(T.int64(1), T.int64(3)), "float32"]):
-            T.func_attr({"global_symbol": "collapse_sum", "tir.noalias": True})
+        def collapse_sum(
+            rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
+            rxplaceholder_red: T.Buffer[(T.int64(1), T.int64(3)), "float32"],
+        ):
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2 in T.grid(T.int64(1), T.int64(3), T.int64(2)):
                 with T.block("rxplaceholder_red"):
                     ax0, ax1, k0 = T.axis.remap("SSR", [i0, i1, i2])
@@ -1544,7 +1579,9 @@ def test_collapse_sum_to():
                     T.writes(rxplaceholder_red[ax0, ax1])
                     with T.init():
                         rxplaceholder_red[ax0, ax1] = T.float32(0)
-                    rxplaceholder_red[ax0, ax1] = rxplaceholder_red[ax0, ax1] + rxplaceholder[k0, ax1]
+                    rxplaceholder_red[ax0, ax1] = (
+                        rxplaceholder_red[ax0, ax1] + rxplaceholder[k0, ax1]
+                    )
 
     mod = OperatorLegalizer(CollapseSumTo).transform()
     tvm.ir.assert_structural_equal(mod, Expected)
@@ -1570,7 +1607,7 @@ def test_broadcast_to():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(1), T.int64(3)), "float32"],
             T_broadcast_to: T.Buffer[(T.int64(4), T.int64(2), T.int64(5), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "broadcast_to", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3 in T.grid(T.int64(4), T.int64(2), T.int64(5), T.int64(3)):
                 with T.block("T_broadcast_to"):
                     ax0, ax1, ax2, ax3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
@@ -1589,7 +1626,7 @@ def test_where():
         def main(
             condition: R.Tensor((2, 1), "bool"),
             x: R.Tensor((2, 3), "float32"),
-            y: R.Tensor((2, 1), "float32")
+            y: R.Tensor((2, 1), "float32"),
         ) -> R.Tensor(None, "float32", ndim=2):
             gv: R.Tensor((2, 3), "float32") = R.where(condition, x, y)
             return gv
@@ -1600,7 +1637,7 @@ def test_where():
         def main(
             condition: R.Tensor((2, 1), "bool"),
             x: R.Tensor((2, 3), "float32"),
-            y: R.Tensor((2, 1), "float32")
+            y: R.Tensor((2, 1), "float32"),
         ) -> R.Tensor(None, "float32", ndim=2):
             gv = R.call_tir(where, (condition, x, y), (2, 3), dtype="float32")
             return gv
@@ -1610,18 +1647,22 @@ def test_where():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(1)), "bool"],
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             rxplaceholder_2: T.Buffer[(T.int64(2), T.int64(1)), "float32"],
-            T_where: T.Buffer[(T.int64(2), T.int64(3)), "float32"]
+            T_where: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "where", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_where"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
-                    T.reads(rxplaceholder[ax0, T.int64(0)], rxplaceholder_1[ax0, ax1], rxplaceholder_2[ax0, T.int64(0)])
+                    T.reads(
+                        rxplaceholder[ax0, T.int64(0)],
+                        rxplaceholder_1[ax0, ax1],
+                        rxplaceholder_2[ax0, T.int64(0)],
+                    )
                     T.writes(T_where[ax0, ax1])
                     T_where[ax0, ax1] = T.Select(
                         0 < T.Cast("int32", rxplaceholder[ax0, T.int64(0)]),
                         rxplaceholder_1[ax0, ax1],
-                        rxplaceholder_2[ax0, T.int64(0)]
+                        rxplaceholder_2[ax0, T.int64(0)],
                     )
 
     mod = OperatorLegalizer(Where).transform()
@@ -1657,7 +1698,7 @@ def test_strided_slice():
                 (T.int64(4), T.int64(9), T.int64(10), T.int64(3)), "float32"
             ],
         ):
-            T.func_attr({"global_symbol": "strided_slice", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3 in T.grid(T.int64(4), T.int64(9), T.int64(10), T.int64(3)):
                 with T.block("T_strided_slice_with_axes"):
                     ax0, ax1, ax2, ax3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
@@ -1704,7 +1745,7 @@ def test_max_pool2d():
             ],
             pool_max: T.Buffer[(T.int64(4), T.int64(6), T.int64(56), T.int64(56)), "float32"],
         ):
-            T.func_attr({"global_symbol": "pool2d", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             pad_temp = T.alloc_buffer(
                 [T.int64(4), T.int64(6), T.int64(114), T.int64(114)], dtype="float32"
             )
@@ -1772,7 +1813,7 @@ def test_layer_norm():
             T_add: T.Buffer[(T.int64(2), T.int64(3), T.int64(4), T.int64(5)), "float32"],
         ):
             # function attr dict
-            T.func_attr({"global_symbol": "layer_norm", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             # body
             # with T.block("root")
             rxplaceholder_red = T.alloc_buffer(
@@ -1967,7 +2008,7 @@ def test_matmul_1_4():
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3), T.int64(4), T.int64(5)), "float32"],
             matmul: T.Buffer[(T.int64(2), T.int64(3), T.int64(5)), "float32"],
         ):
-            T.func_attr({"global_symbol": "matmul", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3 in T.grid(T.int64(2), T.int64(3), T.int64(5), T.int64(4)):
                 with T.block("matmul"):
                     i0_1, i1_1, i2_1, k = T.axis.remap("SSSR", [i0, i1, i2, i3])
@@ -2009,7 +2050,7 @@ def test_matmul_4_1():
             rxplaceholder_1: T.Buffer[T.int64(5), "float32"],
             matmul: T.Buffer[(T.int64(2), T.int64(3), T.int64(4)), "float32"],
         ):
-            T.func_attr({"global_symbol": "matmul", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3 in T.grid(T.int64(2), T.int64(3), T.int64(4), T.int64(5)):
                 with T.block("matmul"):
                     i0_1, i1_1, i2_1, k = T.axis.remap("SSSR", [i0, i1, i2, i3])
@@ -2051,7 +2092,7 @@ def test_matmul_1_1():
             rxplaceholder_1: T.Buffer[T.int64(4), "float32"],
             matmul: T.Buffer[(), "float32"],
         ):
-            T.func_attr({"global_symbol": "matmul", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0 in T.serial(T.int64(4)):
                 with T.block("matmul"):
                     k = T.axis.reduce(T.int64(4), i0)
@@ -2094,7 +2135,7 @@ def test_matmul_4_5():
                 (T.int64(6), T.int64(2), T.int64(3), T.int64(4), T.int64(7)), "float32"
             ],
         ):
-            T.func_attr({"global_symbol": "matmul", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3, i4, i5 in T.grid(
                 T.int64(6), T.int64(2), T.int64(3), T.int64(4), T.int64(7), T.int64(5)
             ):
@@ -2148,7 +2189,7 @@ def test_matmul_4_5_with_out_dtype():
                 (T.int64(6), T.int64(2), T.int64(3), T.int64(4), T.int64(7)), "float16"
             ],
         ):
-            T.func_attr({"global_symbol": "matmul", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3, i4, i5 in T.grid(
                 T.int64(6), T.int64(2), T.int64(3), T.int64(4), T.int64(7), T.int64(5)
             ):
@@ -2200,7 +2241,7 @@ def test_matmul_3_3_with_symbolic_broadcast_dim():
             rxplaceholder: T.Buffer[(T.int64(1), T.int64(4), T.int64(5)), "float32"],
             var_matmul: T.handle,
         ):
-            T.func_attr({"global_symbol": "matmul", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             a = T.var("int64")
             rxplaceholder_1 = T.match_buffer(
                 var_rxplaceholder, [a, T.int64(3), T.int64(4)], dtype="float32"
@@ -2244,7 +2285,7 @@ def test_softmax():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3), T.int64(16), T.int64(32)), "float32"],
             T_softmax_norm: T.Buffer[(T.int64(2), T.int64(3), T.int64(16), T.int64(32)), "float32"],
         ):
-            T.func_attr({"global_symbol": "softmax", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             T_softmax_maxelem = T.alloc_buffer(
                 [T.int64(2), T.int64(3), T.int64(32)], dtype="float32"
             )
@@ -2323,7 +2364,7 @@ def test_adaptive_avg_pool2d():
                 (T.int64(2), T.int64(64), T.int64(1), T.int64(1)), "float32"
             ],
         ):
-            T.func_attr({"global_symbol": "adaptive_pool", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             adaptive_pool_sum = T.alloc_buffer(
                 [T.int64(2), T.int64(64), T.int64(1), T.int64(1)], dtype="float32"
             )
@@ -2358,24 +2399,30 @@ def test_cross_entropy():
     @I.ir_module
     class CrossEntropy:
         @R.function
-        def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
+        def main(
+            predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=0):
             gv: R.Tensor((), "float32") = R.nn.cross_entropy(predictions, targets)
             return gv
 
     @I.ir_module
     class Expected:
         @R.function
-        def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
-            gv: R.Tensor((), "float32") = R.call_tir(cross_entropy, (predictions, targets), (), dtype="float32")
+        def main(
+            predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=0):
+            gv: R.Tensor((), "float32") = R.call_tir(
+                cross_entropy, (predictions, targets), (), dtype="float32"
+            )
             return gv
 
         @T.prim_func
         def cross_entropy(
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
-            T_multiply: T.Buffer[(), "float32"]
+            T_multiply: T.Buffer[(), "float32"],
         ):
-            T.func_attr({"global_symbol": "cross_entropy", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             compute = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
             T_multiply_1 = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
             T_multiply_red = T.alloc_buffer([], dtype="float32")
@@ -2417,24 +2464,30 @@ def test_softmax_cross_entropy():
     @I.ir_module
     class SoftmaxCrossEntropy:
         @R.function
-        def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
+        def main(
+            predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=0):
             gv: R.Tensor((), "float32") = R.nn.softmax_cross_entropy(predictions, targets)
             return gv
 
     @I.ir_module
     class Expected:
         @R.function
-        def main(predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
-            gv: R.Tensor((), "float32") = R.call_tir(softmax_cross_entropy, (predictions, targets), (), dtype="float32")
+        def main(
+            predictions: R.Tensor((2, 3), "float32"), targets: R.Tensor((2, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=0):
+            gv: R.Tensor((), "float32") = R.call_tir(
+                softmax_cross_entropy, (predictions, targets), (), dtype="float32"
+            )
             return gv
 
         @T.prim_func
         def softmax_cross_entropy(
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
             rxplaceholder_1: T.Buffer[(T.int64(2), T.int64(3)), "float32"],
-            T_multiply: T.Buffer[(), "float32"]
+            T_multiply: T.Buffer[(), "float32"],
         ):
-            T.func_attr({"global_symbol": "softmax_cross_entropy", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             T_softmax_maxelem = T.alloc_buffer([T.int64(2)], dtype="float32")
             T_softmax_exp = T.alloc_buffer([T.int64(2), T.int64(3)], dtype="float32")
             T_softmax_expsum = T.alloc_buffer([T.int64(2)], dtype="float32")
@@ -2449,7 +2502,7 @@ def test_softmax_cross_entropy():
                     T.reads(rxplaceholder[i0_1, k])
                     T.writes(T_softmax_maxelem[i0_1])
                     with T.init():
-                        T_softmax_maxelem[i0_1] = T.float32(-3.4028234663852886e+38)
+                        T_softmax_maxelem[i0_1] = T.float32(-3.4028234663852886e38)
                     T_softmax_maxelem[i0_1] = T.max(T_softmax_maxelem[i0_1], rxplaceholder[i0_1, k])
 
             for i0, i1 in T.grid(T.int64(2), T.int64(3)):
@@ -2457,7 +2510,9 @@ def test_softmax_cross_entropy():
                     i0_2, i1_1 = T.axis.remap("SS", [i0, i1])
                     T.reads(rxplaceholder[i0_2, i1_1], T_softmax_maxelem[i0_2])
                     T.writes(T_softmax_exp[i0_2, i1_1])
-                    T_softmax_exp[i0_2, i1_1] = T.exp(rxplaceholder[i0_2, i1_1] - T_softmax_maxelem[i0_2], dtype="float32")
+                    T_softmax_exp[i0_2, i1_1] = T.exp(
+                        rxplaceholder[i0_2, i1_1] - T_softmax_maxelem[i0_2], dtype="float32"
+                    )
 
             for i0_3, i1 in T.grid(T.int64(2), T.int64(3)):
                 with T.block("T_softmax_expsum"):
@@ -2473,7 +2528,7 @@ def test_softmax_cross_entropy():
                     i0_6, i1_2 = T.axis.remap("SS", [i0_5, i1])
                     T.reads(T_softmax_exp[i0_6, i1_2], T_softmax_expsum[i0_6])
                     T.writes(T_softmax_norm[i0_6, i1_2])
-                    T.block_attr({"axis":1})
+                    T.block_attr({"axis": 1})
                     T_softmax_norm[i0_6, i1_2] = T_softmax_exp[i0_6, i1_2] / T_softmax_expsum[i0_6]
 
             for i0_7, i1_3 in T.grid(T.int64(2), T.int64(3)):
@@ -2529,7 +2584,7 @@ def test_sum():
             rxplaceholder: T.Buffer[(T.int64(1), T.int64(2), T.int64(3), T.int64(4)), "float32"],
             rxplaceholder_red: T.Buffer[(T.int64(1), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "sum", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3 in T.grid(T.int64(1), T.int64(3), T.int64(2), T.int64(4)):
                 with T.block("rxplaceholder_red"):
                     ax0, ax1, k1, k3 = T.axis.remap("SSRR", [i0, i1, i2, i3])
@@ -2566,7 +2621,7 @@ def test_mean():
             rxplaceholder: T.Buffer[(T.int64(1), T.int64(2), T.int64(3), T.int64(4)), "float32"],
             rxplaceholder_red: T.Buffer[(T.int64(1), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "sum", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3 in T.grid(T.int64(1), T.int64(3), T.int64(2), T.int64(4)):
                 with T.block("rxplaceholder_red"):
                     ax0, ax1, k1, k3 = T.axis.remap("SSRR", [i0, i1, i2, i3])
@@ -2583,7 +2638,7 @@ def test_mean():
             rxplaceholder: T.Buffer[(T.int64(1), T.int64(3)), "float32"],
             T_divide: T.Buffer[(T.int64(1), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "divide", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1 in T.grid(T.int64(1), T.int64(3)):
                 with T.block("T_divide"):
                     ax0, ax1 = T.axis.remap("SS", [i0, i1])
@@ -2621,7 +2676,7 @@ def test_image_resize2d():
             rxplaceholder: T.Buffer[(T.int64(2), T.int64(8), T.int64(8), T.int64(3)), "float32"],
             resize: T.Buffer[(T.int64(2), T.int64(16), T.int64(16), T.int64(3)), "float32"],
         ):
-            T.func_attr({"global_symbol": "resize2d", "tir.noalias": True})
+            T.func_attr({"tir.noalias": True})
             for i0, i1, i2, i3 in T.grid(T.int64(2), T.int64(16), T.int64(16), T.int64(3)):
                 with T.block("resize"):
                     i0_1, i1_1, i2_1, i3_1 = T.axis.remap("SSSS", [i0, i1, i2, i3])

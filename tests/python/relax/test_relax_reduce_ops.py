@@ -15,13 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from __future__ import annotations  # must import to defer parsing of annotations
 import pytest
 import tvm
 from tvm import relax
 from tvm.error import DiagnosticError
 from tvm.script import relax as R
-import tvm.testing
 
 
 def test_sum():
@@ -36,7 +34,6 @@ def test_sum():
         gv = bb.emit(relax.op.reduce.sum(x, axis=[1, 3]))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -52,7 +49,6 @@ def test_sum_without_specified_axis():
         gv = bb.emit(relax.op.reduce.sum(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -68,7 +64,6 @@ def test_sum_keep_dims():
         gv = bb.emit(relax.op.reduce.sum(x, axis=[1, 3], keepdims=True))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -102,7 +97,6 @@ def test_mean():
         gv = bb.emit(relax.op.reduce.mean(x, axis=[1, 3]))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -118,7 +112,6 @@ def test_variance():
         gv = bb.emit(relax.op.reduce.variance(x, axis=[-1, -2, -3]))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -134,7 +127,6 @@ def test_max():
         gv = bb.emit(relax.op.reduce.variance(x, axis=[-1, -2, -3], keepdims=True))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -150,7 +142,6 @@ def test_min():
         gv = bb.emit(relax.op.reduce.min(x, axis=1))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 

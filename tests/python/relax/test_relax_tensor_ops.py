@@ -15,96 +15,29 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from __future__ import annotations  # must import to defer parsing of annotations
 import pytest
-import numpy as np
 import tvm
-from tvm import relay, relax
+from tvm import relax
 from tvm.error import DiagnosticError
-from tvm.relax.testing import transform
 from tvm.script import relax as R
-import tvm.testing
-
-target_str = "llvm --num-cores=16"
-target = tvm.target.Target(target_str)
-dev = tvm.device(target_str, 0)
-
-
-def relay_build_and_run(f, inputs):
-    mod = tvm.IRModule.from_expr(f)
-    with target:
-        graph_exec = relay.build_module.create_executor("graph", mod, dev, target).evaluate()
-        return graph_exec(*inputs).numpy()
-
-
-def relax_build_and_run(f, inputs):
-    f = f.with_attr("global_symbol", "default")
-    mod = tvm.IRModule.from_expr(f)
-
-    with tvm.transform.PassContext(opt_level=3):
-        mod = relax.transform.Normalize()(mod)
-        mod = transform.LowerWithRelayOpStrategyPass(target)(mod)
-        ex = relax.vm.build(mod, target)
-        vm = relax.VirtualMachine(ex, dev)
-        return vm["default"](*inputs)
-
-
-@pytest.mark.parametrize("op_name", ["relu", "softmax"])
-def test_unary_ops(op_name: str):
-    # Set up
-    dtype = "float32"
-    X_shape = (8, 8)
-
-    data_x = tvm.nd.array(np.random.rand(*X_shape).astype(np.float32), dev)
-    inputs = [data_x]
-
-    # Build relay op, run and get the output
-    X = relay.var("x", shape=X_shape, dtype=dtype)
-    relay_nn = relay.nn
-    relay_op = getattr(relay_nn, op_name)
-
-    Z = relay_op(X)
-    f = relay.Function([X], Z)
-    expected = relay_build_and_run(f, inputs)
-
-    # Relax output
-    tensor_type = relax.DynTensorType(2, dtype)
-    X = relax.Var("x", X_shape, tensor_type)
-    relax_nn = relax.nn
-    relax_op = getattr(relax_nn, op_name)
-    Z = relax_op(X)
-    f = relax.Function([X], Z, ret_type=tensor_type, ret_shape=relax.RuntimeDepShape())
-    out = relax_build_and_run(f, inputs)
-
-    tvm.testing.assert_allclose(out.numpy(), expected)
 
 
 def test_conv2d():
-    dtype = "float32"
-    kernel_size = 4
-    data_shape = (1, 1, 256, 256)
-    weight_shape = (1, 1, kernel_size, kernel_size)
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
+    ) -> R.Tensor(None, "float32", ndim=4):
+        gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(x, w, kernel_size=[3, 3])
+        return gv
 
-    data = tvm.nd.array(np.random.rand(*data_shape).astype(np.float32), dev)
-    weight = tvm.nd.array(np.random.rand(*weight_shape).astype(np.float32), dev)
-    inputs = [data, weight]
+    x = relax.Var("x", [2, 3, 28, 28], relax.DynTensorType(ndim=4, dtype="float32"))
+    w = relax.Var("w", [4, 3, 3, 3], relax.DynTensorType(ndim=4, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, w]):
+        gv = bb.emit(relax.nn.conv2d(x, w, kernel_size=[3, 3]))
+        bb.emit_func_output(gv)
 
-    # Build relay op, run and get the output
-    D = relay.var("data", shape=data_shape, dtype=dtype)
-    W = relay.var("weight", shape=weight_shape, dtype=dtype)
-    Z = relay.nn.conv2d(D, W)
-    f = relay.Function([D, W], Z)
-    expected = relay_build_and_run(f, inputs)
-
-    # Relax output
-    tensor_type = relax.DynTensorType(4, dtype)
-    D = relax.Var("data", data_shape, tensor_type)
-    W = relax.Var("weight", weight_shape, tensor_type)
-    Z = relax.nn.conv2d(D, W, kernel_size=kernel_size)
-    f = relax.Function([D, W], Z, ret_type=tensor_type, ret_shape=relax.RuntimeDepShape())
-    out = relax_build_and_run(f, inputs)
-
-    tvm.testing.assert_allclose(out.numpy(), expected)
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
 def test_conv2d_with_out_dtype():
@@ -124,179 +57,160 @@ def test_conv2d_with_out_dtype():
         gv = bb.emit(relax.op.nn.conv2d(x, w, kernel_size=(5, 5), out_dtype="float16"))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
 def test_dense():
-    # Set up
-    dtype = "float32"
-    X_shape = (4, 8)
-    Y_shape = (4, 8)
+    @R.function
+    def expected(
+        x: R.Tensor((4, 8), "float32"), y: R.Tensor((4, 8), "float32")
+    ) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((4, 4), "float32") = R.nn.dense(x, y)
+        return gv
 
-    data_x = tvm.nd.array(np.random.rand(*X_shape).astype(np.float32), dev)
-    data_y = tvm.nd.array(np.random.rand(*Y_shape).astype(np.float32), dev)
-    inputs = [data_x, data_y]
+    x = relax.Var("x", [4, 8], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [4, 8], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.nn.dense(x, y))
+        bb.emit_func_output(gv)
 
-    # Build relay op, run and get the output
-    X = relay.var("x", shape=X_shape, dtype=dtype)
-    Y = relay.var("y", shape=Y_shape, dtype=dtype)
-    Z = relay.nn.dense(X, Y)
-    f = relay.Function([X, Y], Z)
-    expected = relay_build_and_run(f, inputs)
-
-    # Relax output
-    tensor_type = relax.DynTensorType(2, dtype)
-
-    X = relax.Var("x", X_shape, tensor_type)
-    Y = relax.Var("y", Y_shape, tensor_type)
-    Z = relax.nn.dense(X, Y)
-    f = relax.Function([X, Y], Z, ret_type=tensor_type, ret_shape=relax.RuntimeDepShape())
-    out = relax_build_and_run(f, inputs)
-
-    tvm.testing.assert_allclose(out.numpy(), expected)
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
 def test_max_pool2d():
-    # Set up
-    dtype = "float32"
-    X_shape = (1, 1, 32, 32)
-    pool_size = 3
+    @R.function
+    def expected(
+        x: R.Tensor((1, 1, 32, 32), dtype="float32")
+    ) -> R.Tensor(None, dtype="float32", ndim=4):
+        gv: R.Tensor((1, 1, 30, 30), dtype="float32") = R.nn.max_pool2d(x, pool_size=3)
+        return gv
 
-    data_x = tvm.nd.array(np.random.rand(*X_shape).astype(np.float32), dev)
-    inputs = [data_x]
+    x = relax.Var("x", [1, 1, 32, 32], relax.DynTensorType(ndim=4, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.nn.max_pool2d(x, pool_size=3))
+        bb.emit_func_output(gv)
 
-    # Build relay op, run and get the output
-    X = relay.var("x", shape=X_shape, dtype=dtype)
-    Z = relay.nn.max_pool2d(X, pool_size=pool_size)
-    f = relay.Function([X], Z)
-    expected = relay_build_and_run(f, inputs)
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
-    # Relax output
-    tensor_type = relax.DynTensorType(4, dtype)
 
-    X = relax.Var("x", X_shape, tensor_type)
-    Z = relax.nn.max_pool2d(X, pool_size=pool_size)
-    f = relax.Function([X], Z, ret_type=tensor_type, ret_shape=relax.RuntimeDepShape())
-    out = relax_build_and_run(f, inputs)
+def test_relu():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.nn.relu(x)
+        return gv
 
-    tvm.testing.assert_allclose(out.numpy(), expected)
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.nn.relu(x))
+        bb.emit_func_output(gv)
+
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
+
+
+def test_softmax():
+    @R.function
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.nn.softmax(x)
+        return gv
+
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x]):
+        gv = bb.emit(relax.nn.softmax(x))
+        bb.emit_func_output(gv)
+
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
 def test_add():
-    dtype = "float32"
-    a_shape = [15, 3, 5]
-    b_shape = [15, 1, 5]
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3), "float32"), y: R.Tensor((2, 1), "float32")
+    ) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.add(x, y)
+        return gv
 
-    tensor_type = relax.DynTensorType(ndim=3, dtype="float32")
-    a = relax.Var("a", a_shape, tensor_type)
-    b = relax.Var("b", b_shape, tensor_type)
-    c = relax.op.add(a, b)
-    f = relax.Function(
-        params=[a, b], body=c, ret_type=tensor_type, ret_shape=relax.ShapeExpr(a_shape)
-    )
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [2, 1], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.add(x, y))
+        bb.emit_func_output(gv)
 
-    a_np = np.random.rand(*a_shape).astype(dtype)
-    b_np = np.random.rand(*b_shape).astype(dtype)
-    a_relax = tvm.nd.array(a_np, dev)
-    b_relax = tvm.nd.array(b_np, dev)
-
-    res_np = np.add(a_np, b_np)
-    res_relax = relax_build_and_run(f, [a_relax, b_relax])
-
-    tvm.testing.assert_allclose(res_relax.numpy(), res_np)
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
 def test_subtract():
-    dtype = "float32"
-    a_shape = [15, 3, 5]
-    b_shape = [1]
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3), "float32"), y: R.Tensor((2, 1), "float32")
+    ) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.subtract(x, y)
+        return gv
 
-    tensor_type = relax.DynTensorType(ndim=3, dtype="float32")
-    a = relax.Var("a", a_shape, tensor_type)
-    b = relax.Var("b", b_shape, tensor_type)
-    c = relax.op.subtract(a, b)
-    f = relax.Function(
-        params=[a, b], body=c, ret_type=tensor_type, ret_shape=relax.ShapeExpr(a_shape)
-    )
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [2, 1], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.subtract(x, y))
+        bb.emit_func_output(gv)
 
-    a_np = np.random.rand(*a_shape).astype(dtype)
-    b_np = np.random.rand(*b_shape).astype(dtype)
-    a_relax = tvm.nd.array(a_np, dev)
-    b_relax = tvm.nd.array(b_np, dev)
-
-    res_np = np.subtract(a_np, b_np)
-    res_relax = relax_build_and_run(f, [a_relax, b_relax])
-
-    tvm.testing.assert_allclose(res_relax.numpy(), res_np)
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
 def test_multiply():
-    dtype = "float32"
-    a_shape = [15, 3, 5]
-    b_shape = [3, 1]
+    @R.function
+    def expected(
+        x: R.Tensor((2, 3), "float32"), y: R.Tensor((2, 1), "float32")
+    ) -> R.Tensor(None, "float32", ndim=2):
+        gv: R.Tensor((2, 3), "float32") = R.multiply(x, y)
+        return gv
 
-    tensor_type = relax.DynTensorType(ndim=3, dtype="float32")
-    a = relax.Var("a", a_shape, tensor_type)
-    b = relax.Var("b", b_shape, tensor_type)
-    c = relax.op.multiply(a, b)
-    f = relax.Function(
-        params=[a, b], body=c, ret_type=tensor_type, ret_shape=relax.ShapeExpr(a_shape)
-    )
+    x = relax.Var("x", [2, 3], relax.DynTensorType(ndim=2, dtype="float32"))
+    y = relax.Var("y", [2, 1], relax.DynTensorType(ndim=2, dtype="float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        gv = bb.emit(relax.op.multiply(x, y))
+        bb.emit_func_output(gv)
 
-    a_np = np.random.rand(*a_shape).astype(dtype)
-    b_np = np.random.rand(*b_shape).astype(dtype)
-    a_relax = tvm.nd.array(a_np, dev)
-    b_relax = tvm.nd.array(b_np, dev)
-
-    res_np = np.multiply(a_np, b_np)
-    res_relax = relax_build_and_run(f, [a_relax, b_relax])
-
-    tvm.testing.assert_allclose(res_relax.numpy(), res_np)
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
 def test_batch_norm():
-    dtype = "float32"
-    input_shape = [2, 4, 3, 3]
-    param_shape = [4]
+    @R.function
+    def expected(
+        x: R.Tensor((2, 4, 3, 3), dtype="float32"),
+        gamma: R.Tensor((4,), dtype="float32"),
+        beta: R.Tensor((4,), dtype="float32"),
+        moving_mean: R.Tensor((4,), dtype="float32"),
+        moving_var: R.Tensor((4,), dtype="float32"),
+    ) -> R.Tuple(
+        R.Tensor(None, dtype="float32", ndim=4),
+        R.Tensor(None, dtype="float32", ndim=1),
+        R.Tensor(None, dtype="float32", ndim=1),
+    ):
+        gv: R.Tuple(
+            R.Tensor((2, 4, 3, 3), dtype="float32"),
+            R.Tensor((4,), dtype="float32"),
+            R.Tensor((4,), dtype="float32"),
+        ) = R.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=1)
+        return gv
 
-    tensor_type = relax.DynTensorType(ndim=4, dtype="float32")
-    param_type = relax.DynTensorType(ndim=1, dtype="float32")
+    x = relax.Var("x", [2, 4, 3, 3], relax.DynTensorType(ndim=4, dtype="float32"))
+    gamma = relax.Var("gamma", [4], relax.DynTensorType(ndim=1, dtype="float32"))
+    beta = relax.Var("beta", [4], relax.DynTensorType(ndim=1, dtype="float32"))
+    moving_mean = relax.Var("moving_mean", [4], relax.DynTensorType(ndim=1, dtype="float32"))
+    moving_var = relax.Var("moving_var", [4], relax.DynTensorType(ndim=1, dtype="float32"))
 
-    eps = 1e-5
-    x = relax.Var("x", input_shape, tensor_type)
-    gamma = relax.Var("gamma", param_shape, param_type)
-    beta = relax.Var("beta", param_shape, param_type)
-    moving_mean = relax.Var("moving_mean", param_shape, param_type)
-    moving_var = relax.Var("moving_var", param_shape, param_type)
-    y = relax.op.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, epsilon=eps)
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, gamma, beta, moving_mean, moving_var]):
+        gv = bb.emit(relax.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=1))
+        bb.emit_func_output(gv)
 
-    f = relax.Function(
-        params=[x, gamma, beta, moving_mean, moving_var],
-        body=y,
-        ret_type=relax.TupleType([tensor_type, param_type, param_type]),
-        ret_shape=relax.ShapeExpr(input_shape),
-    )
-
-    x_np = np.random.rand(*input_shape).astype(dtype)
-    gamma_np = np.random.rand(1, *param_shape, 1, 1).astype(dtype)
-    beta_np = np.random.rand(1, *param_shape, 1, 1).astype(dtype)
-    moving_mean_np = np.random.rand(1, *param_shape, 1, 1).astype(dtype)
-    moving_var_np = np.random.rand(1, *param_shape, 1, 1).astype(dtype)
-    x_relax = tvm.nd.array(x_np, dev)
-    gamma_relax = tvm.nd.array(gamma_np.flatten(), dev)
-    beta_relax = tvm.nd.array(beta_np.flatten(), dev)
-    moving_mean_relax = tvm.nd.array(moving_mean_np.flatten(), dev)
-    moving_var_relax = tvm.nd.array(moving_var_np.flatten(), dev)
-
-    res_np = ((x_np - moving_mean_np) / np.sqrt(moving_var_np + eps)) * gamma_np + beta_np
-    res_relax = relax_build_and_run(
-        f, [x_relax, gamma_relax, beta_relax, moving_mean_relax, moving_var_relax]
-    )
-
-    tvm.testing.assert_allclose(res_relax[0].numpy(), res_np)
-    tvm.testing.assert_allclose(res_relax[1].numpy(), moving_mean_np.flatten())
-    tvm.testing.assert_allclose(res_relax[2].numpy(), moving_var_np.flatten())
+    tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
 def test_gelu():
@@ -311,7 +225,6 @@ def test_gelu():
         gv = bb.emit(relax.op.nn.gelu(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -327,7 +240,6 @@ def test_silu():
         gv = bb.emit(relax.op.nn.silu(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -343,7 +255,6 @@ def test_sin():
         gv = bb.emit(relax.op.sin(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -359,7 +270,6 @@ def test_cos():
         gv = bb.emit(relax.op.cos(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -375,7 +285,6 @@ def test_log():
         gv = bb.emit(relax.op.log(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -391,7 +300,6 @@ def test_tanh():
         gv = bb.emit(relax.op.tanh(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -407,7 +315,6 @@ def test_negative():
         gv = bb.emit(relax.op.negative(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -426,7 +333,6 @@ def test_floor_divide():
         gv = bb.emit(relax.op.floor_divide(x, y))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -445,7 +351,6 @@ def test_divide():
         gv = bb.emit(relax.op.divide(x, y))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -461,7 +366,6 @@ def test_dropout():
         gv = bb.emit(relax.op.nn.dropout(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -483,7 +387,6 @@ def test_layer_norm():
         gv = bb.emit(relax.op.nn.layer_norm(x, gamma, beta, axis=[-2, -1]))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -499,7 +402,6 @@ def test_sqrt():
         gv = bb.emit(relax.op.sqrt(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -518,7 +420,6 @@ def test_matmul_2_2():
         gv = bb.emit(relax.op.nn.matmul(x, y))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -537,7 +438,6 @@ def test_matmul_1_1():
         gv = bb.emit(relax.op.nn.matmul(x, y))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -556,7 +456,6 @@ def test_matmul_1_4():
         gv = bb.emit(relax.op.nn.matmul(x, y))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -575,7 +474,6 @@ def test_matmul_4_1():
         gv = bb.emit(relax.op.nn.matmul(x, y))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -594,7 +492,6 @@ def test_matmul_4_5():
         gv = bb.emit(relax.op.nn.matmul(x, y))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -613,7 +510,6 @@ def test_matmul_4_5_with_output_dtype():
         gv = bb.emit(relax.op.nn.matmul(x, y, out_dtype="float16"))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -649,7 +545,6 @@ def test_adaptive_avg_pool2d():
         gv = bb.emit(relax.op.nn.adaptive_avg_pool2d(x, output_size=(7, 7)))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -665,7 +560,6 @@ def test_sigmoid():
         gv = bb.emit(relax.op.sigmoid(x))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -684,7 +578,6 @@ def test_less():
         gv = bb.emit(relax.op.less(x, y))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -703,7 +596,6 @@ def test_cross_entropy():
         gv = bb.emit(relax.op.nn.cross_entropy(predictions, targets))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
@@ -722,7 +614,6 @@ def test_softmax_cross_entropy():
         gv = bb.emit(relax.op.nn.softmax_cross_entropy(predictions, targets))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 

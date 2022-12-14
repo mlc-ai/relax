@@ -15,14 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from __future__ import annotations  # must import to defer parsing of annotations
-import pytest
 import tvm
 from tvm import relax
-from tvm.error import DiagnosticError
-from tvm.relax.testing import transform
 from tvm.script import relax as R
-import tvm.testing
 
 
 def test_resize2d():
@@ -37,7 +32,6 @@ def test_resize2d():
         gv = bb.emit(relax.op.image.resize2d(x, (28, 28), layout="NHWC"))
         bb.emit_func_output(gv)
 
-    expected = expected.with_attr("global_symbol", "main")
     tvm.ir.assert_structural_equal(bb.get()["main"], expected)
 
 
