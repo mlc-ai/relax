@@ -25,9 +25,7 @@ import tvm.relax.op.gradient
 
 
 def relax_check_gradients(op_func, op_name, input_numpy, target, dev, output_shape):
-    """
-        Generate module and run it to check numberic gradients.
-    """
+    """Generate module and run it to check numberic gradients."""
 
     func_name = "main"
     param_vars = []
