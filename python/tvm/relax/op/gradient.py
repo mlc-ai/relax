@@ -15,11 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 """Gradient definitions for Relax operators"""
-from tvm.relax import const
+from tvm.relax import const, Tuple
 from tvm.relay.op import register_gradient
 import tvm.relax.op.nn as nn
 from tvm.relax.op import (
     sum,
+    mean,
     less,
     where,
     collapse_sum_to,
@@ -32,7 +33,8 @@ from tvm.relax.op import (
     sigmoid,
     tanh,
     ones,
-    zeros
+    zeros,
+    expand_dims
 )
 from tvm.relax.expr import Call, Var
 
@@ -59,9 +61,12 @@ def multiply_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.transpose")
 def transpose_grad(orig: Call, grad: Var):
-    """Returns grad transposed over the complement of original transpose axes"""
-    """TODO: Do not support more than one dimensions"""
-    return [transpose(grad)]
+    """Returns grad transposed over the complement of original transpose axes."""
+    axes = orig.attrs["axes"]
+    if axes:
+        return [transpose(grad, axes=axes)]
+    else:
+        return [transpose(grad)]
 
 
 @register_gradient("relax.nn.relu")
@@ -75,13 +80,44 @@ def relu_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.nn.matmul")
 def matmul_grad(orig: Call, grad: Var):
-    """Returns [grad' @ tensor_b, tensor_a @ grad']."""
-    tensor_a, tensor_b = orig.args
-    return [
-        collapse_sum_to(nn.matmul(grad, transpose(tensor_b)), tensor_a.shape),
-        collapse_sum_to(nn.matmul(transpose(tensor_a), grad), tensor_b.shape),
-    ]
+    """Gradients for matmul.
 
+        c = relax.nn.matmul(a, b)
+
+    Generally, returns [grad @ b^T, a^T @ grad]. Here we only transpose the last two dimensions
+    because of the definition of batch matmul. Note that ndim=1 should be treaded specially.
+    """
+
+    tensor_a, tensor_b = orig.args
+
+    a_dim = len(tensor_a.shape)
+    b_dim = len(tensor_b.shape)
+    grad_dim = len(grad.shape)
+
+    def _transpose_last_two_dim(tensor, ndim):
+        """Helper function for reversing the last two dimensions."""
+        assert ndim > 1
+        return transpose(tensor, axes=[i if i < ndim-2 else 2*ndim-3-i for i in range(ndim)])
+
+    if a_dim > 1 and b_dim > 1:
+        a_grad = nn.matmul(grad, _transpose_last_two_dim(tensor_b, b_dim))
+        b_grad = nn.matmul(_transpose_last_two_dim(tensor_a, a_dim), grad)
+    elif a_dim == 1 and b_dim > 1:
+        a_expand = expand_dims(tensor_a, 1)
+        grad_expand = expand_dims(grad, -2)
+        a_grad = nn.matmul(grad_expand, _transpose_last_two_dim(tensor_b, b_dim))
+        b_grad = nn.matmul(a_expand, grad_expand)
+    elif b_dim == 1 and a_dim > 1:
+        b_expand = expand_dims(tensor_b, 0)
+        grad_expand = expand_dims(grad, -1)
+        a_grad = nn.matmul(grad_expand, b_expand)
+        b_grad = mean(nn.matmul(_transpose_last_two_dim(tensor_a, a_dim), grad_expand), axis=-1) # squeeze last dim
+    else:
+        assert a_dim == 1 and b_dim == 1
+        a_grad = multiply(grad, tensor_b)
+        b_grad = multiply(grad, tensor_a)
+
+    return [collapse_sum_to(a_grad, tensor_a.shape), collapse_sum_to(b_grad, tensor_b.shape)]
 
 @register_gradient("relax.sum")
 def sum_grad(orig: Call, grad: Var):
