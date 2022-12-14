@@ -34,7 +34,7 @@ from tvm.relax.op import (
     tanh,
     ones,
     zeros,
-    expand_dims
+    expand_dims,
 )
 from tvm.relax.expr import Call, Var
 
@@ -49,14 +49,20 @@ def add_grad(orig: Call, grad: Var):
 @register_gradient("relax.subtract")
 def subtract_grad(orig: Call, grad: Var):
     """Returns [grad, -grad]."""
-    return [collapse_sum_to(grad, orig.args[0].shape), collapse_sum_to(negative(grad), orig.args[1].shape)]
+    return [
+        collapse_sum_to(grad, orig.args[0].shape),
+        collapse_sum_to(negative(grad), orig.args[1].shape),
+    ]
 
 
 @register_gradient("relax.multiply")
 def multiply_grad(orig: Call, grad: Var):
     """Returns [grad * y, grad * x]."""
     x, y = orig.args
-    return [collapse_sum_to(multiply(grad, y), x.shape), collapse_sum_to(multiply(grad, x), y.shape)]
+    return [
+        collapse_sum_to(multiply(grad, y), x.shape),
+        collapse_sum_to(multiply(grad, x), y.shape),
+    ]
 
 
 @register_gradient("relax.transpose")
@@ -97,7 +103,9 @@ def matmul_grad(orig: Call, grad: Var):
     def _transpose_last_two_dim(tensor, ndim):
         """Helper function for reversing the last two dimensions."""
         assert ndim > 1
-        return transpose(tensor, axes=[i if i < ndim-2 else 2*ndim-3-i for i in range(ndim)])
+        return transpose(
+            tensor, axes=[i if i < ndim - 2 else 2 * ndim - 3 - i for i in range(ndim)]
+        )
 
     if a_dim > 1 and b_dim > 1:
         a_grad = nn.matmul(grad, _transpose_last_two_dim(tensor_b, b_dim))
@@ -111,13 +119,16 @@ def matmul_grad(orig: Call, grad: Var):
         b_expand = expand_dims(tensor_b, 0)
         grad_expand = expand_dims(grad, -1)
         a_grad = nn.matmul(grad_expand, b_expand)
-        b_grad = mean(nn.matmul(_transpose_last_two_dim(tensor_a, a_dim), grad_expand), axis=-1) # squeeze last dim
+        b_grad = mean(
+            nn.matmul(_transpose_last_two_dim(tensor_a, a_dim), grad_expand), axis=-1
+        )  # squeeze last dim
     else:
         assert a_dim == 1 and b_dim == 1
         a_grad = multiply(grad, tensor_b)
         b_grad = multiply(grad, tensor_a)
 
     return [collapse_sum_to(a_grad, tensor_a.shape), collapse_sum_to(b_grad, tensor_b.shape)]
+
 
 @register_gradient("relax.sum")
 def sum_grad(orig: Call, grad: Var):
