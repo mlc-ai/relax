@@ -382,7 +382,8 @@ def _mean(bb: BlockBuilder, args: List[Expr], attrs: Attrs, output_shape: Expr):
     shape_prod = tvm.tir.const(1, "int32")
     axis = attrs.axis if attrs.axis is not None else range(0, len(args[0].shape))
     for dim in axis:
-        shape_prod = shape_prod * args[0].shape[dim.value]
+        ax = len(args[0].shape) + dim.value if dim.value < 0 else dim.value
+        shape_prod = shape_prod * args[0].shape[ax]
     sum_var = bb.emit_te(topi.sum, args[0], axis, attrs.keepdims)
     return bb.call_te(topi.divide, sum_var, shape_prod)
 

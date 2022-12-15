@@ -24,6 +24,7 @@ from tvm.relax.op import (
     less,
     where,
     collapse_sum_to,
+    broadcast_to,
     log,
     multiply,
     divide,
@@ -132,8 +133,13 @@ def matmul_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.sum")
 def sum_grad(orig: Call, grad: Var):
-    """Returns [grad * ones(x.shape)]."""
-    return [multiply(grad, ones(orig.args[0].shape))]
+    """Gradient of sum."""
+    axis = orig.attrs["axis"]
+    keepdims = orig.attrs["keepdims"]
+    if not keepdims and axis:
+        for ax in axis:
+            grad = expand_dims(grad, int(ax))
+    return [broadcast_to(grad, orig.args[0].shape)]
 
 
 @register_gradient("relax.nn.softmax")

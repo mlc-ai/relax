@@ -85,28 +85,28 @@ def relax_check_gradients(op_func, op_name, input_numpy, target, dev, output_sha
 
 @tvm.testing.parametrize_targets("llvm")
 def test_add(target, dev):
-    data1_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
-    data2_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    data2_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
     relax_check_gradients(
-        relax.op.add, "relax.add", [data1_numpy, data2_numpy], target, dev, (16, 16)
+        relax.op.add, "relax.add", [data1_numpy, data2_numpy], target, dev, (3, 3)
     )
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_subtract(target, dev):
-    data1_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
-    data2_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    data2_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
     relax_check_gradients(
-        relax.op.subtract, "relax.subtract", [data1_numpy, data2_numpy], target, dev, (16, 16)
+        relax.op.subtract, "relax.subtract", [data1_numpy, data2_numpy], target, dev, (3, 3)
     )
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_multiply(target, dev):
-    data1_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
-    data2_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    data2_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
     relax_check_gradients(
-        relax.op.multiply, "relax.multiply", [data1_numpy, data2_numpy], target, dev, (16, 16)
+        relax.op.multiply, "relax.multiply", [data1_numpy, data2_numpy], target, dev, (3, 3)
     )
 
 
@@ -134,8 +134,8 @@ def test_transpose_with_axes(target, dev):
 
 @tvm.testing.parametrize_targets("llvm")
 def test_relu(target, dev):
-    data1_numpy = np.random.uniform(-1, 1, (16, 16)).astype(np.float32)
-    relax_check_gradients(relax.op.nn.relu, "relax.nn.relu", [data1_numpy], target, dev, (16, 16))
+    data1_numpy = np.random.uniform(-1, 1, (3, 3)).astype(np.float32)
+    relax_check_gradients(relax.op.nn.relu, "relax.nn.relu", [data1_numpy], target, dev, (3, 3))
 
 
 @tvm.testing.parametrize_targets("llvm")
@@ -190,16 +190,46 @@ def test_matmul_5_4(target, dev):
 
 @tvm.testing.parametrize_targets("llvm")
 def test_softmax(target, dev):
-    data1_numpy = np.random.randint(0, 16, (16, 16)).astype(np.float32)
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
     relax_check_gradients(
-        relax.op.nn.softmax, "relax.nn.softmax", [data1_numpy], target, dev, (16, 16)
+        relax.op.nn.softmax, "relax.nn.softmax", [data1_numpy], target, dev, (3, 3)
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_sum(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(relax.op.sum, "relax.sum", [data1_numpy], target, dev, ())
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_sum_with_axis(target, dev):
+    data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.sum, "relax.sum", [data1_numpy], target, dev, (2, 4), axis=[1, 3]
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_sum_keepdims(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.sum, "relax.sum", [data1_numpy], target, dev, (3, 1), keepdims=True, axis=1
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_softmax_with_axis(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.nn.softmax, "relax.nn.softmax", [data1_numpy], target, dev, (3, 3), axis=1
     )
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_cross_entropy(target, dev):
-    data1_numpy = np.random.randint(1, 16, (10,)).astype(np.float32)
-    data2_numpy = np.random.randint(1, 16, (10,)).astype(np.float32)
+    data1_numpy = np.random.randint(1, 16, (3,)).astype(np.float32)
+    data2_numpy = np.random.randint(1, 16, (3,)).astype(np.float32)
     relax_check_gradients(
         relax.op.nn.cross_entropy,
         "relax.nn.cross_entropy",
@@ -212,8 +242,8 @@ def test_cross_entropy(target, dev):
 
 @tvm.testing.parametrize_targets("llvm")
 def test_softmax_cross_entropy(target, dev):
-    data1_numpy = np.random.randint(1, 16, (10,)).astype(np.float32)
-    data2_numpy = np.random.randint(1, 16, (10,)).astype(np.float32)
+    data1_numpy = np.random.randint(1, 16, (3,)).astype(np.float32)
+    data2_numpy = np.random.randint(1, 16, (3,)).astype(np.float32)
     data2_numpy /= np.sum(data2_numpy)
     relax_check_gradients(
         relax.op.nn.softmax_cross_entropy,
@@ -227,14 +257,14 @@ def test_softmax_cross_entropy(target, dev):
 
 @tvm.testing.parametrize_targets("llvm")
 def test_sigmoid(target, dev):
-    data_numpy = np.random.randint(1, 16, (10,)).astype(np.float32)
-    relax_check_gradients(relax.op.sigmoid, "relax.sigmoid", [data_numpy], target, dev, (10,))
+    data_numpy = np.random.randint(1, 16, (3,)).astype(np.float32)
+    relax_check_gradients(relax.op.sigmoid, "relax.sigmoid", [data_numpy], target, dev, (3,))
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_tanh(target, dev):
-    data_numpy = np.random.randint(1, 16, (16, 16)).astype(np.float32)
-    relax_check_gradients(relax.op.tanh, "relax.tanh", [data_numpy], target, dev, (16, 16))
+    data_numpy = np.random.randint(1, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(relax.op.tanh, "relax.tanh", [data_numpy], target, dev, (3, 3))
 
 
 if __name__ == "__main__":
