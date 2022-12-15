@@ -43,7 +43,6 @@ from tvm.relax.expr import Call, Var
 @register_gradient("relax.add")
 def add_grad(orig: Call, grad: Var):
     """Returns [grad, grad]."""
-    print(type(orig), type(grad))
     return [collapse_sum_to(grad, orig.args[0].shape), collapse_sum_to(grad, orig.args[1].shape)]
 
 
@@ -137,8 +136,7 @@ def sum_grad(orig: Call, grad: Var):
     axis = orig.attrs["axis"]
     keepdims = orig.attrs["keepdims"]
     if not keepdims and axis:
-        for ax in axis:
-            grad = expand_dims(grad, int(ax))
+        grad = expand_dims(grad, [int(ax) for ax in axis])
     return [broadcast_to(grad, orig.args[0].shape)]
 
 
