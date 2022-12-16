@@ -20,7 +20,7 @@ import copy
 from typing import List
 
 from tvm.relay import Call
-from tvm.relax.op import dense, matmul, conv2d
+from tvm.relax.op.nn import dense, matmul, conv2d
 from tvm.relay.op import register_mixed_precision_conversion
 
 # MIXED_PRECISION_ALWAYS ops should always be done in lower precision due to the speed and memory

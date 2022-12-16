@@ -477,8 +477,8 @@ class SplitMutator : public ExprMutator {
         builder_->UpdateFunction(gv, split_funcs.first);
         return Call(new_call);
       }
-      tir::PrimFunc func1 = split_funcs.first;
-      tir::PrimFunc func2 = split_funcs.second.value();
+      tir::PrimFunc func1 = tir::RenewDefs(split_funcs.first);
+      tir::PrimFunc func2 = tir::RenewDefs(split_funcs.second.value());
       ICHECK(arg_partition.size() == 2);
       // emit the first call to the cutlass kernel
       Array<Expr> args1;
