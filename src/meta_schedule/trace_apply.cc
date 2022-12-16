@@ -95,42 +95,67 @@ void InlinePostBlocks(Schedule sch, Trace anchor_trace, Target target) {
   }
 }
 
-std::unordered_set<std::string> GetLocalOnlyBlockNames(Schedule sch, Trace anchor_trace) {
-  static auto kind_get_block = InstructionKind::Get("GetBlock");
-  std::unordered_set<std::string> get_block_names;
-  for (const auto& inst : anchor_trace->insts) {
-    if (inst->kind.same_as(kind_get_block)) {
-      auto block_name = Downcast<String>(inst->attrs[0]);
-      ICHECK(block_name.defined());
-      get_block_names.insert(block_name);
-    }
-  }
-  std::unordered_set<std::string> local_only_block_names;
-  for (auto name : GetBlockNames(sch->mod())) {
-    if (!get_block_names.count(name)) {
-      local_only_block_names.insert(name);
-    }
-  }
-  return local_only_block_names;
-}
-
 // Apply instructions from the anchor trace to the target schedule, and returns blocks
 // that remain unscheduled.
-std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
+std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace,
+                                      const IRModule& record_mod) {
+  // Extract all blocks from a module
+  class BlockExtractor : public StmtExprVisitor {
+   public:
+    static Array<Block> ExtractBlocks(const IRModule& mod) {
+      PrimFunc func = Downcast<PrimFunc>(mod->Lookup("main"));
+      BlockExtractor extractor;
+      extractor(func->body);
+      return extractor.blocks;
+    }
+
+   private:
+    void VisitStmt_(const BlockNode* block) final {
+      if (block->name_hint == "root") {
+        StmtExprVisitor::VisitStmt_(block);
+        return;
+      }
+      ICHECK(!in_block_) << "Nested blocks are not supported";
+      in_block_ = true;
+      blocks.push_back(GetRef<Block>(block));
+      StmtExprVisitor::VisitStmt_(block);
+      in_block_ = false;
+    }
+    Array<Block> blocks;
+    bool in_block_ = false;
+  };
+  Array<Block> blocks_from_record = BlockExtractor::ExtractBlocks(record_mod);
+  Array<Block> blocks_from_target = BlockExtractor::ExtractBlocks(sch->mod());
+  // match same blocks
+  // block maps between target mod and record mod
+  Map<String, String> record2target{{"root", "root"}};
+  Map<String, String> target2record{{"root", "root"}};
+  for (int i = 0; i < static_cast<int>(blocks_from_record.size()); i++) {
+    for (int j = 0; j < static_cast<int>(blocks_from_target.size()); j++) {
+      if (tvm::StructuralEqual()(blocks_from_record[i], blocks_from_target[j])) {
+        record2target.Set(blocks_from_record[i]->name_hint, blocks_from_target[j]->name_hint);
+        target2record.Set(blocks_from_target[j]->name_hint, blocks_from_record[i]->name_hint);
+      }
+    }
+  }
   static auto kind_get_child_blocks = InstructionKind::Get("GetChildBlocks");
   static auto kind_get_block = InstructionKind::Get("GetBlock");
   static auto kind_compute_inline = InstructionKind::Get("ComputeInline");
   static auto kind_reverse_compute_inline = InstructionKind::Get("ReverseComputeInline");
+  static auto kind_decompose_reduction = InstructionKind::Get("DecomposeReduction");
 
   const auto block_names_orig = GetBlockNames(sch->mod());
   const auto sch_orig = sch->Copy();
-
-  std::unordered_map<const Object*, const Object*> rv_map;
+  Schedule sch_for_record_mod =
+      Schedule::Traced(record_mod,
+                       /*rand_state=*/-1,
+                       /*debug_mode=*/0,
+                       /*error_render_level=*/tir::ScheduleErrorRenderLevel::kDetail);
+  std::unordered_map<const Object*, const Object*> rv_map_record_mod;
+  std::unordered_map<const Object*, const Object*> rv_map_target_mod;
   // Blocks and loops that appear in the anchor trace but are not part of the target schedule.
   std::unordered_set<BlockRV, ObjectHash, ObjectEqual> foreign_blocks;
   std::unordered_set<LoopRV, ObjectHash, ObjectEqual> foreign_loops;
-  std::unordered_set<std::string> local_only_block_names =
-      GetLocalOnlyBlockNames(sch, anchor_trace);
   // Instructions in the anchor trace can be applied only if all inputs are part of the target
   // schedule.
   auto is_inst_applicable = [&foreign_blocks, &foreign_loops](Instruction inst) {
@@ -145,6 +170,14 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
   };
 
   for (const auto& inst : anchor_trace->insts) {
+    // execute instruction on record module
+    auto inputs_for_record_mod = TranslateInputRVs(inst->inputs, rv_map_record_mod);
+    Optional<ObjectRef> decision = anchor_trace->GetDecision(inst);
+    Array<ObjectRef> outputs_for_record_mod = inst->kind->f_apply_to_schedule(
+        sch_for_record_mod, inputs_for_record_mod, inst->attrs, decision);
+    TranslateAddOutputRVs(inst->outputs, outputs_for_record_mod, &rv_map_record_mod);
+
+    // execute instruction on target module
     if (!is_inst_applicable(inst)) {
       // If we find an instruction that is not applicable, its outputs are recorded as "foreign"
       // to the target schedule.
@@ -158,13 +191,18 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
       continue;
     }
 
-    Array<ObjectRef> inputs = TranslateInputRVs(inst->inputs, rv_map);
-
-    if (inst->kind.same_as(kind_get_block) && !HasBlock(sch, Downcast<String>(inst->attrs[0]))) {
-      // The anchor trace does get_block on a block that is not part of the target schedule.
-      auto block = Downcast<BlockRV>(inst->outputs[0]);
-      foreign_blocks.insert(block);
-      continue;
+    Array<ObjectRef> inputs = TranslateInputRVs(inst->inputs, rv_map_target_mod);
+    Array<ObjectRef> attrs = inst->attrs;
+    if (inst->kind.same_as(kind_get_block)) {
+      BlockRV block_rv_record = Downcast<BlockRV>(outputs_for_record_mod[0]);
+      Block block_record = Downcast<Block>(sch_for_record_mod->Get(block_rv_record));
+      if (!record2target.count(block_record->name_hint)) {
+        // The anchor trace does get_block on a block that is not part of the target schedule.
+        auto block = Downcast<BlockRV>(inst->outputs[0]);
+        foreign_blocks.insert(block);
+        continue;
+      }
+      attrs.Set(0, record2target[block_record->name_hint]);
     } else if (inst->kind.same_as(kind_reverse_compute_inline)) {
       // The anchor trace does reverse_compute_inline on a block, but the block with the same name
       // in the target schedule cannot be reverse compute inline-ed.
@@ -191,8 +229,7 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
       }
     }
 
-    Optional<ObjectRef> decision = anchor_trace->GetDecision(inst);
-    Array<ObjectRef> outputs = inst->kind->f_apply_to_schedule(sch, inputs, inst->attrs, decision);
+    Array<ObjectRef> outputs = inst->kind->f_apply_to_schedule(sch, inputs, attrs, decision);
 
     if (inst->kind.same_as(kind_get_child_blocks)) {
       // We want to allow a trace generated for a single conv2d block to be applied to
@@ -201,21 +238,52 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
       // violates the assumption made by TranslateAddOutputRVs: old_outputs.size() ==
       // new_outputs.size(). We workaround this problem by assuming that the prefix of the "new"
       // outputs matches with the "old" outputs, and truncating the new outputs accordingly.
-      Array<ObjectRef> new_outputs;
-      for (const auto& output : outputs) {
-        std::string block_name = sch->Get(Downcast<BlockRV>(output))->name_hint;
-        if (!local_only_block_names.count(block_name)) {
-          new_outputs.push_back(output);
+      Array<ObjectRef> new_target_outputs;
+      for (int i = 0; i < static_cast<int>(outputs.size()); i++) {
+        auto block_target = sch->Get(Downcast<BlockRV>(outputs[i]));
+        if (target2record.count(block_target->name_hint)) {
+          new_target_outputs.push_back(outputs[i]);
         }
       }
-      ICHECK(new_outputs.size() <= inst->outputs.size());
-      for (size_t i = new_outputs.size(); i < inst->outputs.size();i++){
-        foreign_blocks.insert(Downcast<BlockRV>(inst->outputs[i]));
+      Array<ObjectRef> new_inst_outputs;
+      for (int i = 0; i < static_cast<int>(outputs_for_record_mod.size()); i++) {
+        auto block_record = sch_for_record_mod->Get(Downcast<BlockRV>(outputs_for_record_mod[i]));
+        if (record2target.count(block_record->name_hint)) {
+          new_inst_outputs.push_back(inst->outputs[i]);
+        } else {
+          foreign_blocks.insert(Downcast<BlockRV>(inst->outputs[i]));
+        }
       }
-        TranslateAddOutputRVs({inst->outputs.begin(), inst->outputs.begin() + new_outputs.size()},
-                              new_outputs, &rv_map);
+      TranslateAddOutputRVs(new_inst_outputs, new_target_outputs, &rv_map_target_mod);
     } else {
-      TranslateAddOutputRVs(inst->outputs, outputs, &rv_map);
+      // map record mod block_rvs to target mod block_rvs
+      ICHECK(outputs.size() == outputs_for_record_mod.size());
+      for (int i = 0; i < static_cast<int>(outputs.size()); i++) {
+        if (outputs[i]->IsInstance<BlockRVNode>()) {
+          ICHECK(outputs_for_record_mod[i]->IsInstance<BlockRVNode>());
+          auto block_rv_record = Downcast<BlockRV>(outputs_for_record_mod[i]);
+          auto block_record = Downcast<Block>(sch_for_record_mod->Get(block_rv_record));
+          auto block_rv_target = Downcast<BlockRV>(outputs[i]);
+          auto block_target = Downcast<Block>(sch->Get(block_rv_target));
+          record2target.Set(block_record->name_hint, block_target->name_hint);
+          target2record.Set(block_target->name_hint, block_record->name_hint);
+        }
+      }
+      // decompose reduction will modify input block
+      if (inst->kind.same_as(kind_decompose_reduction)) {
+        ICHECK(inputs.size() == inputs_for_record_mod.size());
+        for (int i = 0; i < static_cast<int>(inputs.size()); i++) {
+          if (inputs[i]->IsInstance<BlockRVNode>()) {
+            auto block_rv_record = Downcast<BlockRV>(inputs_for_record_mod[i]);
+            auto block_record = Downcast<Block>(sch_for_record_mod->Get(block_rv_record));
+            auto block_rv_target = Downcast<BlockRV>(inputs[i]);
+            auto block_target = Downcast<Block>(sch->Get(block_rv_target));
+            record2target.Set(block_record->name_hint, block_target->name_hint);
+            target2record.Set(block_target->name_hint, block_record->name_hint);
+          }
+        }
+      }
+      TranslateAddOutputRVs(inst->outputs, outputs, &rv_map_target_mod);
     }
   }
 
@@ -243,14 +311,14 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace) {
       unscheduled_blocks.push_back(sch->GetBlock(name));
     }
   }
-
   return unscheduled_blocks;
 }
 
-void ScheduleUsingAnchorTrace(Schedule sch, const Trace& anchor_trace, const tvm::Target& target) {
+void ScheduleUsingAnchorTrace(Schedule sch, const Trace& anchor_trace, const IRModule& record_mod,
+                              const tvm::Target& target) {
   InlinePostBlocks(sch, anchor_trace, target);
 
-  auto unscheduled_blocks = ApplyAnchorTrace(sch, anchor_trace);
+  auto unscheduled_blocks = ApplyAnchorTrace(sch, anchor_trace, record_mod);
   ICHECK(unscheduled_blocks.size() <= 1)
       << "All blocks should have been scheduled or only one (fused) spatial block can remain "
          "unscheduled at this point.";
