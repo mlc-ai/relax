@@ -1488,7 +1488,7 @@ Expr InferShapeBroadcastTo(const Call& call, DiagnosticContext diag_ctx) {
                          << "The broadcast_to operator expects the input new shape is broadcast "
                             "compatible with the shape of the input data. However, on the last but "
                          << i << " dimension, the input data shape has length " << prev_len
-                         << " while the nwe shape has length " << new_len
+                         << " while the new shape has length " << new_len
                          << ", which are not compatible");
     }
   }

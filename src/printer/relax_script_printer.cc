@@ -350,7 +350,6 @@ Doc RelaxScriptPrinter::VisitNode_(const relax::SeqExprNode* op) {
 Doc RelaxScriptPrinter::VisitNode_(const relax::FunctionNode* op) {
   Optional<String> gsymbol = op->GetAttr<String>(tvm::attr::kGlobalSymbol);
   if (gsymbol) {
-    ICHECK_EQ(gsymbol.value(), relax_func_name_);
     return PrintFunctionDef(Doc::Text(relax_func_name_), GetRef<relax::Function>(op),
                             /*is_global=*/true);
   } else {
