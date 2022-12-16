@@ -197,7 +197,7 @@ Optional<tir::Schedule> DatabaseNode::QuerySchedule(const IRModule& mod, const T
                               /*error_render_level=*/tir::ScheduleErrorRenderLevel::kDetail);
     auto mod_eq_structural = meta_schedule::ModuleEquality::Create("ignore-ndarray");
     if (!mod_eq_structural->Equal(mod, record->workload->mod)) {
-      meta_schedule::ScheduleUsingAnchorTrace(sch, record->trace, target);
+      meta_schedule::ScheduleUsingAnchorTrace(sch, record->trace, record->workload->mod, target);
     } else {
       record->trace->ApplyToSchedule(sch, false);
     }
