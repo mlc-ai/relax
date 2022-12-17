@@ -24,6 +24,11 @@ import tvm.testing
 from tvm import relax
 import numpy as np
 from tvm.relax.vm import build as relax_build
+from tvm.relax.transform import OperatorLegalizer
+from tvm.script.ir_builder import relax as R
+from tvm.script.ir_builder import ir as I
+from tvm.script.ir_builder import tir as T
+from tvm.script.ir_builder import IRBuilder
 
 import tvm.relax.cutlass.pattern
 
@@ -42,6 +47,10 @@ def f_run(rt_mod: runtime.Module, device: runtime.ndarray.Device, *input):
 
 
 def build(mod):
+    mod = relax.transform.OperatorLegalizer(mod).transform()
+    mod = relax.transform.AnnotateTIROpPattern()(mod)
+    mod = relax.transform.FuseOps()(mod)
+    mod = relax.transform.FuseTIR()(mod)
     mod = relax.transform.SplitCutlass()(mod)
     mod = relax.transform.CutlassCodegen()(mod)
     executbale = relax_build(mod, target)
@@ -49,42 +58,20 @@ def build(mod):
     return executbale
 
 
-def constructGEMM(m, n, k, GLOBAL_SYMBOL="HGEMM"):
-    from tvm.script.ir_builder import IRBuilder
-    from tvm.script.ir_builder import ir as I
-    from tvm.script.ir_builder import relax as R
-    from tvm.script.ir_builder import tir as T
-
+def constructGEMM(M, N, K):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name(GLOBAL_SYMBOL)
-                T.func_attr(
-                    {
-                        "global_symbol": GLOBAL_SYMBOL,
-                    }
-                )
-                A = T.arg("A", T.buffer_decl((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                D = T.alloc_buffer((m, n), C_TYPE)
-                with T.grid(m, n, k) as (l0, l1, l2):
-                    with T.block("dense_row_row_row"):
-                        vi, vj, vk = T.axis.remap("SSR", [l0, l1, l2])
-                        T.reads(A[vi, vk], B[vk, vj])
-                        T.writes(D[vi, vj])
-                        with T.init():
-                            T.buffer_store(D, T.cast(0.0, C_TYPE), [vi, vj])
-                        T.buffer_store(D, D[vi, vj] + A[vi, vk] * B[vk, vj], [vi, vj])
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = R.call_tir(
-                    frame.global_vars[GLOBAL_SYMBOL], args=[A, B], shape=(m, n), dtype=C_TYPE
-                )
+                A = R.arg("A", R.tensor((M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((K, N), B_TYPE))  # pylint: disable=invalid-name
+                with R.dataflow() as df:
+                    C = R.emit(R.nn.matmul(A, B, out_dtype=C_TYPE))
+                    R.output(C)
+                (C,) = df.output_vars
                 R.func_ret_value(C)
-    mod = ib.get()
-    return mod
+    relax_mod = ib.get()
+    return relax_mod
 
 
 def test_cutlass_dense():
@@ -100,51 +87,22 @@ def test_cutlass_dense():
     np.testing.assert_allclose(result.numpy(), A @ B, rtol=1e-2)
 
 
-def constructGEMM_bias(m, n, k, GLOBAL_SYMBOL="HGEMM_bias"):
-    from tvm.script.ir_builder import IRBuilder
-    from tvm.script.ir_builder import ir as I
-    from tvm.script.ir_builder import relax as R
-    from tvm.script.ir_builder import tir as T
-
+def constructGEMM_bias(M, N, K):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name(GLOBAL_SYMBOL)
-                T.func_attr(
-                    {
-                        "global_symbol": GLOBAL_SYMBOL,
-                    }
-                )
-                A = T.arg("A", T.buffer_decl((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                bias = T.arg("bias", T.buffer_decl((1, n), A_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((m, n), C_TYPE))  # pylint: disable=invalid-name
-                D = T.alloc_buffer((m, n), C_TYPE)
-                with T.grid(m, n, k) as (l0, l1, l2):
-                    with T.block("dense_row_row_row"):
-                        vi, vj, vk = T.axis.remap("SSR", [l0, l1, l2])
-                        T.reads(A[vi, vk], B[vk, vj])
-                        T.writes(D[vi, vj])
-                        with T.init():
-                            T.buffer_store(D, T.cast(0.0, C_TYPE), [vi, vj])
-                        T.buffer_store(D, D[vi, vj] + A[vi, vk] * B[vk, vj], [vi, vj])
-                with T.grid(m, n) as (i, j):
-                    with T.block("bias"):
-                        vi, vj = T.axis.remap("SS", [i, j])
-                        T.reads(D[vi, vj], bias[0, vj])
-                        T.writes(C[vi, vj])
-                        T.buffer_store(C, D[vi, vj] + bias[0, vj], [vi, vj])
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
-                bias = R.arg("bias", R.tensor((1, n), A_TYPE))  # pylint: disable=invalid-name
-                C = R.call_tir(
-                    frame.global_vars[GLOBAL_SYMBOL], args=[A, B, bias], shape=(m, n), dtype=C_TYPE
-                )
-                R.func_ret_value(C)
-    mod = ib.get()
-    return mod
+                A = R.arg("A", R.tensor((M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((K, N), B_TYPE))  # pylint: disable=invalid-name
+                bias = R.arg("bias", R.tensor((1, N), A_TYPE))  # pylint: disable=invalid-name
+                with R.dataflow() as df:
+                    C = R.emit(R.nn.matmul(A, B, out_dtype=C_TYPE))
+                    D = R.emit(R.add(C, bias))
+                    R.output(D)
+                (D,) = df.output_vars
+                R.func_ret_value(D)
+    relax_mod = ib.get()
+    return relax_mod
 
 
 def test_cutlass_dense_bias():
@@ -162,58 +120,23 @@ def test_cutlass_dense_bias():
     np.testing.assert_allclose(result.numpy(), A @ B + bias, rtol=1e-2)
 
 
-def constructGEMM_bias_relu(m, n, k, GLOBAL_SYMBOL="HGEMM"):
-    from tvm.script.ir_builder import IRBuilder
-    from tvm.script.ir_builder import ir as I
-    from tvm.script.ir_builder import relax as R
-    from tvm.script.ir_builder import tir as T
-
+def constructGEMM_bias_relu(M, N, K):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name(GLOBAL_SYMBOL)
-                T.func_attr(
-                    {
-                        "global_symbol": GLOBAL_SYMBOL,
-                    }
-                )
-                A = T.arg("A", T.buffer_decl((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                bias = T.arg("bias", T.buffer_decl((1, n), A_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((m, n), C_TYPE))  # pylint: disable=invalid-name
-                D = T.alloc_buffer((m, n), C_TYPE)
-                E = T.alloc_buffer((m, n), C_TYPE)
-                with T.grid(m, n, k) as (l0, l1, l2):
-                    with T.block("dense_row_row_row"):
-                        vi, vj, vk = T.axis.remap("SSR", [l0, l1, l2])
-                        T.reads(A[vi, vk], B[vk, vj])
-                        T.writes(D[vi, vj])
-                        with T.init():
-                            T.buffer_store(D, T.cast(0.0, C_TYPE), [vi, vj])
-                        T.buffer_store(D, D[vi, vj] + A[vi, vk] * B[vk, vj], [vi, vj])
-                with T.grid(m, n) as (i, j):
-                    with T.block("bias"):
-                        vi, vj = T.axis.remap("SS", [i, j])
-                        T.reads(D[vi, vj], bias[0, vj])
-                        T.writes(E[vi, vj])
-                        T.buffer_store(E, D[vi, vj] + bias[0, vj], [vi, vj])
-                with T.grid(m, n) as (i, j):
-                    with T.block("relu"):
-                        vi, vj = T.axis.remap("SS", [i, j])
-                        T.reads(E[vi, vj])
-                        T.writes(C[vi, vj])
-                        T.buffer_store(C, T.max(E[vi, vj], T.cast(0.0, C_TYPE)), [vi, vj])
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
-                bias = R.arg("bias", R.tensor((1, n), A_TYPE))  # pylint: disable=invalid-name
-                C = R.call_tir(
-                    frame.global_vars[GLOBAL_SYMBOL], args=[A, B, bias], shape=(m, n), dtype=C_TYPE
-                )
-                R.func_ret_value(C)
-    mod = ib.get()
-    return mod
+                A = R.arg("A", R.tensor((M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((K, N), B_TYPE))  # pylint: disable=invalid-name
+                bias = R.arg("bias", R.tensor((1, N), A_TYPE))  # pylint: disable=invalid-name
+                with R.dataflow() as df:
+                    C = R.emit(R.nn.matmul(A, B, out_dtype=C_TYPE))
+                    D = R.emit(R.add(C, bias))
+                    E = R.emit(R.nn.relu(D))
+                    R.output(E)
+                (E,) = df.output_vars
+                R.func_ret_value(E)
+    relax_mod = ib.get()
+    return relax_mod
 
 
 def test_cutlass_dense_bias_relu():
@@ -231,42 +154,20 @@ def test_cutlass_dense_bias_relu():
     np.testing.assert_allclose(result.numpy(), np.maximum(A @ B + bias, 0), rtol=1e-2)
 
 
-def constructBatchGEMM(b, m, n, k, GLOBAL_SYMBOL="BatchHGEMM"):
-    from tvm.script.ir_builder import IRBuilder
-    from tvm.script.ir_builder import ir as I
-    from tvm.script.ir_builder import relax as R
-    from tvm.script.ir_builder import tir as T
-
+def constructBatchGEMM(batch, M, N, K):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name(GLOBAL_SYMBOL)
-                T.func_attr(
-                    {
-                        "global_symbol": GLOBAL_SYMBOL,
-                    }
-                )
-                A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
-                with T.grid(b, m, n, k) as (lb, l0, l1, l2):
-                    with T.block("batch_dense_row_row_row"):
-                        vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
-                        T.reads(A[vb, vi, vk], B[vk, vj])
-                        T.writes(C[vb, vi, vj])
-                        with T.init():
-                            T.buffer_store(C, T.cast(0.0, C_TYPE), [vb, vi, vj])
-                        T.buffer_store(C, C[vb, vi, vj] + A[vb, vi, vk] * B[vk, vj], [vb, vi, vj])
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = R.call_tir(
-                    frame.global_vars[GLOBAL_SYMBOL], args=[A, B], shape=(b, m, n), dtype=C_TYPE
-                )
+                A = R.arg("A", R.tensor((batch, M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((K, N), B_TYPE))  # pylint: disable=invalid-name
+                with R.dataflow() as df:
+                    C = R.emit(R.nn.matmul(A, B, out_dtype=C_TYPE))
+                    R.output(C)
+                (C,) = df.output_vars
                 R.func_ret_value(C)
-    mod = ib.get()
-    return mod
+    relax_mod = ib.get()
+    return relax_mod
 
 
 def test_cutlass_batch_dense():
@@ -282,44 +183,20 @@ def test_cutlass_batch_dense():
     np.testing.assert_allclose(result.numpy(), A @ B, rtol=1e-2)
 
 
-def constructBatchGEMM2(b, m, n, k, GLOBAL_SYMBOL="BatchHGEMM2"):
-    from tvm.script.ir_builder import IRBuilder
-    from tvm.script.ir_builder import ir as I
-    from tvm.script.ir_builder import relax as R
-    from tvm.script.ir_builder import tir as T
-
+def constructBatchGEMM2(batch, M, N, K):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name(GLOBAL_SYMBOL)
-                T.func_attr(
-                    {
-                        "global_symbol": GLOBAL_SYMBOL,
-                    }
-                )
-                A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((b, k, n), B_TYPE))  # pylint: disable=invalid-name
-                D = T.alloc_buffer((b, m, n), C_TYPE)
-                with T.grid(b, m, n, k) as (lb, l0, l1, l2):
-                    with T.block("batch_dense_row_row_row"):
-                        vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
-                        T.reads(A[vb, vi, vk], B[vb, vk, vj])
-                        T.writes(D[vb, vi, vj])
-                        with T.init():
-                            T.buffer_store(D, T.cast(0.0, C_TYPE), [vb, vi, vj])
-                        T.buffer_store(
-                            D, D[vb, vi, vj] + A[vb, vi, vk] * B[vb, vk, vj], [vb, vi, vj]
-                        )
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((b, k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = R.call_tir(
-                    frame.global_vars[GLOBAL_SYMBOL], args=[A, B], shape=(b, m, n), dtype=C_TYPE
-                )
+                A = R.arg("A", R.tensor((batch, M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((batch, K, N), B_TYPE))  # pylint: disable=invalid-name
+                with R.dataflow() as df:
+                    C = R.emit(R.nn.matmul(A, B, out_dtype=C_TYPE))
+                    R.output(C)
+                (C,) = df.output_vars
                 R.func_ret_value(C)
-    mod = ib.get()
-    return mod
+    relax_mod = ib.get()
+    return relax_mod
 
 
 def test_cutlass_batch_dense2():
@@ -335,55 +212,22 @@ def test_cutlass_batch_dense2():
     np.testing.assert_allclose(result.numpy(), A @ B, rtol=1e-2)
 
 
-def constructBatchGEMM_bias(b, m, n, k, GLOBAL_SYMBOL="BatchHGEMM_bias"):
-    from tvm.script.ir_builder import IRBuilder
-    from tvm.script.ir_builder import ir as I
-    from tvm.script.ir_builder import relax as R
-    from tvm.script.ir_builder import tir as T
-
+def constructBatchGEMM_bias(batch, M, N, K):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name(GLOBAL_SYMBOL)
-                T.func_attr(
-                    {
-                        "global_symbol": GLOBAL_SYMBOL,
-                    }
-                )
-                A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                bias = T.arg("bias", T.buffer_decl((1, n), C_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
-
-                D = T.alloc_buffer((b, m, n), C_TYPE)
-                with T.grid(b, m, n, k) as (lb, l0, l1, l2):
-                    with T.block("batch_dense_row_row_row"):
-                        vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
-                        T.reads(A[vb, vi, vk], B[vk, vj])
-                        T.writes(D[vb, vi, vj])
-                        with T.init():
-                            T.buffer_store(D, T.cast(0.0, C_TYPE), [vb, vi, vj])
-                        T.buffer_store(D, D[vb, vi, vj] + A[vb, vi, vk] * B[vk, vj], [vb, vi, vj])
-                with T.grid(b, m, n) as (lb, i, j):
-                    with T.block("bias"):
-                        vb, vi, vj = T.axis.remap("SSS", [lb, i, j])
-                        T.reads(D[vb, vi, vj], bias[0, vj])
-                        T.writes(C[vb, vi, vj])
-                        T.buffer_store(C, D[vb, vi, vj] + bias[0, vj], [vb, vi, vj])
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((k, n), B_TYPE))  # pylint: disable=invalid-name
-                bias = R.arg("bias", R.tensor((1, n), C_TYPE))  # pylint: disable=invalid-name
-                C = R.call_tir(
-                    frame.global_vars[GLOBAL_SYMBOL],
-                    args=[A, B, bias],
-                    shape=(b, m, n),
-                    dtype=C_TYPE,
-                )
-                R.func_ret_value(C)
-    mod = ib.get()
-    return mod
+                A = R.arg("A", R.tensor((batch, M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((K, N), B_TYPE))  # pylint: disable=invalid-name
+                bias = R.arg("bias", R.tensor((1, N), A_TYPE))  # pylint: disable=invalid-name
+                with R.dataflow() as df:
+                    C = R.emit(R.nn.matmul(A, B, out_dtype=C_TYPE))
+                    D = R.emit(R.add(C, bias))
+                    R.output(D)
+                (D,) = df.output_vars
+                R.func_ret_value(D)
+    relax_mod = ib.get()
+    return relax_mod
 
 
 def test_cutlass_batch_dense_bias():
@@ -401,57 +245,22 @@ def test_cutlass_batch_dense_bias():
     np.testing.assert_allclose(result.numpy(), A @ B + bias, rtol=1e-2)
 
 
-def constructBatchGEMM2_bias(b, m, n, k, GLOBAL_SYMBOL="BatchHGEMM2_bias"):
-    from tvm.script.ir_builder import IRBuilder
-    from tvm.script.ir_builder import ir as I
-    from tvm.script.ir_builder import relax as R
-    from tvm.script.ir_builder import tir as T
-
+def constructBatchGEMM2_bias(batch, M, N, K):
     with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name(GLOBAL_SYMBOL)
-                T.func_attr(
-                    {
-                        "global_symbol": GLOBAL_SYMBOL,
-                    }
-                )
-                A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((b, k, n), B_TYPE))  # pylint: disable=invalid-name
-                bias = T.arg("bias", T.buffer_decl((1, n), C_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
-
-                D = T.alloc_buffer((b, m, n), C_TYPE)
-                with T.grid(b, m, n, k) as (lb, l0, l1, l2):
-                    with T.block("batch_dense_row_row_row2"):
-                        vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
-                        T.reads(A[vb, vi, vk], B[vb, vk, vj])
-                        T.writes(D[vb, vi, vj])
-                        with T.init():
-                            T.buffer_store(D, T.cast(0.0, C_TYPE), [vb, vi, vj])
-                        T.buffer_store(
-                            D, D[vb, vi, vj] + A[vb, vi, vk] * B[vb, vk, vj], [vb, vi, vj]
-                        )
-                with T.grid(b, m, n) as (lb, i, j):
-                    with T.block("bias"):
-                        vb, vi, vj = T.axis.remap("SSS", [lb, i, j])
-                        T.reads(D[vb, vi, vj], bias[0, vj])
-                        T.writes(C[vb, vi, vj])
-                        T.buffer_store(C, D[vb, vi, vj] + bias[0, vj], [vb, vi, vj])
             with R.function():
                 R.func_name("main")
-                A = R.arg("A", R.tensor((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = R.arg("B", R.tensor((b, k, n), B_TYPE))  # pylint: disable=invalid-name
-                bias = R.arg("bias", R.tensor((1, n), C_TYPE))  # pylint: disable=invalid-name
-                C = R.call_tir(
-                    frame.global_vars[GLOBAL_SYMBOL],
-                    args=[A, B, bias],
-                    shape=(b, m, n),
-                    dtype=C_TYPE,
-                )
-                R.func_ret_value(C)
-    mod = ib.get()
-    return mod
+                A = R.arg("A", R.tensor((batch, M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((batch, K, N), B_TYPE))  # pylint: disable=invalid-name
+                bias = R.arg("bias", R.tensor((1, N), A_TYPE))  # pylint: disable=invalid-name
+                with R.dataflow() as df:
+                    C = R.emit(R.nn.matmul(A, B, out_dtype=C_TYPE))
+                    D = R.emit(R.add(C, bias))
+                    R.output(D)
+                (D,) = df.output_vars
+                R.func_ret_value(D)
+    relax_mod = ib.get()
+    return relax_mod
 
 
 def test_cutlass_batch_dense2_bias():
@@ -469,6 +278,43 @@ def test_cutlass_batch_dense2_bias():
     np.testing.assert_allclose(result.numpy(), A @ B + bias, rtol=1e-2)
 
 
+# def constructConv2D(N, C, H, W, KH, KW, O, strides, padding, dilation, GLOBAL_SYMBOL="Conv2D"):
+#     from tvm.script.ir_builder import IRBuilder
+#     from tvm.script.ir_builder import ir as I
+#     from tvm.script.ir_builder import relax as R
+#     from tvm.script.ir_builder import tir as T
+
+#     with IRBuilder() as ib:  # pylint: disable=invalid-name
+#         with I.ir_module() as frame:
+#             with R.function():
+#                 R.func_name("main")
+#                 x = R.arg("x", R.tensor((N, H, W, C), A_TYPE))  # pylint: disable=invalid-name
+#                 w = R.arg("w", R.tensor((O, KH, KW, C), B_TYPE))  # pylint: disable=invalid-name
+#                 C = R.nn.conv2d(
+#                     x,
+#                     w,
+#                     kernel_size=(KH, KW),
+#                     strides=strides,
+#                     padding=padding,
+#                     dilation=dilation,
+#                     groups=1,
+#                     channels=None,
+#                     data_layout="NHWC",
+#                     kernel_layout="OHWI",
+#                     out_layout="NHWC",
+#                     out_dtype=C_TYPE,
+#                 )
+#                 R.func_ret_value(C)
+#     mod = ib.get()
+#     return mod
+
+
+# def test_cutlass_conv2d():
+#     mod = constructConv2D(1, 3, 224, 224, 3, 3, 64, (2, 2), (1, 1), (1, 1))
+#     mod = OperatorLegalizer(mod).transform()
+#     print(mod.script())
+
+
 if __name__ == "__main__":
     test_cutlass_dense()
     test_cutlass_dense_bias()
@@ -477,3 +323,4 @@ if __name__ == "__main__":
     test_cutlass_batch_dense2()
     test_cutlass_batch_dense_bias()
     test_cutlass_batch_dense2_bias()
+    # test_cutlass_conv2d()

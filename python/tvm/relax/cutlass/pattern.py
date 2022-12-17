@@ -4,20 +4,25 @@ from tvm.script.ir_builder import relax as R
 from tvm.script.ir_builder import ir as I
 from tvm.script.ir_builder import tir as T
 from tvm.script.ir_builder import IRBuilder
+from tvm.relax.transform import OperatorLegalizer
 from tvm import register_func
 
 OP_PATTERN_LIST = list()
-OP_PATTERN_GENERATOR_LIST = dict()
+OP_PATTERN_FUNC_LIST = dict()
+OP_PATTERN_VARS_LIST = dict()
 GRAPH_PATTERN_CODE_LIST = dict()
 
 
-def register_pattern_generator(name):
+def register_pattern():
     def register(func):
-        OP_PATTERN_LIST.append(name)
-        OP_PATTERN_GENERATOR_LIST[name] = func
+        func()
         return func
 
     return register
+
+
+def get_value(evaluated_symbols, pattern_name):
+    return [evaluated_symbols[symbol] for symbol in OP_PATTERN_VARS_LIST[pattern_name]]
 
 
 @register_func("tvm.relax.cutlass.op_pattern_stitch")
@@ -31,9 +36,9 @@ def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_name
             and matched_pattern_names[2] == "relu"
         ):
             # dense_row_row_row + bias_row + relu
-            m_dense, n_dense, k_dense = evaluated_symbols[0]
-            m_bias, n_bias = evaluated_symbols[1]
-            m_relu, n_relu = evaluated_symbols[2]
+            m_dense, n_dense, k_dense = get_value(evaluated_symbols[0], "dense_row_row_row")
+            m_bias, n_bias = get_value(evaluated_symbols[1], "bias_row")
+            m_relu, n_relu = get_value(evaluated_symbols[2], "relu")
             A_dense, B_dense, C_dense = evaluated_buffers[0]
             A_bias, B_bias, C_bias = evaluated_buffers[1]
             A_relu, B_relu = evaluated_buffers[2]
@@ -54,8 +59,8 @@ def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_name
             and matched_pattern_names[1] == "bias_row"
         ):
             # dense_row_row_row + bias_row
-            m_dense, n_dense, k_dense = evaluated_symbols[0]
-            m_bias, n_bias = evaluated_symbols[1]
+            m_dense, n_dense, k_dense = get_value(evaluated_symbols[0], "dense_row_row_row")
+            m_bias, n_bias = get_value(evaluated_symbols[1], "bias_row")
             A_dense, B_dense, C_dense = evaluated_buffers[0]
             A_bias, B_bias, C_bias = evaluated_buffers[1]
             if m_dense == m_bias and n_dense == n_bias and C_dense == A_bias:
@@ -64,9 +69,11 @@ def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_name
             matched_pattern_names[0] == "batch_dense_row_row_row"
             and matched_pattern_names[1] == "batch_bias_row"
         ):
-            # dense_row_row_row + bias_row
-            b_dense, m_dense, n_dense, k_dense = evaluated_symbols[0]
-            b_bias, m_bias, n_bias = evaluated_symbols[1]
+            # batch_dense_row_row_row + batch_bias_row
+            b_dense, m_dense, n_dense, k_dense = get_value(
+                evaluated_symbols[0], "batch_dense_row_row_row"
+            )
+            b_bias, m_bias, n_bias = get_value(evaluated_symbols[1], "batch_bias_row")
             A_dense, B_dense, C_dense = evaluated_buffers[0]
             A_bias, B_bias, C_bias = evaluated_buffers[1]
             if b_dense == b_bias and m_dense == m_bias and n_dense == n_bias and C_dense == A_bias:
@@ -76,8 +83,10 @@ def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_name
             and matched_pattern_names[1] == "batch_bias_row"
         ):
             # dense_row_row_row + bias_row
-            b_dense, m_dense, n_dense, k_dense = evaluated_symbols[0]
-            b_bias, m_bias, n_bias = evaluated_symbols[1]
+            b_dense, m_dense, n_dense, k_dense = get_value(
+                evaluated_symbols[0], "batch_dense_row_row_row_2"
+            )
+            b_bias, m_bias, n_bias = get_value(evaluated_symbols[1], "batch_bias_row")
             A_dense, B_dense, C_dense = evaluated_buffers[0]
             A_bias, B_bias, C_bias = evaluated_buffers[1]
             if b_dense == b_bias and m_dense == m_bias and n_dense == n_bias and C_dense == A_bias:
@@ -107,142 +116,137 @@ def get_op_pattern_list():
     return OP_PATTERN_LIST
 
 
-@register_func("tvm.relax.cutlass.get_op_pattern")
-def get_op_pattern(name):
-    return OP_PATTERN_GENERATOR_LIST[name]()
+@register_func("tvm.relax.cutlass.get_op_pattern_func")
+def get_op_pattern_func(name):
+    return OP_PATTERN_FUNC_LIST[name]
 
 
-@register_pattern_generator("dense_row_row_row")
+@register_pattern()
 def dense_row_row_row():
-    m = tir.Var("m", "int32")
-    n = tir.Var("n", "int32")
-    k = tir.Var("k", "int32")
-    with IRBuilder() as ib:
+    M = tir.Var("M", "int64")
+    N = tir.Var("N", "int64")
+    K = tir.Var("K", "int64")
+
+    with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name("dense_row_row_row")
-                A = T.arg("A", T.buffer_decl((m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((m, n), C_TYPE))  # pylint: disable=invalid-name
-                with T.grid(m, n, k) as (l0, l1, l2):
-                    with T.block("dense_row_row_row"):
-                        vi, vj, vk = T.axis.remap("SSR", [l0, l1, l2])
-                        T.reads(A[vi, vk], B[vk, vj])
-                        T.writes(C[vi, vj])
-                        with T.init():
-                            T.buffer_store(C, T.cast(0.0, C_TYPE), [vi, vj])
-                        T.buffer_store(C, C[vi, vj] + A[vi, vk] * B[vk, vj], [vi, vj])
-    return ib.get()["dense_row_row_row"]
+            with R.function():
+                R.func_name("main")
+                A = R.arg("A", R.tensor((M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((K, N), B_TYPE))  # pylint: disable=invalid-name
+                C = R.nn.matmul(A, B, out_dtype=C_TYPE)
+                R.func_ret_value(C)
+    relax_mod = ib.get()
+    relax_mod = OperatorLegalizer(relax_mod).transform()
+    name = "dense_row_row_row"
+    OP_PATTERN_LIST.append(name)
+    OP_PATTERN_FUNC_LIST[name] = relax_mod["matmul"]
+    OP_PATTERN_VARS_LIST[name] = [M, N, K]
 
 
-@register_pattern_generator("bias_row")
+@register_pattern()
 def bias_row():
-    m = tir.Var("m", "int32")
-    n = tir.Var("n", "int32")
-    with IRBuilder() as ib:
+    M = tir.Var("M", "int64")
+    N = tir.Var("N", "int64")
+    with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name("bias_row")
-                A = T.arg("A", T.buffer_decl((m, n), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((0, n), B_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((m, n), C_TYPE))  # pylint: disable=invalid-name
-                with T.grid(m, n) as (l0, l1):
-                    with T.block("bias_row"):
-                        i, j = T.axis.remap("SS", [l0, l1])
-                        T.reads(A[i, j], B[0, j])
-                        T.writes(C[i, j])
-                        T.buffer_store(C, A[i, j] + B[0, j], [i, j])
-    return ib.get()["bias_row"]
+            with R.function():
+                R.func_name("main")
+                A = R.arg("A", R.tensor((M, N), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((1, N), B_TYPE))  # pylint: disable=invalid-name
+                C = R.add(A, B)
+                R.func_ret_value(C)
+    relax_mod = ib.get()
+    relax_mod = OperatorLegalizer(relax_mod).transform()
+    name = "bias_row"
+    OP_PATTERN_LIST.append(name)
+    OP_PATTERN_FUNC_LIST[name] = relax_mod["add"]
+    OP_PATTERN_VARS_LIST[name] = [M, N]
 
 
-@register_pattern_generator("batch_bias_row")
+@register_pattern()
 def batch_bias_row():
-    batch = tir.Var("b", "int32")
-    m = tir.Var("m", "int32")
-    n = tir.Var("n", "int32")
-    with IRBuilder() as ib:
+    batch = tir.Var("batch", "int64")
+    M = tir.Var("M", "int64")
+    N = tir.Var("N", "int64")
+    with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name("batch_bias_row")
-                A = T.arg("A", T.buffer_decl((batch, m, n), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((0, n), B_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((batch, m, n), C_TYPE))  # pylint: disable=invalid-name
-                with T.grid(batch, m, n) as (lb, l0, l1):
-                    with T.block("batch_bias_row"):
-                        b, i, j = T.axis.remap("SSS", [lb, l0, l1])
-                        T.reads(A[b, i, j], B[0, j])
-                        T.writes(C[b, i, j])
-                        T.buffer_store(C, A[b, i, j] + B[0, j], [b, i, j])
-    return ib.get()["batch_bias_row"]
+            with R.function():
+                R.func_name("main")
+                A = R.arg("A", R.tensor((batch, M, N), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((1, N), B_TYPE))  # pylint: disable=invalid-name
+                C = R.add(A, B)
+                R.func_ret_value(C)
+    relax_mod = ib.get()
+    relax_mod = OperatorLegalizer(relax_mod).transform()
+    name = "batch_bias_row"
+    OP_PATTERN_LIST.append(name)
+    OP_PATTERN_FUNC_LIST[name] = relax_mod["add"]
+    OP_PATTERN_VARS_LIST[name] = [batch, M, N]
 
 
-@register_pattern_generator("relu")
+@register_pattern()
 def relu():
-    m = tir.Var("m", "int32")
-    n = tir.Var("n", "int32")
-    with IRBuilder() as ib:
+    M = tir.Var("M", "int64")
+    N = tir.Var("n", "int64")
+    with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name("relu")
-                A = T.arg("A", T.buffer_decl((m, n), A_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((m, n), C_TYPE))  # pylint: disable=invalid-name
-                with T.grid(m, n) as (l0, l1):
-                    with T.block("relu"):
-                        i, j = T.axis.remap("SS", [l0, l1])
-                        T.reads(A[i, j])
-                        T.writes(C[i, j])
-                        T.buffer_store(C, T.max(A[i, j], T.cast(0, A_TYPE)), [i, j])
-    return ib.get()["relu"]
+            with R.function():
+                R.func_name("main")
+                A = R.arg("A", R.tensor((M, N), A_TYPE))  # pylint: disable=invalid-name
+                B = R.nn.relu(A)
+                R.func_ret_value(B)
+    relax_mod = ib.get()
+    relax_mod = OperatorLegalizer(relax_mod).transform()
+    name = "relu"
+    OP_PATTERN_LIST.append(name)
+    OP_PATTERN_FUNC_LIST[name] = relax_mod["relu"]
+    OP_PATTERN_VARS_LIST[name] = [M, N]
 
 
-@register_pattern_generator("batch_dense_row_row_row")
+@register_pattern()
 def batch_dense_row_row_row():
-    b = tir.Var("b", "int32")
-    m = tir.Var("m", "int32")
-    n = tir.Var("n", "int32")
-    k = tir.Var("k", "int32")
-    with IRBuilder() as ib:
+    batch = tir.Var("batch", "int64")
+    M = tir.Var("M", "int64")
+    N = tir.Var("N", "int64")
+    K = tir.Var("K", "int64")
+
+    with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name("batch_dense_row_row_row")
-                A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
-                with T.grid(b, m, n, k) as (lb, l0, l1, l2):
-                    with T.block("batch_dense_row_row_row"):
-                        vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
-                        T.reads(A[vb, vi, vk], B[vk, vj])
-                        T.writes(C[vb, vi, vj])
-                        with T.init():
-                            T.buffer_store(C, T.cast(0.0, C_TYPE), [vb, vi, vj])
-                        T.buffer_store(C, C[vb, vi, vj] + A[vb, vi, vk] * B[vk, vj], [vb, vi, vj])
-    return ib.get()["batch_dense_row_row_row"]
+            with R.function():
+                R.func_name("main")
+                A = R.arg("A", R.tensor((batch, M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((K, N), B_TYPE))  # pylint: disable=invalid-name
+                C = R.nn.matmul(A, B, out_dtype=C_TYPE)
+                R.func_ret_value(C)
+    relax_mod = ib.get()
+    relax_mod = OperatorLegalizer(relax_mod).transform()
+    name = "batch_dense_row_row_row"
+    OP_PATTERN_LIST.append(name)
+    OP_PATTERN_FUNC_LIST[name] = relax_mod["matmul"]
+    OP_PATTERN_VARS_LIST[name] = [batch, M, N, K]
 
 
-@register_pattern_generator("batch_dense_row_row_row_2")
+@register_pattern()
 def batch_dense_row_row_row_2():
-    b = tir.Var("b", "int32")
-    m = tir.Var("m", "int32")
-    n = tir.Var("n", "int32")
-    k = tir.Var("k", "int32")
-    with IRBuilder() as ib:
+    batch = tir.Var("batch", "int64")
+    M = tir.Var("M", "int64")
+    N = tir.Var("N", "int64")
+    K = tir.Var("K", "int64")
+
+    with IRBuilder() as ib:  # pylint: disable=invalid-name
         with I.ir_module() as frame:
-            with T.prim_func():
-                T.func_name("batch_dense_row_row_row_2")
-                A = T.arg("A", T.buffer_decl((b, m, k), A_TYPE))  # pylint: disable=invalid-name
-                B = T.arg("B", T.buffer_decl((b, k, n), B_TYPE))  # pylint: disable=invalid-name
-                C = T.arg("C", T.buffer_decl((b, m, n), C_TYPE))  # pylint: disable=invalid-name
-                with T.grid(b, m, n, k) as (lb, l0, l1, l2):
-                    with T.block("batch_dense_row_row_row_2"):
-                        vb, vi, vj, vk = T.axis.remap("SSSR", [lb, l0, l1, l2])
-                        T.reads(A[vb, vi, vk], B[vb, vk, vj])
-                        T.writes(C[vb, vi, vj])
-                        with T.init():
-                            T.buffer_store(C, T.cast(0.0, C_TYPE), [vb, vi, vj])
-                        T.buffer_store(
-                            C, C[vb, vi, vj] + A[vb, vi, vk] * B[vb, vk, vj], [vb, vi, vj]
-                        )
-    return ib.get()["batch_dense_row_row_row_2"]
+            with R.function():
+                R.func_name("main")
+                A = R.arg("A", R.tensor((batch, M, K), A_TYPE))  # pylint: disable=invalid-name
+                B = R.arg("B", R.tensor((batch, K, N), B_TYPE))  # pylint: disable=invalid-name
+                C = R.nn.matmul(A, B, out_dtype=C_TYPE)
+                R.func_ret_value(C)
+    relax_mod = ib.get()
+    relax_mod = OperatorLegalizer(relax_mod).transform()
+    name = "batch_dense_row_row_row_2"
+    OP_PATTERN_LIST.append(name)
+    OP_PATTERN_FUNC_LIST[name] = relax_mod["matmul"]
+    OP_PATTERN_VARS_LIST[name] = [batch, M, N, K]
 
 
 @register_func("tvm.relax.cutlass.get_graph_pattern_code")
@@ -624,7 +628,7 @@ GRAPH_PATTERN_CODE_LIST[
       }
 
       }  // namespace
-      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM); 
+      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM);
 """
 
 GRAPH_PATTERN_CODE_LIST[
@@ -722,7 +726,7 @@ GRAPH_PATTERN_CODE_LIST[
       }
 
       }  // namespace
-      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM); 
+      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM);
 """
 
 GRAPH_PATTERN_CODE_LIST[
@@ -811,7 +815,7 @@ GRAPH_PATTERN_CODE_LIST[
       }
 
       }  // namespace
-      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM); 
+      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM);
 """
 
 GRAPH_PATTERN_CODE_LIST[
@@ -910,5 +914,5 @@ GRAPH_PATTERN_CODE_LIST[
       }
 
       }  // namespace
-      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM); 
+      TVM_DLL_EXPORT_TYPED_FUNC({global_symbol}, _BHGEMM);
 """
