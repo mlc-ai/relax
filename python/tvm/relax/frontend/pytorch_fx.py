@@ -304,7 +304,10 @@ class TorchFXTranslator:
     def _getitem(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         if isinstance(x, (list, tuple, relax.ShapeExpr, relax.Tuple)):
-            return x[node.args[1]]
+            idx = node.args[1]
+            if isinstance(idx, int) and idx < 0:
+                idx = len(x) + idx
+            return x[idx]
         elif isinstance(x, relax.Var):
             if isinstance(x.shape, relax.Tuple):
                 return self.bb.emit(relax.TupleGetItem(x, node.args[1]))
