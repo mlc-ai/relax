@@ -148,8 +148,8 @@ std::pair<Map<String, String>, Map<String, String>> GetBlockMapping(IRModule tar
   Map<String, String> record2target{{"root", "root"}};
   Map<String, String> target2record{{"root", "root"}};
 
-  for (int i = 0; i < blocks_from_record.size(); i++) {
-    for (int j = 0; j < blocks_from_target.size(); j++) {
+  for (size_t i = 0; i < blocks_from_record.size(); i++) {
+    for (size_t j = 0; j < blocks_from_target.size(); j++) {
       if (SEqualHandlerIgnoreFloat().Equal(blocks_from_record[i], blocks_from_target[j], false) &&
           !target2record.count(blocks_from_target[j]->name_hint)) {
         record2target.Set(blocks_from_record[i]->name_hint, blocks_from_target[j]->name_hint);
