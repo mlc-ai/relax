@@ -240,7 +240,7 @@ class TorchFXTranslator:
             start_dim = node.args[1] if len(node.args) >= 2 else 0
             end_dim = node.args[2] if len(node.args) == 3 else -1
         assert start_dim == 1 and end_dim == -1
-        return self.bb.emit(relax.op.flatten(x))
+        return self.bb.emit(relax.op.nn.flatten(x))
 
     def _batch_norm_2d(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -395,7 +395,7 @@ class TorchFXTranslator:
         return self.bb.emit(relax.op.nn.matmul(a, b, out_dtype="float32"))
 
     def _gelu(self, node: fx.node.Node) -> relax.Var:
-        return self.bb.emit(relax.op.gelu(self.env[node.args[0]]))
+        return self.bb.emit(relax.op.nn.gelu(self.env[node.args[0]]))
 
     def _interpolate(self, node: fx.node.Node) -> relax.Var:
         # torch.nn.functional.interpolate(
@@ -523,7 +523,7 @@ class TorchFXTranslator:
 
     def _silu(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
-        return self.bb.emit(relax.op.silu(x))
+        return self.bb.emit(relax.op.nn.silu(x))
 
     def _group_norm(self, node: fx.node.Node) -> relax.Var:
         # torch.nn.GroupNorm(num_groups, num_channels, eps=1e-05, affine=True, device=None, dtype=None)
