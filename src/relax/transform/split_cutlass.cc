@@ -44,13 +44,6 @@ class BlockMatcher : public TensorizeComparator {
     ICHECK(pattern_top) << "Invalid pattern function";
     if (!VisitStmt(top, GetRef<Stmt>(pattern_top))) return false;
     // Get evaluated symbols, buffers from the pattern.
-    for (const auto& loop : loop_stack_rhs_) {
-      const VarNode* extent = loop->extent.as<VarNode>();
-      ICHECK(extent);
-      auto it = extent_var_map_.find(GetRef<Var>(extent));
-      ICHECK(it != extent_var_map_.end());
-      evaluated_symbols.push_back(it->second);
-    }
     for (const auto& arg : pattern_->params) {
       auto it = pattern_->buffer_map.find(arg);
       if (it != pattern_->buffer_map.end()) {
@@ -62,10 +55,29 @@ class BlockMatcher : public TensorizeComparator {
     return true;
   }
 
-  std::vector<PrimExpr> evaluated_symbols;
+  std::unordered_map<Var, PrimExpr, ObjectPtrHash, ObjectPtrEqual> evaluated_symbols;
   std::vector<Buffer> evaluated_buffers;
 
  private:
+  bool VisitExpr(const PrimExpr& lhs, const PrimExpr& rhs) final {
+    if (const auto* op = rhs.as<VarNode>()) {
+      const auto* lhs_ptr = lhs.as<VarNode>();
+      if (lhs_ptr == nullptr) {
+        if (lhs->IsInstance<tir::IntImmNode>() || lhs->IsInstance<tir::FloatImmNode>()) {
+          auto it = evaluated_symbols.find(GetRef<Var>(op));
+          if (it != evaluated_symbols.end()) {
+            if (!analyzer_.CanProveEqual(it->second, lhs)) return false;
+          }
+          evaluated_symbols[GetRef<Var>(op)] = lhs;
+          return true;
+        } else {
+          return false;
+        }
+      }
+    }
+    return TensorizeComparator::VisitExpr(lhs, rhs);
+  }
+
   bool VisitStmt_(const tir::ForNode* op, const Stmt& other) final {
     const auto* rhs = other.as<ForNode>();
     loop_stack_lhs_.push_back(GetRef<For>(op));
@@ -85,14 +97,7 @@ class BlockMatcher : public TensorizeComparator {
     if (op->kind != ForKind::kSerial || op->kind != rhs->kind) return false;
     if (!op->annotations.empty() || !rhs->annotations.empty()) return false;
     // Match the extents of loops
-    const VarNode* rhs_extent = rhs->extent.as<VarNode>();
-    ICHECK(rhs_extent) << "Invalid pattern function";
-    auto it = extent_var_map_.find(GetRef<Var>(rhs_extent));
-    if (it != extent_var_map_.end()) {
-      if (!analyzer_.CanProveEqual(it->second, op->extent)) return false;
-    } else {
-      extent_var_map_[GetRef<Var>(rhs_extent)] = op->extent;
-    }
+    if (!VisitExpr(op->extent, rhs->extent)) return false;
     return VisitStmt(op->body, rhs->body);
   }
 
@@ -191,7 +196,6 @@ class BlockMatcher : public TensorizeComparator {
 
   arith::Analyzer analyzer_;
   std::vector<For> loop_stack_lhs_, loop_stack_rhs_;
-  std::unordered_map<Var, PrimExpr, ObjectHash, ObjectEqual> extent_var_map_;
   tir::PrimFunc pattern_;
 };
 
@@ -203,9 +207,9 @@ class FuncMatcher : public StmtExprVisitor {
     if (fail) return;
     auto f = tvm::runtime::Registry::Get("tvm.relax.cutlass.op_pattern_stitch");
     ICHECK(f != nullptr) << "Cannot find cutlass op pattern stitch function";
-    cutlass_annotation =
-        (*f)(Array<Array<PrimExpr>>(evaluated_symbols_), Array<Array<Buffer>>(evaluated_buffers_),
-             Array<runtime::String>(matched_pattern_names_));
+    cutlass_annotation = (*f)(Array<Map<Var, PrimExpr>>(evaluated_symbols_),
+                              Array<Array<Buffer>>(evaluated_buffers_),
+                              Array<runtime::String>(matched_pattern_names_));
     this->VisitStmt(body);
   }
 
@@ -306,7 +310,7 @@ class FuncMatcher : public StmtExprVisitor {
 
   size_t block_counter_ = 0;
 
-  std::vector<Array<PrimExpr>> evaluated_symbols_;
+  std::vector<Map<Var, PrimExpr>> evaluated_symbols_;
   std::vector<Array<Buffer>> evaluated_buffers_;
   std::vector<runtime::String> matched_pattern_names_;
 };
@@ -489,7 +493,8 @@ class SplitMutator : public ExprMutator {
       GlobalVar gv1 = builder_->AddFunction(func1, "cutlass_primfunc");
       tir::Buffer intermediate_buffer = func1->buffer_map.at(func1->params.back());
       DataType dtype = intermediate_buffer->dtype;
-      Call call1(call_tir_op_, {gv1, Tuple(args1), shape1}, call->attrs, {DynTensorType(intermediate_buffer->shape.size(), dtype)});
+      Call call1(call_tir_op_, {gv1, Tuple(args1), shape1}, call->attrs,
+                 {DynTensorType(intermediate_buffer->shape.size(), dtype)});
       Var call_var1 = builder_->Emit(call1);
       // emit the second call to the rest of the function
       Array<Expr> args2;
