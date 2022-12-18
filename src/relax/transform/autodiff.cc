@@ -37,7 +37,7 @@
  *             lv1 = relax.sum(lv0)
  *             R.output(lv1)
  *         return lv1
- *
+ *TODO:update
  * After AD:
  * @tvm.script.ir_module
  * class Module:
@@ -58,12 +58,11 @@
  *         # return value type: Tuple(original_return_value, Tuple(all_adjoints))
  *         return (lv1, (x_adjoint, y_adjoint))
  *
- *  TODO(yixindong, chaofanlin): eliminate unnecessary computations.
  */
 
 #include <tvm/relax/expr_functor.h>
 #include <tvm/relax/transform.h>
-#include <tvm/relay/op_attr_types.h>
+#include <tvm/relax/op_attr_types.h>
 
 #include <unordered_set>
 
@@ -80,15 +79,14 @@ class SimpleADMutator : public ExprMutator {
 
     Array<Var> new_params;
     for (Var param : node->params) {
-      Var new_param = Var(param->vid, NullOpt, param->checked_type_, param->span);
-      UpdateShape(new_param, param->shape_);
+      Var new_param = Var(param->vid, param->shape(), param->checked_type_, param->span);
       this->var_remap_[param->vid] = new_param;
       new_params.push_back(new_param);
     }
     Expr new_body = VisitWithNewScope(node->body);
 
     const SeqExprNode* seq_expr = new_body.as<SeqExprNode>();
-    // only a single dataflow block
+    // only support a single dataflow block
     ICHECK(seq_expr->blocks.size() == 1);
     ICHECK(seq_expr->blocks[0]->IsInstance<DataflowBlockNode>());
     const DataflowBlockNode* block = seq_expr->blocks[0].as<DataflowBlockNode>();
@@ -100,10 +98,10 @@ class SimpleADMutator : public ExprMutator {
 
     // create adjoint var for inputs
     for (size_t i = 0; i < new_params.size(); ++i) {
-      if (require_grads.empty() || std::find(require_grads.begin(), require_grads.end(), node->params[i]) != require_grads.end()) {
+      if (require_grads.empty() ||
+        std::find(require_grads.begin(), require_grads.end(), node->params[i]) != require_grads.end()) {
         CreateAdjointVar(new_params[i], false);
-      }
-      else {
+      } else {
         CreateAdjointVar(new_params[i], true);
       }
     }
@@ -112,15 +110,13 @@ class SimpleADMutator : public ExprMutator {
     if (const auto* node = seq_expr->body.as<VarNode>()) {
       const Var& target = GetRef<Var>(node);
       CheckTarget(target);
-      CreateAdjointVar(target, true);
-      InitGrad(adjoint_var_map[target], target);
-    }
-    else {
+      target_var = target;
+    } else {
       LOG(FATAL) << "the body of the function is not a relax.Var";
     }
 
     // reverse-mode ad
-    for (int i = block->bindings.size()-1; i >= 0; --i) {
+    for (int i = block->bindings.size() - 1; i >= 0; --i) {
       if (!block->bindings[i]->IsInstance<VarBindingNode>()) continue;
       const VarBindingNode* binding = block->bindings[i].as<VarBindingNode>();
       ReverseVisit(binding);
@@ -135,13 +131,17 @@ class SimpleADMutator : public ExprMutator {
 
     // emit the input adjoints
     for (size_t i = 0; i < new_params.size(); ++i) {
-      if (require_grads.empty() || std::find(require_grads.begin(), require_grads.end(), node->params[i]) != require_grads.end()) {
+      if (require_grads.empty() ||
+        std::find(require_grads.begin(), require_grads.end(), node->params[i]) != require_grads.end()) {
         const Var& adjoint_var = adjoint_var_map[new_params[i]];
         if (adjoint_expr_map.count(new_params[i])) {
           BindAndEmit(adjoint_var, adjoint_expr_map[new_params[i]]);
-        }
-        else {
-          const Expr& default_adjoint = Call(default_op, {new_params[i]->shape()});
+        } else {
+          ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
+          auto type = Downcast<DynTensorType>(new_params[i]->checked_type_);
+          attrs->dtype = type->dtype;
+
+          const Expr& default_adjoint = Call(zeros_op, {new_params[i]->shape()}, Attrs(attrs));
           BindAndEmit(adjoint_var, default_adjoint);
         }
         out_adjoints.push_back(adjoint_var);
@@ -161,44 +161,41 @@ class SimpleADMutator : public ExprMutator {
   }
 
   void ReverseVisit(const VarBindingNode* binding) {
-    VLOG(2) << "AD reverse visit binding: " << binding->var->name_hint() << std::endl;
-
     CreateAdjointVar(binding->var, true);
     const Var& adjoint_var = adjoint_var_map[binding->var];
 
     // must be ignored output's AST
     if (adjoint_expr_map.count(binding->var) == 0) {
-      VLOG(2) << "AD ignored binding var: " << binding->var->name_hint() << std::endl;
-      return;
+      if (binding->var == target_var) {
+        InitGrad(adjoint_var_map[binding->var], binding->var);
+      } else {
+        return;
+      }
     }
 
     // meet a def
     BindAndEmit(adjoint_var, adjoint_expr_map[binding->var]);
-    // back prop.
-    ICHECK(adjoint_expr_map.count(binding->var)) << "reverse visit terminated: missing adjoint of binding var: " << binding->var->name_hint() << std::endl;
 
-    // case 1: tuple
-    // a = ((c, d),)
-    // b_adjoint_expr += a_adjoint_var[0], c_adjoint_expr += a_adjoint_var[1]
+    // back propagation
     if (const auto* node = binding->value.as<TupleNode>()) {
+      // case 1: tuple
+      // a = ((c, d),)
+      // b_adjoint_expr += a_adjoint_var[0], c_adjoint_expr += a_adjoint_var[1]
       UpdateExprMap(GetRef<Tuple>(node), adjoint_expr_map[binding->var]);
-    }
-    // case 2: tuple get item
-    // b = a[0]
-    // a_adjoint_expr[0] (in fields) += b_adjoint_var
-    // a = ((x, y), (z,))
-    // b = a[0]
-    else if (const auto* node = binding->value.as<TupleGetItemNode>()) {
+    } else if (const auto* node = binding->value.as<TupleGetItemNode>()) {
+      // case 2: tuple get item
+      // b = a[0]
+      // a_adjoint_expr[0] (in fields) += b_adjoint_var
+      // a = ((x, y), (z,))
+      // b = a[0]
       UpdateExprMap(GetRef<TupleGetItem>(node), adjoint_expr_map[binding->var]);
-    }
-    // case 3: assign
-    // a = b
-    // b_adjoint_expr += a_adjoint_var
-    else if (const auto* node = binding->value.as<VarNode>()) {
+    } else if (const auto* node = binding->value.as<VarNode>()) {
+      // case 3: assign
+      // a = b
+      // b_adjoint_expr += a_adjoint_var
       UpdateExprMap(GetRef<Var>(node), adjoint_expr_map[binding->var]);
-    }
-    // case 4: call
-    else if (const auto* node = binding->value.as<CallNode>()) {
+    } else if (const auto* node = binding->value.as<CallNode>()) {
+      // case 4: call
       const Op& call_op = GetRef<Op>(node->op.as<OpNode>());
       const Array<Expr>& partials = gradient_op_map[call_op](GetRef<Call>(node), adjoint_var);
       ICHECK(partials.size() == node->args.size()) << "partials number != inputs number";
@@ -207,8 +204,7 @@ class SimpleADMutator : public ExprMutator {
         ICHECK(arg != nullptr);
         UpdateExprMap(GetRef<Var>(arg), partials[i]);
       }
-    }
-    else {
+    } else {
       LOG(FATAL) << "AD does not support this type of binding value now: " << binding->value;
     }
   }
@@ -221,8 +217,7 @@ class SimpleADMutator : public ExprMutator {
       Var adjoint = DataflowVar(v->name_hint() + "_adjoint", v->shape(), v->checked_type());
       adjoint->checked_type_ = v->checked_type();
       adjoint_var_map.Set(v, adjoint);
-    }
-    else {
+    } else {
       Var adjoint = Var(v->name_hint() + "_adjoint", v->shape(), v->checked_type());
       adjoint->checked_type_ = v->checked_type();
       adjoint_var_map.Set(v, adjoint);
@@ -235,12 +230,10 @@ class SimpleADMutator : public ExprMutator {
       if (adjoint_expr_map.count(v) == 0) {
         if (adjoint_binding_.count(increment)) {
           adjoint_expr_map.Set(v, adjoint_binding_[increment]);
-        }
-        else {
+        } else {
           adjoint_expr_map.Set(v, increment);
         }
-      }
-      else {
+      } else {
         const Expr& updated = DoAdd(adjoint_expr_map[v], increment); // Call(add_op, {adjoint_expr_map[v], increment});
         adjoint_expr_map.Set(v, updated);
       }
@@ -250,57 +243,57 @@ class SimpleADMutator : public ExprMutator {
         for (size_t i = 0; i < node->fields.size(); ++i) {
           UpdateExprMap(node->fields[i], node1->fields[i]);
         }
-      }
-      else {
-        LOG(FATAL) << "base and increment should be both tuple" << std::endl;
+      } else {
+        LOG(FATAL) << "base and increment should be both tuple";
       }
     }
     else if (const auto* node = base.as<TupleGetItemNode>()) {
-      ICHECK(node->tuple->IsInstance<VarNode>()) << "Tuple of TupleGetItem must be binded to a Var" << std::endl;
-      ICHECK(!node->tuple->shape().as<TupleGetItemNode>()) << "Error: no nested TupleGetItem" << std::endl;
-      ICHECK(node->tuple->shape().as<TupleNode>()) << "Type of tuple of TupleGetItem must be tuple" << std::endl;
+      ICHECK(node->tuple->IsInstance<VarNode>()) << "Tuple of TupleGetItem must be binded to a Var";
+      ICHECK(!node->tuple->shape().as<TupleGetItemNode>()) << "Error: no nested TupleGetItem";
+      ICHECK(node->tuple->shape().as<TupleNode>()) << "Type of tuple of TupleGetItem must be tuple";
 
-      const Var& v = GetRef<Var>(node->tuple.as<VarNode>());
+      const Var& v = Downcast<Var>(node->tuple);
       if (adjoint_expr_map.count(v) == 0) {
-        const Tuple& init = BuildEmptyNestedTupleExpr(GetRef<Tuple>(node->tuple->shape().as<TupleNode>()));
+        const Tuple& init = BuildEmptyNestedTupleExpr(
+          Downcast<Tuple>(node->tuple->shape()),
+          Downcast<TupleType>(node->tuple->checked_type())
+        );
         init->checked_type_ = v->checked_type();
         adjoint_expr_map.Set(v, init);
       }
 
       ICHECK(adjoint_expr_map[v].as<TupleNode>()) << "adjoint of var is not tuple";
       adjoint_expr_map.Set(v,
-        DoAddInTuple(GetRef<Tuple>(adjoint_expr_map[v].as<TupleNode>()), node->index, increment)
+        DoAddInTuple(Downcast<Tuple>(adjoint_expr_map[v]), node->index, increment)
       );
-    }
-    else {
-      LOG(FATAL) << "not a leaf node" << std::endl;
+    } else {
+      LOG(FATAL) << "not a leaf node";
     }
   }
 
-  Tuple BuildEmptyNestedTupleExpr(const Tuple& from) {
+  Tuple BuildEmptyNestedTupleExpr(const Tuple& shape, const TupleType &type) {
     Array<Expr> ret;
-    for (size_t i = 0; i < from->fields.size(); ++i) {
-      if (const auto* node = from->fields[i].as<TupleNode>()) {
-        ret.push_back(BuildEmptyNestedTupleExpr(GetRef<Tuple>(node)));
-      }
-      else if (from->fields[i].as<ShapeExprNode>()) {
-        // VLOG(2) << "init: " << from << std::endl;
-        const Expr& init = Call(default_op, {from->fields[i]});
+    for (size_t i = 0; i < shape->fields.size(); ++i) {
+      if (const auto* node = shape->fields[i].as<TupleNode>()) {
+        ret.push_back(BuildEmptyNestedTupleExpr(
+          GetRef<Tuple>(node), Downcast<TupleType>(type->fields[i])
+        ));
+      } else if (shape->fields[i].as<ShapeExprNode>()) {
+        ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
+        auto tensortype = Downcast<DynTensorType>(type->fields[i]);
+        attrs->dtype = tensortype->dtype;
+
+        const Expr& init = Call(zeros_op, {shape->fields[i]}, Attrs(attrs));
         zeros_tracker_.emplace(init);
         ret.push_back(init);
-      }
-      else {
-        LOG(FATAL) << "Unsupported emtpy expr: " << from->fields[i] << std::endl;
+      } else {
+        LOG(FATAL) << "Unsupported emtpy expr: " << shape->fields[i];
       }
     }
     return Tuple(ret);
   }
 
   Expr DoAdd(const Expr& src1, const Expr& src2) {
-    VLOG(2) << "DoAdd." << std::endl;
-    VLOG(2) << "src1: " << src1 << std::endl;
-    VLOG(2) << "src2: " << src2 << std::endl;
-
     if (zeros_tracker_.count(src1) != 0) {
       return src2;
     }
@@ -310,19 +303,17 @@ class SimpleADMutator : public ExprMutator {
 
     if (const auto* node1 = src1.as<TupleNode>()) {
       if (const auto* node2 = src2.as<TupleNode>()) {
-        ICHECK(node1->fields.size() == node2->fields.size()) << "size of tuple not match" << std::endl;
+        ICHECK(node1->fields.size() == node2->fields.size()) << "size of tuple not match";
         Array<Expr> result;
         for (size_t i = 0; i < node1->fields.size(); ++i) {
           result.push_back(DoAdd(node1->fields[i], node2->fields[i]));
         }
         return Tuple(result);
-      }
-      else {
-        LOG(FATAL) << "Type not match: src1 and src2 should be both tuple" << std::endl;
+      } else {
+        LOG(FATAL) << "Type not match: src1 and src2 should be both tuple";
         return Expr();
       }
-    }
-    else {
+    } else {
       // use the variable to replace expr to reduce the size of AST
       if (adjoint_binding_.count(src2)) {
         return Call(add_op, {src1, adjoint_binding_[src2]});
@@ -336,25 +327,25 @@ class SimpleADMutator : public ExprMutator {
     for (size_t i = 0; i < origin->fields.size(); ++i) {
       if ((int)i == index) {
         ret.push_back(DoAdd(origin->fields[i], increment));
-      }
-      else {
+      } else {
         ret.push_back(origin->fields[i]);
       }
     }
     return Tuple(ret);
   }
 
-  void BindAndEmit(const Var& v, const Expr& e) {
+  void BindAndEmit(Var v, Expr e) {
     if (adjoint_binding_.count(e)) {
-      return;
+      e = adjoint_binding_[e];
+      // return;
+    } else {
+      adjoint_binding_.Set(e, v);
+      e->checked_type_ = v->checked_type();
+      e->shape_ = v->shape();
     }
-    adjoint_binding_.Set(e, v);
-    e->checked_type_ = v->checked_type();
-    e->shape_ = v->shape();
     if (v->IsInstance<DataflowVarNode>()) {
       builder_->Emit(VarBinding(v, e));
-    }
-    else {
+    } else {
       builder_->EmitOutput(VarBinding(v, e));
     }
   }
@@ -368,11 +359,15 @@ class SimpleADMutator : public ExprMutator {
   }
 
   void InitGrad(const Var& adjoint_var, const Var& var) {
-    const Expr& init = Call(init_op, {var->shape()});
-    BindAndEmit(adjoint_var, init);
-    VLOG(2) << "init grad: " << var->name_hint() << std::endl;
+    ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
+    auto type = Downcast<DynTensorType>(var->checked_type_);
+    attrs->dtype = type->dtype;
+
+    const Expr& init = Call(ones_op, {var->shape()}, Attrs(attrs));
     adjoint_expr_map.Set(var, init);
   }
+
+  Var target_var;
 
   Array<Var> require_grads;
 
@@ -387,19 +382,19 @@ class SimpleADMutator : public ExprMutator {
   std::set<Expr> zeros_tracker_;
 
   // gop map
-  const OpAttrMap<relay::FPrimalGradient> gradient_op_map =
-      Op::GetAttrMap<relay::FPrimalGradient>("FPrimalGradient");
+  const OpAttrMap<relax::FPrimalGradient> gradient_op_map =
+      Op::GetAttrMap<relax::FPrimalGradient>("FPrimalGradient");
 
   // constant
-  const Op& init_op = Op::Get("relax.ones");
+  const Op& ones_op = Op::Get("relax.ones");
   const Op& add_op = Op::Get("relax.add");
-  const Op& default_op = Op::Get("relax.zeros");
+  const Op& zeros_op = Op::Get("relax.zeros");
 };
 
 /*!
  * \brief A simple reverse-mode auto differentiation.
  * \param m The module
- * \param func_name The name of the specific function
+ * \param var The GlobalVar of the specific function
  * \param require_grad_names The relax variables which need adjoints. Must be inputs.
  * \return The module after AD.
  */

@@ -30,36 +30,12 @@ from tvm.script.parser import ir as I, relax as R, tir as T
 from tvm._ffi.base import TVMError
 from tvm.relax.transform import OperatorLegalizer
 
-import tvm.relax.training.legalizer_update
-
 
 def _execute_mod(mod, func_name, *args):
-    # lowered_mod = LowerToTensorIRPass()(mod)
     lowered_mod = OperatorLegalizer(mod).transform()
     ex = relax.vm.build(lowered_mod, target="llvm")
     vm = relax.VirtualMachine(ex, tvm.cpu())
     return vm[func_name](*args)
-
-
-def _check_mod_grad_equal(mod1, mod2, func_name):
-    args = []
-    for arg in mod1[func_name].params:
-        shape = [int(l) for l in arg.shape]
-        args.append(rand("float32", *shape))
-    res1, grad1 = _execute_mod(mod1, func_name, *args)
-    res2, grad2 = _execute_mod(mod2, func_name, *args)
-
-    if isinstance(res1, tvm.runtime.container.ADT):
-        for (l, r) in zip(res1, res2):
-            assert_allclose(l.numpy(), r.numpy())
-    else:
-        assert_allclose(res1.numpy(), res2.numpy())
-
-    if isinstance(grad1, tvm.runtime.container.ADT):
-        for (l, r) in zip(grad1, grad2):
-            assert_allclose(l.numpy(), r.numpy())
-    else:
-        assert_allclose(grad1.numpy(), grad2.numpy())
 
 
 def test_binding_uses():
@@ -86,7 +62,6 @@ def test_binding_uses():
                 R.output(lv7)
             return lv7
     After = relax.transform.SimpleAD(Before.get_global_var("main"))(Before)
-
     args = [rand("float32", 5, 5), rand("float32", 5), rand("float32", 5), rand("float32", 5)]
     output, grads = _execute_mod(After, "main_adjoint", *args)
     assert_allclose(output.numpy(), np.sum(2 * args[0].numpy() + 2 * args[1].numpy()), atol=1e-4)
@@ -117,104 +92,101 @@ def test_default_require_grads():
                 R.output(lv6)
             return lv6
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected1:
         @R.function
-        def main(x: R.Tensor((5, 5), "float32"),
-                 y: R.Tensor((5, 5), "float32"),
-                 z: R.Tensor((5, 5), "float32"),
-                 u: R.Tensor((5, 5), "float32")):
+        def main(x: R.Tensor((5, 5), dtype="float32"), y: R.Tensor((5, 5), dtype="float32"), z: R.Tensor((5, 5), dtype="float32"), u: R.Tensor((5, 5), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=0):
+            # block 0
             with R.dataflow():
-                lv1 = R.add(x, y)
-                lv2 = R.subtract(z, u)
-                lv3 = R.add(y, z)
-                lv4 = R.add(lv1, lv2)
-                lv5 = R.add(lv4, lv3)
-                lv6 = R.sum(lv5)
+                lv1: R.Tensor((5, 5), dtype="float32") = R.add(x, y)
+                lv2: R.Tensor((5, 5), dtype="float32") = R.subtract(z, u)
+                lv3: R.Tensor((5, 5), dtype="float32") = R.add(y, z)
+                lv4: R.Tensor((5, 5), dtype="float32") = R.add(lv1, lv2)
+                lv5: R.Tensor((5, 5), dtype="float32") = R.add(lv4, lv3)
+                lv6: R.Tensor((), dtype="float32") = R.sum(lv5, axis=None, keepdims=False)
                 R.output(lv6)
             return lv6
+
         @R.function
-        def main_adjoint(x: R.Tensor((5, 5), "float32"),
-                 y: R.Tensor((5, 5), "float32"),
-                 z: R.Tensor((5, 5), "float32"),
-                 u: R.Tensor((5, 5), "float32")):
+        def main_adjoint(x: R.Tensor((5, 5), dtype="float32"), y: R.Tensor((5, 5), dtype="float32"), z: R.Tensor((5, 5), dtype="float32"), u: R.Tensor((5, 5), dtype="float32")) -> R.Tuple(R.Tensor(None, dtype="float32", ndim=0), R.Tuple(R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=2))):
+            # function attr dict
+            R.func_attr({"global_symbol": "main_adjoint"})
+            # block 0
             with R.dataflow():
-                lv1 = R.add(x, y)
-                lv2 = R.subtract(z, u)
-                lv3 = R.add(y, z)
-                lv4 = R.add(lv1, lv2)
-                lv5 = R.add(lv4, lv3)
-                lv6 = R.sum(lv5)
-                lv6_adjoint = R.ones(())
-                lv = R.ones_like(lv5)
-                lv5_adjoint = R.multiply(lv6_adjoint, lv)
-                lv4_adjoint = R.collapse_sum_like(lv5_adjoint, lv4)
-                lv3_adjoint = R.collapse_sum_like(lv5_adjoint, lv3)
-                lv2_adjoint = R.collapse_sum_like(lv4_adjoint, lv2)
-                lv1_adjoint = R.collapse_sum_like(lv4_adjoint, lv1)
-                x_adjoint = R.collapse_sum_like(lv1_adjoint, x)
-                lv11 = R.collapse_sum_like(lv3_adjoint, y)
-                lv21 = R.collapse_sum_like(lv1_adjoint, y)
-                y_adjoint = R.add(lv11, lv21)
-                lv31 = R.collapse_sum_like(lv3_adjoint, z)
-                lv41 = R.collapse_sum_like(lv2_adjoint, z)
-                z_adjoint = R.add(lv31, lv41)
-                lv51 = R.negative(lv2_adjoint)
-                u_adjoint = R.collapse_sum_like(lv51, u)
+                lv1: R.Tensor((5, 5), dtype="float32") = R.add(x, y)
+                lv2: R.Tensor((5, 5), dtype="float32") = R.subtract(z, u)
+                lv3: R.Tensor((5, 5), dtype="float32") = R.add(y, z)
+                lv4: R.Tensor((5, 5), dtype="float32") = R.add(lv1, lv2)
+                lv5: R.Tensor((5, 5), dtype="float32") = R.add(lv4, lv3)
+                lv6: R.Tensor((), dtype="float32") = R.sum(lv5, axis=None, keepdims=False)
+                lv6_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+                lv5_adjoint: R.Tensor((5, 5), dtype="float32") = R.broadcast_to(lv6_adjoint, (5, 5))
+                lv4_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv5_adjoint, (5, 5))
+                lv3_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv5_adjoint, (5, 5))
+                lv2_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv4_adjoint, (5, 5))
+                lv1_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv4_adjoint, (5, 5))
+                x_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv1_adjoint, (5, 5))
+                lv: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv3_adjoint, (5, 5))
+                lv11: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv1_adjoint, (5, 5))
+                y_adjoint: R.Tensor((5, 5), dtype="float32") = R.add(lv, lv11)
+                lv21: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv3_adjoint, (5, 5))
+                lv31: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv2_adjoint, (5, 5))
+                z_adjoint: R.Tensor((5, 5), dtype="float32") = R.add(lv21, lv31)
+                lv41: R.Tensor((5, 5), dtype="float32") = R.negative(lv2_adjoint)
+                u_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv41, (5, 5))
                 R.output(lv6, x_adjoint, y_adjoint, z_adjoint, u_adjoint)
-            return lv6, relax.Tuple((x_adjoint, y_adjoint, z_adjoint, u_adjoint))
+            return (lv6, (x_adjoint, y_adjoint, z_adjoint, u_adjoint))
+
+
 
     After1 = relax.transform.SimpleAD(Before.get_global_var("main"))(Before)
-    assert_structural_equal(After1["main"], Expected1["main"])
     assert_structural_equal(After1["main_adjoint"], Expected1["main_adjoint"])
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected2:
         @R.function
-        def main(x: R.Tensor((5, 5), "float32"),
-                 y: R.Tensor((5, 5), "float32"),
-                 z: R.Tensor((5, 5), "float32"),
-                 u: R.Tensor((5, 5), "float32")):
+        def main(x: R.Tensor((5, 5), dtype="float32"), y: R.Tensor((5, 5), dtype="float32"), z: R.Tensor((5, 5), dtype="float32"), u: R.Tensor((5, 5), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=0):
+            # block 0
             with R.dataflow():
-                lv1 = R.add(x, y)
-                lv2 = R.subtract(z, u)
-                lv3 = R.add(y, z)
-                lv4 = R.add(lv1, lv2)
-                lv5 = R.add(lv4, lv3)
-                lv6 = R.sum(lv5)
+                lv1: R.Tensor((5, 5), dtype="float32") = R.add(x, y)
+                lv2: R.Tensor((5, 5), dtype="float32") = R.subtract(z, u)
+                lv3: R.Tensor((5, 5), dtype="float32") = R.add(y, z)
+                lv4: R.Tensor((5, 5), dtype="float32") = R.add(lv1, lv2)
+                lv5: R.Tensor((5, 5), dtype="float32") = R.add(lv4, lv3)
+                lv6: R.Tensor((), dtype="float32") = R.sum(lv5, axis=None, keepdims=False)
                 R.output(lv6)
             return lv6
+
         @R.function
-        def main_adjoint(x: R.Tensor((5, 5), "float32"),
-                 y: R.Tensor((5, 5), "float32"),
-                 z: R.Tensor((5, 5), "float32"),
-                 u: R.Tensor((5, 5), "float32")):
+        def main_adjoint(x: R.Tensor((5, 5), dtype="float32"), y: R.Tensor((5, 5), dtype="float32"), z: R.Tensor((5, 5), dtype="float32"), u: R.Tensor((5, 5), dtype="float32")) -> R.Tuple(R.Tensor(None, dtype="float32", ndim=0), R.Tuple(R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=2))):
+            # function attr dict
+            R.func_attr({"global_symbol": "main_adjoint"})
+            # block 0
             with R.dataflow():
-                lv1 = R.add(x, y)
-                lv2 = R.subtract(z, u)
-                lv3 = R.add(y, z)
-                lv4 = R.add(lv1, lv2)
-                lv5 = R.add(lv4, lv3)
-                lv6 = R.sum(lv5)
-                lv6_adjoint = R.ones(())
-                lv = R.ones_like(lv5)
-                lv5_adjoint = R.multiply(lv6_adjoint, lv)
-                lv4_adjoint = R.collapse_sum_like(lv5_adjoint, lv4)
-                lv3_adjoint = R.collapse_sum_like(lv5_adjoint, lv3)
-                lv2_adjoint = R.collapse_sum_like(lv4_adjoint, lv2) # could be optimized
-                lv1_adjoint = R.collapse_sum_like(lv4_adjoint, lv1)
-                x_adjoint = R.collapse_sum_like(lv1_adjoint, x)
-                lv11 = R.collapse_sum_like(lv3_adjoint, y)
-                lv21 = R.collapse_sum_like(lv1_adjoint, y)
-                y_adjoint = R.add(lv11, lv21)
+                lv1: R.Tensor((5, 5), dtype="float32") = R.add(x, y)
+                lv2: R.Tensor((5, 5), dtype="float32") = R.subtract(z, u)
+                lv3: R.Tensor((5, 5), dtype="float32") = R.add(y, z)
+                lv4: R.Tensor((5, 5), dtype="float32") = R.add(lv1, lv2)
+                lv5: R.Tensor((5, 5), dtype="float32") = R.add(lv4, lv3)
+                lv6: R.Tensor((), dtype="float32") = R.sum(lv5, axis=None, keepdims=False)
+                lv6_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+                lv5_adjoint: R.Tensor((5, 5), dtype="float32") = R.broadcast_to(lv6_adjoint, (5, 5))
+                lv4_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv5_adjoint, (5, 5))
+                lv3_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv5_adjoint, (5, 5))
+                lv2_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv4_adjoint, (5, 5))
+                lv1_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv4_adjoint, (5, 5))
+                x_adjoint: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv1_adjoint, (5, 5))
+                lv: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv3_adjoint, (5, 5))
+                lv11: R.Tensor((5, 5), dtype="float32") = R.collapse_sum_to(lv1_adjoint, (5, 5))
+                y_adjoint: R.Tensor((5, 5), dtype="float32") = R.add(lv, lv11)
                 R.output(lv6, x_adjoint, y_adjoint)
-            return (lv6, relax.Tuple([x_adjoint, y_adjoint]))
+            return (lv6, (x_adjoint, y_adjoint))
 
     After2 = relax.transform.SimpleAD(Before.get_global_var("main"), require_grads=Before["main"].params[:2])(Before)
     assert_structural_equal(After2["main_adjoint"], Expected2["main_adjoint"])
 
 
-def test_batch_mlp_script():
+def test_mlp_script():
     @I.ir_module
     class Before:
         @R.function
@@ -223,64 +195,62 @@ def test_batch_mlp_script():
                  b0: R.Tensor((10,), "float32"),
                  label: R.Tensor((5, 10), "float32")):
             with R.dataflow():
-                lv0 = R.matmul(x, w0)
+                lv0 = R.nn.matmul(x, w0)
                 out = R.add(lv0, b0)
-                loss = R.softmax_cross_entropy(out, label)
+                loss = R.nn.softmax_cross_entropy(out, label)
                 R.output(loss)
             return loss
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
-        def main(x: R.Tensor((5, 20), "float32"),
-                 w0: R.Tensor((20, 10), "float32"),
-                 b0: R.Tensor((10,), "float32"),
-                 label: R.Tensor((5, 10), "float32")):
+        def main(x: R.Tensor((5, 20), dtype="float32"), w0: R.Tensor((20, 10), dtype="float32"), b0: R.Tensor((10,), dtype="float32"), label: R.Tensor((5, 10), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=0):
+            # block 0
             with R.dataflow():
-                lv0 = R.matmul(x, w0)
-                out = R.add(lv0, b0)
-                loss = R.softmax_cross_entropy(out, label)
+                lv0: R.Tensor((5, 10), dtype="float32") = R.nn.matmul(x, w0, out_dtype="")
+                out: R.Tensor((5, 10), dtype="float32") = R.add(lv0, b0)
+                loss: R.Tensor((), dtype="float32") = R.nn.softmax_cross_entropy(out, label)
                 R.output(loss)
             return loss
+
         @R.function
-        def main_adjoint(x: R.Tensor((5, 20), "float32"),
-                 w0: R.Tensor((20, 10), "float32"),
-                 b0: R.Tensor((10,), "float32"),
-                 label: R.Tensor((5, 10), "float32")):
+        def main_adjoint(x: R.Tensor((5, 20), dtype="float32"), w0: R.Tensor((20, 10), dtype="float32"), b0: R.Tensor((10,), dtype="float32"), label: R.Tensor((5, 10), dtype="float32")) -> R.Tuple(R.Tensor(None, dtype="float32", ndim=0), R.Tuple(R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=1))):
+            # function attr dict
+            R.func_attr({"global_symbol": "main_adjoint"})
+            # block 0
             with R.dataflow():
-                lv0 = R.matmul(x, w0)
-                out = R.add(lv0, b0)
-                loss = R.softmax_cross_entropy(out, label)
-                loss_adjoint = R.ones(())
-                lv = R.softmax(out)
-                lv1 = R.subtract(lv, label)
-                out_adjoint = R.multiply(loss_adjoint, lv1)
-                lv0_adjoint = R.collapse_sum_like(out_adjoint, lv0)
-                lv2 = R.transpose(x)
-                lv3 = R.matmul(lv2, lv0_adjoint)
-                w0_adjoint = R.collapse_sum_like(lv3, w0)
-                b0_adjoint = R.collapse_sum_like(out_adjoint, b0)
+                lv0: R.Tensor((5, 10), dtype="float32") = R.nn.matmul(x, w0, out_dtype="")
+                out: R.Tensor((5, 10), dtype="float32") = R.add(lv0, b0)
+                loss: R.Tensor((), dtype="float32") = R.nn.softmax_cross_entropy(out, label)
+                loss_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+                lv: R.Tensor((5, 10), dtype="float32") = R.nn.softmax(out, axis=-1)
+                lv1: R.Tensor((5, 10), dtype="float32") = R.subtract(lv, label)
+                out_adjoint: R.Tensor((5, 10), dtype="float32") = R.multiply(loss_adjoint, lv1)
+                lv0_adjoint: R.Tensor((5, 10), dtype="float32") = R.collapse_sum_to(out_adjoint, (5, 10))
+                lv2: R.Tensor((20, 5), dtype="float32") = R.transpose(x, axes=[1, 0])
+                lv3: R.Tensor((20, 10), dtype="float32") = R.nn.matmul(lv2, lv0_adjoint, out_dtype="")
+                w0_adjoint: R.Tensor((20, 10), dtype="float32") = R.collapse_sum_to(lv3, (20, 10))
+                b0_adjoint: R.Tensor((10,), dtype="float32") = R.collapse_sum_to(out_adjoint, (10,))
                 R.output(loss, w0_adjoint, b0_adjoint)
-            return (loss, relax.Tuple((w0_adjoint, b0_adjoint)))
+            return (loss, (w0_adjoint, b0_adjoint))
 
     After = relax.transform.SimpleAD(Before.get_global_var("main"), require_grads=Before["main"].params[1:3])(Before)
-    After.show()
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
-    _check_mod_grad_equal(Expected, After, "main_adjoint")
 
 
 def test_mlp_blockbuilder():
     layers, in_size, out_size, hidden_size, batch_size = 3, 5, 5, 5, 4
 
-    ty = rx.DynTensorType(dtype="float32")
+    ty1 = rx.DynTensorType(ndim=1, dtype="float32")
+    ty2 = rx.DynTensorType(ndim=2, dtype="float32")
 
-    input_list = [rx.Var("x", [batch_size, in_size], ty)]
-    w_list = [rx.Var("w_0", [in_size, hidden_size], ty)] + \
-        [rx.Var("w_" + str(i + 1), [hidden_size, hidden_size], ty) for i in range(layers - 2)] + \
-        [rx.Var("w_" + str(layers - 1), [hidden_size, out_size], ty)]
-    b_list = [rx.Var("b_" + str(i), [hidden_size], ty) for i in range(layers - 1)] + \
-        [rx.Var("b_" + str(layers - 1), [out_size], ty)]
-    label_list = [rx.Var("y", [batch_size, out_size], ty)]
+    input_list = [rx.Var("x", [batch_size, in_size], ty2)]
+    w_list = [rx.Var("w_0", [in_size, hidden_size], ty2)] + \
+        [rx.Var("w_" + str(i + 1), [hidden_size, hidden_size], ty2) for i in range(layers - 2)] + \
+        [rx.Var("w_" + str(layers - 1), [hidden_size, out_size], ty2)]
+    b_list = [rx.Var("b_" + str(i), [hidden_size], ty1) for i in range(layers - 1)] + \
+        [rx.Var("b_" + str(layers - 1), [out_size], ty1)]
+    label_list = [rx.Var("y", [batch_size, out_size], ty2)]
     args_list = input_list + w_list + b_list + label_list
 
     bb = rx.BlockBuilder()
@@ -288,10 +258,10 @@ def test_mlp_blockbuilder():
         with bb.dataflow():
             current = input_list[0]
             for i in range(layers):
-                lv0 = bb.emit(relax.op.matmul(current, w_list[i]))
-                lv1 = bb.emit(relax.op.add(lv0, b_list[i]))
-                current = bb.emit(relax.op.relu(lv1) if i < layers - 1 else lv1)
-            loss = bb.emit(relax.op.softmax_cross_entropy(current, label_list[0]))
+                lv0 = bb.emit(R.nn.matmul(current, w_list[i]))
+                lv1 = bb.emit(R.add(lv0, b_list[i]))
+                current = bb.emit(R.nn.relu(lv1) if i < layers - 1 else lv1)
+            loss = bb.emit(R.nn.softmax_cross_entropy(current, label_list[0]))
             gv0 = bb.emit_output(loss)
         bb.emit_func_output(gv0)
 
@@ -318,45 +288,33 @@ def test_gradient_api():
     @I.ir_module
     class Before:
         @R.function
-        def main(x: R.Tensor((1, 20), "float32"),
-                 w0: R.Tensor((20, 10), "float32"),
-                 b0: R.Tensor((10,), "float32"),
-                 label: R.Tensor((1, 10), "float32")):
+        def main(x: R.Tensor((3, 3), "float32"),
+                 y: R.Tensor((3,), "float32")):
             with R.dataflow():
-                lv0 = R.matmul(x, w0)
-                out = R.add(lv0, b0)
-                loss = R.softmax_cross_entropy(out, label)
-                R.output(loss)
-            return loss
+                lv0 = R.add(x, y)
+                out = R.sum(lv0)
+                R.output(out)
+            return out
 
-    @I.ir_module
-    class After:
-        @R.function
-        def main_adjoint(x: R.Tensor((1, 20), "float32"),
-                    w0: R.Tensor((20, 10), "float32"),
-                    b0: R.Tensor((10,), "float32"),
-                    label: R.Tensor((1, 10), "float32")):
-            with R.dataflow():
-                lv0 = R.matmul(x, w0)
-                out = R.add(lv0, b0)
-                loss = R.softmax_cross_entropy(out, label)
-                loss_adjoint = R.ones(())
-                lv = R.softmax(out)
-                lv1 = R.subtract(lv, label)
-                out_adjoint = R.multiply(loss_adjoint, lv1)
-                lv0_adjoint = R.collapse_sum_like(out_adjoint, lv0)
-                lv2 = R.transpose(x)
-                lv3 = R.matmul(lv2, lv0_adjoint)
-                w0_adjoint = R.collapse_sum_like(lv3, w0)
-                b0_adjoint = R.collapse_sum_like(out_adjoint, b0)
-                R.output(loss, w0_adjoint, b0_adjoint)
-            return (loss, relax.Tuple((w0_adjoint, b0_adjoint)))
+    @R.function
+    def main_adjoint(x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3,), dtype="float32")) -> R.Tuple(R.Tensor(None, dtype="float32", ndim=0), R.Tuple(R.Tensor(None, dtype="float32", ndim=2))):
+        # function attr dict
+        R.func_attr({"global_symbol": "main_adjoint"})
+        # block 0
+        with R.dataflow():
+            lv0: R.Tensor((3, 3), dtype="float32") = R.add(x, y)
+            out: R.Tensor((), dtype="float32") = R.sum(lv0, axis=None, keepdims=False)
+            out_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+            lv0_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(out_adjoint, (3, 3))
+            x_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(lv0_adjoint, (3, 3))
+            R.output(out, x_adjoint)
+        return (out, (x_adjoint,))
 
-    after_func = relax.transform.gradient(Before["main"], require_grads=Before["main"].params[1:3])
-    after_func1 = relax.transform.gradient(Before.get_global_var("main"), Before["main"].params[1:3],
-                                           mod=Before)
-    assert_structural_equal(after_func, After["main_adjoint"])
-    assert_structural_equal(after_func1, After["main_adjoint"])
+    after_func = relax.transform.gradient(Before["main"], require_grads=Before["main"].params[0])
+    assert_structural_equal(after_func, main_adjoint)
+    after_func = relax.transform.gradient(Before.get_global_var("main"), Before["main"].params[0],
+                                          mod=Before)
+    assert_structural_equal(after_func, main_adjoint)
 
 
 def test_tuple1():
@@ -369,12 +327,12 @@ def test_tuple1():
                  y2: R.Tensor((1, 10), "float32"),
                  z: R.Tensor((1, 10), "float32")):
             with R.dataflow():
-                t1 = relax.Tuple((x1, y1))
-                lv1 = R.add(relax.TupleGetItem(t1, 0), relax.TupleGetItem(t1, 1))
+                t1 = R.Tuple((x1, y1))
+                lv1 = R.add(R.TupleGetItem(t1, 0), R.TupleGetItem(t1, 1))
                 t2 = relax.Tuple((x2, y2))
-                lv2 = R.subtract(relax.TupleGetItem(t2, 1), lv1)
-                lv3 = R.multiply(lv2, relax.TupleGetItem(t2, 0))
-                loss = R.softmax_cross_entropy(lv3, z)
+                lv2 = R.subtract(R.TupleGetItem(t2, 1), lv1)
+                lv3 = R.multiply(lv2, R.TupleGetItem(t2, 0))
+                loss = R.nn.softmax_cross_entropy(lv3, z)
                 R.output(loss)
             return loss
 
@@ -414,7 +372,7 @@ def test_tuple2():
                 lv1 = R.add(relax.TupleGetItem(t0, 0), relax.TupleGetItem(t0, 1))
                 lv2 = R.subtract(relax.TupleGetItem(t1, 1), lv1)
                 lv3 = R.multiply(lv2, relax.TupleGetItem(t1, 0))
-                loss = R.softmax_cross_entropy(lv3, z)
+                loss = R.nn.softmax_cross_entropy(lv3, z)
                 R.output(loss)
             return loss
 
@@ -526,9 +484,6 @@ def test_function_copy():
 
 
 def test_ad_error_cases():
-    def _perform_transform(module):
-        relax.transform.SimpleAD(module.get_global_var("main"))(module)
-
     @I.ir_module
     class TargetNotScalar:
         @R.function
@@ -539,7 +494,7 @@ def test_ad_error_cases():
                 R.output(out)
             return out
     with pytest.raises(TVMError):
-        _perform_transform(TargetNotScalar)
+        relax.transform.SimpleAD(TargetNotScalar.get_global_var("main"))(TargetNotScalar)
 
     @I.ir_module
     class NoDataflow:
@@ -548,22 +503,22 @@ def test_ad_error_cases():
             out = R.sum(x0)
             return out
     with pytest.raises(TVMError):
-        _perform_transform(NoDataflow)
+        relax.transform.SimpleAD(NoDataflow.get_global_var("main"))(NoDataflow)
 
     @I.ir_module
     class MultiBlocks:
         @R.function
         def main(x0: R.Tensor((5, 5), "float32"),
                  x1: R.Tensor((5, 5), "float32")):
+            # block 0
             with R.dataflow():
                 out = R.add(x0, x1)
                 R.output(out)
-            with R.dataflow():
-                out1 = R.sum(x0)
-                R.output(out1)
+            # block 1
+            out1 = R.sum(x0)
             return out1
     with pytest.raises(TVMError):
-        _perform_transform(MultiBlocks)
+        relax.transform.SimpleAD(MultiBlocks.get_global_var("main"))(MultiBlocks)
 
     @I.ir_module
     class NormalModule:
