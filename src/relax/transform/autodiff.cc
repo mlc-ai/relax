@@ -24,40 +24,7 @@
  * Now only supports differentiating a function in the IRModule with one dataflow block
  * with respect to the only return value of the function. It needs to be scalar.
  *
- * Example:
- *
- * Before AD:
- * @tvm.script.ir_module
- * class Before:
- *     @R.function
- *     def main(x: Tensor((5, 5), "float32"),
- *              y: Tensor((5, 5), "float32")):
- *         with R.dataflow():
- *             lv0 = relax.add(x, y)
- *             lv1 = relax.sum(lv0)
- *             R.output(lv1)
- *         return lv1
- *TODO:update
- * After AD:
- * @tvm.script.ir_module
- * class Module:
- *     @R.function
- *     def main(x: Tensor((5, 5), "float32"), y: Tensor((5, 5), "float32")) -> Tuple(
- *             Tensor(None, "float32", ndim = 0), Tuple(Tensor(None, "float32", ndim = 2),
- *             Tensor(None, "float32", ndim = 2))):
- *         # block 0
- *         with R.dataflow():
- *             lv0: Tensor((5, 5), "float32") = relax.add(x, y)
- *             lv1: Tensor((), "float32") = relax.sum(lv0)
- *             lv1_adjoint: Tensor((), "float32") = relax.ones_like(lv1)
- *             lv: Tensor((5, 5), "float32") = relax.ones_like(lv0)
- *             lv0_adjoint: Tensor((5, 5), "float32") = relax.multiply(lv1_adjoint, lv)
- *             x_adjoint: Tensor((5, 5), "float32") = relax.collapse_sum_like(lv0_adjoint, x)
- *             y_adjoint: Tensor((5, 5), "float32") = relax.collapse_sum_like(lv0_adjoint, y)
- *             R.output(lv1, x_adjoint, y_adjoint)
- *         # return value type: Tuple(original_return_value, Tuple(all_adjoints))
- *         return (lv1, (x_adjoint, y_adjoint))
- *
+ * For examples, see tests/python/relax/test_transform_autodiff.py.
  */
 
 #include <tvm/relax/expr_functor.h>
@@ -79,7 +46,7 @@ class SimpleADMutator : public ExprMutator {
 
     Array<Var> new_params;
     for (Var param : node->params) {
-      Var new_param = Var(param->vid, param->shape(), param->checked_type_, param->span);
+      Var new_param = Var(param->vid, param->shape(), param->checked_type(), param->span);
       this->var_remap_[param->vid] = new_param;
       new_params.push_back(new_param);
     }
@@ -138,7 +105,7 @@ class SimpleADMutator : public ExprMutator {
           BindAndEmit(adjoint_var, adjoint_expr_map[new_params[i]]);
         } else {
           ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
-          auto type = Downcast<DynTensorType>(new_params[i]->checked_type_);
+          auto type = Downcast<DynTensorType>(new_params[i]->checked_type());
           attrs->dtype = type->dtype;
 
           const Expr& default_adjoint = Call(zeros_op, {new_params[i]->shape()}, Attrs(attrs));
@@ -215,11 +182,9 @@ class SimpleADMutator : public ExprMutator {
     if (adjoint_var_map.count(v)) return;
     if (is_dataflow_var) {
       Var adjoint = DataflowVar(v->name_hint() + "_adjoint", v->shape(), v->checked_type());
-      adjoint->checked_type_ = v->checked_type();
       adjoint_var_map.Set(v, adjoint);
     } else {
       Var adjoint = Var(v->name_hint() + "_adjoint", v->shape(), v->checked_type());
-      adjoint->checked_type_ = v->checked_type();
       adjoint_var_map.Set(v, adjoint);
     }
   }
@@ -234,7 +199,7 @@ class SimpleADMutator : public ExprMutator {
           adjoint_expr_map.Set(v, increment);
         }
       } else {
-        const Expr& updated = DoAdd(adjoint_expr_map[v], increment); // Call(add_op, {adjoint_expr_map[v], increment});
+        const Expr& updated = DoAdd(adjoint_expr_map[v], increment);
         adjoint_expr_map.Set(v, updated);
       }
     }
@@ -352,7 +317,7 @@ class SimpleADMutator : public ExprMutator {
 
   void CheckTarget(const Expr& e) {
     ICHECK(!e->IsInstance<DataflowVarNode>()) << "not an output node";
-    ICHECK(e->checked_type_.as<DynTensorTypeNode>()) << "target must be a DynTensorType";
+    ICHECK(e->checked_type().as<DynTensorTypeNode>()) << "target must be a DynTensorType";
     ICHECK(e->shape().as<ShapeExprNode>()) << "error when getting target shape";
     const auto* shape_node = e->shape().as<ShapeExprNode>();
     ICHECK(shape_node->values.size() == 0) << "target must be a scalar";
@@ -360,7 +325,7 @@ class SimpleADMutator : public ExprMutator {
 
   void InitGrad(const Var& adjoint_var, const Var& var) {
     ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
-    auto type = Downcast<DynTensorType>(var->checked_type_);
+    auto type = Downcast<DynTensorType>(var->checked_type());
     attrs->dtype = type->dtype;
 
     const Expr& init = Call(ones_op, {var->shape()}, Attrs(attrs));
