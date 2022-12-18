@@ -363,17 +363,6 @@ def MetaScheduleTuneIRMod(
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
 
 
-def CutlassCodegen() -> tvm.ir.transform.Pass:
-    """Inject the cutlass code into the PrimFunc that is matched with cutlass kernels.
-
-    Returns
-    -------
-    ret : tvm.transform.Pass
-        The registered pass for cutlass codegen.
-    """
-    return _ffi_api.CutlassCodegen()
-
-
 def SplitCutlass() -> tvm.ir.transform.Pass:
     """Split a PrimFunc into 2 parts: the first part is a TIR PrimFunc which is
        matched with some cutlass kernels, and the second part is the rest of the original

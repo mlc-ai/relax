@@ -197,13 +197,6 @@ TVM_DLL Pass RunCodegen(Optional<Array<runtime::String>> target_codegens,
 TVM_DLL Pass SplitCutlass();
 
 /*!
- * \brief Inject the cutlass code into the PrimFunc that is matched with cutlass kernels.
- *
- * \return The Pass.
- */
-TVM_DLL Pass CutlassCodegen();
-
-/*!
  * \brief Automatic mixed precision pass.
  *
  * \return The Pass.

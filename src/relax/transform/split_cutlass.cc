@@ -32,6 +32,13 @@
 #include "../../tir/schedule/ir_comparator.h"
 
 namespace tvm {
+
+const static constexpr char* kCutlassKernel = "cutlass_kernel";
+const static constexpr char* kCutlassCodegen = "cutlass_codegen";
+const static constexpr char* kCSource = "c_source";
+const static constexpr char* kCSourceFmt = "c_source_fmt";
+const static constexpr char* kCSourceFmtCuda = "cu";
+
 namespace tir {
 
 class BlockMatcher : public TensorizeComparator {
@@ -76,6 +83,20 @@ class BlockMatcher : public TensorizeComparator {
       }
     }
     return TensorizeComparator::VisitExpr(lhs, rhs);
+  }
+
+  bool VisitExpr_(const tir::CallNode* call, const PrimExpr& other) final {
+    const auto* rhs = other.as<CallNode>();
+    if (rhs == nullptr) return false;
+    const auto* lhs_op = call->op.as<OpNode>();
+    const auto* rhs_op = rhs->op.as<OpNode>();
+    if (lhs_op == nullptr || rhs_op == nullptr) return false;
+    if (lhs_op->name != rhs_op->name) return false;
+    if (call->args.size() != rhs->args.size()) return false;
+    for (size_t i = 0; i < call->args.size(); ++i) {
+      if (!VisitExpr(call->args[i], rhs->args[i])) return false;
+    }
+    return true;
   }
 
   bool VisitStmt_(const tir::ForNode* op, const Stmt& other) final {
@@ -161,7 +182,12 @@ class BlockMatcher : public TensorizeComparator {
     if (it != rhs_buffer_map_.end()) {
       equal = (*it).second.same_as(lhs);
     } else {
-      // Remap both buffer itself and buffer data, skip buffer shape
+      // Compare shape
+      if (lhs->shape.size() != rhs->shape.size()) return false;
+      for (size_t i = 0; i < lhs->shape.size(); ++i) {
+        if (!VisitExpr(lhs->shape[i], rhs->shape[i])) return false;
+      }
+      // Remap both buffer itself and buffer data
       equal =
           DefEqual(lhs->data, rhs->data) && lhs->dtype == rhs->dtype && lhs.scope() == rhs.scope();
       if (equal) {
@@ -205,11 +231,21 @@ class FuncMatcher : public StmtExprVisitor {
   void Match(Stmt body) {
     OpMatternMatch(body);
     if (fail) return;
-    auto f = tvm::runtime::Registry::Get("tvm.relax.cutlass.op_pattern_stitch");
+    auto f = TypedPackedFunc<Array<ObjectRef>(Array<Map<Var, PrimExpr>>, Array<Array<Buffer>>,
+                                              Array<runtime::String>)>(
+        *tvm::runtime::Registry::Get("tvm.relax.cutlass.op_pattern_stitch"));
     ICHECK(f != nullptr) << "Cannot find cutlass op pattern stitch function";
-    cutlass_annotation = (*f)(Array<Map<Var, PrimExpr>>(evaluated_symbols_),
-                              Array<Array<Buffer>>(evaluated_buffers_),
-                              Array<runtime::String>(matched_pattern_names_));
+    Array<ObjectRef> op_stitich_result =
+        f(Array<Map<Var, PrimExpr>>(evaluated_symbols_), Array<Array<Buffer>>(evaluated_buffers_),
+          Array<runtime::String>(matched_pattern_names_));
+    LOG(INFO) << op_stitich_result;
+    ICHECK_EQ(op_stitich_result.size(), 2);
+    num_matched_ops = op_stitich_result[1].as<IntImmNode>()->value;
+    if (num_matched_ops == 0) {
+      fail = true;
+      return;
+    }
+    cutlass_kernel_code = Downcast<runtime::String>(op_stitich_result[0]);
     this->VisitStmt(body);
   }
 
@@ -226,8 +262,10 @@ class FuncMatcher : public StmtExprVisitor {
   // The output buffer for the first function, which is also the input buffer for the second
   // function
   Buffer intermediate_buffer;
-  // The accumulated annotation for which cutlass kernel we are matching.
-  Array<runtime::String> cutlass_annotation;
+  // The number of matched ops in the function
+  size_t num_matched_ops = 0;
+  // The CUDA code for the cutlass kernel
+  runtime::String cutlass_kernel_code;
   // Indicate whether we have failed. If failed, we will not do any further analysis and directly
   // return the original one.
   bool fail = false;
@@ -279,8 +317,8 @@ class FuncMatcher : public StmtExprVisitor {
 
   void VisitStmt_(const BlockNode* op) final {
     block_counter_++;
-    bool is_matching_ = block_counter_ <= cutlass_annotation.size();
-    if (block_counter_ == cutlass_annotation.size() + 1) {
+    bool is_matching_ = block_counter_ <= num_matched_ops;
+    if (block_counter_ == num_matched_ops) {
       allocs1.erase(intermediate_buffer);
     }
     for (const auto& read : op->reads) {
@@ -382,8 +420,8 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     }
   }
   if (!has_second_func) {
-    func = WithAttr(func, "cutlass_codegen", Bool(true));
-    return {WithAttr(func, "cutlass_kernel", matcher.cutlass_annotation), NullOpt};
+    // No need to split the function.
+    return {WithAttr(func, kCutlassKernel, matcher.cutlass_kernel_code), NullOpt};
   }
   // Step 2. Split the function into two functions.
   Stmt body1 = BlockMasker::Mask(func->body, matcher.block_partition, matcher.allocs1, true);
@@ -410,8 +448,7 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
   }
   new_buffer_map1.Set(new_params1.back(), matcher.intermediate_buffer);
   PrimFunc func1 = PrimFunc(new_params1, body1, func->ret_type, new_buffer_map1, func->attrs);
-  func1 = WithAttr(func1, "cutlass_kernel", matcher.cutlass_annotation);
-  func1 = WithAttr(func1, "cutlass_codegen", Bool(true));
+  func1 = WithAttr(func1, kCutlassKernel, matcher.cutlass_kernel_code);
   // Step 4. Craft the second function.
   Array<Var> new_params2;
   std::vector<int> arg_partition2;
@@ -434,12 +471,32 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     }
   }
   PrimFunc func2 = PrimFunc(new_params2, body2, func->ret_type, new_buffer_map2, func->attrs);
-  func2 = WithoutAttr(func2, "cutlass_codegen");
   return {func1, func2};
 }
 }  // namespace tir
 
 namespace relax {
+
+void StringReplace(std::string* subject, const std::string& search, const std::string& replace) {
+  for (size_t pos = 0; (pos = subject->find(search, pos)) != std::string::npos;
+       pos += replace.length()) {
+    subject->replace(pos, search.length(), replace);
+  }
+}
+
+ExternFunc CodegenWithCutlass(const tir::PrimFuncNode* pf, String global_symbol) {
+  using namespace tvm::tir;
+  Optional<runtime::String> cutlass_kernel_code =
+      pf->attrs.GetAttr<runtime::String>(kCutlassKernel);
+  std::string source = cutlass_kernel_code.value();
+  StringReplace(&source, "{global_symbol}", global_symbol);
+  ExternFunc ret(global_symbol);
+  ret = WithAttrs(std::move(ret), Map<String, ObjectRef>{
+                                      {String(kCSource), String(source)},
+                                      {String(kCSourceFmt), String(kCSourceFmtCuda)},
+                                  });
+  return ret;
+}
 
 // Emit 2 calls to the cutlass kernel and the rest of the function.
 class SplitMutator : public ExprMutator {
@@ -469,16 +526,20 @@ class SplitMutator : public ExprMutator {
     Call call = Downcast<Call>(ExprMutator::VisitExpr_(op));
     static const Op& call_tir_op_ = Op::Get("relax.call_tir");
     if (call->op.same_as(call_tir_op_)) {
+      // the first argument is the function to be called
       GlobalVar gv = Downcast<GlobalVar>(call->args[0]);
+      // retrieve the function from the module and split it
       tir::PrimFunc func = Downcast<tir::PrimFunc>(mod_->Lookup(gv));
       std::vector<std::vector<int>> arg_partition;
       // split the function into two functions, one for the cutlass kernel and one for the rest.
       std::pair<tir::PrimFunc, Optional<tir::PrimFunc>> split_funcs =
           tir::SplitFunctions(func, &arg_partition);
       if (!split_funcs.second.defined()) {
-        // no need to split
+        // no need to split, the function itself a cutlass kernel
+        // emit the call to the cutlass kernel
         ObjectPtr<CallNode> new_call = make_object<CallNode>(*call.operator->());
-        builder_->UpdateFunction(gv, split_funcs.first);
+        // builder_->UpdateFunction(gv, split_funcs.first);
+        builder_->UpdateFunction(gv, CodegenWithCutlass(split_funcs.first.get(), gv->name_hint));
         return Call(new_call);
       }
       tir::PrimFunc func1 = tir::RenewDefs(split_funcs.first);
@@ -490,7 +551,9 @@ class SplitMutator : public ExprMutator {
         args1.push_back(GetCallTIRArgs(call->args[1])[p]);
       }
       ShapeExpr shape1(func1->buffer_map[func1->params.back()]->shape);
+      // replace the function in the module with the cutlass kernel
       GlobalVar gv1 = builder_->AddFunction(func1, "cutlass_primfunc");
+      builder_->UpdateFunction(gv1, CodegenWithCutlass(func1.get(), gv1->name_hint));
       tir::Buffer intermediate_buffer = func1->buffer_map.at(func1->params.back());
       DataType dtype = intermediate_buffer->dtype;
       Call call1(call_tir_op_, {gv1, Tuple(args1), shape1}, call->attrs,

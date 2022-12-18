@@ -51,8 +51,11 @@ def build(mod):
     mod = relax.transform.AnnotateTIROpPattern()(mod)
     mod = relax.transform.FuseOps()(mod)
     mod = relax.transform.FuseTIR()(mod)
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+    print(mod.script())
     mod = relax.transform.SplitCutlass()(mod)
-    mod = relax.transform.CutlassCodegen()(mod)
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+    print(mod.script())
     executbale = relax_build(mod, target)
     executbale.mod.export_library(PKG_FILE, cc="nvcc")
     return executbale
@@ -278,49 +281,52 @@ def test_cutlass_batch_dense2_bias():
     np.testing.assert_allclose(result.numpy(), A @ B + bias, rtol=1e-2)
 
 
-# def constructConv2D(N, C, H, W, KH, KW, O, strides, padding, dilation, GLOBAL_SYMBOL="Conv2D"):
-#     from tvm.script.ir_builder import IRBuilder
-#     from tvm.script.ir_builder import ir as I
-#     from tvm.script.ir_builder import relax as R
-#     from tvm.script.ir_builder import tir as T
+def constructConv2D(N, C, H, W, KH, KW, O, strides, padding, dilation, GLOBAL_SYMBOL="Conv2D"):
+    from tvm.script.ir_builder import IRBuilder
+    from tvm.script.ir_builder import ir as I
+    from tvm.script.ir_builder import relax as R
+    from tvm.script.ir_builder import tir as T
 
-#     with IRBuilder() as ib:  # pylint: disable=invalid-name
-#         with I.ir_module() as frame:
-#             with R.function():
-#                 R.func_name("main")
-#                 x = R.arg("x", R.tensor((N, H, W, C), A_TYPE))  # pylint: disable=invalid-name
-#                 w = R.arg("w", R.tensor((O, KH, KW, C), B_TYPE))  # pylint: disable=invalid-name
-#                 C = R.nn.conv2d(
-#                     x,
-#                     w,
-#                     kernel_size=(KH, KW),
-#                     strides=strides,
-#                     padding=padding,
-#                     dilation=dilation,
-#                     groups=1,
-#                     channels=None,
-#                     data_layout="NHWC",
-#                     kernel_layout="OHWI",
-#                     out_layout="NHWC",
-#                     out_dtype=C_TYPE,
-#                 )
-#                 R.func_ret_value(C)
-#     mod = ib.get()
-#     return mod
+    with IRBuilder() as ib:  # pylint: disable=invalid-name
+        with I.ir_module() as frame:
+            with R.function():
+                R.func_name("main")
+                x = R.arg("x", R.tensor((N, H, W, C), A_TYPE))  # pylint: disable=invalid-name
+                w = R.arg("w", R.tensor((O, KH, KW, C), B_TYPE))  # pylint: disable=invalid-name
+                C = R.nn.conv2d(
+                    x,
+                    w,
+                    kernel_size=(KH, KW),
+                    strides=strides,
+                    padding=padding,
+                    dilation=dilation,
+                    groups=1,
+                    channels=None,
+                    data_layout="NHWC",
+                    kernel_layout="OHWI",
+                    out_layout="NHWC",
+                    out_dtype=C_TYPE,
+                )
+                R.func_ret_value(C)
+    mod = ib.get()
+    return mod
 
 
-# def test_cutlass_conv2d():
-#     mod = constructConv2D(1, 3, 224, 224, 3, 3, 64, (2, 2), (1, 1), (1, 1))
-#     mod = OperatorLegalizer(mod).transform()
-#     print(mod.script())
+def test_cutlass_conv2d():
+    n, c, h, w = 1, 3, 224, 224
+    kh, kw, o = 3, 3, 64
+    strides = (2, 2)
+    padding = (3, 3)
+    dilation = (4, 4)
+    build(constructConv2D(n, c, h, w, kh, kw, o, strides, padding, dilation))
 
 
 if __name__ == "__main__":
-    test_cutlass_dense()
-    test_cutlass_dense_bias()
-    test_cutlass_dense_bias_relu()
-    test_cutlass_batch_dense()
-    test_cutlass_batch_dense2()
-    test_cutlass_batch_dense_bias()
-    test_cutlass_batch_dense2_bias()
-    # test_cutlass_conv2d()
+    # test_cutlass_dense()
+    # test_cutlass_dense_bias()
+    # test_cutlass_dense_bias_relu()
+    # test_cutlass_batch_dense()
+    # test_cutlass_batch_dense2()
+    # test_cutlass_batch_dense_bias()
+    # test_cutlass_batch_dense2_bias()
+    test_cutlass_conv2d()

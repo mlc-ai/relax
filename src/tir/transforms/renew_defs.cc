@@ -188,7 +188,9 @@ class RenewDefMutator : public StmtExprMutator {
     ICHECK(define);
 
     auto redefine_if_is_var = [this](const PrimExpr& expr) -> PrimExpr {
+      LOG(INFO) << expr;
       auto it = remap_.find(expr);
+      LOG(INFO) << "OK";
       if (it != remap_.end()) {
         return Downcast<PrimExpr>((*it).second);
       } else if (const VarNode* var = expr.as<VarNode>()) {
@@ -199,6 +201,8 @@ class RenewDefMutator : public StmtExprMutator {
     };
 
     // update data
+    LOG(INFO) << "??????????";
+    LOG(INFO) << buffer;
     Var data = Downcast<Var>(redefine_if_is_var(buffer->data));
     // update shape
     Array<PrimExpr> shape = buffer->shape.Map(redefine_if_is_var);
