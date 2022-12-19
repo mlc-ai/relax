@@ -32,12 +32,25 @@
 #include "../../tir/schedule/ir_comparator.h"
 
 namespace tvm {
+
+const static constexpr char* kCutlassKernel = "cutlass_kernel";
+const static constexpr char* kCutlassCodegen = "cutlass_codegen";
+const static constexpr char* kCSource = "c_source";
+const static constexpr char* kCSourceFmt = "c_source_fmt";
+const static constexpr char* kCSourceFmtCuda = "cu";
+
 namespace tir {
 
 class BlockMatcher : public TensorizeComparator {
  public:
-  explicit BlockMatcher(const tir::PrimFunc& pattern)
-      : TensorizeComparator(IRModule({{GlobalVar(""), pattern}}), false), pattern_(pattern) {}
+  using SymbolMap = std::unordered_map<Var, PrimExpr, ObjectPtrHash, ObjectPtrEqual>;
+  explicit BlockMatcher(const tir::PrimFunc& pattern, const Array<Var>& pattern_vars)
+      : TensorizeComparator(IRModule({{GlobalVar(""), pattern}}), false), pattern_(pattern) {
+    for (const auto& pattern_var : pattern_vars) {
+      this->pattern_vars_.insert(pattern_var);
+    }
+    this->evaluated_symbols.push_back(SymbolMap());
+  }
 
   bool Match(const For& top) {
     const ForNode* pattern_top = pattern_->body.as<BlockRealizeNode>()->block->body.as<ForNode>();
@@ -55,27 +68,165 @@ class BlockMatcher : public TensorizeComparator {
     return true;
   }
 
-  std::unordered_map<Var, PrimExpr, ObjectPtrHash, ObjectPtrEqual> evaluated_symbols;
+  std::vector<SymbolMap> evaluated_symbols;
   std::vector<Buffer> evaluated_buffers;
 
  private:
+  Optional<PrimExpr> QueryEvaluatedSymbols(const Var& var) {
+    for (const SymbolMap& symbol_map : evaluated_symbols) {
+      auto it = symbol_map.find(var);
+      if (it != symbol_map.end()) {
+        return it->second;
+      }
+    }
+    return NullOpt;
+  }
+
   bool VisitExpr(const PrimExpr& lhs, const PrimExpr& rhs) final {
     if (const auto* op = rhs.as<VarNode>()) {
-      const auto* lhs_ptr = lhs.as<VarNode>();
-      if (lhs_ptr == nullptr) {
-        if (lhs->IsInstance<tir::IntImmNode>() || lhs->IsInstance<tir::FloatImmNode>()) {
-          auto it = evaluated_symbols.find(GetRef<Var>(op));
-          if (it != evaluated_symbols.end()) {
-            if (!analyzer_.CanProveEqual(it->second, lhs)) return false;
+      if (pattern_vars_.count(GetRef<Var>(op))) {
+        // special case for pattern vars
+        const auto* lhs_ptr = lhs.as<VarNode>();
+        if (lhs_ptr == nullptr) {
+          if (lhs->IsInstance<tir::IntImmNode>() || lhs->IsInstance<tir::FloatImmNode>()) {
+            Optional<PrimExpr> value = QueryEvaluatedSymbols(GetRef<Var>(op));
+            if (value.defined()) {
+              if (!analyzer_.CanProveEqual(lhs, value.value())) return false;
+            } else {
+              evaluated_symbols.back()[GetRef<Var>(op)] = lhs;
+            }
+            return true;
+          } else {
+            return false;
           }
-          evaluated_symbols[GetRef<Var>(op)] = lhs;
+        }
+      }
+    }
+    // pattern_var * expr
+    if (const auto* rhs_ptr = rhs.as<MulNode>()) {
+      const auto* operand_a = rhs_ptr->a.as<VarNode>();
+      const auto* operand_b = rhs_ptr->b.as<VarNode>();
+      if (operand_a != nullptr && pattern_vars_.count(GetRef<Var>(operand_a))) {
+        // pattern var is on the left
+        evaluated_symbols.push_back(SymbolMap());
+        bool match = VisitExpr(lhs, rhs_ptr->b);
+        SymbolMap symbol_map = std::move(evaluated_symbols.back());
+        evaluated_symbols.pop_back();
+        if (match) {
+          evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+          evaluated_symbols.back()[GetRef<Var>(operand_a)] = MakeConstScalar(rhs_ptr->b.dtype(), 1);
           return true;
-        } else {
-          return false;
+        }
+      }
+      if (operand_b != nullptr && pattern_vars_.count(GetRef<Var>(operand_b))) {
+        // pattern var is on the right
+        evaluated_symbols.push_back(SymbolMap());
+        bool match = VisitExpr(lhs, rhs_ptr->a);
+        SymbolMap symbol_map = std::move(evaluated_symbols.back());
+        evaluated_symbols.pop_back();
+        if (match) {
+          evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+          evaluated_symbols.back()[GetRef<Var>(operand_b)] = MakeConstScalar(rhs_ptr->a.dtype(), 1);
+          return true;
+        }
+      }
+    }
+    // pattern_Var + expr
+    if (const auto* rhs_ptr = rhs.as<AddNode>()) {
+      const auto* operand_a = rhs_ptr->a.as<VarNode>();
+      const auto* operand_b = rhs_ptr->b.as<VarNode>();
+      if (operand_a != nullptr && pattern_vars_.count(GetRef<Var>(operand_a))) {
+        // pattern var is on the left
+        evaluated_symbols.push_back(SymbolMap());
+        bool match = VisitExpr(lhs, rhs_ptr->b);
+        SymbolMap symbol_map = std::move(evaluated_symbols.back());
+        evaluated_symbols.pop_back();
+        if (match) {
+          evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+          evaluated_symbols.back()[GetRef<Var>(operand_a)] = MakeConstScalar(rhs_ptr->b.dtype(), 0);
+          return true;
+        }
+      }
+      if (operand_b != nullptr && pattern_vars_.count(GetRef<Var>(operand_b))) {
+        // pattern var is on the right
+        evaluated_symbols.push_back(SymbolMap());
+        bool match = VisitExpr(lhs, rhs_ptr->a);
+        SymbolMap symbol_map = std::move(evaluated_symbols.back());
+        evaluated_symbols.pop_back();
+        if (match) {
+          evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+          evaluated_symbols.back()[GetRef<Var>(operand_b)] = MakeConstScalar(rhs_ptr->a.dtype(), 0);
+          return true;
         }
       }
     }
     return TensorizeComparator::VisitExpr(lhs, rhs);
+  }
+
+  bool VisitExpr_(const tir::AddNode* add, const PrimExpr& other) final {
+    const auto* rhs = other.as<AddNode>();
+    if (rhs == nullptr) return false;
+    {
+      this->evaluated_symbols.push_back(SymbolMap());
+      bool match = VisitExpr(add->a, rhs->a) && VisitExpr(add->b, rhs->b);
+      SymbolMap symbol_map = std::move(evaluated_symbols.back());
+      this->evaluated_symbols.pop_back();
+      if (match) {
+        this->evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+        return true;
+      }
+    }
+    {
+      this->evaluated_symbols.push_back(SymbolMap());
+      bool match = VisitExpr(add->a, rhs->b) && VisitExpr(add->b, rhs->a);
+      SymbolMap symbol_map = std::move(evaluated_symbols.back());
+      this->evaluated_symbols.pop_back();
+      if (match) {
+        this->evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool VisitExpr_(const tir::MulNode* mul, const PrimExpr& other) final {
+    const auto* rhs = other.as<MulNode>();
+    if (rhs == nullptr) return false;
+    {
+      this->evaluated_symbols.push_back(SymbolMap());
+      bool match = VisitExpr(mul->a, rhs->a) && VisitExpr(mul->b, rhs->b);
+      SymbolMap symbol_map = std::move(evaluated_symbols.back());
+      this->evaluated_symbols.pop_back();
+      if (match) {
+        this->evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+        return true;
+      }
+    }
+    {
+      this->evaluated_symbols.push_back(SymbolMap());
+      bool match = VisitExpr(mul->a, rhs->b) && VisitExpr(mul->b, rhs->a);
+      SymbolMap symbol_map = std::move(evaluated_symbols.back());
+      this->evaluated_symbols.pop_back();
+      if (match) {
+        this->evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool VisitExpr_(const tir::CallNode* call, const PrimExpr& other) final {
+    const auto* rhs = other.as<CallNode>();
+    if (rhs == nullptr) return false;
+    const auto* lhs_op = call->op.as<OpNode>();
+    const auto* rhs_op = rhs->op.as<OpNode>();
+    if (lhs_op == nullptr || rhs_op == nullptr) return false;
+    if (lhs_op->name != rhs_op->name) return false;
+    if (call->args.size() != rhs->args.size()) return false;
+    for (size_t i = 0; i < call->args.size(); ++i) {
+      if (!VisitExpr(call->args[i], rhs->args[i])) return false;
+    }
+    return true;
   }
 
   bool VisitStmt_(const tir::ForNode* op, const Stmt& other) final {
@@ -161,7 +312,12 @@ class BlockMatcher : public TensorizeComparator {
     if (it != rhs_buffer_map_.end()) {
       equal = (*it).second.same_as(lhs);
     } else {
-      // Remap both buffer itself and buffer data, skip buffer shape
+      // Compare shape
+      if (lhs->shape.size() != rhs->shape.size()) return false;
+      for (size_t i = 0; i < lhs->shape.size(); ++i) {
+        if (!VisitExpr(lhs->shape[i], rhs->shape[i])) return false;
+      }
+      // Remap both buffer itself and buffer data
       equal =
           DefEqual(lhs->data, rhs->data) && lhs->dtype == rhs->dtype && lhs.scope() == rhs.scope();
       if (equal) {
@@ -197,6 +353,7 @@ class BlockMatcher : public TensorizeComparator {
   arith::Analyzer analyzer_;
   std::vector<For> loop_stack_lhs_, loop_stack_rhs_;
   tir::PrimFunc pattern_;
+  std::unordered_set<Var, ObjectHash, ObjectEqual> pattern_vars_;
 };
 
 // Analyze the function and match it with supported cutlass kernels
@@ -205,11 +362,20 @@ class FuncMatcher : public StmtExprVisitor {
   void Match(Stmt body) {
     OpMatternMatch(body);
     if (fail) return;
-    auto f = tvm::runtime::Registry::Get("tvm.relax.cutlass.op_pattern_stitch");
+    auto f = TypedPackedFunc<Array<ObjectRef>(Array<Map<Var, PrimExpr>>, Array<Array<Buffer>>,
+                                              Array<runtime::String>)>(
+        *tvm::runtime::Registry::Get("tvm.relax.cutlass.op_pattern_stitch"));
     ICHECK(f != nullptr) << "Cannot find cutlass op pattern stitch function";
-    cutlass_annotation = (*f)(Array<Map<Var, PrimExpr>>(evaluated_symbols_),
-                              Array<Array<Buffer>>(evaluated_buffers_),
-                              Array<runtime::String>(matched_pattern_names_));
+    Array<ObjectRef> op_stitich_result =
+        f(Array<Map<Var, PrimExpr>>(evaluated_symbols_), Array<Array<Buffer>>(evaluated_buffers_),
+          Array<runtime::String>(matched_pattern_names_));
+    ICHECK_EQ(op_stitich_result.size(), 2);
+    num_matched_ops = op_stitich_result[1].as<IntImmNode>()->value;
+    if (num_matched_ops == 0) {
+      fail = true;
+      return;
+    }
+    cutlass_kernel_code = Downcast<runtime::String>(op_stitich_result[0]);
     this->VisitStmt(body);
   }
 
@@ -226,8 +392,10 @@ class FuncMatcher : public StmtExprVisitor {
   // The output buffer for the first function, which is also the input buffer for the second
   // function
   Buffer intermediate_buffer;
-  // The accumulated annotation for which cutlass kernel we are matching.
-  Array<runtime::String> cutlass_annotation;
+  // The number of matched ops in the function
+  size_t num_matched_ops = 0;
+  // The CUDA code for the cutlass kernel
+  runtime::String cutlass_kernel_code;
   // Indicate whether we have failed. If failed, we will not do any further analysis and directly
   // return the original one.
   bool fail = false;
@@ -237,16 +405,19 @@ class FuncMatcher : public StmtExprVisitor {
   bool BlockPatternMatch(const For& top) {
     auto f = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern_list");
     auto g = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern_func");
+    auto h = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern_vars");
     CHECK(f != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern_list";
     CHECK(g != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern_func";
+    CHECK(h != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern_vars";
     Array<runtime::String> pattern_list = (*f)();
 
     for (const runtime::String& pattern : pattern_list) {
       tir::PrimFunc pattern_func = (*g)(pattern);
-      BlockMatcher block_matcher(pattern_func);
+      Array<Var> pattern_vars = (*h)(pattern);
+      BlockMatcher block_matcher(pattern_func, pattern_vars);
       if (block_matcher.Match(top)) {
         // We have found a match
-        evaluated_symbols_.push_back(block_matcher.evaluated_symbols);
+        evaluated_symbols_.push_back(block_matcher.evaluated_symbols.back());
         evaluated_buffers_.push_back(block_matcher.evaluated_buffers);
         matched_pattern_names_.push_back(pattern);
         return true;
@@ -279,8 +450,8 @@ class FuncMatcher : public StmtExprVisitor {
 
   void VisitStmt_(const BlockNode* op) final {
     block_counter_++;
-    bool is_matching_ = block_counter_ <= cutlass_annotation.size();
-    if (block_counter_ == cutlass_annotation.size() + 1) {
+    bool is_matching_ = block_counter_ <= num_matched_ops;
+    if (block_counter_ == num_matched_ops) {
       allocs1.erase(intermediate_buffer);
     }
     for (const auto& read : op->reads) {
@@ -364,7 +535,8 @@ class BlockMasker : public StmtExprMutator {
  * rest.
  * \param func The input function.
  * \param arg_partition The input arg for the functions after split.
- * \return A pair of functions, the first one is the cutlass kernel and the second one is the rest.
+ * \return A pair of functions, the first one is the cutlass kernel and the second one is the
+ * rest.
  */
 std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     PrimFunc func, std::vector<std::vector<int>>* arg_partition) {
@@ -382,8 +554,8 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     }
   }
   if (!has_second_func) {
-    func = WithAttr(func, "cutlass_codegen", Bool(true));
-    return {WithAttr(func, "cutlass_kernel", matcher.cutlass_annotation), NullOpt};
+    // No need to split the function.
+    return {WithAttr(func, kCutlassKernel, matcher.cutlass_kernel_code), NullOpt};
   }
   // Step 2. Split the function into two functions.
   Stmt body1 = BlockMasker::Mask(func->body, matcher.block_partition, matcher.allocs1, true);
@@ -410,8 +582,7 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
   }
   new_buffer_map1.Set(new_params1.back(), matcher.intermediate_buffer);
   PrimFunc func1 = PrimFunc(new_params1, body1, func->ret_type, new_buffer_map1, func->attrs);
-  func1 = WithAttr(func1, "cutlass_kernel", matcher.cutlass_annotation);
-  func1 = WithAttr(func1, "cutlass_codegen", Bool(true));
+  func1 = WithAttr(func1, kCutlassKernel, matcher.cutlass_kernel_code);
   // Step 4. Craft the second function.
   Array<Var> new_params2;
   std::vector<int> arg_partition2;
@@ -434,12 +605,34 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     }
   }
   PrimFunc func2 = PrimFunc(new_params2, body2, func->ret_type, new_buffer_map2, func->attrs);
-  func2 = WithoutAttr(func2, "cutlass_codegen");
   return {func1, func2};
 }
 }  // namespace tir
 
 namespace relax {
+void StringReplace(std::string* subject, const std::string& search, const std::string& replace) {
+  for (size_t pos = 0; (pos = subject->find(search, pos)) != std::string::npos;
+       pos += replace.length()) {
+    subject->replace(pos, search.length(), replace);
+  }
+}
+
+tvm::BaseFunc CodegenWithCutlass(const tir::PrimFuncNode* pf, String global_symbol) {
+  using namespace tvm::tir;
+  Optional<runtime::String> cutlass_kernel_code =
+      pf->attrs.GetAttr<runtime::String>(kCutlassKernel);
+  if (!cutlass_kernel_code.defined()) {
+    return GetRef<tir::PrimFunc>(pf);
+  }
+  std::string source = cutlass_kernel_code.value();
+  StringReplace(&source, "{global_symbol}", global_symbol);
+  ExternFunc ret(global_symbol);
+  ret = WithAttrs(std::move(ret), Map<String, ObjectRef>{
+                                      {String(kCSource), String(source)},
+                                      {String(kCSourceFmt), String(kCSourceFmtCuda)},
+                                  });
+  return ret;
+}
 
 // Emit 2 calls to the cutlass kernel and the rest of the function.
 class SplitMutator : public ExprMutator {
@@ -469,16 +662,20 @@ class SplitMutator : public ExprMutator {
     Call call = Downcast<Call>(ExprMutator::VisitExpr_(op));
     static const Op& call_tir_op_ = Op::Get("relax.call_tir");
     if (call->op.same_as(call_tir_op_)) {
+      // the first argument is the function to be called
       GlobalVar gv = Downcast<GlobalVar>(call->args[0]);
+      // retrieve the function from the module and split it
       tir::PrimFunc func = Downcast<tir::PrimFunc>(mod_->Lookup(gv));
       std::vector<std::vector<int>> arg_partition;
       // split the function into two functions, one for the cutlass kernel and one for the rest.
       std::pair<tir::PrimFunc, Optional<tir::PrimFunc>> split_funcs =
           tir::SplitFunctions(func, &arg_partition);
       if (!split_funcs.second.defined()) {
-        // no need to split
+        // no need to split, the function itself a cutlass kernel
+        // emit the call to the cutlass kernel
         ObjectPtr<CallNode> new_call = make_object<CallNode>(*call.operator->());
-        builder_->UpdateFunction(gv, split_funcs.first);
+        // builder_->UpdateFunction(gv, split_funcs.first);
+        builder_->UpdateFunction(gv, CodegenWithCutlass(split_funcs.first.get(), gv->name_hint));
         return Call(new_call);
       }
       tir::PrimFunc func1 = tir::RenewDefs(split_funcs.first);
@@ -490,7 +687,9 @@ class SplitMutator : public ExprMutator {
         args1.push_back(GetCallTIRArgs(call->args[1])[p]);
       }
       ShapeExpr shape1(func1->buffer_map[func1->params.back()]->shape);
+      // replace the function in the module with the cutlass kernel
       GlobalVar gv1 = builder_->AddFunction(func1, "cutlass_primfunc");
+      builder_->UpdateFunction(gv1, CodegenWithCutlass(func1.get(), gv1->name_hint));
       tir::Buffer intermediate_buffer = func1->buffer_map.at(func1->params.back());
       DataType dtype = intermediate_buffer->dtype;
       Call call1(call_tir_op_, {gv1, Tuple(args1), shape1}, call->attrs,
