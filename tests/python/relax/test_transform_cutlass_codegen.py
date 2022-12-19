@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 import tempfile
+import torch
 
 from tvm import relax, runtime
 import tvm
@@ -324,14 +325,20 @@ def test_cutlass_conv2d():
     B_tvm = tvm.nd.array(B, dev)
     executable = tvm.runtime.load_module(PKG_FILE)
     result = f_run(executable, dev, A_tvm, B_tvm)
+    A_torch = torch.from_numpy(np.transpose(A, (0, 3, 1, 2))).cuda()
+    B_torch = torch.from_numpy(np.transpose(B, (0, 3, 1, 2))).cuda()
+    C_torch = torch.nn.functional.conv2d(
+        A_torch, B_torch, stride=strides, padding=padding, dilation=dilation
+    )
+    np.testing.assert_allclose(np.transpose(result.numpy(), (0, 3, 1, 2)), C_torch.cpu().numpy(), rtol=1e-2)
 
 
 if __name__ == "__main__":
-    # test_cutlass_dense()
-    # test_cutlass_dense_bias()
-    # test_cutlass_dense_bias_relu()
-    # test_cutlass_batch_dense()
-    # test_cutlass_batch_dense2()
-    # test_cutlass_batch_dense_bias()
-    # test_cutlass_batch_dense2_bias()
+    test_cutlass_dense()
+    test_cutlass_dense_bias()
+    test_cutlass_dense_bias_relu()
+    test_cutlass_batch_dense()
+    test_cutlass_batch_dense2()
+    test_cutlass_batch_dense_bias()
+    test_cutlass_batch_dense2_bias()
     test_cutlass_conv2d()
