@@ -831,6 +831,7 @@ GRAPH_PATTERN_CODE_LIST[
       #define NDEBUG
 
       #include <cutlass/cutlass.h>
+      #include <cutlass/gemm/device/gemm.h>
       #include <cutlass/gemm/device/gemm_batched.h>
       #include <cutlass/layout/matrix.h>
       #include <cutlass/numeric_types.h>
@@ -874,16 +875,31 @@ GRAPH_PATTERN_CODE_LIST[
         CHECK_EQ(C.DataType(), DataType::Float(16));
 
         // Define the GEMM operation
+        // Gemm operator cutlass_tensorop_h16816gemm_128x128_32x5_tt_align8
         using Gemm = cutlass::gemm::device::GemmBatched<
-            cutlass::half_t,            // ElementA
-            cutlass::layout::RowMajor,  // LayoutA
-            cutlass::half_t,            // ElementB
-            cutlass::layout::RowMajor,  // LayoutB
-            cutlass::half_t,            // ElementOutput
-            cutlass::layout::RowMajor,  // LayoutOutput
+            cutlass::half_t, cutlass::layout::RowMajor,
+            cutlass::half_t, cutlass::layout::RowMajor,
+            cutlass::half_t, cutlass::layout::RowMajor,
             cutlass::half_t,
             cutlass::arch::OpClassTensorOp,
-            cutlass::arch::Sm75
+            cutlass::arch::Sm80,
+            cutlass::gemm::GemmShape<64, 64, 64>,
+            cutlass::gemm::GemmShape<32, 32, 64>,
+            cutlass::gemm::GemmShape<16, 8, 16>,
+
+            cutlass::epilogue::thread::LinearCombination<
+                cutlass::half_t,
+                8,
+                cutlass::half_t,
+                cutlass::half_t,
+                cutlass::epilogue::thread::ScaleType::NoBetaScaling
+            >,
+            cutlass::gemm::threadblock::GemmBatchedIdentityThreadblockSwizzle,
+            5,
+            8,
+            8,
+
+            cutlass::arch::OpMultiplyAdd
         >;
         Gemm gemm_op;
         cutlass::half_t alpha(1.0);
@@ -1063,15 +1079,29 @@ GRAPH_PATTERN_CODE_LIST[
 
         // Define the GEMM operation
         using Gemm = cutlass::gemm::device::GemmBatched<
-            cutlass::half_t,            // ElementA
-            cutlass::layout::RowMajor,  // LayoutA
-            cutlass::half_t,            // ElementB
-            cutlass::layout::RowMajor,  // LayoutB
-            cutlass::half_t,            // ElementOutput
-            cutlass::layout::RowMajor,  // LayoutOutput
+            cutlass::half_t, cutlass::layout::RowMajor,
+            cutlass::half_t, cutlass::layout::RowMajor,
+            cutlass::half_t, cutlass::layout::RowMajor,
             cutlass::half_t,
             cutlass::arch::OpClassTensorOp,
-            cutlass::arch::Sm75
+            cutlass::arch::Sm80,
+            cutlass::gemm::GemmShape<64, 64, 64>,
+            cutlass::gemm::GemmShape<32, 32, 64>,
+            cutlass::gemm::GemmShape<16, 8, 16>,
+
+            cutlass::epilogue::thread::LinearCombination<
+                cutlass::half_t,
+                8,
+                cutlass::half_t,
+                cutlass::half_t,
+                cutlass::epilogue::thread::ScaleType::NoBetaScaling
+            >,
+            cutlass::gemm::threadblock::GemmBatchedIdentityThreadblockSwizzle,
+            5,
+            8,
+            8,
+
+            cutlass::arch::OpMultiplyAdd
         >;
         Gemm gemm_op;
         cutlass::half_t alpha(1.0);
