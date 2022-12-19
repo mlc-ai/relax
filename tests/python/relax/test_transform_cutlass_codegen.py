@@ -47,14 +47,14 @@ def f_run(rt_mod: runtime.Module, device: runtime.ndarray.Device, *input):
     return vm["main"](*input)
 
 
-def build(mod):
+def build(mod, file_name=PKG_FILE):
     mod = relax.transform.OperatorLegalizer(mod).transform()
     mod = relax.transform.AnnotateTIROpPattern()(mod)
     mod = relax.transform.FuseOps()(mod)
     mod = relax.transform.FuseTIR()(mod)
     mod = relax.transform.SplitCutlass()(mod)
     executbale = relax_build(mod, target)
-    executbale.mod.export_library(PKG_FILE, cc="nvcc")
+    executbale.mod.export_library(file_name, cc="nvcc")
     return executbale
 
 
@@ -111,7 +111,7 @@ def test_cutlass_dense_bias():
     dev = tvm.cuda()
     A = np.random.rand(m, k).astype("float16") * 5
     B = np.random.rand(k, n).astype("float16") * 5
-    bias = np.random.rand(1, n).astype("float16") * 100
+    bias = np.random.rand(1, n).astype("float16") * 20
     A_tvm = tvm.nd.array(A, dev)
     B_tvm = tvm.nd.array(B, dev)
     bias_tvm = tvm.nd.array(bias, dev)
@@ -145,7 +145,7 @@ def test_cutlass_dense_bias_relu():
     dev = tvm.cuda()
     A = np.random.rand(m, k).astype("float16") * 5
     B = np.random.rand(k, n).astype("float16") * 5
-    bias = np.random.rand(1, n).astype("float16") * 5
+    bias = np.random.rand(1, n).astype("float16") * 20
     A_tvm = tvm.nd.array(A, dev)
     B_tvm = tvm.nd.array(B, dev)
     bias_tvm = tvm.nd.array(bias, dev)
@@ -231,7 +231,7 @@ def constructBatchGEMM_bias(batch, M, N, K):
 
 
 def test_cutlass_batch_dense_bias():
-    b, m, n, k = 1, 128, 128, 128
+    b, m, n, k = 2, 128, 128, 128
     build(constructBatchGEMM_bias(b, m, n, k))
     dev = tvm.cuda()
     A = np.random.rand(b, m, k).astype("float16") * 5
@@ -312,25 +312,30 @@ def constructConv2D(N, C, H, W, KH, KW, O, strides, padding, dilation):
 def test_cutlass_conv2d():
     n, c, h, w = 1, 3, 224, 224
     kh, kw, o = 3, 3, 64
-    strides = (2, 2)
-    padding = (3, 3)
-    dilation = (4, 4)
-    build(constructConv2D(n, c, h, w, kh, kw, o, strides, padding, dilation))
-    dev = tvm.cuda()
-    np.random.seed(0)
-    A = np.random.rand(n, h, w, c).astype("float16") * 5
-    B = np.random.rand(o, kh, kw, c).astype("float16") * 5
-    print(A.shape, B.shape)
-    A_tvm = tvm.nd.array(A, dev)
-    B_tvm = tvm.nd.array(B, dev)
-    executable = tvm.runtime.load_module(PKG_FILE)
-    result = f_run(executable, dev, A_tvm, B_tvm)
-    A_torch = torch.from_numpy(np.transpose(A, (0, 3, 1, 2))).cuda()
-    B_torch = torch.from_numpy(np.transpose(B, (0, 3, 1, 2))).cuda()
-    C_torch = torch.nn.functional.conv2d(
-        A_torch, B_torch, stride=strides, padding=padding, dilation=dilation
-    )
-    np.testing.assert_allclose(np.transpose(result.numpy(), (0, 3, 1, 2)), C_torch.cpu().numpy(), rtol=1e-2)
+    # strides = (1, 1)
+    # padding = (3, 3)
+    # dilation = (1, 1)
+    counter = 0
+    for strides in [(1, 1), (2, 2)]:
+        for padding in [(0, 0), (3, 3)]:
+            for dilation in [(1, 1), (4, 4)]:
+                filename = "/tmp/" + "test_transform_cutlass_codegen" + str(counter) + ".so"
+                build(constructConv2D(n, c, h, w, kh, kw, o, strides, padding, dilation), filename)
+                dev = tvm.cuda()
+                np.random.seed(0)
+                A = np.random.rand(n, h, w, c).astype("float16") * 5
+                B = np.random.rand(o, kh, kw, c).astype("float16") * 5
+                A_tvm = tvm.nd.array(A, dev)
+                B_tvm = tvm.nd.array(B, dev)
+                executable = tvm.runtime.load_module(filename)
+                result = f_run(executable, dev, A_tvm, B_tvm)
+                A_torch = torch.from_numpy(np.transpose(A, (0, 3, 1, 2))).cuda()
+                B_torch = torch.from_numpy(np.transpose(B, (0, 3, 1, 2))).cuda()
+                C_torch = torch.nn.functional.conv2d(
+                    A_torch, B_torch, stride=strides, padding=padding, dilation=dilation
+                )
+                np.testing.assert_allclose(np.transpose(result.numpy(), (0, 3, 1, 2)), C_torch.cpu().numpy(), rtol=1e-2)
+                counter += 1
 
 
 if __name__ == "__main__":

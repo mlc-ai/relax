@@ -38,9 +38,6 @@ def get_graph_pattern_code(cutlass_op, *args, **kwargs):
 
 @register_func("tvm.relax.cutlass.op_pattern_stitch")
 def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_names):
-    print("matched_pattern_names", matched_pattern_names)
-    print("evaluated_symbols", evaluated_symbols)
-    print("evaluated_buffers", evaluated_buffers)
     if len(matched_pattern_names) >= 3:
         assert len(evaluated_symbols) >= 3
         assert len(evaluated_buffers) >= 3
@@ -107,21 +104,32 @@ def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_name
                 return [get_graph_pattern_code(matched_pattern_names[:2]), 2]
         # padding2d_NHWC + conv2d_NHWC
         if (
-            matched_pattern_names[0] == "padding_2d_NHWC"
+            matched_pattern_names[0] in ["padding_2d_NHWC", "copy_4d"]
             and matched_pattern_names[1] == "conv2d_NHWC"
         ):
-            (
-                N_pad,
-                H_pad,
-                W_pad,
-                C_pad,
-                pH_pad,
-                pW_pad,
-                lH_pad,
-                lW_pad,
-                rH_pad,
-                rW_pad,
-            ) = get_value(evaluated_symbols[0], "padding_2d_NHWC")
+            if matched_pattern_names[0] == "padding_2d_NHWC":
+                (
+                    N_pad,
+                    H_pad,
+                    W_pad,
+                    C_pad,
+                    pH_pad,
+                    pW_pad,
+                    lH_pad,
+                    lW_pad,
+                    rH_pad,
+                    rW_pad,
+                ) = get_value(evaluated_symbols[0], "padding_2d_NHWC")
+            else:
+                (
+                    N_pad,
+                    H_pad,
+                    W_pad,
+                    C_pad,
+                ) = get_value(evaluated_symbols[0], "copy_4d")
+                pH_pad = rH_pad = H_pad
+                pW_pad = rW_pad = W_pad
+                lH_pad = lW_pad = 0
             (
                 N_conv,
                 pH_conv,
@@ -192,6 +200,11 @@ def get_op_pattern_list():
 @register_func("tvm.relax.cutlass.get_op_pattern_func")
 def get_op_pattern_func(name):
     return OP_PATTERN_FUNC_LIST[name]
+
+
+@register_func("tvm.relax.cutlass.get_op_pattern_vars")
+def get_op_pattern_vars(name):
+    return OP_PATTERN_VARS_LIST[name]
 
 
 @register_pattern()
@@ -1278,8 +1291,9 @@ def conv2d_NHWC_codegen(padding, strides, dilation):
         .replace("{{dilation_H}}", str(dilation_H))
         .replace("{{dilation_W}}", str(dilation_W))
     )
-    print(res)
     return res
 
 
 GRAPH_PATTERN_CODE_LIST["padding_2d_NHWC/conv2d_NHWC"] = conv2d_NHWC_codegen
+
+GRAPH_PATTERN_CODE_LIST["copy_4d/conv2d_NHWC"] = conv2d_NHWC_codegen

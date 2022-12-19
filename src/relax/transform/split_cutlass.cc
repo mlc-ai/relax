@@ -43,8 +43,14 @@ namespace tir {
 
 class BlockMatcher : public TensorizeComparator {
  public:
-  explicit BlockMatcher(const tir::PrimFunc& pattern)
-      : TensorizeComparator(IRModule({{GlobalVar(""), pattern}}), false), pattern_(pattern) {}
+  using SymbolMap = std::unordered_map<Var, PrimExpr, ObjectPtrHash, ObjectPtrEqual>;
+  explicit BlockMatcher(const tir::PrimFunc& pattern, const Array<Var>& pattern_vars)
+      : TensorizeComparator(IRModule({{GlobalVar(""), pattern}}), false), pattern_(pattern) {
+    for (const auto& pattern_var : pattern_vars) {
+      this->pattern_vars_.insert(pattern_var);
+    }
+    this->evaluated_symbols.push_back(SymbolMap());
+  }
 
   bool Match(const For& top) {
     const ForNode* pattern_top = pattern_->body.as<BlockRealizeNode>()->block->body.as<ForNode>();
@@ -62,27 +68,151 @@ class BlockMatcher : public TensorizeComparator {
     return true;
   }
 
-  std::unordered_map<Var, PrimExpr, ObjectPtrHash, ObjectPtrEqual> evaluated_symbols;
+  std::vector<SymbolMap> evaluated_symbols;
   std::vector<Buffer> evaluated_buffers;
 
  private:
+  Optional<PrimExpr> QueryEvaluatedSymbols(const Var& var) {
+    for (const SymbolMap& symbol_map : evaluated_symbols) {
+      auto it = symbol_map.find(var);
+      if (it != symbol_map.end()) {
+        return it->second;
+      }
+    }
+    return NullOpt;
+  }
+
   bool VisitExpr(const PrimExpr& lhs, const PrimExpr& rhs) final {
     if (const auto* op = rhs.as<VarNode>()) {
-      const auto* lhs_ptr = lhs.as<VarNode>();
-      if (lhs_ptr == nullptr) {
-        if (lhs->IsInstance<tir::IntImmNode>() || lhs->IsInstance<tir::FloatImmNode>()) {
-          auto it = evaluated_symbols.find(GetRef<Var>(op));
-          if (it != evaluated_symbols.end()) {
-            if (!analyzer_.CanProveEqual(it->second, lhs)) return false;
+      if (pattern_vars_.count(GetRef<Var>(op))) {
+        // special case for pattern vars
+        const auto* lhs_ptr = lhs.as<VarNode>();
+        if (lhs_ptr == nullptr) {
+          if (lhs->IsInstance<tir::IntImmNode>() || lhs->IsInstance<tir::FloatImmNode>()) {
+            Optional<PrimExpr> value = QueryEvaluatedSymbols(GetRef<Var>(op));
+            if (value.defined()) {
+              if (!analyzer_.CanProveEqual(lhs, value.value())) return false;
+            } else {
+              evaluated_symbols.back()[GetRef<Var>(op)] = lhs;
+            }
+            return true;
+          } else {
+            return false;
           }
-          evaluated_symbols[GetRef<Var>(op)] = lhs;
+        }
+      }
+    }
+    // pattern_var * expr
+    if (const auto* rhs_ptr = rhs.as<MulNode>()) {
+      const auto* operand_a = rhs_ptr->a.as<VarNode>();
+      const auto* operand_b = rhs_ptr->b.as<VarNode>();
+      if (operand_a != nullptr && pattern_vars_.count(GetRef<Var>(operand_a))) {
+        // pattern var is on the left
+        evaluated_symbols.push_back(SymbolMap());
+        bool match = VisitExpr(lhs, rhs_ptr->b);
+        SymbolMap symbol_map = std::move(evaluated_symbols.back());
+        evaluated_symbols.pop_back();
+        if (match) {
+          evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+          evaluated_symbols.back()[GetRef<Var>(operand_a)] = MakeConstScalar(rhs_ptr->b.dtype(), 1);
           return true;
-        } else {
-          return false;
+        }
+      }
+      if (operand_b != nullptr && pattern_vars_.count(GetRef<Var>(operand_b))) {
+        // pattern var is on the right
+        evaluated_symbols.push_back(SymbolMap());
+        bool match = VisitExpr(lhs, rhs_ptr->a);
+        SymbolMap symbol_map = std::move(evaluated_symbols.back());
+        evaluated_symbols.pop_back();
+        if (match) {
+          evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+          evaluated_symbols.back()[GetRef<Var>(operand_b)] = MakeConstScalar(rhs_ptr->a.dtype(), 1);
+          return true;
+        }
+      }
+    }
+    // pattern_Var + expr
+    if (const auto* rhs_ptr = rhs.as<AddNode>()) {
+      const auto* operand_a = rhs_ptr->a.as<VarNode>();
+      const auto* operand_b = rhs_ptr->b.as<VarNode>();
+      if (operand_a != nullptr && pattern_vars_.count(GetRef<Var>(operand_a))) {
+        // pattern var is on the left
+        evaluated_symbols.push_back(SymbolMap());
+        bool match = VisitExpr(lhs, rhs_ptr->b);
+        SymbolMap symbol_map = std::move(evaluated_symbols.back());
+        evaluated_symbols.pop_back();
+        if (match) {
+          evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+          evaluated_symbols.back()[GetRef<Var>(operand_a)] = MakeConstScalar(rhs_ptr->b.dtype(), 0);
+          return true;
+        }
+      }
+      if (operand_b != nullptr && pattern_vars_.count(GetRef<Var>(operand_b))) {
+        // pattern var is on the right
+        evaluated_symbols.push_back(SymbolMap());
+        bool match = VisitExpr(lhs, rhs_ptr->a);
+        SymbolMap symbol_map = std::move(evaluated_symbols.back());
+        evaluated_symbols.pop_back();
+        if (match) {
+          evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+          evaluated_symbols.back()[GetRef<Var>(operand_b)] = MakeConstScalar(rhs_ptr->a.dtype(), 0);
+          return true;
         }
       }
     }
     return TensorizeComparator::VisitExpr(lhs, rhs);
+  }
+
+  bool VisitExpr_(const tir::AddNode* add, const PrimExpr& other) final {
+    const auto* rhs = other.as<AddNode>();
+    if (rhs == nullptr) return false;
+    {
+      this->evaluated_symbols.push_back(SymbolMap());
+      bool match = VisitExpr(add->a, rhs->a) && VisitExpr(add->b, rhs->b);
+      SymbolMap symbol_map = std::move(evaluated_symbols.back());
+      this->evaluated_symbols.pop_back();
+      if (match) {
+        this->evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+        return true;
+      }
+    }
+    {
+      this->evaluated_symbols.push_back(SymbolMap());
+      bool match = VisitExpr(add->a, rhs->b) && VisitExpr(add->b, rhs->a);
+      SymbolMap symbol_map = std::move(evaluated_symbols.back());
+      this->evaluated_symbols.pop_back();
+      if (match) {
+        this->evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool VisitExpr_(const tir::MulNode* mul, const PrimExpr& other) final {
+    const auto* rhs = other.as<MulNode>();
+    if (rhs == nullptr) return false;
+    {
+      this->evaluated_symbols.push_back(SymbolMap());
+      bool match = VisitExpr(mul->a, rhs->a) && VisitExpr(mul->b, rhs->b);
+      SymbolMap symbol_map = std::move(evaluated_symbols.back());
+      this->evaluated_symbols.pop_back();
+      if (match) {
+        this->evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+        return true;
+      }
+    }
+    {
+      this->evaluated_symbols.push_back(SymbolMap());
+      bool match = VisitExpr(mul->a, rhs->b) && VisitExpr(mul->b, rhs->a);
+      SymbolMap symbol_map = std::move(evaluated_symbols.back());
+      this->evaluated_symbols.pop_back();
+      if (match) {
+        this->evaluated_symbols.back().insert(symbol_map.begin(), symbol_map.end());
+        return true;
+      }
+    }
+    return false;
   }
 
   bool VisitExpr_(const tir::CallNode* call, const PrimExpr& other) final {
@@ -223,6 +353,7 @@ class BlockMatcher : public TensorizeComparator {
   arith::Analyzer analyzer_;
   std::vector<For> loop_stack_lhs_, loop_stack_rhs_;
   tir::PrimFunc pattern_;
+  std::unordered_set<Var, ObjectHash, ObjectEqual> pattern_vars_;
 };
 
 // Analyze the function and match it with supported cutlass kernels
@@ -274,16 +405,19 @@ class FuncMatcher : public StmtExprVisitor {
   bool BlockPatternMatch(const For& top) {
     auto f = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern_list");
     auto g = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern_func");
+    auto h = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern_vars");
     CHECK(f != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern_list";
     CHECK(g != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern_func";
+    CHECK(h != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern_vars";
     Array<runtime::String> pattern_list = (*f)();
 
     for (const runtime::String& pattern : pattern_list) {
       tir::PrimFunc pattern_func = (*g)(pattern);
-      BlockMatcher block_matcher(pattern_func);
+      Array<Var> pattern_vars = (*h)(pattern);
+      BlockMatcher block_matcher(pattern_func, pattern_vars);
       if (block_matcher.Match(top)) {
         // We have found a match
-        evaluated_symbols_.push_back(block_matcher.evaluated_symbols);
+        evaluated_symbols_.push_back(block_matcher.evaluated_symbols.back());
         evaluated_buffers_.push_back(block_matcher.evaluated_buffers);
         matched_pattern_names_.push_back(pattern);
         return true;
@@ -401,7 +535,8 @@ class BlockMasker : public StmtExprMutator {
  * rest.
  * \param func The input function.
  * \param arg_partition The input arg for the functions after split.
- * \return A pair of functions, the first one is the cutlass kernel and the second one is the rest.
+ * \return A pair of functions, the first one is the cutlass kernel and the second one is the
+ * rest.
  */
 std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     PrimFunc func, std::vector<std::vector<int>>* arg_partition) {
@@ -475,7 +610,6 @@ std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
 }  // namespace tir
 
 namespace relax {
-
 void StringReplace(std::string* subject, const std::string& search, const std::string& replace) {
   for (size_t pos = 0; (pos = subject->find(search, pos)) != std::string::npos;
        pos += replace.length()) {
@@ -483,10 +617,13 @@ void StringReplace(std::string* subject, const std::string& search, const std::s
   }
 }
 
-ExternFunc CodegenWithCutlass(const tir::PrimFuncNode* pf, String global_symbol) {
+tvm::BaseFunc CodegenWithCutlass(const tir::PrimFuncNode* pf, String global_symbol) {
   using namespace tvm::tir;
   Optional<runtime::String> cutlass_kernel_code =
       pf->attrs.GetAttr<runtime::String>(kCutlassKernel);
+  if (!cutlass_kernel_code.defined()) {
+    return GetRef<tir::PrimFunc>(pf);
+  }
   std::string source = cutlass_kernel_code.value();
   StringReplace(&source, "{global_symbol}", global_symbol);
   ExternFunc ret(global_symbol);
