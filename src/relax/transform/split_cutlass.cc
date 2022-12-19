@@ -238,7 +238,6 @@ class FuncMatcher : public StmtExprVisitor {
     Array<ObjectRef> op_stitich_result =
         f(Array<Map<Var, PrimExpr>>(evaluated_symbols_), Array<Array<Buffer>>(evaluated_buffers_),
           Array<runtime::String>(matched_pattern_names_));
-    LOG(INFO) << op_stitich_result;
     ICHECK_EQ(op_stitich_result.size(), 2);
     num_matched_ops = op_stitich_result[1].as<IntImmNode>()->value;
     if (num_matched_ops == 0) {

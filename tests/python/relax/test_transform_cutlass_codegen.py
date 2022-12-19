@@ -51,11 +51,7 @@ def build(mod):
     mod = relax.transform.AnnotateTIROpPattern()(mod)
     mod = relax.transform.FuseOps()(mod)
     mod = relax.transform.FuseTIR()(mod)
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-    print(mod.script())
     mod = relax.transform.SplitCutlass()(mod)
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-    print(mod.script())
     executbale = relax_build(mod, target)
     executbale.mod.export_library(PKG_FILE, cc="nvcc")
     return executbale
@@ -281,7 +277,7 @@ def test_cutlass_batch_dense2_bias():
     np.testing.assert_allclose(result.numpy(), A @ B + bias, rtol=1e-2)
 
 
-def constructConv2D(N, C, H, W, KH, KW, O, strides, padding, dilation, GLOBAL_SYMBOL="Conv2D"):
+def constructConv2D(N, C, H, W, KH, KW, O, strides, padding, dilation):
     from tvm.script.ir_builder import IRBuilder
     from tvm.script.ir_builder import ir as I
     from tvm.script.ir_builder import relax as R
@@ -319,6 +315,15 @@ def test_cutlass_conv2d():
     padding = (3, 3)
     dilation = (4, 4)
     build(constructConv2D(n, c, h, w, kh, kw, o, strides, padding, dilation))
+    dev = tvm.cuda()
+    np.random.seed(0)
+    A = np.random.rand(n, h, w, c).astype("float16") * 5
+    B = np.random.rand(o, kh, kw, c).astype("float16") * 5
+    print(A.shape, B.shape)
+    A_tvm = tvm.nd.array(A, dev)
+    B_tvm = tvm.nd.array(B, dev)
+    executable = tvm.runtime.load_module(PKG_FILE)
+    result = f_run(executable, dev, A_tvm, B_tvm)
 
 
 if __name__ == "__main__":
