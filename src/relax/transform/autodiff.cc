@@ -39,7 +39,7 @@ namespace relax {
 class SimpleADMutator : public ExprMutator {
  public:
   explicit SimpleADMutator(IRModule mod, const Array<Var>& require_grads)
-      : ExprMutator(mod), require_grads(require_grads) {}
+      : ExprMutator(mod), require_grads_(require_grads) {}
 
   Function FuncTransform(const FunctionNode* node) {
     ICHECK(node->body->IsInstance<SeqExprNode>());
@@ -65,8 +65,8 @@ class SimpleADMutator : public ExprMutator {
 
     // create adjoint var for inputs
     for (size_t i = 0; i < new_params.size(); ++i) {
-      if (require_grads.empty() ||
-        std::find(require_grads.begin(), require_grads.end(), node->params[i]) != require_grads.end()) {
+      if (require_grads_.empty() ||
+        std::find(require_grads_.begin(), require_grads_.end(), node->params[i]) != require_grads_.end()) {
         CreateAdjointVar(new_params[i], false);
       } else {
         CreateAdjointVar(new_params[i], true);
@@ -77,7 +77,7 @@ class SimpleADMutator : public ExprMutator {
     if (const auto* node = seq_expr->body.as<VarNode>()) {
       const Var& target = GetRef<Var>(node);
       CheckTarget(target);
-      target_var = target;
+      target_var_ = target;
     } else {
       LOG(FATAL) << "the body of the function is not a relax.Var";
     }
@@ -98,11 +98,11 @@ class SimpleADMutator : public ExprMutator {
 
     // emit the input adjoints
     for (size_t i = 0; i < new_params.size(); ++i) {
-      if (require_grads.empty() ||
-        std::find(require_grads.begin(), require_grads.end(), node->params[i]) != require_grads.end()) {
-        const Var& adjoint_var = adjoint_var_map[new_params[i]];
-        if (adjoint_expr_map.count(new_params[i])) {
-          BindAndEmit(adjoint_var, adjoint_expr_map[new_params[i]]);
+      if (require_grads_.empty() ||
+        std::find(require_grads_.begin(), require_grads_.end(), node->params[i]) != require_grads_.end()) {
+        const Var& adjoint_var = adjoint_var_map_[new_params[i]];
+        if (adjoint_expr_map_.count(new_params[i])) {
+          BindAndEmit(adjoint_var, adjoint_expr_map_[new_params[i]]);
         } else {
           ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
           auto type = Downcast<DynTensorType>(new_params[i]->checked_type());
@@ -129,38 +129,38 @@ class SimpleADMutator : public ExprMutator {
 
   void ReverseVisit(const VarBindingNode* binding) {
     CreateAdjointVar(binding->var, true);
-    const Var& adjoint_var = adjoint_var_map[binding->var];
+    const Var& adjoint_var = adjoint_var_map_[binding->var];
 
     // must be ignored output's AST
-    if (adjoint_expr_map.count(binding->var) == 0) {
-      if (binding->var == target_var) {
-        InitGrad(adjoint_var_map[binding->var], binding->var);
+    if (adjoint_expr_map_.count(binding->var) == 0) {
+      if (binding->var == target_var_) {
+        InitGrad(adjoint_var_map_[binding->var], binding->var);
       } else {
         return;
       }
     }
 
     // meet a def
-    BindAndEmit(adjoint_var, adjoint_expr_map[binding->var]);
+    BindAndEmit(adjoint_var, adjoint_expr_map_[binding->var]);
 
     // back propagation
     if (const auto* node = binding->value.as<TupleNode>()) {
       // case 1: tuple
       // a = ((c, d),)
       // b_adjoint_expr += a_adjoint_var[0], c_adjoint_expr += a_adjoint_var[1]
-      UpdateExprMap(GetRef<Tuple>(node), adjoint_expr_map[binding->var]);
+      UpdateExprMap(GetRef<Tuple>(node), adjoint_expr_map_[binding->var]);
     } else if (const auto* node = binding->value.as<TupleGetItemNode>()) {
       // case 2: tuple get item
       // b = a[0]
       // a_adjoint_expr[0] (in fields) += b_adjoint_var
       // a = ((x, y), (z,))
       // b = a[0]
-      UpdateExprMap(GetRef<TupleGetItem>(node), adjoint_expr_map[binding->var]);
+      UpdateExprMap(GetRef<TupleGetItem>(node), adjoint_expr_map_[binding->var]);
     } else if (const auto* node = binding->value.as<VarNode>()) {
       // case 3: assign
       // a = b
       // b_adjoint_expr += a_adjoint_var
-      UpdateExprMap(GetRef<Var>(node), adjoint_expr_map[binding->var]);
+      UpdateExprMap(GetRef<Var>(node), adjoint_expr_map_[binding->var]);
     } else if (const auto* node = binding->value.as<CallNode>()) {
       // case 4: call
       const Op& call_op = GetRef<Op>(node->op.as<OpNode>());
@@ -177,30 +177,35 @@ class SimpleADMutator : public ExprMutator {
   }
 
  private:
+  Expr ReplaceExprByVar(Expr expr) {
+    if (adjoint_expr_to_var_.count(expr)) {
+      return adjoint_expr_to_var_[expr];
+    }
+    return expr;
+  }
+
   void CreateAdjointVar(const Var& v, bool is_dataflow_var) {
     // the adjoint var has been created
-    if (adjoint_var_map.count(v)) return;
+    if (adjoint_var_map_.count(v)) return;
     if (is_dataflow_var) {
       Var adjoint = DataflowVar(v->name_hint() + "_adjoint", v->shape(), v->checked_type());
-      adjoint_var_map.Set(v, adjoint);
+      adjoint_var_map_.Set(v, adjoint);
     } else {
       Var adjoint = Var(v->name_hint() + "_adjoint", v->shape(), v->checked_type());
-      adjoint_var_map.Set(v, adjoint);
+      adjoint_var_map_.Set(v, adjoint);
     }
   }
 
+  // base could only be one of these types:
+  // Var, Tuple, TupleGetItem
   void UpdateExprMap(const Expr& base, const Expr& increment) {
     if (const auto* node = base.as<VarNode>()) {
       const Var& v = GetRef<Var>(node);
-      if (adjoint_expr_map.count(v) == 0) {
-        if (adjoint_binding_.count(increment)) {
-          adjoint_expr_map.Set(v, adjoint_binding_[increment]);
-        } else {
-          adjoint_expr_map.Set(v, increment);
-        }
+      if (adjoint_expr_map_.count(v) == 0) {
+        adjoint_expr_map_.Set(v, ReplaceExprByVar(increment));
       } else {
-        const Expr& updated = DoAdd(adjoint_expr_map[v], increment);
-        adjoint_expr_map.Set(v, updated);
+        const Expr& updated = DoAdd(adjoint_expr_map_[v], increment);
+        adjoint_expr_map_.Set(v, updated);
       }
     }
     else if (const auto* node = base.as<TupleNode>()) {
@@ -218,18 +223,18 @@ class SimpleADMutator : public ExprMutator {
       ICHECK(node->tuple->shape().as<TupleNode>()) << "Type of tuple of TupleGetItem must be tuple";
 
       const Var& v = Downcast<Var>(node->tuple);
-      if (adjoint_expr_map.count(v) == 0) {
+      if (adjoint_expr_map_.count(v) == 0) {
         const Tuple& init = BuildEmptyNestedTupleExpr(
           Downcast<Tuple>(node->tuple->shape()),
           Downcast<TupleType>(node->tuple->checked_type())
         );
         init->checked_type_ = v->checked_type();
-        adjoint_expr_map.Set(v, init);
+        adjoint_expr_map_.Set(v, init);
       }
 
-      ICHECK(adjoint_expr_map[v].as<TupleNode>()) << "adjoint of var is not tuple";
-      adjoint_expr_map.Set(v,
-        DoAddInTuple(Downcast<Tuple>(adjoint_expr_map[v]), node->index, increment)
+      ICHECK(adjoint_expr_map_[v].as<TupleNode>()) << "adjoint of var is not tuple";
+      adjoint_expr_map_.Set(v,
+        DoAddInTuple(Downcast<Tuple>(adjoint_expr_map_[v]), node->index, increment)
       );
     } else {
       LOG(FATAL) << "not a leaf node";
@@ -260,10 +265,10 @@ class SimpleADMutator : public ExprMutator {
 
   Expr DoAdd(const Expr& src1, const Expr& src2) {
     if (zeros_tracker_.count(src1) != 0) {
-      return src2;
+      return ReplaceExprByVar(src2);
     }
     else if (zeros_tracker_.count(src2) != 0) {
-      return src1;
+      return ReplaceExprByVar(src1);
     }
 
     if (const auto* node1 = src1.as<TupleNode>()) {
@@ -279,11 +284,7 @@ class SimpleADMutator : public ExprMutator {
         return Expr();
       }
     } else {
-      // use the variable to replace expr to reduce the size of AST
-      if (adjoint_binding_.count(src2)) {
-        return Call(add_op, {src1, adjoint_binding_[src2]});
-      }
-      return Call(add_op, {src1, src2});
+      return Call(add_op, {src1, ReplaceExprByVar(src2)});
     }
   }
 
@@ -300,11 +301,10 @@ class SimpleADMutator : public ExprMutator {
   }
 
   void BindAndEmit(Var v, Expr e) {
-    if (adjoint_binding_.count(e)) {
-      e = adjoint_binding_[e];
-      // return;
+    if (adjoint_expr_to_var_.count(e)) {
+      e = adjoint_expr_to_var_[e];
     } else {
-      adjoint_binding_.Set(e, v);
+      adjoint_expr_to_var_.Set(e, v);
       e->checked_type_ = v->checked_type();
       e->shape_ = v->shape();
     }
@@ -329,26 +329,26 @@ class SimpleADMutator : public ExprMutator {
     attrs->dtype = type->dtype;
 
     const Expr& init = Call(ones_op, {var->shape()}, Attrs(attrs));
-    adjoint_expr_map.Set(var, init);
+    adjoint_expr_map_.Set(var, init);
   }
 
-  Var target_var;
-
-  Array<Var> require_grads;
+  // the differentiation target
+  Var target_var_;
+  // the arguments to differentiate
+  Array<Var> require_grads_;
 
   // var to its adjoints var
-  Map<Var, Var> adjoint_var_map;
+  Map<Var, Var> adjoint_var_map_;
   // var to its adjoint expr
-  Map<Var, Expr> adjoint_expr_map;
-
+  Map<Var, Expr> adjoint_expr_map_;
   // trace binding
-  Map<Expr, Var> adjoint_binding_;
+  Map<Expr, Var> adjoint_expr_to_var_;
   // track zeros introduced
   std::set<Expr> zeros_tracker_;
 
   // gop map
-  const OpAttrMap<relax::FPrimalGradient> gradient_op_map =
-      Op::GetAttrMap<relax::FPrimalGradient>("FPrimalGradient");
+  const OpAttrMap<FPrimalGradient> gradient_op_map =
+      Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
 
   // constant
   const Op& ones_op = Op::Get("relax.ones");
