@@ -367,9 +367,10 @@ def ToMixedPrecision(out_dtype="float32") -> tvm.ir.transform.Pass:
     """
     return _ffi_api.ToMixedPrecision(out_dtype)  # type: ignore
 
-    
-def SimpleAD(func: GlobalVar,
-             require_grads: Optional[Union[Var, List[Var]]] = None) -> tvm.ir.transform.Pass:
+
+def Gradient(
+    func: GlobalVar, require_grads: Optional[Union[Var, List[Var]]] = None
+) -> tvm.ir.transform.Pass:
     """Automatically differentiate the given function in the IRModule, and add the generated
     function to the IRModule, with name [name of func] + "_adjoint".
 
@@ -394,7 +395,7 @@ def SimpleAD(func: GlobalVar,
     if not isinstance(require_grads, list):
         require_grads = [require_grads]
 
-    return _ffi_api.SimpleAD(func, require_grads)
+    return _ffi_api.Gradient(func, require_grads)
 
 
 def _wrap_class_function_pass(pass_cls, pass_info):
@@ -543,43 +544,6 @@ def function_pass(
     if pass_func:
         return create_function_pass(pass_func)
     return create_function_pass
-
-
-def gradient(func: Union[Function, GlobalVar],
-             require_grads: Optional[Union[Var, List[Var]]] = None,
-             mod: Optional[IRModule] = None) -> Function:
-    """A functional interface of relax.transform.SimpleAD. Takes a relax function as input, and
-    returns the differentiated function.
-
-    Parameters
-    ----------
-    func: Union[relax.Function, relax.GlobalVar]
-        The function or global var to differentiate.
-        The function should only return one scalar value.
-        If func is an instance of relax.GlobalVar, mod must be given.
-    require_grads: Optional[Union[relax.Var, List[relax.Var]]]
-        The relax variables which need adjoints. Must be arguments of func.
-        If the elements in require_grads are integers, integer i represent the i-th variable in the
-        parameter list of func. The index is 0-based.
-        If require_grads is not given, it will emit an adjoint for each input.
-    mod: Optional[IRModule]
-        The IRModule that GlobalVar looks up into.
-
-    Returns
-    -------
-    ret: relax.Function
-        The result function.
-    """
-    if isinstance(func, relax.GlobalVar):
-        if mod is None:
-            raise ValueError("please provide the IRModule containing GlobalVar argument func")
-        func = mod[func]
-        if func is None:
-            raise ValueError("please provide the IRModule containing GlobalVar argument func")
-    assert isinstance(func, relax.Function)
-
-    func_module = IRModule.from_expr(func)
-    return SimpleAD(func_module.get_global_var("main"), require_grads)(func_module)["main_adjoint"]
 
 
 def _wrap_class_dataflowblock_pass(pass_cls, pass_info):

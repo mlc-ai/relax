@@ -36,9 +36,9 @@
 namespace tvm {
 namespace relax {
 
-class SimpleADMutator : public ExprMutator {
+class GradientMutator : public ExprMutator {
  public:
-  explicit SimpleADMutator(IRModule mod, const Array<Var>& require_grads)
+  explicit GradientMutator(IRModule mod, const Array<Var>& require_grads)
       : ExprMutator(mod), require_grads_(require_grads) {}
 
   Function FuncTransform(const FunctionNode* node) {
@@ -305,8 +305,8 @@ class SimpleADMutator : public ExprMutator {
       e = adjoint_expr_to_var_[e];
     } else {
       adjoint_expr_to_var_.Set(e, v);
-      e->checked_type_ = v->checked_type();
-      e->shape_ = v->shape();
+      // e->checked_type_ = v->checked_type();
+      // e->shape_ = v->shape();
     }
     if (v->IsInstance<DataflowVarNode>()) {
       builder_->Emit(VarBinding(v, e));
@@ -363,7 +363,7 @@ class SimpleADMutator : public ExprMutator {
  * \param require_grad_names The relax variables which need adjoints. Must be inputs.
  * \return The module after AD.
  */
-IRModule SimpleAD(IRModule m, const GlobalVar &var, const Array<Var> &require_grads) {
+IRModule Gradient(IRModule m, const GlobalVar &var, const Array<Var> &require_grads) {
   BaseFunc base_func = m->Lookup(var);
   if (auto* n = base_func.as<FunctionNode>()) {
     auto f_before = GetRef<Function>(n);
@@ -376,7 +376,7 @@ IRModule SimpleAD(IRModule m, const GlobalVar &var, const Array<Var> &require_gr
 
     IRModuleNode* new_module_node = m.CopyOnWrite();
     auto new_module = GetRef<IRModule>(new_module_node);
-    auto mutator = SimpleADMutator(new_module, require_grads_var);
+    auto mutator = GradientMutator(new_module, require_grads_var);
 
     auto adjoint_var = GlobalVar(var->name_hint + "_adjoint");
     Function f_after = mutator.FuncTransform(f_before.as<FunctionNode>());
@@ -392,18 +392,18 @@ IRModule SimpleAD(IRModule m, const GlobalVar &var, const Array<Var> &require_gr
 
 namespace transform {
 
-Pass SimpleAD(GlobalVar func, Array<Var> require_grads) {
+Pass Gradient(GlobalVar func, Array<Var> require_grads) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
       [=](IRModule mod, PassContext pc) {
-        return relax::SimpleAD(mod, func, require_grads);
+        return relax::Gradient(mod, func, require_grads);
       };
   return CreateModulePass(/*pass_function=*/pass_func,
                           /*opt_level=*/0,
-                          /*pass_name=*/"SimpleAD",
+                          /*pass_name=*/"Gradient",
                           /*required=*/{});
 }
 
-TVM_REGISTER_GLOBAL("relax.transform.SimpleAD").set_body_typed(SimpleAD);
+TVM_REGISTER_GLOBAL("relax.transform.Gradient").set_body_typed(Gradient);
 
 }  // namespace transform
 
