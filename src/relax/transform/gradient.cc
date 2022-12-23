@@ -18,13 +18,14 @@
  */
 
 /*!
- * \file src/relax/transform/autodiff/simple_ad.cc
- * \brief A simple reverse-mode auto differentiation.
+ * \file src/relax/transform/gradient.cc
+ * \brief A reverse-mode automatic differentiation.
  *
  * Now only supports differentiating a function in the IRModule with one dataflow block
  * with respect to the only return value of the function. It needs to be scalar.
  *
- * For examples, see tests/python/relax/test_transform_autodiff.py.
+ * For examples, see the MLP examples in tests/python/relax/test_transform_gradient.py and
+ * tests/python/relax/test_transform_gradient_numeric.py.
  */
 
 #include <tvm/relax/expr_functor.h>
@@ -108,7 +109,7 @@ class GradientMutator : public ExprMutator {
           auto type = Downcast<DynTensorType>(new_params[i]->checked_type());
           attrs->dtype = type->dtype;
 
-          const Expr& default_adjoint = Call(zeros_op, {new_params[i]->shape()}, Attrs(attrs));
+          const Expr& default_adjoint = Call(zeros_op_, {new_params[i]->shape()}, Attrs(attrs));
           BindAndEmit(adjoint_var, default_adjoint);
         }
         out_adjoints.push_back(adjoint_var);
@@ -165,7 +166,7 @@ class GradientMutator : public ExprMutator {
     } else if (const auto* node = binding->value.as<CallNode>()) {
       // case 4: call
       const Op& call_op = GetRef<Op>(node->op.as<OpNode>());
-      const Array<Expr>& partials = gradient_op_map[call_op](GetRef<Call>(node), adjoint_var);
+      const Array<Expr>& partials = gradient_op_map_[call_op](GetRef<Call>(node), adjoint_var);
       ICHECK(partials.size() == node->args.size()) << "partials number != inputs number";
       for (size_t i = 0; i < partials.size(); ++i) {
         const VarNode* arg = node->args[i].as<VarNode>();
@@ -249,7 +250,7 @@ class GradientMutator : public ExprMutator {
         auto tensortype = Downcast<DynTensorType>(type->fields[i]);
         attrs->dtype = tensortype->dtype;
 
-        const Expr& init = Call(zeros_op, {shape->fields[i]}, Attrs(attrs));
+        const Expr& init = Call(zeros_op_, {shape->fields[i]}, Attrs(attrs));
         zeros_tracker_.emplace(init);
         ret.push_back(init);
       } else {
@@ -279,7 +280,7 @@ class GradientMutator : public ExprMutator {
         return Expr();
       }
     } else {
-      return Call(add_op, {src1, ReplaceExprByVar(src2)});
+      return Call(add_op_, {src1, ReplaceExprByVar(src2)});
     }
   }
 
@@ -323,7 +324,7 @@ class GradientMutator : public ExprMutator {
     auto type = Downcast<DynTensorType>(var->checked_type());
     attrs->dtype = type->dtype;
 
-    const Expr& init = Call(ones_op, {var->shape()}, Attrs(attrs));
+    const Expr& init = Call(ones_op_, {var->shape()}, Attrs(attrs));
     adjoint_expr_map_.Set(var, init);
   }
 
@@ -339,16 +340,16 @@ class GradientMutator : public ExprMutator {
   // trace binding
   Map<Expr, Var> adjoint_expr_to_var_;
   // track zeros introduced
-  std::set<Expr> zeros_tracker_;
+  std::unordered_set<Expr, ObjectPtrHash, ObjectPtrEqual> zeros_tracker_;
 
   // gop map
-  const OpAttrMap<FPrimalGradient> gradient_op_map =
+  const OpAttrMap<FPrimalGradient> gradient_op_map_ =
       Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
 
   // constant
-  const Op& ones_op = Op::Get("relax.ones");
-  const Op& add_op = Op::Get("relax.add");
-  const Op& zeros_op = Op::Get("relax.zeros");
+  const Op& ones_op_ = Op::Get("relax.ones");
+  const Op& add_op_ = Op::Get("relax.add");
+  const Op& zeros_op_ = Op::Get("relax.zeros");
 };
 
 /*!

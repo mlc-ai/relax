@@ -369,7 +369,7 @@ def ToMixedPrecision(out_dtype="float32") -> tvm.ir.transform.Pass:
 
 
 def Gradient(
-    func: GlobalVar, require_grads: Optional[Union[Var, List[Var]]] = None
+    global_var: GlobalVar, require_grads: Optional[Union[Var, List[Var]]] = None
 ) -> tvm.ir.transform.Pass:
     """Automatically differentiate the given function in the IRModule, and add the generated
     function to the IRModule, with name [name of func] + "_adjoint".
@@ -395,7 +395,7 @@ def Gradient(
     if not isinstance(require_grads, list):
         require_grads = [require_grads]
 
-    return _ffi_api.Gradient(func, require_grads)
+    return _ffi_api.Gradient(global_var, require_grads)
 
 
 def _wrap_class_function_pass(pass_cls, pass_info):

@@ -14,8 +14,6 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-from __future__ import annotations  # must import to defer parsing of annotations
-
 import numpy as np
 import pytest
 import tvm
