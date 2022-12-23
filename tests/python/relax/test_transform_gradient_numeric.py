@@ -45,10 +45,12 @@ def test_manual_gradient():
     @I.ir_module
     class Before:
         @R.function
-        def main(x: R.Tensor((3, 5), "float32"),
-                 y: R.Tensor((5,), "float32"),
-                 z: R.Tensor((5,), "float32"),
-                 u: R.Tensor((5,), "float32")):
+        def main(
+            x: R.Tensor((3, 5), "float32"),
+            y: R.Tensor((5,), "float32"),
+            z: R.Tensor((5,), "float32"),
+            u: R.Tensor((5,), "float32"),
+        ):
             with R.dataflow():
                 lv1 = R.add(x, x)
                 lv2 = R.subtract(lv1, y)
@@ -58,6 +60,7 @@ def test_manual_gradient():
                 lv6 = R.sum(lv5)
                 R.output(lv6)
             return lv6
+
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
 
     args = [rand("float32", 3, 5), rand("float32", 5), rand("float32", 5), rand("float32", 5)]
@@ -67,10 +70,12 @@ def test_manual_gradient():
     output_np = np.sum((2 * args_np[0] - 2 * args_np[1]) * (args_np[1] + args_np[2]))
     assert_allclose(output.numpy(), output_np, atol=1e-4)
 
-    expected_grads_nd = [(2 * args_np[1] + 2 * args_np[2]) * np.ones_like(args_np[0]),
-                         np.sum((2 * args_np[0] - 4 * args_np[1] - 2 * args_np[2]), axis=0),
-                         np.sum((2 * args_np[0] - 2 * args_np[1]), axis=0),
-                         np.zeros_like(args_np[3])]
+    expected_grads_nd = [
+        (2 * args_np[1] + 2 * args_np[2]) * np.ones_like(args_np[0]),
+        np.sum((2 * args_np[0] - 4 * args_np[1] - 2 * args_np[2]), axis=0),
+        np.sum((2 * args_np[0] - 2 * args_np[1]), axis=0),
+        np.zeros_like(args_np[3]),
+    ]
     for i, j in zip(grads, expected_grads_nd):
         assert_allclose(i.numpy(), j, atol=1e-4)
 
@@ -82,11 +87,14 @@ def test_mlp_blockbuilder():
     ty2 = rx.DynTensorType(ndim=2, dtype="float32")
 
     input_list = [rx.Var("x", [batch_size, in_size], ty2)]
-    w_list = [rx.Var("w_0", [in_size, hidden_size], ty2)] + \
-        [rx.Var("w_" + str(i + 1), [hidden_size, hidden_size], ty2) for i in range(layers - 2)] + \
-        [rx.Var("w_" + str(layers - 1), [hidden_size, out_size], ty2)]
-    b_list = [rx.Var("b_" + str(i), [hidden_size], ty1) for i in range(layers - 1)] + \
-        [rx.Var("b_" + str(layers - 1), [out_size], ty1)]
+    w_list = (
+        [rx.Var("w_0", [in_size, hidden_size], ty2)]
+        + [rx.Var("w_" + str(i + 1), [hidden_size, hidden_size], ty2) for i in range(layers - 2)]
+        + [rx.Var("w_" + str(layers - 1), [hidden_size, out_size], ty2)]
+    )
+    b_list = [rx.Var("b_" + str(i), [hidden_size], ty1) for i in range(layers - 1)] + [
+        rx.Var("b_" + str(layers - 1), [out_size], ty1)
+    ]
     label_list = [rx.Var("y", [batch_size, out_size], ty2)]
     args_list = input_list + w_list + b_list + label_list
 
@@ -118,6 +126,7 @@ def test_mlp_blockbuilder():
     def func(*inputs):
         loss = _execute_mod(Before, "MLP", *[tvm.nd.array(i) for i in inputs])
         return loss.numpy()
+
     check_numerical_grads(func, [i.numpy() for i in args], [i.numpy() for i in grad])
 
 

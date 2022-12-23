@@ -28,8 +28,8 @@
  */
 
 #include <tvm/relax/expr_functor.h>
-#include <tvm/relax/transform.h>
 #include <tvm/relax/op_attr_types.h>
+#include <tvm/relax/transform.h>
 
 #include <unordered_set>
 
@@ -59,14 +59,14 @@ class GradientMutator : public ExprMutator {
     const DataflowBlockNode* block = seq_expr->blocks[0].as<DataflowBlockNode>();
 
     builder_->BeginDataflowBlock();
-    for (const auto& binding: block->bindings) {
+    for (const auto& binding : block->bindings) {
       VisitBinding(binding);
     }
 
     // create adjoint var for inputs
     for (size_t i = 0; i < new_params.size(); ++i) {
-      if (require_grads_.empty() ||
-        std::find(require_grads_.begin(), require_grads_.end(), node->params[i]) != require_grads_.end()) {
+      if (require_grads_.empty() || std::find(require_grads_.begin(), require_grads_.end(),
+                                              node->params[i]) != require_grads_.end()) {
         CreateAdjointVar(new_params[i], false);
       } else {
         CreateAdjointVar(new_params[i], true);
@@ -98,8 +98,8 @@ class GradientMutator : public ExprMutator {
 
     // emit the input adjoints
     for (size_t i = 0; i < new_params.size(); ++i) {
-      if (require_grads_.empty() ||
-        std::find(require_grads_.begin(), require_grads_.end(), node->params[i]) != require_grads_.end()) {
+      if (require_grads_.empty() || std::find(require_grads_.begin(), require_grads_.end(),
+                                              node->params[i]) != require_grads_.end()) {
         const Var& adjoint_var = adjoint_var_map_[new_params[i]];
         if (adjoint_expr_map_.count(new_params[i])) {
           BindAndEmit(adjoint_var, adjoint_expr_map_[new_params[i]]);
@@ -124,7 +124,8 @@ class GradientMutator : public ExprMutator {
     Type new_ret_type = VisitType(TupleType(ret_type));
     Expr final_body = builder_->Normalize(SeqExpr({builder_->EndBlock()}, Tuple(out_expr)));
 
-    return Function(new_params, final_body, new_ret_type, /*Tuple(out_shape)*/ RuntimeDepShape(), node->attrs);
+    return Function(new_params, final_body, new_ret_type, /*Tuple(out_shape)*/ RuntimeDepShape(),
+                    node->attrs);
   }
 
   void ReverseVisit(const VarBindingNode* binding) {
@@ -207,8 +208,7 @@ class GradientMutator : public ExprMutator {
         const Expr& updated = DoAdd(adjoint_expr_map_[v], increment);
         adjoint_expr_map_.Set(v, updated);
       }
-    }
-    else if (const auto* node = base.as<TupleNode>()) {
+    } else if (const auto* node = base.as<TupleNode>()) {
       if (const auto* node1 = increment.as<TupleNode>()) {
         for (size_t i = 0; i < node->fields.size(); ++i) {
           UpdateExprMap(node->fields[i], node1->fields[i]);
@@ -216,38 +216,34 @@ class GradientMutator : public ExprMutator {
       } else {
         LOG(FATAL) << "base and increment should be both tuple";
       }
-    }
-    else if (const auto* node = base.as<TupleGetItemNode>()) {
+    } else if (const auto* node = base.as<TupleGetItemNode>()) {
       ICHECK(node->tuple->IsInstance<VarNode>()) << "Tuple of TupleGetItem must be binded to a Var";
       ICHECK(!node->tuple->shape().as<TupleGetItemNode>()) << "Error: no nested TupleGetItem";
       ICHECK(node->tuple->shape().as<TupleNode>()) << "Type of tuple of TupleGetItem must be tuple";
 
       const Var& v = Downcast<Var>(node->tuple);
       if (adjoint_expr_map_.count(v) == 0) {
-        const Tuple& init = BuildEmptyNestedTupleExpr(
-          Downcast<Tuple>(node->tuple->shape()),
-          Downcast<TupleType>(node->tuple->checked_type())
-        );
+        const Tuple& init =
+            BuildEmptyNestedTupleExpr(Downcast<Tuple>(node->tuple->shape()),
+                                      Downcast<TupleType>(node->tuple->checked_type()));
         init->checked_type_ = v->checked_type();
         adjoint_expr_map_.Set(v, init);
       }
 
       ICHECK(adjoint_expr_map_[v].as<TupleNode>()) << "adjoint of var is not tuple";
-      adjoint_expr_map_.Set(v,
-        DoAddInTuple(Downcast<Tuple>(adjoint_expr_map_[v]), node->index, increment)
-      );
+      adjoint_expr_map_.Set(
+          v, DoAddInTuple(Downcast<Tuple>(adjoint_expr_map_[v]), node->index, increment));
     } else {
       LOG(FATAL) << "not a leaf node";
     }
   }
 
-  Tuple BuildEmptyNestedTupleExpr(const Tuple& shape, const TupleType &type) {
+  Tuple BuildEmptyNestedTupleExpr(const Tuple& shape, const TupleType& type) {
     Array<Expr> ret;
     for (size_t i = 0; i < shape->fields.size(); ++i) {
       if (const auto* node = shape->fields[i].as<TupleNode>()) {
-        ret.push_back(BuildEmptyNestedTupleExpr(
-          GetRef<Tuple>(node), Downcast<TupleType>(type->fields[i])
-        ));
+        ret.push_back(
+            BuildEmptyNestedTupleExpr(GetRef<Tuple>(node), Downcast<TupleType>(type->fields[i])));
       } else if (shape->fields[i].as<ShapeExprNode>()) {
         ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
         auto tensortype = Downcast<DynTensorType>(type->fields[i]);
@@ -266,8 +262,7 @@ class GradientMutator : public ExprMutator {
   Expr DoAdd(const Expr& src1, const Expr& src2) {
     if (zeros_tracker_.count(src1) != 0) {
       return ReplaceExprByVar(src2);
-    }
-    else if (zeros_tracker_.count(src2) != 0) {
+    } else if (zeros_tracker_.count(src2) != 0) {
       return ReplaceExprByVar(src1);
     }
 
@@ -363,14 +358,14 @@ class GradientMutator : public ExprMutator {
  * \param require_grad_names The relax variables which need adjoints. Must be inputs.
  * \return The module after AD.
  */
-IRModule Gradient(IRModule m, const GlobalVar &var, const Array<Var> &require_grads) {
+IRModule Gradient(IRModule m, const GlobalVar& var, const Array<Var>& require_grads) {
   BaseFunc base_func = m->Lookup(var);
   if (auto* n = base_func.as<FunctionNode>()) {
     auto f_before = GetRef<Function>(n);
     Array<Var> require_grads_var;
-    for (auto input: require_grads) {
+    for (auto input : require_grads) {
       ICHECK(std::find(n->params.begin(), n->params.end(), input) != n->params.end())
-      << "function " << var->name_hint << " has no var named " << input->name_hint();
+          << "function " << var->name_hint << " has no var named " << input->name_hint();
       require_grads_var.push_back(input);
     }
 
@@ -394,9 +389,7 @@ namespace transform {
 
 Pass Gradient(GlobalVar func, Array<Var> require_grads) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
-      [=](IRModule mod, PassContext pc) {
-        return relax::Gradient(mod, func, require_grads);
-      };
+      [=](IRModule mod, PassContext pc) { return relax::Gradient(mod, func, require_grads); };
   return CreateModulePass(/*pass_function=*/pass_func,
                           /*opt_level=*/0,
                           /*pass_name=*/"Gradient",
