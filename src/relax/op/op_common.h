@@ -37,6 +37,8 @@ bool EqualConstInt(const PrimExpr& lhs, int64_t value);
 
 bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
 
+#define RELAX_REGISTER_OP RELAY_REGISTER_OP
+
 /*! Quick helper macro
  * - Expose a positional make function to construct the node.
  * - Register op to the registry.
@@ -52,7 +54,7 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
     static const Op& op = Op::Get("relax." OpName);                               \
     return Call(op, {lhs, rhs}, Attrs(), {});                                     \
   });                                                                             \
-  RELAY_REGISTER_OP("relax." OpName)                                              \
+  RELAX_REGISTER_OP("relax." OpName)                                              \
       .set_num_inputs(2)                                                          \
       .add_argument("lhs", "Tensor", "The left hand side tensor.")                \
       .add_argument("rhs", "Tensor", "The right hand side tensor.")               \
