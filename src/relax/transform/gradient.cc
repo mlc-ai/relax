@@ -98,6 +98,7 @@ class GradientMutator : public ExprMutator {
     ret_type.push_back(node->ret_type);
 
     // emit the input adjoints
+    static const Op& default_op = Op::Get("relax.zeros");
     for (size_t i = 0; i < new_params.size(); ++i) {
       if (require_grads_.empty() || std::find(require_grads_.begin(), require_grads_.end(),
                                               node->params[i]) != require_grads_.end()) {
@@ -109,7 +110,7 @@ class GradientMutator : public ExprMutator {
           auto type = Downcast<DynTensorType>(new_params[i]->checked_type());
           attrs->dtype = type->dtype;
 
-          const Expr& default_adjoint = Call(zeros_op_, {new_params[i]->shape()}, Attrs(attrs));
+          const Expr& default_adjoint = Call(default_op, {new_params[i]->shape()}, Attrs(attrs));
           BindAndEmit(adjoint_var, default_adjoint);
         }
         out_adjoints.push_back(adjoint_var);
@@ -240,6 +241,8 @@ class GradientMutator : public ExprMutator {
   }
 
   Tuple BuildEmptyNestedTupleExpr(const Tuple& shape, const TupleType& type) {
+    static const Op& zeros_op = Op::Get("relax.zeros");
+
     Array<Expr> ret;
     for (size_t i = 0; i < shape->fields.size(); ++i) {
       if (const auto* node = shape->fields[i].as<TupleNode>()) {
@@ -250,7 +253,7 @@ class GradientMutator : public ExprMutator {
         auto tensortype = Downcast<DynTensorType>(type->fields[i]);
         attrs->dtype = tensortype->dtype;
 
-        const Expr& init = Call(zeros_op_, {shape->fields[i]}, Attrs(attrs));
+        const Expr& init = Call(zeros_op, {shape->fields[i]}, Attrs(attrs));
         zeros_tracker_.emplace(init);
         ret.push_back(init);
       } else {
@@ -261,6 +264,8 @@ class GradientMutator : public ExprMutator {
   }
 
   Expr DoAdd(const Expr& src1, const Expr& src2) {
+    static const Op& add_op = Op::Get("relax.add");
+
     if (zeros_tracker_.count(src1) != 0) {
       return ReplaceExprByVar(src2);
     } else if (zeros_tracker_.count(src2) != 0) {
@@ -280,7 +285,7 @@ class GradientMutator : public ExprMutator {
         return Expr();
       }
     } else {
-      return Call(add_op_, {src1, ReplaceExprByVar(src2)});
+      return Call(add_op, {src1, ReplaceExprByVar(src2)});
     }
   }
 
@@ -320,11 +325,13 @@ class GradientMutator : public ExprMutator {
   }
 
   void InitGrad(const Var& adjoint_var, const Var& var) {
+    static const Op& ones_op = Op::Get("relax.ones");
+
     ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
     auto type = Downcast<DynTensorType>(var->checked_type());
     attrs->dtype = type->dtype;
 
-    const Expr& init = Call(ones_op_, {var->shape()}, Attrs(attrs));
+    const Expr& init = Call(ones_op, {var->shape()}, Attrs(attrs));
     adjoint_expr_map_.Set(var, init);
   }
 
@@ -345,11 +352,6 @@ class GradientMutator : public ExprMutator {
   // gop map
   const OpAttrMap<FPrimalGradient> gradient_op_map_ =
       Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
-
-  // constant
-  const Op& ones_op_ = Op::Get("relax.ones");
-  const Op& add_op_ = Op::Get("relax.add");
-  const Op& zeros_op_ = Op::Get("relax.zeros");
 };
 
 /*!
