@@ -383,16 +383,13 @@ def Gradient(
         The relax variables which need adjoints. Must be arguments of func.
         If the elements in require_grads are integers, integer i represent the i-th variable in the
         parameter list of func. The index is 0-based.
-        If the list is empty, it will emit an adjoint for each input.
+        If it is set to None, the pass will emit an adjoint for each input.
 
     Returns.
     -------
     ret: tvm.ir.transform.Pass
     """
-    if require_grads is None:
-        require_grads = []
-
-    if not isinstance(require_grads, list):
+    if require_grads is not None and not isinstance(require_grads, list):
         require_grads = [require_grads]
 
     return _ffi_api.Gradient(global_var, require_grads)
