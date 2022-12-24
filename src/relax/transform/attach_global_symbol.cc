@@ -39,6 +39,8 @@ class GlobalSymbolAttacher {
         func = WithAttr(GetRef<tir::PrimFunc>(prim_func), "global_symbol", p.first->name_hint);
       } else if (auto* relax_func = func.as<FunctionNode>()) {
         func = WithAttr(GetRef<Function>(relax_func), "global_symbol", p.first->name_hint);
+      } else if (auto* extern_func = func.as<ExternFuncNode>()) {
+        func = WithAttr(GetRef<ExternFunc>(extern_func), "global_symbol", p.first->name_hint);
       } else {
         LOG(FATAL) << "Unsupported function type: " << func->GetTypeKey();
         throw;
