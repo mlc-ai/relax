@@ -49,7 +49,6 @@ def test_simple():
             R.Tensor(None, dtype="float32", ndim=0),
             R.Tuple(R.Tensor(None, dtype="float32", ndim=2)),
         ):
-            R.func_attr({"global_symbol": "main_adjoint"})
             with R.dataflow():
                 gv: R.Tensor((), dtype="float32") = R.sum(x, axis=None, keepdims=False)
                 gv_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
@@ -92,8 +91,6 @@ def test_assign_binding():
             R.Tensor(None, dtype="float32", ndim=0),
             R.Tuple(R.Tensor(None, dtype="float32", ndim=2)),
         ):
-            # function attr dict
-            R.func_attr({"global_symbol": "main_adjoint"})
             # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = x
@@ -140,7 +137,6 @@ def test_multiple_uses():
             R.Tensor(None, dtype="float32", ndim=0),
             R.Tuple(R.Tensor(None, dtype="float32", ndim=2)),
         ):
-            R.func_attr({"global_symbol": "main_adjoint"})
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, x)
                 lv2: R.Tensor((3, 3), dtype="float32") = R.add(lv1, x)
@@ -193,8 +189,6 @@ def test_unused():
             R.Tensor(None, dtype="float32", ndim=0),
             R.Tuple(R.Tensor(None, dtype="float32", ndim=2)),
         ):
-            # function attr dict
-            R.func_attr({"global_symbol": "main_adjoint"})
             # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, x)
@@ -254,8 +248,6 @@ def test_default_require_grads():
                 R.Tensor(None, dtype="float32", ndim=2),
             ),
         ):
-            # function attr dict
-            R.func_attr({"global_symbol": "main_adjoint"})
             # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, y)
@@ -306,8 +298,6 @@ def test_default_require_grads():
             R.Tensor(None, dtype="float32", ndim=0),
             R.Tuple(R.Tensor(None, dtype="float32", ndim=2)),
         ):
-            # function attr dict
-            R.func_attr({"global_symbol": "main_adjoint"})
             # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, y)
@@ -382,7 +372,6 @@ def test_tuple():
                 R.Tensor(None, dtype="float32", ndim=2),
             ),
         ):
-            R.func_attr({"global_symbol": "main_adjoint"})
             with R.dataflow():
                 lv1: R.Tuple(
                     R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")
@@ -499,8 +488,6 @@ def test_tuple_nested():
                 R.Tensor(None, dtype="float32", ndim=2),
             ),
         ):
-            # function attr dict
-            R.func_attr({"global_symbol": "main_adjoint"})
             # block 0
             with R.dataflow():
                 lv1: R.Tuple(
@@ -617,8 +604,6 @@ def test_tuple_update():
                 R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=2)
             ),
         ):
-            # function attr dict
-            R.func_attr({"global_symbol": "main_adjoint"})
             # block 0
             with R.dataflow():
                 lv0: R.Tuple(
@@ -847,8 +832,6 @@ def test_mlp_script():
                 R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=1)
             ),
         ):
-            # function attr dict
-            R.func_attr({"global_symbol": "main_adjoint"})
             # block 0
             with R.dataflow():
                 lv0: R.Tensor((3, 5), dtype="float32") = R.nn.matmul(x, w0, out_dtype="")

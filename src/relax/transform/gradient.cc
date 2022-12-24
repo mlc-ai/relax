@@ -19,7 +19,10 @@
 
 /*!
  * \file src/relax/transform/gradient.cc
- * \brief A reverse-mode automatic differentiation.
+ * \brief A reverse-mode automatic differentiation. For a given function specified by the input
+ * global var, it generates a new function which computes the adjoints of the given function's
+ * inputs in respect of the function's output. Use require_grads to specify inputs which need to be
+ * differentiated instead of returning adjoints of all inputs.
  *
  * Now only supports differentiating a function in the IRModule with one dataflow block
  * with respect to the only return value of the function. It needs to be scalar.
@@ -40,18 +43,18 @@ namespace relax {
 class GradientMutator : public ExprMutator {
  public:
   explicit GradientMutator(IRModule mod, const Array<Var>& require_grads)
-      : ExprMutator(mod), require_grads_(require_grads) {}
+      : ExprMutator(std::move(mod)), require_grads_(std::move(require_grads)) {}
 
-  Function FuncTransform(const FunctionNode* node) {
-    ICHECK(node->body->IsInstance<SeqExprNode>());
+  Function FuncTransform(Function func) {
+    ICHECK(func->body->IsInstance<SeqExprNode>());
 
     Array<Var> new_params;
-    for (Var param : node->params) {
+    for (Var param : func->params) {
       Var new_param = Var(param->vid, param->shape(), param->checked_type(), param->span);
       this->var_remap_[param->vid] = new_param;
       new_params.push_back(new_param);
     }
-    Expr new_body = VisitWithNewScope(node->body);
+    Expr new_body = VisitWithNewScope(func->body);
 
     const SeqExprNode* seq_expr = new_body.as<SeqExprNode>();
     // only support a single dataflow block
@@ -67,7 +70,7 @@ class GradientMutator : public ExprMutator {
     // create adjoint var for inputs
     for (size_t i = 0; i < new_params.size(); ++i) {
       if (require_grads_.empty() || std::find(require_grads_.begin(), require_grads_.end(),
-                                              node->params[i]) != require_grads_.end()) {
+                                              func->params[i]) != require_grads_.end()) {
         CreateAdjointVar(new_params[i], false);
       } else {
         CreateAdjointVar(new_params[i], true);
@@ -95,13 +98,13 @@ class GradientMutator : public ExprMutator {
     Array<Type> ret_type, out_adjoints_type;
     out_expr.push_back(seq_expr->body);
     out_shape.push_back(seq_expr->body->shape());
-    ret_type.push_back(node->ret_type);
+    ret_type.push_back(func->ret_type);
 
     // emit the input adjoints
     static const Op& default_op = Op::Get("relax.zeros");
     for (size_t i = 0; i < new_params.size(); ++i) {
       if (require_grads_.empty() || std::find(require_grads_.begin(), require_grads_.end(),
-                                              node->params[i]) != require_grads_.end()) {
+                                              func->params[i]) != require_grads_.end()) {
         const Var& adjoint_var = adjoint_var_map_[new_params[i]];
         if (adjoint_expr_map_.count(new_params[i])) {
           BindAndEmit(adjoint_var, adjoint_expr_map_[new_params[i]]);
@@ -127,10 +130,13 @@ class GradientMutator : public ExprMutator {
     Expr final_body = builder_->Normalize(SeqExpr({builder_->EndBlock()}, Tuple(out_expr)));
 
     return Function(new_params, final_body, new_ret_type, /*Tuple(out_shape)*/ RuntimeDepShape(),
-                    node->attrs);
+                    func->attrs);
   }
 
   void ReverseVisit(const VarBindingNode* binding) {
+    static const OpAttrMap<FPrimalGradient> gradient_op_map =
+        Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
+
     CreateAdjointVar(binding->var, true);
     const Var& adjoint_var = adjoint_var_map_[binding->var];
 
@@ -167,7 +173,7 @@ class GradientMutator : public ExprMutator {
     } else if (const auto* node = binding->value.as<CallNode>()) {
       // case 4: call
       const Op& call_op = GetRef<Op>(node->op.as<OpNode>());
-      const Array<Expr>& partials = gradient_op_map_[call_op](GetRef<Call>(node), adjoint_var);
+      const Array<Expr>& partials = gradient_op_map[call_op](GetRef<Call>(node), adjoint_var);
       ICHECK(partials.size() == node->args.size()) << "partials number != inputs number";
       for (size_t i = 0; i < partials.size(); ++i) {
         const VarNode* arg = node->args[i].as<VarNode>();
@@ -348,10 +354,6 @@ class GradientMutator : public ExprMutator {
   Map<Expr, Var> adjoint_expr_to_var_;
   // track zeros introduced
   std::unordered_set<Expr, ObjectPtrHash, ObjectPtrEqual> zeros_tracker_;
-
-  // gop map
-  const OpAttrMap<FPrimalGradient> gradient_op_map_ =
-      Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
 };
 
 /*!
@@ -361,31 +363,29 @@ class GradientMutator : public ExprMutator {
  * \param require_grad_names The relax variables which need adjoints. Must be inputs.
  * \return The module after AD.
  */
-IRModule Gradient(IRModule m, const GlobalVar& var, const Array<Var>& require_grads) {
-  BaseFunc base_func = m->Lookup(var);
-  if (auto* n = base_func.as<FunctionNode>()) {
-    auto f_before = GetRef<Function>(n);
-    Array<Var> require_grads_var;
-    for (auto input : require_grads) {
-      ICHECK(std::find(n->params.begin(), n->params.end(), input) != n->params.end())
-          << "function " << var->name_hint << " has no var named " << input->name_hint();
-      require_grads_var.push_back(input);
-    }
+IRModule Gradient(IRModule m, const GlobalVar& gvar, Array<Var> require_grads) {
+  auto* func = m->Lookup(gvar).as<FunctionNode>();
 
-    IRModuleNode* new_module_node = m.CopyOnWrite();
-    auto new_module = GetRef<IRModule>(new_module_node);
-    auto mutator = GradientMutator(new_module, require_grads_var);
-
-    auto adjoint_var = GlobalVar(var->name_hint + "_adjoint");
-    Function f_after = mutator.FuncTransform(f_before.as<FunctionNode>());
-    f_after = WithAttr(f_after, tvm::attr::kGlobalSymbol, adjoint_var->name_hint);
-    new_module->Add(adjoint_var, f_after);
-
-    return new_module;
-  } else {
-    LOG(FATAL) << "relax function " << var->name_hint << " not found";
+  if (func == nullptr) {
+    LOG(FATAL) << "relax function " << gvar->name_hint << " not found";
     return m;
   }
+
+  auto f_before = GetRef<Function>(func);
+  for (auto input : require_grads) {
+    ICHECK(std::find(func->params.begin(), func->params.end(), input) != func->params.end())
+        << "function " << gvar->name_hint << " has no var named " << input->name_hint();
+  }
+
+  IRModuleNode* new_module_node = m.CopyOnWrite();
+  auto new_module = GetRef<IRModule>(new_module_node);
+  auto mutator = GradientMutator(new_module, require_grads);
+
+  auto adjoint_var = GlobalVar(gvar->name_hint + "_adjoint");
+  Function f_after = mutator.FuncTransform(GetRef<Function>(func));
+  new_module->Add(adjoint_var, f_after);
+
+  return new_module;
 }
 
 namespace transform {
