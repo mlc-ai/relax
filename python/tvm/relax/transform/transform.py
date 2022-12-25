@@ -373,11 +373,11 @@ def Gradient(
 ) -> tvm.ir.transform.Pass:
     """Reverse-mode automatic differentiation.
 
-    Now only supports differentiating a function in the IRModule with one dataflow block
+    Now only supports differentiating one function in the IRModule with one dataflow block
     with respect to the only return value of the function, which needs to be scalar.
 
     For a given function specified by the input global var, it generates a new function with the
-    name [name of original function] + "_adjoint". The new function computes the adjoints of the
+    name `[name of original function] + "_adjoint"`. The new function computes the adjoints of the
     specified arguments of the original function with respect to the only one return value of the
     original function.
 
