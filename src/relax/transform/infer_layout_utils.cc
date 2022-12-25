@@ -118,7 +118,6 @@ InferLayoutOutput InferLayoutBinaryEwise(const Call& call,
   const auto& it = desired_layouts.find(op_node->name);
   ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
   ICHECK_EQ(call->args.size(), 2) << "Invalid Call";
-  
   Map<String, Var> lhs_layout_map, rhs_layout_map;
   const auto* lhs = call->args[0].as<VarNode>();
   const auto* rhs = call->args[1].as<VarNode>();
@@ -149,6 +148,43 @@ InferLayoutOutput InferLayoutBinaryEwise(const Call& call,
   // No common layout found.
   Layout layout = GetOneValidLayout(var_layout_map, call->args[0]);
   return InferLayoutOutput({layout, layout}, {layout}, Attrs(call->attrs));
+}
+
+InferLayoutOutput InferLayoutTernaryEwise(const Call& call,
+                                          const Map<String, Array<String>>& desired_layouts,
+                                          VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr) << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 3) << "Invalid Call";
+
+  Map<String, Var> layout_map[3];
+  for (size_t i = 0; i < 3; ++i) {
+    const auto* var = call->args[i].as<VarNode>();
+    const auto* type = call->args[i]->checked_type().as<DynTensorTypeNode>();
+    ICHECK(type != nullptr) << "Invalid Call";
+    if (var != nullptr) {
+      layout_map[i] = var_layout_map.at(GetRef<Var>(var));
+    } else {
+      layout_map[i].Set(InitialLayout(type->ndim), Var());
+    }
+  }
+
+  // Find a common layout.
+  for (const auto& iter0 : layout_map[0]) {
+    for (const auto& iter1 : layout_map[1]) {
+      for (const auto& iter2 : layout_map[2]) {
+        if (iter0.first == iter1.first && iter1.first == iter2.first) {
+          Layout layout = Layout(std::string(iter0.first));
+          return InferLayoutOutput({layout, layout, layout}, {layout}, Attrs(call->attrs));
+        }
+      }
+    }
+  }
+  // No common layout found.
+  Layout layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  return InferLayoutOutput({layout, layout, layout}, {layout}, Attrs(call->attrs));
 }
 
 }  // namespace relax
