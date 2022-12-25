@@ -210,10 +210,12 @@ TVM_DLL Pass ToMixedPrecision(const DataType& out_dtype);
  * tests/python/relax/test_transform_gradient_numeric.py.
  *
  * \param var The GlobalVar of the specific function.
- * \param require_grads The relax variables whose adjoints is needed. Must be parameters of the given function. If it is not specified, adjoints of all arguments would be computed.
+ * \param require_grads The relax variables whose adjoints is needed. Must be parameters of the
+ * given function. If it is not specified, adjoints of all arguments would be computed.
  * \return The Pass.
  */
-TVM_DLL Pass Gradient(GlobalVar global_var, Optional<Array<Var>> require_grads = runtime::NullOptType());
+TVM_DLL Pass Gradient(GlobalVar global_var,
+                      Optional<Array<Var>> require_grads = runtime::NullOptType());
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm

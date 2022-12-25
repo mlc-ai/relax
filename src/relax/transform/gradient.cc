@@ -352,7 +352,8 @@ class GradientMutator : public ExprMutator {
 };
 
 /* This is the internal function of tvm::relax::transform::Gradient. */
-IRModule Gradient(IRModule m, const GlobalVar& gvar, Optional<Array<Var>> require_grads = runtime::NullOptType()) {
+IRModule Gradient(IRModule m, const GlobalVar& gvar,
+                  Optional<Array<Var>> require_grads = runtime::NullOptType()) {
   auto* func = m->Lookup(gvar).as<FunctionNode>();
 
   if (func == nullptr) {
