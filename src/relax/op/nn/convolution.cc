@@ -60,7 +60,7 @@ with the layer input to produce a tensor of outputs.
     .set_attrs_type<Conv2DAttrs>()
     .set_attr<FInferShape>("FInferShape", InferShapeConv2D)
     .set_attr<FInferType>("FInferType", InferTypeConv2D)
-    .set_attr<FTVMRelaxInferLayoutType>("FTVMRelaxInferLayoutType", InferLayoutConv2d);
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutConv2d);
 
 Expr InferShapeConv2D(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {

@@ -30,6 +30,8 @@
 #include <tvm/relay/expr.h>
 #include <tvm/relay/op.h>
 
+#include "../transform/infer_layout_utils.h"
+
 namespace tvm {
 namespace relax {
 
@@ -70,7 +72,8 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
       .set_num_inputs(1)                                              \
       .add_argument("e", "Tensor", "The input tensor.")               \
       .set_attr<FInferShape>("FInferShape", InferShapeUnaryBroadcast) \
-      .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast)
+      .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast)    \
+      .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutUnaryEwise)
 
 #define RELAX_REGISTER_REDUCTION_OP(OpName)                                         \
   TVM_REGISTER_GLOBAL("relax.op." OpName)                                           \

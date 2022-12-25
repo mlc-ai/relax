@@ -158,11 +158,10 @@ class LayoutConvertMutator : public ExprMutator {
       const OpNode* op_node = call_node->op.as<OpNode>();
       if (op_node != nullptr) {
         Op op = Downcast<Op>(GetRef<Op>(op_node));
-        const auto infer_layout_map =
-            Op::GetAttrMap<FTVMRelaxInferLayoutType>("FTVMRelaxInferLayoutType");
+        const auto infer_layout_map = Op::GetAttrMap<FRelaxInferLayout>("FRelaxInferLayout");
         if (infer_layout_map.count(op)) {
           // Infer the layout convertion from the input layouts and the desired layouts.
-          FTVMRelaxInferLayoutType f = infer_layout_map[op];
+          FRelaxInferLayout f = infer_layout_map[op];
           InferLayoutOutput layouts = f(GetRef<Call>(call_node), desired_layouts_, var_layout_map_);
           ICHECK_EQ(layouts->output_layouts.size(), 1) << "Only support single output op for now";
           // Convert the layout of inputs

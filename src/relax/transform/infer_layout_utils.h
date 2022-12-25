@@ -79,7 +79,7 @@ using VarLayoutMap = Map<relax::Var, Map<String, relax::Var>>;
  * \param desired_layouts The desired layouts of the operator.
  * \param var_layout_map The layout of the variables.
  */
-using FTVMRelaxInferLayoutType = runtime::TypedPackedFunc<InferLayoutOutput(
+using FRelaxInferLayout = runtime::TypedPackedFunc<InferLayoutOutput(
     const Call& call, const Map<String, Array<String>>& desired_layouts,
     VarLayoutMap var_layout_map)>;
 
@@ -110,6 +110,10 @@ Layout GetOneValidLayout(VarLayoutMap var_layout_map, const Expr& arg);
 InferLayoutOutput InferLayoutConv2d(const Call& call,
                                     const Map<String, Array<String>>& desired_layouts,
                                     VarLayoutMap var_layout_map);
+
+InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
+                                        const Map<String, Array<String>>& desired_layouts,
+                                        VarLayoutMap var_layout_map);
 
 }  // namespace relax
 }  // namespace tvm

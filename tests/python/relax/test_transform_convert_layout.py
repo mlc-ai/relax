@@ -87,8 +87,8 @@ class conv2d_relu:
             out_layout="NHWC",
             out_dtype="float32",
         )
-        gv3: R.Tensor((2, 4, 26, 26), dtype="float32") = R.transpose(gv2, axes=[0, 3, 1, 2])
-        gv4: R.Tensor((2, 4, 26, 26), dtype="float32") = R.nn.relu(gv3)
+        gv3: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.relu(gv2)
+        gv4: R.Tensor((2, 4, 26, 26), dtype="float32") = R.transpose(gv3, axes=[0, 3, 1, 2])
         return gv4
 
 
@@ -133,8 +133,8 @@ class relu_conv2d_relu:
             out_layout="NHWC",
             out_dtype="float32",
         )
-        gv4: R.Tensor((2, 4, 26, 26), dtype="float32") = R.transpose(gv3, axes=[0, 3, 1, 2])
-        gv5: R.Tensor((2, 4, 26, 26), dtype="float32") = R.nn.relu(gv4)
+        gv4: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.relu(gv3)
+        gv5: R.Tensor((2, 4, 26, 26), dtype="float32") = R.transpose(gv4, axes=[0, 3, 1, 2])
         return gv5
 
 
@@ -156,7 +156,56 @@ def test_relu_conv2d_relu():
     tvm.ir.assert_structural_equal(mod, relu_conv2d_relu)
 
 
+@I.ir_module
+class conv2d_relu_tanh:
+    @R.function
+    def main(
+        x: R.Tensor((2, 3, 28, 28), dtype="float32"), w: R.Tensor((4, 3, 3, 3), dtype="float32")
+    ) -> R.Tensor(None, dtype="float32", ndim=4):
+        # block 0
+        gv: R.Tensor((2, 28, 28, 3), dtype="float32") = R.transpose(x, axes=[0, 2, 3, 1])
+        gv1: R.Tensor((4, 3, 3, 3), dtype="float32") = R.transpose(w, axes=[0, 2, 3, 1])
+        gv2: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.conv2d(
+            gv,
+            gv1,
+            strides=[1, 1],
+            padding=[0, 0, 0, 0],
+            dilation=[1, 1],
+            groups=1,
+            channels=None,
+            kernel_size=[3, 3],
+            data_layout="NHWC",
+            kernel_layout="OHWI",
+            out_layout="NHWC",
+            out_dtype="float32",
+        )
+        gv3: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.relu(gv2)
+        gv4: R.Tensor((2, 26, 26, 4), dtype="float32") = R.tanh(gv3)
+        gv5: R.Tensor((2, 4, 26, 26), dtype="float32") = R.transpose(gv4, axes=[0, 3, 1, 2])
+        return gv5
+
+
+def test_conv2d_relu_tanh():
+    @I.ir_module
+    class Conv2dReLUTanh:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
+                x, w, kernel_size=[3, 3], out_dtype="float32"
+            )
+            gv2: R.Tensor((2, 4, 26, 26), "float32") = R.nn.relu(gv)
+            gv3: R.Tensor((2, 4, 26, 26), "float32") = R.tanh(gv2)
+            return gv3
+
+    mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dReLUTanh)
+    print(mod.script())
+    tvm.ir.assert_structural_equal(mod, conv2d_relu_tanh)
+
+
 if __name__ == "__main__":
     test_conv2d()
     test_conv2d_relu()
     test_relu_conv2d_relu()
+    test_conv2d_relu_tanh()
