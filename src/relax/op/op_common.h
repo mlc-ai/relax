@@ -33,11 +33,8 @@
 namespace tvm {
 namespace relax {
 
-bool EqualConstInt(const PrimExpr& lhs, int64_t value);
-
-bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
-
-#define RELAX_REGISTER_OP RELAY_REGISTER_OP
+// Todo(ruihang): leave this file as empty here at this moment is good.
+// Will bring more contents in followup PRs.
 
 }  // namespace relax
 }  // namespace tvm

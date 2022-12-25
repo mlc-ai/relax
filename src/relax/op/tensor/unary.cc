@@ -27,12 +27,20 @@
 namespace tvm {
 namespace relax {
 
+/*!
+ * \brief Quick helper macro
+ * - Expose a make function to construct the node.
+ * - Register op to the registry.
+ * \param OpName The name of operator to register. The name passed in will
+ *  1. be prepended with a prefix "relax.op." as the FFI key string for the make function,
+ *  2. be prepended with a prefix "relax." as the key string in the operator registry.
+ */
 #define RELAX_REGISTER_UNARY_OP(OpName)                               \
   TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr e) { \
     static const Op& op = Op::Get("relax." OpName);                   \
     return Call(op, {e}, Attrs(), {});                                \
   });                                                                 \
-  RELAX_REGISTER_OP("relax." OpName)                                  \
+  TVM_REGISTER_OP("relax." OpName)                                    \
       .set_num_inputs(1)                                              \
       .add_argument("e", "Tensor", "The input tensor.")               \
       .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary)
@@ -102,7 +110,7 @@ StructInfo InferStructInfoUnique(const Call& call, const BlockBuilder& ctx) {
   return TensorStructInfo(input_sinfo->dtype, /*ndim=*/1);
 }
 
-RELAX_REGISTER_OP("relax.unique")
+TVM_REGISTER_OP("relax.unique")
     .describe(
         "This operation returns the unique elements and the new index of each item in a given "
         "tensor.")

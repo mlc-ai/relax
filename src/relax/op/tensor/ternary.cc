@@ -40,6 +40,27 @@ StructInfo InferStructInfoEwiseFMA(const Call& call, const BlockBuilder& ctx) {
     ctx->ReportFatal(Diagnostic::Error(call) << "EwiseFMA expects three tensor inputs");
   }
 
+  int ndim = kUnknownNDim;
+  if (!t0->IsUnknownNdim()) {
+    ndim = t0->ndim;
+  }
+  if (!t1->IsUnknownNdim()) {
+    if (ndim == kUnknownNDim) {
+      ndim = t1->ndim;
+    } else if (t1->ndim != ndim) {
+      ctx->ReportFatal(Diagnostic::Error(call)
+                       << "The 3 arguments of EwiseFMA must have the same number of dimensions");
+    }
+  }
+  if (!t2->IsUnknownNdim()) {
+    if (ndim == kUnknownNDim) {
+      ndim = t2->ndim;
+    } else if (t2->ndim != ndim) {
+      ctx->ReportFatal(Diagnostic::Error(call)
+                       << "The 3 arguments of EwiseFMA must have the same number of dimensions");
+    }
+  }
+
   DataType output_dtype;
   if (t0->IsUnknownDtype() || t1->IsUnknownDtype() || t2->IsUnknownDtype()) {
     output_dtype = DataType::Void();
@@ -54,20 +75,14 @@ StructInfo InferStructInfoEwiseFMA(const Call& call, const BlockBuilder& ctx) {
   auto* s0 = t0->shape.as<ShapeExprNode>();
   auto* s1 = t1->shape.as<ShapeExprNode>();
   auto* s2 = t2->shape.as<ShapeExprNode>();
+  arith::Analyzer* analyzer = ctx->GetAnalyzer();
   if (s0 && s1 && s2) {
     Array<PrimExpr> output_shape;
-    size_t ndim0 = s0->values.size();
-    size_t ndim1 = s1->values.size();
-    size_t ndim2 = s2->values.size();
-    if (ndim0 != ndim1 || ndim1 != ndim2) {
-      ctx->ReportFatal(Diagnostic::Error(call)
-                       << "The 3 arguments of EwiseFMA must have the same number of dimensions");
-    }
-    for (size_t i = 0; i < ndim0; ++i) {
+    for (int i = 0; i < ndim; ++i) {
       PrimExpr dim0 = s0->values[i];
       PrimExpr dim1 = s1->values[i];
       PrimExpr dim2 = s2->values[i];
-      if (EqualCheck(dim0, dim1) && EqualCheck(dim1, dim2)) {
+      if (analyzer->CanProveEqual(dim0, dim1) && analyzer->CanProveEqual(dim1, dim2)) {
         output_shape.push_back(dim0);
       } else {
         ctx->ReportFatal(Diagnostic::Error(call)
@@ -77,16 +92,10 @@ StructInfo InferStructInfoEwiseFMA(const Call& call, const BlockBuilder& ctx) {
     return TensorStructInfo(ShapeExpr(output_shape), output_dtype);
   }
 
-  int output_ndim;
-  if (t0->IsUnknownNdim() || t1->IsUnknownNdim() || t2->IsUnknownNdim()) {
-    output_ndim = kUnknownNDim;
-  } else {
-    output_ndim = t0->ndim;
-  }
-  return TensorStructInfo(output_dtype, output_ndim);
+  return TensorStructInfo(output_dtype, ndim);
 }
 
-RELAX_REGISTER_OP("relax.ewise_fma")
+TVM_REGISTER_OP("relax.ewise_fma")
     .set_num_inputs(3)
     .add_argument("e0", "Tensor", "The left hand operand of the multiplication")
     .add_argument("e1", "Tensor", "The right hand operand of the multiplication")

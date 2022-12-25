@@ -31,29 +31,37 @@
 namespace tvm {
 namespace relax {
 
+/*!
+ * \brief Quick helper macro
+ * - Expose a make function to construct the node.
+ * - Register op to the registry.
+ * \param OpName The name of operator to register. The name passed in will
+ *  1. be prepended with a prefix "relax.op." as the FFI key string for the make function,
+ *  2. be prepended with a prefix "relax." as the key string in the operator registry.
+ */
 #define RELAX_REGISTER_BINARY_OP(OpName)                                          \
   TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr lhs, Expr rhs) { \
     static const Op& op = Op::Get("relax." OpName);                               \
     return Call(op, {lhs, rhs}, Attrs(), {});                                     \
   });                                                                             \
-  RELAX_REGISTER_OP("relax." OpName)                                              \
+  TVM_REGISTER_OP("relax." OpName)                                                \
       .set_num_inputs(2)                                                          \
       .add_argument("lhs", "Tensor", "The left hand side tensor.")                \
       .add_argument("rhs", "Tensor", "The right hand side tensor.")
 
 #define RELAX_REGISTER_BINARY_BROADCAST_OP(OpName)                                \
   RELAX_REGISTER_BINARY_OP(OpName).set_attr<FInferStructInfo>("FInferStructInfo", \
-                                                              InferStructInfoBroadcast)
+                                                              InferStructInfoBroadcastArith)
 
 #define RELAX_REGISTER_CMP_OP(OpName)                                             \
   RELAX_REGISTER_BINARY_OP(OpName).set_attr<FInferStructInfo>("FInferStructInfo", \
-                                                              InferStructInfoCMP)
+                                                              InferStructInfoBroadcastCMP)
 
 using FComputeOutDtype = std::function<DataType(
     const Call&, const BlockBuilder&, const TensorStructInfoNode*, const TensorStructInfoNode*)>;
 
-StructInfo InferStructInfoBinary(const Call& call, const BlockBuilder& ctx,
-                                 FComputeOutDtype f_compute_out_dtype) {
+StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx,
+                                    FComputeOutDtype f_compute_out_dtype) {
   if (call->args.size() != 2) {
     ctx->ReportFatal(Diagnostic::Error(call) << "Binary op should have 2 arguments");
   }
@@ -79,6 +87,7 @@ StructInfo InferStructInfoBinary(const Call& call, const BlockBuilder& ctx,
 
   auto* lhs_shape = lhs_sinfo->shape.as<ShapeExprNode>();
   auto* rhs_shape = rhs_sinfo->shape.as<ShapeExprNode>();
+  arith::Analyzer* analyzer = ctx->GetAnalyzer();
   // Shapes and ndims
   if (lhs_shape && rhs_shape) {
     // If all inputs have shapes, directly infer shapes
@@ -92,12 +101,19 @@ StructInfo InferStructInfoBinary(const Call& call, const BlockBuilder& ctx,
     for (; i <= std::min(lhs_ndim, rhs_ndim); ++i) {
       const PrimExpr& dim0 = lhs_shape->values[lhs_ndim - i];
       const PrimExpr& dim1 = rhs_shape->values[rhs_ndim - i];
-      if (EqualConstInt(dim0, 1)) {
+      const auto* int_dim0 = dim0.as<IntImmNode>();
+      const auto* int_dim1 = dim1.as<IntImmNode>();
+      if (int_dim0 != nullptr && int_dim0->value == 1) {
         output_shape.push_back(dim1);
-      } else if (EqualConstInt(dim1, 1)) {
+      } else if (int_dim1 != nullptr && int_dim1->value == 1) {
         output_shape.push_back(dim0);
-      } else if (EqualCheck(dim0, dim1)) {
+      } else if (analyzer->CanProveEqual(dim0, dim1)) {
         output_shape.push_back(dim0);
+      } else if (int_dim0 && int_dim1 && int_dim0->value != int_dim1->value) {
+        ctx->ReportFatal(Diagnostic::Error(call)
+                         << "The lhs shape at dim " << lhs_ndim - i << " is " << dim0
+                         << " and the rhs shape at dim " << rhs_ndim - i << " is " << dim1
+                         << ", which are not broadcastable.");
       } else {
         // Use simple fallback when shape mismatch.
         return TensorStructInfo(output_dtype, /*ndim=*/output_ndim);
@@ -114,7 +130,7 @@ StructInfo InferStructInfoBinary(const Call& call, const BlockBuilder& ctx,
   }
 }
 
-StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx) {
+StructInfo InferStructInfoBroadcastArith(const Call& call, const BlockBuilder& ctx) {
   auto f_compute_out_dtype = [](const Call& call, const BlockBuilder& ctx,
                                 const TensorStructInfoNode* lhs_sinfo,
                                 const TensorStructInfoNode* rhs_sinfo) {
@@ -130,14 +146,14 @@ StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx) {
     }
     return output_dtype;
   };
-  return InferStructInfoBinary(call, ctx, std::move(f_compute_out_dtype));
+  return InferStructInfoBroadcast(call, ctx, std::move(f_compute_out_dtype));
 }
 
-StructInfo InferStructInfoCMP(const Call& call, const BlockBuilder& ctx) {
+StructInfo InferStructInfoBroadcastCMP(const Call& call, const BlockBuilder& ctx) {
   auto f_compute_out_dtype = [](const Call& call, const BlockBuilder& ctx,
                                 const TensorStructInfoNode* lhs_sinfo,
                                 const TensorStructInfoNode* rhs_sinfo) { return DataType::Bool(); };
-  return InferStructInfoBinary(call, ctx, std::move(f_compute_out_dtype));
+  return InferStructInfoBroadcast(call, ctx, std::move(f_compute_out_dtype));
 }
 
 RELAX_REGISTER_BINARY_BROADCAST_OP("add").describe("Elementwise addition with broadcasting");

@@ -42,9 +42,10 @@ def add(lhs: Expr, rhs: Expr) -> Expr:
     --------
     .. code:: python
 
-      x = relax.Var("a") # shape is [2, 3]
-      y = relax.Var("b") # shape is [2, 1]
-      z = relax.add(x, y)  # result shape is [2, 3]
+      bb = relax.BlockBuilder()
+      a = relax.Var("a", relax.TensorStructInfo(shape=(2, 3), dtype="float32"))
+      b = relax.Var("b", relax.TensorStructInfo(shape=(2, 1), dtype="float32"))
+      c = bb.normalize(relax.op.add(a, b))  # c has TensorStructInfo(shape=(2, 3), dtype="float32")
     """
     return _ffi_api.add(lhs, rhs)  # type: ignore
 
@@ -251,19 +252,19 @@ def less(lhs: Expr, rhs: Expr) -> Expr:
     return _ffi_api.less(lhs, rhs)  # type: ignore
 
 
-def ewise_fma(e1: Expr, e2: Expr, e3: Expr) -> Expr:
+def ewise_fma(e0: Expr, e1: Expr, e2: Expr) -> Expr:
     """Elementwise fused multiply-add operator
-    Returns elementwise result of :math:`e1 * e2 + e3`
+    Returns elementwise result of :math:`e0 * e1 + e2`
 
     Parameters
     ----------
-    e1 : relax.Expr
+    e0 : relax.Expr
         The left hand operand of the multiplication
 
-    e2 : relax.Expr
+    e1 : relax.Expr
         The right hand operand of the multiplication
 
-    e3 : relax.Expr
+    e2 : relax.Expr
         The operand of the addition
 
     Returns
@@ -271,7 +272,7 @@ def ewise_fma(e1: Expr, e2: Expr, e3: Expr) -> Expr:
     result : relax.Expr
         The computed result.
     """
-    return _ffi_api.ewise_fma(e1, e2, e3)  # type: ignore
+    return _ffi_api.ewise_fma(e0, e1, e2)  # type: ignore
 
 
 def unique(

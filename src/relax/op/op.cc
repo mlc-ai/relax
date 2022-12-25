@@ -35,26 +35,6 @@ TVM_REGISTER_NODE_TYPE(VMAllocStorageAttrs);
 TVM_REGISTER_NODE_TYPE(VMAllocTensorAttrs);
 TVM_REGISTER_NODE_TYPE(ShapeHeapAttrs);
 
-bool EqualConstInt(const PrimExpr& lhs, int64_t value) {
-  if (const int64_t* pvalue = tir::as_const_int(lhs)) {
-    return pvalue[0] == value;
-  }
-  return false;
-}
-
-bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs) {
-  PrimExpr diff = lhs - rhs;
-  if (const int64_t* pdiff = tir::as_const_int(diff)) {
-    return pdiff[0] == 0;
-  }
-  tvm::arith::Analyzer ana;
-  diff = ana.Simplify(diff);
-  if (const int64_t* pdiff = tir::as_const_int(diff)) {
-    return pdiff[0] == 0;
-  }
-  return false;
-}
-
 StructInfo ReturnVoidStructInfo(const Call& call, const BlockBuilder& ctx) {
   return TupleStructInfo(Array<StructInfo>());
 }
@@ -95,7 +75,7 @@ StructInfo InferStructInfoCallTIR(const Call& call, const BlockBuilder& ctx) {
   return CallTIRStructInfoFromShapeType(output_shape, output_type);
 }
 
-RELAX_REGISTER_OP("relax.call_tir")
+TVM_REGISTER_OP("relax.call_tir")
     .set_num_inputs(4)
     .add_argument("func", "Expr", "The destination-passing-style function.")
     .add_argument("args", "Tuple", "The input arguments.")
@@ -123,7 +103,7 @@ TVM_REGISTER_GLOBAL("relax.op.call_tir").set_body_typed(MakeCallTIR);
 // print
 TVM_REGISTER_NODE_TYPE(PrintAttrs);
 
-RELAX_REGISTER_OP("relax.print")
+TVM_REGISTER_OP("relax.print")
     .set_attrs_type<PrintAttrs>()
     .set_num_inputs(-1)
     .add_argument("vals", "Array<Expr>", "Values to print.")
@@ -162,7 +142,7 @@ StructInfo InferAssertStructInfo(const Call& call, const BlockBuilder& ctx) {
 
 TVM_REGISTER_NODE_TYPE(AssertOpAttrs);
 
-RELAX_REGISTER_OP("relax.assert_op")
+TVM_REGISTER_OP("relax.assert_op")
     .set_attrs_type<AssertOpAttrs>()
     .set_num_inputs(-1)
     .add_argument("vals", "Array<Expr>",
@@ -186,7 +166,7 @@ TVM_REGISTER_GLOBAL("relax.op.assert_op").set_body_typed(MakeAssertOp);
 
 // make_closure
 
-RELAX_REGISTER_OP("relax.make_closure")
+TVM_REGISTER_OP("relax.make_closure")
     .set_num_inputs(2)
     .add_argument("func", "Expr", "The closure.")
     .add_argument("args", "Tuple", "The captured variables.")
@@ -211,7 +191,7 @@ StructInfo InferStructInfoInvokeClosure(const Call& call, const BlockBuilder& ct
   }
 }
 
-RELAX_REGISTER_OP("relax.invoke_closure")
+TVM_REGISTER_OP("relax.invoke_closure")
     .set_num_inputs(2)
     .add_argument("closure", "Expr", "The VMClosure.")
     .add_argument("args", "Tuple", "The captured variables.")
@@ -226,7 +206,7 @@ TVM_REGISTER_GLOBAL("relax.op.invoke_closure").set_body_typed(InvokeClosure);
 
 // shape_of
 
-RELAX_REGISTER_OP("relax.shape_of")
+TVM_REGISTER_OP("relax.shape_of")
     .set_num_inputs(1)
     .add_argument("input", "Expr", "The input expression")
     .set_attr<FInferStructInfo>("FInferStructInfo", ReturnShapeStructInfo);
@@ -248,7 +228,7 @@ StructInfo InferStructInfoAllocateTensor(const Call& call, const BlockBuilder& c
   return TensorStructInfo(call->args[0], attrs->dtype);
 }
 
-RELAX_REGISTER_OP("relax.builtin.alloc_tensor")
+TVM_REGISTER_OP("relax.builtin.alloc_tensor")
     .set_attrs_type<AllocTensorAttrs>()
     .set_num_inputs(1)
     .add_argument("shape", "Expr", "The shape of the tensor to allocate.")
@@ -266,7 +246,7 @@ TVM_REGISTER_GLOBAL("relax.op.builtin.alloc_tensor").set_body_typed(MakeAllocTen
 
 // memory planning alloc_storage
 
-RELAX_REGISTER_OP("relax.memory.alloc_storage")
+TVM_REGISTER_OP("relax.memory.alloc_storage")
     .set_attrs_type<MemAllocStorageAttrs>()
     .set_num_inputs(1)
     .add_argument("total_space", "Expr", "The total space of the storage to allocate.")
@@ -294,7 +274,7 @@ StructInfo InferStructInfoMemAllocTensor(const Call& call, const BlockBuilder& c
   return TensorStructInfo(call->args[1], attrs->dtype);
 }
 
-RELAX_REGISTER_OP("relax.memory.alloc_tensor")
+TVM_REGISTER_OP("relax.memory.alloc_tensor")
     .set_attrs_type<MemAllocTensorAttrs>()
     .set_num_inputs(2)
     .add_argument("storage", "Expr", "The storage to allocate the tensor to.")
@@ -313,7 +293,7 @@ TVM_REGISTER_GLOBAL("relax.op.memory.alloc_tensor").set_body_typed(MakeMemAllocT
 
 // memory planning kill_storage
 
-RELAX_REGISTER_OP("relax.memory.kill_storage")
+TVM_REGISTER_OP("relax.memory.kill_storage")
     .set_num_inputs(1)
     .add_argument("storage", "Expr", "The storage to be killed.")
     .set_attr<FInferStructInfo>("FInferStructInfo", ReturnVoidStructInfo);
@@ -327,7 +307,7 @@ TVM_REGISTER_GLOBAL("relax.op.memory.kill_storage").set_body_typed(MakeMemKillSt
 
 // memory planning kill_tensor
 
-RELAX_REGISTER_OP("relax.memory.kill_tensor")
+TVM_REGISTER_OP("relax.memory.kill_tensor")
     .set_num_inputs(1)
     .add_argument("tensor", "Expr", "The tensor to be killed.")
     .set_attr<FInferStructInfo>("FInferStructInfo", ReturnVoidStructInfo);
@@ -341,7 +321,7 @@ TVM_REGISTER_GLOBAL("relax.op.memory.kill_tensor").set_body_typed(MakeMemKillTen
 
 // vm alloc_storage
 
-RELAX_REGISTER_OP("relax.vm.builtin.alloc_storage")
+TVM_REGISTER_OP("relax.vm.builtin.alloc_storage")
     .set_attrs_type<VMAllocStorageAttrs>()
     .set_num_inputs(1)
     .add_argument("size", "Expr", "The size of the storage to allocate.")
@@ -372,7 +352,7 @@ StructInfo InferStructInfoVMAllocTensor(const Call& call, const BlockBuilder& ct
   return TensorStructInfo(attrs->dtype, kUnknownNDim);
 }
 
-RELAX_REGISTER_OP("relax.vm.builtin.alloc_tensor")
+TVM_REGISTER_OP("relax.vm.builtin.alloc_tensor")
     .set_attrs_type<VMAllocTensorAttrs>()
     .set_num_inputs(2)
     .add_argument("storage", "Expr", "The storage to allocate the tensor to.")
@@ -391,7 +371,7 @@ TVM_REGISTER_GLOBAL("relax.op.vm.builtin.alloc_tensor").set_body_typed(MakeVMAll
 
 // vm store_shape
 
-RELAX_REGISTER_OP("relax.vm.builtin.store_shape")
+TVM_REGISTER_OP("relax.vm.builtin.store_shape")
     .set_attrs_type<ShapeHeapAttrs>()
     .set_num_inputs(2)
     .add_argument("shape", "Expr", "The shape to be stored.")
@@ -409,7 +389,7 @@ TVM_REGISTER_GLOBAL("relax.op.vm.builtin.store_shape").set_body_typed(MakeStoreS
 
 // vm load_shape
 
-RELAX_REGISTER_OP("relax.vm.builtin.load_shape")
+TVM_REGISTER_OP("relax.vm.builtin.load_shape")
     .set_attrs_type<ShapeHeapAttrs>()
     .set_num_inputs(1)
     .add_argument("heap", "Expr", "The heap to load the shape from.")
@@ -426,7 +406,7 @@ TVM_REGISTER_GLOBAL("relax.op.vm.builtin.load_shape").set_body_typed(MakeLoadSha
 
 // vm call_tir_dyn
 
-RELAX_REGISTER_OP("relax.vm.call_tir_dyn")
+TVM_REGISTER_OP("relax.vm.call_tir_dyn")
     .set_num_inputs(2)
     .add_argument("func", "Expr", "The destination-passing-style function.")
     .add_argument("args", "Tuple",
