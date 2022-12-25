@@ -110,5 +110,46 @@ InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
   return InferLayoutOutput({layout}, {layout}, Attrs(call->attrs));
 }
 
+InferLayoutOutput InferLayoutBinaryEwise(const Call& call,
+                                         const Map<String, Array<String>>& desired_layouts,
+                                         VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr) << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 2) << "Invalid Call";
+  
+  Map<String, Var> lhs_layout_map, rhs_layout_map;
+  const auto* lhs = call->args[0].as<VarNode>();
+  const auto* rhs = call->args[1].as<VarNode>();
+  const auto* lhs_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  const auto* rhs_type = call->args[1]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(lhs_type != nullptr && rhs_type != nullptr) << "Invalid Call";
+
+  if (lhs != nullptr) {
+    lhs_layout_map = var_layout_map.at(GetRef<Var>(lhs));
+  } else {
+    lhs_layout_map.Set(InitialLayout(lhs_type->ndim), Var());
+  }
+  if (rhs != nullptr) {
+    rhs_layout_map = var_layout_map.at(GetRef<Var>(rhs));
+  } else {
+    rhs_layout_map.Set(InitialLayout(rhs_type->ndim), Var());
+  }
+  // Find a common layout.
+  for (const auto& lhs_iter : lhs_layout_map) {
+    for (const auto& rhs_iter : rhs_layout_map) {
+      if (lhs_iter.first == rhs_iter.first) {
+        Layout lhs_layout = Layout(std::string(lhs_iter.first));
+        Layout rhs_layout = Layout(std::string(rhs_iter.first));
+        return InferLayoutOutput({lhs_layout, rhs_layout}, {lhs_layout}, Attrs(call->attrs));
+      }
+    }
+  }
+  // No common layout found.
+  Layout layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  return InferLayoutOutput({layout, layout}, {layout}, Attrs(call->attrs));
+}
+
 }  // namespace relax
 }  // namespace tvm

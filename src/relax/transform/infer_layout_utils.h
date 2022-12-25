@@ -115,6 +115,10 @@ InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
                                         VarLayoutMap var_layout_map);
 
+InferLayoutOutput InferLayoutBinaryEwise(const Call& call,
+                                         const Map<String, Array<String>>& desired_layouts,
+                                         VarLayoutMap var_layout_map);
+
 }  // namespace relax
 }  // namespace tvm
 
