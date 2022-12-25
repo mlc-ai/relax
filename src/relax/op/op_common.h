@@ -61,7 +61,8 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
       .add_argument("lhs", "Tensor", "The left hand side tensor.")                \
       .add_argument("rhs", "Tensor", "The right hand side tensor.")               \
       .set_attr<FInferShape>("FInferShape", InferShapeBinaryBroadcast)            \
-      .set_attr<FInferType>("FInferType", InferTypeBinaryBroadcast)
+      .set_attr<FInferType>("FInferType", InferTypeBinaryBroadcast)               \
+      .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutBinaryEwise)
 
 #define RELAX_REGISTER_UNARY_OP(OpName)                               \
   TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr e) { \
