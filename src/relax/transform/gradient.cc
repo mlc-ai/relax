@@ -19,16 +19,10 @@
 
 /*!
  * \file src/relax/transform/gradient.cc
- * \brief A reverse-mode automatic differentiation. For a given function specified by the input
- * global var, it generates a new function which computes the adjoints of the given function's
- * inputs in respect of the function's output. Use require_grads to specify inputs which need to be
- * differentiated instead of returning adjoints of all inputs.
+ * \brief Reverse-mode automatic differentiation.
  *
- * Now only supports differentiating a function in the IRModule with one dataflow block
- * with respect to the only return value of the function. It needs to be scalar.
- *
- * For examples, see the MLP examples in tests/python/relax/test_transform_gradient.py and
- * tests/python/relax/test_transform_gradient_numeric.py.
+ * Now only supports differentiating one function in the IRModule with one dataflow block
+ * with respect to the only return value of the function, which needs to be scalar.
  */
 
 #include <tvm/relax/expr_functor.h>
@@ -324,11 +318,11 @@ class GradientMutator : public ExprMutator {
   }
 
   void CheckTarget(const Expr& e) {
-    ICHECK(!e->IsInstance<DataflowVarNode>()) << "not an output node";
-    ICHECK(e->checked_type().as<DynTensorTypeNode>()) << "target must be a DynTensorType";
-    ICHECK(e->shape().as<ShapeExprNode>()) << "error when getting target shape";
+    CHECK(!e->IsInstance<DataflowVarNode>()) << "not an output node";
+    CHECK(e->checked_type().as<DynTensorTypeNode>()) << "target must be a DynTensorType";
+    CHECK(e->shape().as<ShapeExprNode>()) << "error when getting target shape";
     const auto* shape_node = e->shape().as<ShapeExprNode>();
-    ICHECK(shape_node->values.size() == 0) << "target must be a scalar";
+    CHECK(shape_node->values.size() == 0) << "target must be a scalar";
   }
 
   void InitGrad(const Var& adjoint_var, const Var& var) {
@@ -357,14 +351,8 @@ class GradientMutator : public ExprMutator {
   std::unordered_set<Expr, ObjectPtrHash, ObjectPtrEqual> zeros_tracker_;
 };
 
-/*!
- * \brief A simple reverse-mode auto differentiation.
- * \param m The module
- * \param var The GlobalVar of the specific function
- * \param require_grads The relax variables which need adjoints. Must be inputs.
- * \return The module after AD.
- */
-IRModule Gradient(IRModule m, const GlobalVar& gvar, Optional<Array<Var>> require_grads) {
+/* This is the internal function of tvm::relax::transform::Gradient. */
+IRModule Gradient(IRModule m, const GlobalVar& gvar, Optional<Array<Var>> require_grads = runtime::NullOptType()) {
   auto* func = m->Lookup(gvar).as<FunctionNode>();
 
   if (func == nullptr) {
@@ -396,9 +384,9 @@ IRModule Gradient(IRModule m, const GlobalVar& gvar, Optional<Array<Var>> requir
 
 namespace transform {
 
-Pass Gradient(GlobalVar func, Optional<Array<Var>> require_grads) {
+Pass Gradient(GlobalVar global_var, Optional<Array<Var>> require_grads) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
-      [=](IRModule mod, PassContext pc) { return relax::Gradient(mod, func, require_grads); };
+      [=](IRModule mod, PassContext pc) { return relax::Gradient(mod, global_var, require_grads); };
   return CreateModulePass(/*pass_function=*/pass_func,
                           /*opt_level=*/0,
                           /*pass_name=*/"Gradient",

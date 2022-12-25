@@ -195,6 +195,25 @@ TVM_DLL Pass RunCodegen(Optional<Array<runtime::String>> target_codegens,
  */
 TVM_DLL Pass ToMixedPrecision(const DataType& out_dtype);
 
+/*!
+ * \brief Reverse-mode automatic differentiation.
+ *
+ * Now only supports differentiating a function in the IRModule with one dataflow block
+ * with respect to the only return value of the function, which needs to be scalar.
+ *
+ * For a given function specified by the input global var, it generates a new function with the name
+ * [name of original function] + "_adjoint". The new function computes the adjoints of the specified
+ * arguments of the original function with respect to the only one return value of the original
+ * function.
+ *
+ * For examples, see the MLP examples in tests/python/relax/test_transform_gradient.py and
+ * tests/python/relax/test_transform_gradient_numeric.py.
+ *
+ * \param var The GlobalVar of the specific function.
+ * \param require_grads The relax variables whose adjoints is needed. Must be parameters of the given function. If it is not specified, adjoints of all arguments would be computed.
+ * \return The Pass.
+ */
+TVM_DLL Pass Gradient(GlobalVar global_var, Optional<Array<Var>> require_grads = runtime::NullOptType());
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm

@@ -371,23 +371,30 @@ def ToMixedPrecision(out_dtype="float32") -> tvm.ir.transform.Pass:
 def Gradient(
     global_var: GlobalVar, require_grads: Optional[Union[Var, List[Var]]] = None
 ) -> tvm.ir.transform.Pass:
-    """Automatically differentiate the given function in the IRModule, and add the generated
-    function to the IRModule, with name [name of func] + "_adjoint".
+    """Reverse-mode automatic differentiation.
+
+    Now only supports differentiating a function in the IRModule with one dataflow block
+    with respect to the only return value of the function, which needs to be scalar.
+
+    For a given function specified by the input global var, it generates a new function with the name
+    [name of original function] + "_adjoint". The new function computes the adjoints of the specified
+    arguments of the original function with respect to the only one return value of the original
+    function.
+
+    For examples, see the MLP examples in tests/python/relax/test_transform_gradient.py and
+    tests/python/relax/test_transform_gradient_numeric.py.
 
     Parameters
     ----------
     func: relax.GlobalVar
-        The global variable (of the given module) to differentiate.
-        The function should only return one scalar value.
+        The GlobalVar of the specific function.
     require_grads: Optional[Union[relax.Var, List[relax.Var]]]
-        The relax variables which need adjoints. Must be arguments of func.
-        If the elements in require_grads are integers, integer i represent the i-th variable in the
-        parameter list of func. The index is 0-based.
-        If it is set to None, the pass will emit an adjoint for each input.
-
-    Returns.
+        The relax variables whose adjoints is needed. Must be parameters of the given function.
+        If it is not specified, adjoints of all arguments would be computed.
+    Returns
     -------
     ret: tvm.ir.transform.Pass
+        The Pass.
     """
     if require_grads is not None and not isinstance(require_grads, list):
         require_grads = [require_grads]

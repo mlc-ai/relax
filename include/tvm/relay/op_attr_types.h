@@ -210,7 +210,7 @@ using FForwardRewrite = runtime::TypedPackedFunc<Expr(
  *
  * \param orig_call the original Expr.
  * \param output_grad the gradient of the Expr.
- * \return the gradient for each parameter.
+ * \return the gradient for each parameters.
  */
 using FPrimalGradient =
     runtime::TypedPackedFunc<tvm::Array<Expr>(const Expr& orig_call, const Expr& output_grad)>;
