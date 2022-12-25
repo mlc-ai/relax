@@ -392,6 +392,21 @@ def ToMixedPrecision(out_dtype="float32") -> tvm.ir.transform.Pass:
     return _ffi_api.ToMixedPrecision(out_dtype)
 
 
+def ConvertLayout(desired_layouts) -> tvm.ir.transform.Pass:
+    """Automatic layout conversion pass.
+    Parameters
+    ----------
+    desired_layouts : Dict[str, List[str]]
+        The desired layouts for some operators
+
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass for layout conversion.
+    """
+    return _ffi_api.ConvertLayout(desired_layouts)
+
+
 def _wrap_class_function_pass(pass_cls, pass_info):
     """Wrap a python class as function pass."""
 

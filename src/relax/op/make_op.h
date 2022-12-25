@@ -46,6 +46,8 @@ Expr MakeVMAllocTensor(Expr storage, Expr shape, int offset, DataType dtype);
 
 Expr MakeCast(Expr data, DataType dtype);
 
+Expr MakeTranspose(Expr data, Optional<Array<Integer>> axes);
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_MAKE_OP_H_
