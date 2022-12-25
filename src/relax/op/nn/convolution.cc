@@ -24,6 +24,7 @@
 
 #include "convolution.h"
 
+#include "../../transform/infer_layout_utils.h"
 #include "../tensor/binary.h"
 namespace tvm {
 namespace relax {
@@ -58,7 +59,8 @@ with the layer input to produce a tensor of outputs.
     .add_argument("weight", "Tensor", "The weight tensor.")
     .set_attrs_type<Conv2DAttrs>()
     .set_attr<FInferShape>("FInferShape", InferShapeConv2D)
-    .set_attr<FInferType>("FInferType", InferTypeConv2D);
+    .set_attr<FInferType>("FInferType", InferTypeConv2D)
+    .set_attr<FTVMRelaxInferLayoutType>("FTVMRelaxInferLayoutType", InferLayoutConv2d);
 
 Expr InferShapeConv2D(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
@@ -70,28 +72,37 @@ Expr InferShapeConv2D(const Call& call, DiagnosticContext diag_ctx) {
   auto* s1 = shape1.as<ShapeExprNode>();
   auto* attrs = call->attrs.as<Conv2DAttrs>();
   if (s0 && s1) {
-    std::vector<PrimExpr> output_shape;
+    std::unordered_map<char, PrimExpr> output_shape;
     size_t ndim0 = s0->values.size();
     size_t ndim1 = s1->values.size();
     if (ndim0 != 4 || ndim1 != 4) {
       diag_ctx.EmitFatal(Diagnostic::Error(call->span)
                          << "The 2 arguments of Conv2d must be 4D Tensors");
     }
+    size_t N = std::string(attrs->data_layout).find('N');
+    size_t H = std::string(attrs->data_layout).find('H');
+    size_t W = std::string(attrs->data_layout).find('W');
+    size_t O = std::string(attrs->kernel_layout).find('O');
     // N
-    output_shape.push_back(s0->values[0]);
-    // C
-    output_shape.push_back(s1->values[0]);
-    // H
-    output_shape.push_back((s0->values[2] + 2 * attrs->padding[0] -
-                            attrs->dilation[0] * (attrs->kernel_size[0] - 1) - 1) /
-                               attrs->strides[0] +
-                           1);
-    // W
-    output_shape.push_back((s0->values[3] + 2 * attrs->padding[1] -
-                            attrs->dilation[1] * (attrs->kernel_size[1] - 1) - 1) /
-                               attrs->strides[1] +
-                           1);
-    return ShapeExpr(Array<PrimExpr>{output_shape.begin(), output_shape.end()});
+    output_shape['N'] = (s0->values[N]);
+    // O
+    output_shape['C'] = (s1->values[O]);
+    // H (output)
+    output_shape['H'] = ((s0->values[H] + 2 * attrs->padding[0] -
+                          attrs->dilation[0] * (attrs->kernel_size[0] - 1) - 1) /
+                             attrs->strides[0] +
+                         1);
+    // W (output)
+    output_shape['W'] = ((s0->values[W] + 2 * attrs->padding[1] -
+                          attrs->dilation[1] * (attrs->kernel_size[1] - 1) - 1) /
+                             attrs->strides[1] +
+                         1);
+    std::vector<PrimExpr> res;
+    std::string out_layout = attrs->out_layout == "" ? attrs->data_layout : attrs->out_layout;
+    for (size_t i = 0; i < 4; ++i) {
+      res.push_back(output_shape[out_layout.at(i)]);
+    }
+    return ShapeExpr(res);
   } else {
     return RuntimeDepShape();
   }
