@@ -57,3 +57,23 @@ class PrintAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.AssertOpAttrs")
 class AssertOpAttrs(Attrs):
     """Attributes used for the assert operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.Conv2DAttrs")
+class Conv2DAttrs(Attrs):
+    """Attributes for nn.conv2d"""
+
+
+@tvm._ffi.register_object("relax.attrs.MaxPool2DAttrs")
+class MaxPool2DAttrs(Attrs):
+    """Attributes for nn.max_pool2d"""
+
+
+@tvm._ffi.register_object("relax.attrs.AdaptivePool2DAttrs")
+class AdaptivePool2DAttrs(Attrs):
+    """Attributes for 2d adaptive pool operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.SoftmaxAttrs")
+class SoftmaxAttrs(Attrs):
+    """Attributes for nn.softmax"""
