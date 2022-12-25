@@ -39,27 +39,6 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
 
 #define RELAX_REGISTER_OP RELAY_REGISTER_OP
 
-/*! Quick helper macro
- * - Expose a positional make function to construct the node.
- * - Register op to the registry.
- *
- * We make the decision to always only expose positional argument.
- * We will do rewrapping in the frontend to support language
- * sugars such as keyword arguments and default value.
- *
- * \param OpName the name of registry.
- */
-#define RELAX_REGISTER_BINARY_BROADCAST_OP(OpName)                                \
-  TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr lhs, Expr rhs) { \
-    static const Op& op = Op::Get("relax." OpName);                               \
-    return Call(op, {lhs, rhs}, Attrs(), {});                                     \
-  });                                                                             \
-  RELAX_REGISTER_OP("relax." OpName)                                              \
-      .set_num_inputs(2)                                                          \
-      .add_argument("lhs", "Tensor", "The left hand side tensor.")                \
-      .add_argument("rhs", "Tensor", "The right hand side tensor.")               \
-      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoBroadcast)
-
 }  // namespace relax
 }  // namespace tvm
 

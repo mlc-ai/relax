@@ -13,6 +13,7 @@
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
+# under the License.
 # pylint: disable=redefined-builtin, invalid-name
 """Basic tensor operations."""
 import numpy as np  # type: ignore
@@ -23,14 +24,253 @@ from ..expr import Expr
 
 
 def add(lhs: Expr, rhs: Expr) -> Expr:
+    """Addition with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : Expr
+        The left hand side input data
+    rhs : Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : Expr
+        The computed result.
+
+    Examples
+    --------
+    .. code:: python
+
+      x = relax.Var("a") # shape is [2, 3]
+      y = relax.Var("b") # shape is [2, 1]
+      z = relax.add(x, y)  # result shape is [2, 3]
+    """
     return _ffi_api.add(lhs, rhs)  # type: ignore
 
 
+def subtract(lhs: Expr, rhs: Expr) -> Expr:
+    """Subtraction with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : relax.Expr
+        The left hand side input data
+    rhs : relax.Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.subtract(lhs, rhs)  # type: ignore
+
+
 def multiply(lhs: Expr, rhs: Expr) -> Expr:
+    """Multiplication with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : Expr
+        The left hand side input data
+    rhs : Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : Expr
+        The computed result.
+    """
     return _ffi_api.multiply(lhs, rhs)  # type: ignore
 
 
+def divide(lhs: Expr, rhs: Expr) -> Expr:
+    """Division with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : relax.Expr
+        The left hand side input data
+    rhs : relax.Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.divide(lhs, rhs)  # type: ignore
+
+
+def floor_divide(lhs, rhs) -> Expr:
+    """Floor division with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : relax.Expr
+        The left hand side input data
+    rhs : relax.Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.floor_divide(lhs, rhs)  # type: ignore
+
+
+def negative(lhs: Expr) -> Expr:
+    """Compute element-wise negative of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result
+    """
+    return _ffi_api.negative(lhs)  # type: ignore
+
+
+def sin(data: Expr) -> Expr:
+    """Compute elementwise sin of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.sin(data)  # type: ignore
+
+
+def cos(data: Expr) -> Expr:
+    """Compute elementwise cos of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.cos(data)  # type: ignore
+
+
+def tanh(data: Expr) -> Expr:
+    """Compute elementwise tanh of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.tanh(data)  # type: ignore
+
+
+def sqrt(data: Expr) -> Expr:
+    """Compute elementwise square root of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.sqrt(data)  # type: ignore
+
+
+def log(data: Expr) -> Expr:
+    """Compute elementwise natural logarithm of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result
+    """
+    return _ffi_api.log(data)  # type: ignore
+
+
+def sigmoid(data: Expr) -> Expr:
+    """Compute elementwise sigmoid of data.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.sigmoid(data)  # type: ignore
+
+
+def less(lhs: Expr, rhs: Expr) -> Expr:
+    """Broadcasted elementwise test for (lhs < rhs).
+
+    Parameters
+    ----------
+    lhs : relax.Expr
+        The left hand side input data
+    rhs : relax.Expr
+        The right hand side input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.less(lhs, rhs)  # type: ignore
+
+
 def ewise_fma(e1: Expr, e2: Expr, e3: Expr) -> Expr:
+    """Elementwise fused multiply-add operator
+    Returns elementwise result of :math:`e1 * e2 + e3`
+
+    Parameters
+    ----------
+    e1 : relax.Expr
+        The left hand operand of the multiplication
+
+    e2 : relax.Expr
+        The right hand operand of the multiplication
+
+    e3 : relax.Expr
+        The operand of the addition
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
     return _ffi_api.ewise_fma(e1, e2, e3)  # type: ignore
 
 

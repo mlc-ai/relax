@@ -17,50 +17,15 @@
  * under the License.
  */
 
+#include "../op_common.h"
+
 /*!
  * \file ternary.cc
  * \brief ternary operators.
  */
 
-#include "ternary.h"
-
 namespace tvm {
 namespace relax {
-
-Type InferTypeEwiseFMA(const Call& call, DiagnosticContext diag_ctx) {
-  if (call->args.size() != 3) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call) << "EwiseFMA op should have 3 arguments");
-  }
-  Type type0 = call->args[0]->checked_type();
-  Type type1 = call->args[1]->checked_type();
-  Type type2 = call->args[2]->checked_type();
-  auto* t0 = type0.as<DynTensorTypeNode>();
-  auto* t1 = type1.as<DynTensorTypeNode>();
-  auto* t2 = type2.as<DynTensorTypeNode>();
-  if (!t0 || !t1 || !t2) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call)
-                       << "The 3 arguments of EwiseFMA should be DynTensor");
-  }
-
-  DataType output_dtype;
-  if (t0->IsUnknownDtype() || t1->IsUnknownDtype() || t2->IsUnknownDtype()) {
-    output_dtype = DataType::Void();
-  } else if (t0->dtype != t1->dtype || t1->dtype != t2->dtype) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call)
-                       << "Data types " << t0->dtype << ", " << t1->dtype << ", and " << t2->dtype
-                       << " must be equal for EwiseFMA");
-  } else {
-    output_dtype = t0->dtype;
-  }
-
-  int output_ndim;
-  if (t0->IsUnknownNdim() || t1->IsUnknownNdim() || t2->IsUnknownNdim()) {
-    output_ndim = -1;
-  } else {
-    output_ndim = t0->ndim;
-  }
-  return DynTensorType(output_ndim, output_dtype);
-}
 
 StructInfo InferStructInfoEwiseFMA(const Call& call, const BlockBuilder& ctx) {
   if (call->args.size() != 3) {
@@ -121,16 +86,16 @@ StructInfo InferStructInfoEwiseFMA(const Call& call, const BlockBuilder& ctx) {
   return TensorStructInfo(output_dtype, output_ndim);
 }
 
-RELAY_REGISTER_OP("relax.ewise_fma")
+RELAX_REGISTER_OP("relax.ewise_fma")
     .set_num_inputs(3)
-    .add_argument("e1", "Expr", "The input expression")
-    .add_argument("e2", "Expr", "The input expression")
-    .add_argument("e3", "Expr", "The input expression")
+    .add_argument("e0", "Tensor", "The left hand operand of the multiplication")
+    .add_argument("e1", "Tensor", "The right hand operand of the multiplication")
+    .add_argument("e2", "Tensor", "The operand of the addition")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoEwiseFMA);
 
-Expr MakeEwiseFma(Expr expr1, Expr expr2, Expr expr3) {
+Expr MakeEwiseFma(Expr expr0, Expr expr1, Expr expr2) {
   static const Op& op = Op::Get("relax.ewise_fma");
-  return Call(op, {expr1, expr2, expr3}, {}, {});
+  return Call(op, {expr0, expr1, expr2}, Attrs(), {});
 }
 
 TVM_REGISTER_GLOBAL("relax.op.ewise_fma").set_body_typed(MakeEwiseFma);

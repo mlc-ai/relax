@@ -22,43 +22,52 @@
  * \brief binary broadcast operators.
  */
 
-#include "binary.h"
+#include <algorithm>
+#include <utility>
+#include <vector>
+
+#include "../op_common.h"
 
 namespace tvm {
 namespace relax {
 
-RELAX_REGISTER_BINARY_BROADCAST_OP("add")
-    .describe("Elementwise add with broadcasting")
-    .set_support_level(1);
+#define RELAX_REGISTER_BINARY_OP(OpName)                                          \
+  TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr lhs, Expr rhs) { \
+    static const Op& op = Op::Get("relax." OpName);                               \
+    return Call(op, {lhs, rhs}, Attrs(), {});                                     \
+  });                                                                             \
+  RELAX_REGISTER_OP("relax." OpName)                                              \
+      .set_num_inputs(2)                                                          \
+      .add_argument("lhs", "Tensor", "The left hand side tensor.")                \
+      .add_argument("rhs", "Tensor", "The right hand side tensor.")
 
-RELAX_REGISTER_BINARY_BROADCAST_OP("multiply")
-    .describe("Elementwise multiply with broadcasting")
-    .set_support_level(1);
+#define RELAX_REGISTER_BINARY_BROADCAST_OP(OpName)                                \
+  RELAX_REGISTER_BINARY_OP(OpName).set_attr<FInferStructInfo>("FInferStructInfo", \
+                                                              InferStructInfoBroadcast)
 
-StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx) {
+#define RELAX_REGISTER_CMP_OP(OpName)                                             \
+  RELAX_REGISTER_BINARY_OP(OpName).set_attr<FInferStructInfo>("FInferStructInfo", \
+                                                              InferStructInfoCMP)
+
+using FComputeOutDtype = std::function<DataType(
+    const Call&, const BlockBuilder&, const TensorStructInfoNode*, const TensorStructInfoNode*)>;
+
+StructInfo InferStructInfoBinary(const Call& call, const BlockBuilder& ctx,
+                                 FComputeOutDtype f_compute_out_dtype) {
   if (call->args.size() != 2) {
-    ctx->ReportFatal(Diagnostic::Error(call) << "Binary broadcast op should have 2 arguments");
+    ctx->ReportFatal(Diagnostic::Error(call) << "Binary op should have 2 arguments");
   }
   auto* lhs_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[0]);
   auto* rhs_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[1]);
   if (!lhs_sinfo || !rhs_sinfo) {
     ctx->ReportFatal(Diagnostic::Error(call)
-                     << "Both lhs and rhs should be Tensor for broadcasting, but got "
+                     << "Both lhs and rhs should be Tensor for binary operator, but got "
                      << call->args[0]->struct_info_->GetTypeKey() << " and "
-                     << call->args[0]->struct_info_->GetTypeKey());
+                     << call->args[1]->struct_info_->GetTypeKey());
   }
 
   // DateType
-  DataType output_dtype;
-  if (lhs_sinfo->IsUnknownDtype() || rhs_sinfo->IsUnknownDtype()) {
-    output_dtype = DataType::Void();
-  } else if (lhs_sinfo->dtype != rhs_sinfo->dtype) {
-    ctx->ReportFatal(Diagnostic::Error(call)
-                     << "Data types " << lhs_sinfo->dtype << " and " << rhs_sinfo->dtype
-                     << " must be equal for broadcasting operators");
-  } else {
-    output_dtype = lhs_sinfo->dtype;
-  }
+  DataType output_dtype = f_compute_out_dtype(call, ctx, lhs_sinfo, rhs_sinfo);
 
   // ndims
   int output_ndim;
@@ -104,6 +113,47 @@ StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx) {
     return TensorStructInfo(output_dtype, /*ndim=*/output_ndim);
   }
 }
+
+StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx) {
+  auto f_compute_out_dtype = [](const Call& call, const BlockBuilder& ctx,
+                                const TensorStructInfoNode* lhs_sinfo,
+                                const TensorStructInfoNode* rhs_sinfo) {
+    DataType output_dtype;
+    if (lhs_sinfo->IsUnknownDtype() || rhs_sinfo->IsUnknownDtype()) {
+      output_dtype = DataType::Void();
+    } else if (lhs_sinfo->dtype != rhs_sinfo->dtype) {
+      ctx->ReportFatal(Diagnostic::Error(call)
+                       << "Data types " << lhs_sinfo->dtype << " and " << rhs_sinfo->dtype
+                       << " must be equal for broadcasting operators");
+    } else {
+      output_dtype = lhs_sinfo->dtype;
+    }
+    return output_dtype;
+  };
+  return InferStructInfoBinary(call, ctx, std::move(f_compute_out_dtype));
+}
+
+StructInfo InferStructInfoCMP(const Call& call, const BlockBuilder& ctx) {
+  auto f_compute_out_dtype = [](const Call& call, const BlockBuilder& ctx,
+                                const TensorStructInfoNode* lhs_sinfo,
+                                const TensorStructInfoNode* rhs_sinfo) { return DataType::Bool(); };
+  return InferStructInfoBinary(call, ctx, std::move(f_compute_out_dtype));
+}
+
+RELAX_REGISTER_BINARY_BROADCAST_OP("add").describe("Elementwise addition with broadcasting");
+
+RELAX_REGISTER_BINARY_BROADCAST_OP("subtract")
+    .describe("Elementwise subtraction with broadcasting");
+
+RELAX_REGISTER_BINARY_BROADCAST_OP("multiply")
+    .describe("Elementwise multiplication with broadcasting");
+
+RELAX_REGISTER_BINARY_BROADCAST_OP("divide").describe("Elementwise division with broadcasting");
+
+RELAX_REGISTER_BINARY_BROADCAST_OP("floor_divide")
+    .describe("Elementwise floor-division with broadcasting");
+
+RELAX_REGISTER_CMP_OP("less");
 
 }  // namespace relax
 }  // namespace tvm
