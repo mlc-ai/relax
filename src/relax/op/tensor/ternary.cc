@@ -33,7 +33,8 @@ RELAX_REGISTER_OP("relax.ewise_fma")
     .add_argument("e2", "Expr", "The input expression")
     .add_argument("e3", "Expr", "The input expression")
     .set_attr<FInferShape>("FInferShape", InferShapeEwiseFMA)
-    .set_attr<FInferType>("FInferType", InferTypeEwiseFMA);
+    .set_attr<FInferType>("FInferType", InferTypeEwiseFMA)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutTernaryEwise);
 
 Expr MakeEwiseFma(Expr expr1, Expr expr2, Expr expr3) {
   static const Op& op = Op::Get("relax.ewise_fma");
