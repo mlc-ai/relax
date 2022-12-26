@@ -627,7 +627,8 @@ RELAX_REGISTER_OP("relax.cumsum")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeCumsum)
-    .set_attr<FInferType>("FInferType", InferTypeCumsum);
+    .set_attr<FInferType>("FInferType", InferTypeCumsum)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutCumsum);
 
 Expr MakeCumsum(Expr data, Optional<Integer> axis) {
   ObjectPtr<CumsumAttrs> attrs = make_object<CumsumAttrs>();

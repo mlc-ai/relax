@@ -411,14 +411,38 @@ InferLayoutOutput InferLayoutStridedSlice(const Call& call,
     }
   }
 
-  Layout axes_layout = Layout(axes);
   Array<Integer> new_axes;
-  for (size_t i = 0; i < axes_layout.ndim(); ++i) {
-    new_axes.push_back(Integer(exisiting_layout.IndexOf(axes_layout[i])));
+  for (const auto& axis : axes) {
+    new_axes.push_back(Integer(exisiting_layout.name().find(axis)));
   }
   ObjectPtr<StridedSliceAttrs> new_attrs = make_object<StridedSliceAttrs>(*attrs);
   new_attrs->axes = new_axes;
   return InferLayoutOutput({exisiting_layout}, {exisiting_layout}, Attrs(new_attrs));
+}
+
+InferLayoutOutput InferLayoutCumsum(const Call& call,
+                                    const Map<String, Array<String>>& desired_layouts,
+                                    VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr) << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+
+  const auto* attrs = call->attrs.as<CumsumAttrs>();
+  ICHECK(attrs != nullptr) << "Invalid Call";
+  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(type != nullptr && !type->IsUnknownNdim()) << "Invalid Call";
+
+  Layout exisiting_layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  if (attrs->axis.defined()) {
+    int axis = attrs->axis.value()->value;
+    ObjectPtr<CumsumAttrs> new_attrs = make_object<CumsumAttrs>(*attrs);
+    new_attrs->axis = Integer(exisiting_layout.name().find('A' + axis));
+    return InferLayoutOutput({exisiting_layout}, {exisiting_layout}, Attrs(new_attrs));
+  } else {
+    return InferLayoutOutput({InitialLayout(type->ndim)}, {InitialLayout(1)}, Attrs(call->attrs));
+  }
 }
 }  // namespace relax
 }  // namespace tvm

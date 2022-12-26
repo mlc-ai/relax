@@ -142,6 +142,11 @@ InferLayoutOutput InferLayoutSqueeze(const Call& call,
 InferLayoutOutput InferLayoutStridedSlice(const Call& call,
                                           const Map<String, Array<String>>& desired_layouts,
                                           VarLayoutMap var_layout_map);
+
+InferLayoutOutput InferLayoutCumsum(const Call& call,
+                                    const Map<String, Array<String>>& desired_layouts,
+                                    VarLayoutMap var_layout_map);
+
 }  // namespace relax
 }  // namespace tvm
 

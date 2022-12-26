@@ -675,6 +675,96 @@ def test_conv2d_strided_slice():
     tvm.ir.assert_structural_equal(mod, conv2d_strided_slice)
 
 
+@I.ir_module
+class conv2d_cumsum:
+    @R.function
+    def main(
+        x: R.Tensor((2, 3, 28, 28), dtype="float32"), w: R.Tensor((4, 3, 3, 3), dtype="float32")
+    ) -> R.Tensor(None, dtype="float32", ndim=4):
+        # block 0
+        gv: R.Tensor((2, 28, 28, 3), dtype="float32") = R.transpose(x, axes=[0, 2, 3, 1])
+        gv1: R.Tensor((4, 3, 3, 3), dtype="float32") = R.transpose(w, axes=[0, 2, 3, 1])
+        gv2: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.conv2d(
+            gv,
+            gv1,
+            strides=[1, 1],
+            padding=[0, 0, 0, 0],
+            dilation=[1, 1],
+            groups=1,
+            channels=None,
+            kernel_size=[3, 3],
+            data_layout="NHWC",
+            kernel_layout="OHWI",
+            out_layout="NHWC",
+            out_dtype="float32",
+        )
+        gv3: R.Tensor((2, 26, 26, 4), dtype="float32") = R.cumsum(gv2, axis=3)
+        gv4: R.Tensor((2, 4, 26, 26), dtype="float32") = R.transpose(gv2, axes=[0, 3, 1, 2])
+        return gv4
+
+
+def test_conv2d_cumsum():
+    @I.ir_module
+    class Conv2dCumsum:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
+                x, w, kernel_size=[3, 3], out_dtype="float32"
+            )
+            gv2: R.Tensor((2, 4, 26, 26), dtype="float32") = R.cumsum(gv, axis=1)
+            return gv
+
+    mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dCumsum)
+    tvm.ir.assert_structural_equal(mod, conv2d_cumsum)
+
+
+@I.ir_module
+class conv2d_cumsum_default_axis:
+    @R.function
+    def main(
+        x: R.Tensor((2, 3, 28, 28), dtype="float32"), w: R.Tensor((4, 3, 3, 3), dtype="float32")
+    ) -> R.Tensor(None, dtype="float32", ndim=1):
+        # block 0
+        gv: R.Tensor((2, 28, 28, 3), dtype="float32") = R.transpose(x, axes=[0, 2, 3, 1])
+        gv1: R.Tensor((4, 3, 3, 3), dtype="float32") = R.transpose(w, axes=[0, 2, 3, 1])
+        gv2: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.conv2d(
+            gv,
+            gv1,
+            strides=[1, 1],
+            padding=[0, 0, 0, 0],
+            dilation=[1, 1],
+            groups=1,
+            channels=None,
+            kernel_size=[3, 3],
+            data_layout="NHWC",
+            kernel_layout="OHWI",
+            out_layout="NHWC",
+            out_dtype="float32",
+        )
+        gv3: R.Tensor((2, 4, 26, 26), dtype="float32") = R.transpose(gv2, axes=[0, 3, 1, 2])
+        gv4: R.Tensor((5408,), dtype="float32") = R.cumsum(gv3, axis=None)
+        return gv4
+
+
+def test_conv2d_cumsum_default_axis():
+    @I.ir_module
+    class Conv2dCumsumDefaultAxis:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=1):
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
+                x, w, kernel_size=[3, 3], out_dtype="float32"
+            )
+            gv2 = R.cumsum(gv)
+            return gv2
+
+    mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dCumsumDefaultAxis)
+    tvm.ir.assert_structural_equal(mod, conv2d_cumsum_default_axis)
+
+
 if __name__ == "__main__":
     test_conv2d()
     test_conv2d_relu()
@@ -689,3 +779,5 @@ if __name__ == "__main__":
     test_conv2d_expand_dims()
     test_conv2d_expand_dims_squeeze()
     test_conv2d_strided_slice()
+    test_conv2d_cumsum()
+    test_conv2d_cumsum_default_axis()
