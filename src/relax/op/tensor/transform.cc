@@ -39,7 +39,8 @@ RELAX_REGISTER_OP("relax.transpose")
     .set_num_inputs(1)
     .add_argument("data", "nD Tensor", "input tensor to be transposed")
     .set_attr<FInferShape>("FInferShape", InferShapeTranspose)
-    .set_attr<FInferType>("FInferType", InferTypeTranspose);
+    .set_attr<FInferType>("FInferType", InferTypeTranspose)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutTranspose);
 
 Expr MakeTranspose(Expr data, Optional<Array<Integer>> axes) {
   ObjectPtr<TransposeAttrs> attrs = make_object<TransposeAttrs>();
@@ -220,7 +221,8 @@ RELAX_REGISTER_OP("relax.expand_dims")
     .set_attrs_type<ExpandDimsAttrs>()
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeExpandDims)
-    .set_attr<FInferType>("FInferType", InferTypeExpandDims);
+    .set_attr<FInferType>("FInferType", InferTypeExpandDims)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutExpandDims);
 
 Expr MakeExpandDims(Expr data, Array<Integer> axis) {
   ObjectPtr<ExpandDimsAttrs> attrs = make_object<ExpandDimsAttrs>();
@@ -309,7 +311,8 @@ RELAX_REGISTER_OP("relax.squeeze")
     .set_attrs_type<SqueezeAttrs>()
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeSqueeze)
-    .set_attr<FInferType>("FInferType", InferTypeSqueeze);
+    .set_attr<FInferType>("FInferType", InferTypeSqueeze)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutSqueeze);
 
 Expr MakeSqueeze(Expr data, Optional<Array<Integer>> axis) {
   ObjectPtr<SqueezeAttrs> attrs = make_object<SqueezeAttrs>();
@@ -624,7 +627,8 @@ RELAX_REGISTER_OP("relax.cumsum")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeCumsum)
-    .set_attr<FInferType>("FInferType", InferTypeCumsum);
+    .set_attr<FInferType>("FInferType", InferTypeCumsum)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutCumsum);
 
 Expr MakeCumsum(Expr data, Optional<Integer> axis) {
   ObjectPtr<CumsumAttrs> attrs = make_object<CumsumAttrs>();
@@ -1002,16 +1006,14 @@ TVM_REGISTER_GLOBAL("relax.op.ones").set_body_typed(MakeOnes);
 
 Expr InferShapeOnesZeros(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "Ones or zeros op should have 1 argument");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Ones or zeros op should have 1 argument");
   }
   return call->args[0];
 }
 
 Type InferTypeOnesZeros(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 1) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "Ones or zeros op should have 1 argument");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Ones or zeros op should have 1 argument");
   }
 
   const auto* shape_type = call->args[0]->checked_type().as<ShapeTypeNode>();
@@ -1125,7 +1127,8 @@ RELAX_REGISTER_UNARY_OP("zeros_like");
 RELAX_REGISTER_OP("relax.collapse_sum_like")
     .set_num_inputs(2)
     .add_argument("data", "Tensor", "The input tensor.")
-    .add_argument("collapse_target", "Tensor", "The tensor whose shape is the shape to collapse to.")
+    .add_argument("collapse_target", "Tensor",
+                  "The tensor whose shape is the shape to collapse to.")
     .set_attr<FInferShape>("FInferShape", InferShapeCollapseSumLike)
     .set_attr<FInferType>("FInferType", InferTypeCollapseSumLike);
 
@@ -1138,7 +1141,8 @@ TVM_REGISTER_GLOBAL("relax.op.collapse_sum_like").set_body_typed(MakeCollapseSum
 
 Expr InferShapeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "collapse_sum_like op should have 2 arguments");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "collapse_sum_like op should have 2 arguments");
   }
 
   Expr shape = call->args[1]->shape();
@@ -1152,7 +1156,8 @@ Expr InferShapeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx) {
 
 Type InferTypeCollapseSumLike(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "collapse_sum_like op should have 2 arguments");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "collapse_sum_like op should have 2 arguments");
   }
 
   auto* input_ty = call->args[1]->checked_type().as<DynTensorTypeNode>();
@@ -1180,10 +1185,10 @@ Expr MakeCollapseSumTo(Expr data, Expr shape) {
 
 TVM_REGISTER_GLOBAL("relax.op.collapse_sum_to").set_body_typed(MakeCollapseSumTo);
 
-
 Expr InferShapeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "collapse_sum_to op should have 2 arguments");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "collapse_sum_to op should have 2 arguments");
   }
 
   return call->args[1];
@@ -1191,7 +1196,8 @@ Expr InferShapeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx) {
 
 Type InferTypeCollapseSumTo(const Call& call, DiagnosticContext diag_ctx) {
   if (call->args.size() != 2) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "collapse_sum_to op should have 2 arguments");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "collapse_sum_to op should have 2 arguments");
   }
 
   const auto* orig_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
@@ -1266,10 +1272,8 @@ Expr InferShapeWhere(const Call& call, DiagnosticContext diag_ctx) {
     return ShapeExpr(Array<PrimExpr>(output_shape.rbegin(), output_shape.rend()));
   };
 
-  return binary_broadcast(
-    binary_broadcast(call->args[1]->shape(), call->args[2]->shape()),
-    call->args[0]->shape()
-  );
+  return binary_broadcast(binary_broadcast(call->args[1]->shape(), call->args[2]->shape()),
+                          call->args[0]->shape());
   // TODO(chaofanlin): runtime shape inference
 }
 
@@ -1286,8 +1290,10 @@ Type InferTypeWhere(const Call& call, DiagnosticContext diag_ctx) {
   auto* t2 = y_type.as<DynTensorTypeNode>();
   if (!t0 || !t1 || !t2) {
     diag_ctx.EmitFatal(Diagnostic::Error(call->span)
-                       << "All three arguments of where: condtion, x and y should be DynTensor for broadcasting, but got "
-                       << condition_type->GetTypeKey()  << ", " << x_type->GetTypeKey() << " and " << y_type->GetTypeKey());
+                       << "All three arguments of where: condtion, x and y should be DynTensor for "
+                          "broadcasting, but got "
+                       << condition_type->GetTypeKey() << ", " << x_type->GetTypeKey() << " and "
+                       << y_type->GetTypeKey());
   }
 
   DataType output_dtype;
@@ -1531,7 +1537,8 @@ RELAX_REGISTER_OP("relax.strided_slice")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeStridedSlice)
-    .set_attr<FInferType>("FInferType", InferTypeStridedSlice);
+    .set_attr<FInferType>("FInferType", InferTypeStridedSlice)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutStridedSlice);
 
 Expr MakeStridedSlice(Expr data,                          //
                       Array<PrimExpr> begin,              //
