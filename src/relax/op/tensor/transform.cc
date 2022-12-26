@@ -1536,7 +1536,8 @@ RELAX_REGISTER_OP("relax.strided_slice")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeStridedSlice)
-    .set_attr<FInferType>("FInferType", InferTypeStridedSlice);
+    .set_attr<FInferType>("FInferType", InferTypeStridedSlice)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutStridedSlice);
 
 Expr MakeStridedSlice(Expr data,                          //
                       Array<PrimExpr> begin,              //

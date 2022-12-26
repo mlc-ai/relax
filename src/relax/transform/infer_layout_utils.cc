@@ -384,5 +384,41 @@ InferLayoutOutput InferLayoutSqueeze(const Call& call,
   new_attrs->axis = new_axis;
   return InferLayoutOutput({exisiting_layout}, {output_layout}, Attrs(new_attrs));
 }
+
+InferLayoutOutput InferLayoutStridedSlice(const Call& call,
+                                          const Map<String, Array<String>>& desired_layouts,
+                                          VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr) << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+
+  const auto* attrs = call->attrs.as<StridedSliceAttrs>();
+  ICHECK(attrs != nullptr) << "Invalid Call";
+  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(type != nullptr && !type->IsUnknownNdim()) << "Invalid Call";
+
+  Layout exisiting_layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  std::string axes;
+  if (attrs->axes.defined()) {
+    for (const auto& axis : attrs->axes.value()) {
+      axes.push_back('A' + axis->value);
+    }
+  } else {
+    for (int i = 0; i < type->ndim; ++i) {
+      axes.push_back('A' + i);
+    }
+  }
+
+  Layout axes_layout = Layout(axes);
+  Array<Integer> new_axes;
+  for (size_t i = 0; i < axes_layout.ndim(); ++i) {
+    new_axes.push_back(Integer(exisiting_layout.IndexOf(axes_layout[i])));
+  }
+  ObjectPtr<StridedSliceAttrs> new_attrs = make_object<StridedSliceAttrs>(*attrs);
+  new_attrs->axes = new_axes;
+  return InferLayoutOutput({exisiting_layout}, {exisiting_layout}, Attrs(new_attrs));
+}
 }  // namespace relax
 }  // namespace tvm
