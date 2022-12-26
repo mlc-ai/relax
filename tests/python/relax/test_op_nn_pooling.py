@@ -42,6 +42,7 @@ def test_max_pool2d_infer_struct_info():
     x3 = relax.Var("x", R.Tensor("float32"))
     x4 = relax.Var("x", R.Tensor(ndim=4))
     x5 = relax.Var("x", R.Tensor())
+    x6 = relax.Var("x", R.Tensor((2, 4, 32, 32, 16), "float32"))
 
     _check_inference(
         bb, relax.op.nn.max_pool2d(x0), relax.TensorStructInfo((2, 3, 32, 32), "float32")
@@ -85,6 +86,11 @@ def test_max_pool2d_infer_struct_info():
         relax.TensorStructInfo((2, 32, 32, 3), "float32"),
     )
     _check_inference(
+        bb,
+        relax.op.nn.max_pool2d(x6, layout="NCHW16c", out_layout="NHWC16c"),
+        relax.TensorStructInfo((2, 32, 32, 4, 16), "float32"),
+    )
+    _check_inference(
         bb, relax.op.nn.max_pool2d(x2), relax.TensorStructInfo(dtype="float32", ndim=4)
     )
     _check_inference(
@@ -98,6 +104,7 @@ def test_max_pool2d_infer_struct_info_symbolic():
     bb = relax.BlockBuilder()
     n = tir.Var("n", "int64")
     c = tir.Var("c", "int64")
+    c16 = tir.Var("c16", "int64")
     ih = tir.Var("ih", "int64")
     iw = tir.Var("iw", "int64")
     kh = tir.Var("kh", "int64")
@@ -110,12 +117,13 @@ def test_max_pool2d_infer_struct_info_symbolic():
     padding_r = tir.Var("padding_r", "int64")
     dilation_h = tir.Var("dilation_h", "int64")
     dilation_w = tir.Var("dilation_w", "int64")
-    x = relax.Var("x", R.Tensor((n, c, ih, iw), "float32"))
+    x0 = relax.Var("x", R.Tensor((n, c, ih, iw), "float32"))
+    x1 = relax.Var("x", R.Tensor((n, c, ih, iw, c16), "float32"))
 
     _check_inference(
         bb,
         relax.op.nn.max_pool2d(
-            x,
+            x0,
             pool_size=(kh, kw),
             strides=(stride_h, stride_w),
             padding=(padding_t, padding_l, padding_b, padding_r),
@@ -130,6 +138,11 @@ def test_max_pool2d_infer_struct_info_symbolic():
             ),
             "float32",
         ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.max_pool2d(x1, layout="NCHW16c", out_layout="NHWC"),
+        relax.TensorStructInfo((n, ih, iw, c * 16), "float32"),
     )
 
 
@@ -157,12 +170,13 @@ def test_max_pool2d_wrong_strides_padding_dilation_length():
         relax.op.nn.max_pool2d(x, dilation=(1, 2, 3))
 
 
-def test_max_pool2d_wrong_layout_string():
+def test_max_pool2d_infer_struct_info_wrong_layout_string():
+    bb = relax.BlockBuilder()
     x = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
     with pytest.raises(TVMError):
-        relax.op.nn.max_pool2d(x, layout="OIHW")
+        bb.normalize(relax.op.nn.max_pool2d(x, layout="OIHW"))
     with pytest.raises(TVMError):
-        relax.op.nn.max_pool2d(x, out_layout="OHWI")
+        bb.normalize(relax.op.nn.max_pool2d(x, out_layout="OHWI"))
 
 
 def test_max_pool2d_wrong_input_ndim():
@@ -194,6 +208,7 @@ def test_adaptive_avg_pool2d_infer_struct_info():
     x3 = relax.Var("x", R.Tensor("float32"))
     x4 = relax.Var("x", R.Tensor(ndim=4))
     x5 = relax.Var("x", R.Tensor())
+    x6 = relax.Var("x", R.Tensor((2, 4, 32, 32, 16), "float32"))
 
     _check_inference(
         bb, relax.op.nn.adaptive_avg_pool2d(x0), relax.TensorStructInfo((2, 3, 32, 32), "float32")
@@ -219,6 +234,11 @@ def test_adaptive_avg_pool2d_infer_struct_info():
         relax.TensorStructInfo((2, 32, 32, 3), "float32"),
     )
     _check_inference(
+        bb,
+        relax.op.nn.adaptive_avg_pool2d(x6, layout="NCHW16c", out_layout="NHWC16c"),
+        relax.TensorStructInfo((2, 32, 32, 4, 16), "float32"),
+    )
+    _check_inference(
         bb, relax.op.nn.adaptive_avg_pool2d(x2), relax.TensorStructInfo(dtype="float32", ndim=4)
     )
     _check_inference(
@@ -236,24 +256,31 @@ def test_adaptive_avg_pool2d_infer_struct_info_symbolic():
     bb = relax.BlockBuilder()
     n = tir.Var("n", "int64")
     c = tir.Var("c", "int64")
+    c16 = tir.Var("c16", "int64")
     ih = tir.Var("ih", "int64")
     iw = tir.Var("iw", "int64")
     oh = tir.Var("oh", "int64")
     ow = tir.Var("ow", "int64")
-    x = relax.Var("x", R.Tensor((n, c, ih, iw), "float32"))
+    x0 = relax.Var("x", R.Tensor((n, c, ih, iw), "float32"))
+    x1 = relax.Var("x", R.Tensor((n, c, ih, iw, c16), "float32"))
 
     _check_inference(
-        bb, relax.op.nn.adaptive_avg_pool2d(x), relax.TensorStructInfo((n, c, ih, iw), "float32")
+        bb, relax.op.nn.adaptive_avg_pool2d(x0), relax.TensorStructInfo((n, c, ih, iw), "float32")
     )
     _check_inference(
         bb,
-        relax.op.nn.adaptive_avg_pool2d(x, output_size=oh),
+        relax.op.nn.adaptive_avg_pool2d(x0, output_size=oh),
         relax.TensorStructInfo((n, c, oh, oh), "float32"),
     )
     _check_inference(
         bb,
-        relax.op.nn.adaptive_avg_pool2d(x, output_size=(oh, ow)),
+        relax.op.nn.adaptive_avg_pool2d(x0, output_size=(oh, ow)),
         relax.TensorStructInfo((n, c, oh, ow), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.adaptive_avg_pool2d(x1, layout="NCHW16c", out_layout="NHWC"),
+        relax.TensorStructInfo((n, ih, iw, c * 16), "float32"),
     )
 
 
@@ -273,12 +300,13 @@ def test_adaptive_avg_pool2d_infer_struct_info_more_input_dtype():
     )
 
 
-def test_adaptive_avg_pool2d_wrong_layout_string():
+def test_adaptive_avg_pool2d_infer_struct_info_wrong_layout_string():
+    bb = relax.BlockBuilder()
     x = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
     with pytest.raises(TVMError):
-        relax.op.nn.adaptive_avg_pool2d(x, layout="OIHW")
+        bb.normalize(relax.op.nn.adaptive_avg_pool2d(x, layout="OIHW"))
     with pytest.raises(TVMError):
-        relax.op.nn.adaptive_avg_pool2d(x, out_layout="OHWI")
+        bb.normalize(relax.op.nn.adaptive_avg_pool2d(x, out_layout="OHWI"))
 
 
 def test_adaptive_avg_pool2d_wrong_input_ndim():

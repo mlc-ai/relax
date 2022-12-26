@@ -49,14 +49,6 @@ Expr MakeMaxPool2D(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides
   CHECK_EQ(dilation.size(), 2)
       << "The input dilation length is expected to be 2. However, the given dilation is "
       << dilation;
-  CHECK(CheckTensorLayout(layout, {'N', 'C', 'H', 'W'}))
-      << "The input data layout is expected to exactly contain \"N\", \"C\", \"H\" and \"W\". "
-         "However, the given data layout is "
-      << layout;
-  CHECK(!out_layout.defined() || CheckTensorLayout(out_layout.value(), {'N', 'C', 'H', 'W'}))
-      << "The given output layout is expected to exactly contain \"N\", \"C\", \"H\" and \"W\". "
-         "However, the given output layout is "
-      << out_layout.value();
 
   auto attrs = make_object<MaxPool2DAttrs>();
   attrs->pool_size = std::move(pool_size);
@@ -72,43 +64,46 @@ Expr MakeMaxPool2D(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides
 TVM_REGISTER_GLOBAL("relax.op.nn.max_pool2d").set_body_typed(MakeMaxPool2D);
 
 StructInfo InferStructInfoMaxPool2D(const Call& call, const BlockBuilder& ctx) {
-  constexpr static int ndim = 4;
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx, /*op_name=*/"MaxPool2D");
 
+  const auto* attrs = call->attrs.as<MaxPool2DAttrs>();
+  auto [data_layout, data2NCHW] = CheckTensorLayout(call, ctx, attrs->layout,  //
+                                                    /*tgt_layout=*/"NCHW",     //
+                                                    /*op_name=*/"MaxPool2D",   //
+                                                    /*tensor_name=*/"data");
+  auto [out_layout, out2NCHW] = CheckTensorLayout(call, ctx, attrs->out_layout,  //
+                                                  /*tgt_layout=*/"NCHW",         //
+                                                  /*op_name=*/"MaxPool2D",       //
+                                                  /*tensor_name=*/"output");
+
   Optional<ShapeExpr> data_shape =
-      CheckNdimAndGetShape(call, ctx, data_sinfo, ndim, /*op_name=*/"MaxPool2D");
+      CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout, /*op_name=*/"MaxPool2D");
   if (!data_shape.defined()) {
-    return TensorStructInfo(data_sinfo->dtype, ndim);
+    return TensorStructInfo(data_sinfo->dtype, out_layout.ndim());
   }
 
-  const auto* attrs = call->attrs.as<MaxPool2DAttrs>();
-  ShapeExpr _data_shape = data_shape.value();
-  std::string _data_layout = attrs->layout.operator std::string();
+  Array<PrimExpr> data_NCHW_shape = data2NCHW.ForwardShape(data_shape.value()->values);
 
   std::unordered_map<char, PrimExpr> output_shape;
-  PrimExpr batch = _data_shape->values[_data_layout.find('N')];
-  PrimExpr channel = _data_shape->values[_data_layout.find('C')];
-  PrimExpr input_h = _data_shape->values[_data_layout.find('H')];
-  PrimExpr input_w = _data_shape->values[_data_layout.find('W')];
+  PrimExpr input_h = data_NCHW_shape[2];
+  PrimExpr input_w = data_NCHW_shape[3];
   PrimExpr kernel_h = attrs->pool_size[0];
   PrimExpr kernel_w = attrs->pool_size[1];
   PrimExpr padding_h = attrs->padding[0] + attrs->padding[2];
   PrimExpr padding_w = attrs->padding[1] + attrs->padding[3];
 
   arith::Analyzer* analyzer = ctx->GetAnalyzer();
-  output_shape['N'] = batch;
-  output_shape['C'] = channel;
-  output_shape['H'] = analyzer->Simplify(
+  std::vector<PrimExpr> out_NCHW_shape;
+  out_NCHW_shape.resize(4);
+  out_NCHW_shape[0] = data_NCHW_shape[0];
+  out_NCHW_shape[1] = data_NCHW_shape[1];
+  out_NCHW_shape[2] = analyzer->Simplify(
       (input_h + padding_h - attrs->dilation[0] * (kernel_h - 1) - 1) / attrs->strides[0] + 1);
-  output_shape['W'] = analyzer->Simplify(
+  out_NCHW_shape[3] = analyzer->Simplify(
       (input_w + padding_w - attrs->dilation[1] * (kernel_w - 1) - 1) / attrs->strides[1] + 1);
 
-  std::vector<PrimExpr> shape;
-  shape.reserve(ndim);
-  for (int i = 0; i < ndim; ++i) {
-    shape.push_back(output_shape[attrs->out_layout.at(i)]);
-  }
-  return TensorStructInfo(ShapeExpr(shape), data_sinfo->dtype);
+  Array<PrimExpr> out_shape = out2NCHW.BackwardShape(out_NCHW_shape);
+  return TensorStructInfo(ShapeExpr(out_shape), data_sinfo->dtype);
 }
 
 TVM_REGISTER_OP("relax.nn.max_pool2d")
@@ -122,15 +117,6 @@ TVM_REGISTER_NODE_TYPE(AdaptivePool2DAttrs);
 
 Expr MakeAdaptiveAvgPool2D(Expr data, Optional<Array<PrimExpr>> output_size, String layout,
                            Optional<String> out_layout) {
-  CHECK(CheckTensorLayout(layout, {'N', 'C', 'H', 'W'}))
-      << "The input data layout is expected to exactly contain \"N\", \"C\", \"H\" and \"W\". "
-         "However, the given data layout is "
-      << layout;
-  CHECK(!out_layout.defined() || CheckTensorLayout(out_layout.value(), {'N', 'C', 'H', 'W'}))
-      << "The given output layout is expected to exactly contain \"N\", \"C\", \"H\" and \"W\". "
-         "However, the given output layout is "
-      << out_layout.value();
-
   ObjectPtr<AdaptivePool2DAttrs> attrs = make_object<AdaptivePool2DAttrs>();
   attrs->layout = layout;
   attrs->out_layout = out_layout.value_or(layout);
@@ -152,37 +138,34 @@ Expr MakeAdaptiveAvgPool2D(Expr data, Optional<Array<PrimExpr>> output_size, Str
 TVM_REGISTER_GLOBAL("relax.op.nn.adaptive_avg_pool2d").set_body_typed(MakeAdaptiveAvgPool2D);
 
 StructInfo InferStructInfoAdaptiveAvgPool2D(const Call& call, const BlockBuilder& ctx) {
-  constexpr static int ndim = 4;
   TensorStructInfo data_sinfo =
       GetUnaryInputTensorStructInfo(call, ctx, /*op_name=*/"AdaptiveAvgPool2D");
 
-  Optional<ShapeExpr> data_shape =
-      CheckNdimAndGetShape(call, ctx, data_sinfo, ndim, /*op_name=*/"AdaptiveAvgPool2D");
-  if (!data_shape.defined()) {
-    return TensorStructInfo(data_sinfo->dtype, ndim);
-  }
-
   const auto* attrs = call->attrs.as<AdaptivePool2DAttrs>();
-  ShapeExpr _data_shape = data_shape.value();
-  std::string _data_layout = attrs->layout.operator std::string();
+  auto [data_layout, data2NCHW] = CheckTensorLayout(call, ctx, attrs->layout,         //
+                                                    /*tgt_layout=*/"NCHW",            //
+                                                    /*op_name=*/"AdaptiveAvgPool2D",  //
+                                                    /*tensor_name=*/"data");
+  auto [out_layout, out2NCHW] = CheckTensorLayout(call, ctx, attrs->out_layout,     //
+                                                  /*tgt_layout=*/"NCHW",            //
+                                                  /*op_name=*/"AdaptiveAvgPool2D",  //
+                                                  /*tensor_name=*/"output");
 
-  std::unordered_map<char, PrimExpr> output_shape;
-  output_shape['N'] = _data_shape->values[_data_layout.find('N')];
-  output_shape['C'] = _data_shape->values[_data_layout.find('C')];
+  Optional<ShapeExpr> data_shape = CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout,
+                                                                 /*op_name=*/"AdaptiveAvgPool2D");
+  if (!data_shape.defined()) {
+    return TensorStructInfo(data_sinfo->dtype, out_layout.ndim());
+  }
+
+  Array<PrimExpr> data_NCHW_shape = data2NCHW.ForwardShape(data_shape.value()->values);
+  Array<PrimExpr> out_NCHW_shape(data_NCHW_shape);
   if (attrs->output_size.defined()) {
-    output_shape['H'] = attrs->output_size.value()[0];
-    output_shape['W'] = attrs->output_size.value()[1];
-  } else {
-    output_shape['H'] = _data_shape->values[_data_layout.find('H')];
-    output_shape['W'] = _data_shape->values[_data_layout.find('W')];
+    out_NCHW_shape.Set(2, attrs->output_size.value()[0]);
+    out_NCHW_shape.Set(3, attrs->output_size.value()[1]);
   }
 
-  std::vector<PrimExpr> shape;
-  shape.reserve(ndim);
-  for (int i = 0; i < ndim; ++i) {
-    shape.push_back(output_shape[attrs->out_layout.at(i)]);
-  }
-  return TensorStructInfo(ShapeExpr(shape), data_sinfo->dtype);
+  Array<PrimExpr> out_shape = out2NCHW.BackwardShape(out_NCHW_shape);
+  return TensorStructInfo(ShapeExpr(out_shape), data_sinfo->dtype);
 }
 
 TVM_REGISTER_OP("relax.nn.adaptive_avg_pool2d")

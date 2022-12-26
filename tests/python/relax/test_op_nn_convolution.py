@@ -41,10 +41,12 @@ def test_conv2d_infer_struct_info():
     x2 = relax.Var("x", R.Tensor("float32", ndim=4))
     x3 = relax.Var("x", R.Tensor("float32"))
     x4 = relax.Var("x", R.Tensor())
+    x5 = relax.Var("x", R.Tensor((2, 4, 28, 28, 16), "float32"))
     w0 = relax.Var("w", R.Tensor((4, 3, 3, 3), "float32"))
     w1 = relax.Var("w", R.Tensor((3, 4, 3, 3), "float32"))
     w2 = relax.Var("w", R.Tensor("float32", ndim=4))
     w3 = relax.Var("w", R.Tensor("float32"))
+    w4 = relax.Var("w", R.Tensor((48, 4, 3, 3, 16), "float32"))
 
     _check_inference(
         bb, relax.op.nn.conv2d(x0, w0), relax.TensorStructInfo((2, 4, 26, 26), "float32")
@@ -103,6 +105,13 @@ def test_conv2d_infer_struct_info():
         relax.TensorStructInfo((2, 4, 26, 26), "float32"),
     )
     _check_inference(
+        bb,
+        relax.op.nn.conv2d(
+            x5, w4, data_layout="NCHW16c", kernel_layout="OIHW16i", out_layout="NHWC16c"
+        ),
+        relax.TensorStructInfo((2, 26, 26, 3, 16), "float32"),
+    )
+    _check_inference(
         bb, relax.op.nn.conv2d(x2, w0), relax.TensorStructInfo(dtype="float32", ndim=4)
     )
     _check_inference(
@@ -121,6 +130,7 @@ def test_conv2d_infer_struct_info_symbolic():
     bb = relax.BlockBuilder()
     n = tir.Var("n", "int64")
     c = tir.Var("c", "int64")
+    c16 = tir.Var("c16", "int64")
     ih = tir.Var("ih", "int64")
     iw = tir.Var("iw", "int64")
     ki = tir.Var("ki", "int64")
@@ -136,8 +146,10 @@ def test_conv2d_infer_struct_info_symbolic():
     dilation_h = tir.Var("dilation_h", "int64")
     dilation_w = tir.Var("dilation_w", "int64")
     x0 = relax.Var("x", R.Tensor((n, c, ih, iw), "float32"))
+    x1 = relax.Var("x", R.Tensor((n, c, ih, iw, c16), "float32"))
     w0 = relax.Var("w", R.Tensor((ko, ki, kh, kw), "float32"))
     w1 = relax.Var("w", R.Tensor((ko, c, kh, kw), "float32"))
+    w2 = relax.Var("w", R.Tensor((ko, c, kh, kw, c16), "float32"))
 
     _check_inference(
         bb,
@@ -147,6 +159,13 @@ def test_conv2d_infer_struct_info_symbolic():
     _check_inference(
         bb,
         relax.op.nn.conv2d(x0, w1),
+        relax.TensorStructInfo((n, ko, ih + 1 - kh, iw + 1 - kw), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(
+            x1, w2, data_layout="NCHW16c", kernel_layout="OIHW16i", out_layout="NCHW"
+        ),
         relax.TensorStructInfo((n, ko, ih + 1 - kh, iw + 1 - kw), "float32"),
     )
     _check_inference(
@@ -217,15 +236,16 @@ def test_conv2d_wrong_strides_padding_dilation_length():
         relax.op.nn.conv2d(x, w, dilation=(1, 2, 3))
 
 
-def test_conv2d_wrong_layout_string():
+def test_conv2d_infer_struct_info_wrong_layout_string():
+    bb = relax.BlockBuilder()
     x = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
     w = relax.Var("w", R.Tensor((4, 3, 3, 3), "float32"))
     with pytest.raises(TVMError):
-        relax.op.nn.conv2d(x, w, data_layout="OIHW")
+        bb.normalize(relax.op.nn.conv2d(x, w, data_layout="OIHW"))
     with pytest.raises(TVMError):
-        relax.op.nn.conv2d(x, w, kernel_layout="NHWC")
+        bb.normalize(relax.op.nn.conv2d(x, w, kernel_layout="NHWC"))
     with pytest.raises(TVMError):
-        relax.op.nn.conv2d(x, w, out_layout="OHWI")
+        bb.normalize(relax.op.nn.conv2d(x, w, out_layout="OHWI"))
 
 
 def test_conv2d_dtype_mismatch():

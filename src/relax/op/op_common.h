@@ -29,6 +29,7 @@
 #include <tvm/relax/op_attr_types.h>
 #include <tvm/relay/expr.h>
 #include <tvm/relay/op.h>
+#include <tvm/tir/data_layout.h>
 
 #include <string>
 #include <utility>
@@ -113,9 +114,6 @@ inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx
 
 /************ Utilities ************/
 
-using FComputeOutDtype = std::function<DataType(const Call&, const BlockBuilder&,
-                                                const TensorStructInfo&, const TensorStructInfo&)>;
-
 /*!
  * \brief Infer the output datatype for binary arithmetic operators.
  * \param call The Call of the binary tensor operators.
@@ -142,25 +140,6 @@ inline DataType InferBinaryArithOpOutDtype(const Call& call, const BlockBuilder&
 }
 
 /*!
- * \brief Check if the given layout exactly contains all the specified characters.
- * \param layout The input layout to be checked
- * \param dims The given characters that are required to contain
- * \return A boolean indicating if the input layout exactly contains all the specified characters.
- */
-inline bool CheckTensorLayout(const String& layout, std::vector<char> dims) {
-  if (layout.size() != dims.size()) {
-    return false;
-  }
-  std::string _layout = layout.operator std::string();
-  for (char dim : dims) {
-    if (_layout.find(dim) == std::string::npos) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/*!
  * \brief Complete the padding to a 4-length array.
  * - If the padding length is 1, the same padding is used on all top/left/bottom/right sides
  * - If the padding length is 2, top/bottom sides use padding[0] and left/right use padding[1]
@@ -184,22 +163,50 @@ inline Array<PrimExpr> GetCompletePadding2D(Array<PrimExpr> padding) {
 }
 
 /*!
- * \brief Check if the given tensor struct info has the given expected ndim (or the ndim is
- * unknown), and try to cast the shape to ShapeExpr.
+ * \brief Check if the given tensor layout can be converted to the given target layout.
+ * If convertible, return the tensor layout and the bijective conversion in tir::Layout and
+ * tir::BijectiveLayout accordingly.
+ * \param call The Call of the binary tensor operators.
+ * \param ctx The error reporting context.
+ * \param tensor_layout The tensor layout to be checked
+ * \param tgt_layout The target layout to be matched
+ * \param op_name The name of the operator that invokes this function.
+ * \param tensor_name The name of the input tensor
+ * \return std::pair<tir::Layout, tir::BijectiveLayout>
+ */
+inline std::pair<tir::Layout, tir::BijectiveLayout> CheckTensorLayout(
+    const Call& call, const BlockBuilder& ctx, const String& tensor_layout,
+    const String& tgt_layout, const String& op_name, const String& tensor_name) {
+  tir::Layout _tensor_layout(tensor_layout, DataType::Int(64));
+  tir::BijectiveLayout tensor2tgt(_tensor_layout, tir::Layout(tgt_layout, DataType::Int(64)));
+  if (!tensor2tgt.defined()) {
+    ctx->ReportFatal(Diagnostic::Error(call) << op_name << " requires the given " << tensor_name
+                                             << " layout to be convertible from " << tgt_layout
+                                             << " layout. However, the given layout "
+                                             << tensor_layout << " is not convertible.");
+  }
+  return {_tensor_layout, tensor2tgt};
+}
+
+/*!
+ * \brief Check if the given tensor struct info has expected ndim per the given layout (or the ndim
+ * is unknown), and try to cast the shape to ShapeExpr.
  * \param call The Call of the binary tensor operators.
  * \param ctx The error reporting context.
  * \param sinfo The input tensor struct info to be checked.
- * \param expected_ndim The ndim that the input tensor struct info is expected to have
+ * \param layout The layout that the given tensor is expected to have.
  * \param op_name The name of the operator that invokes this function.
  * \return The shape of the input tensor in ShapeExpr, or `NullOpt` if the shape is unknown.
  */
-inline Optional<ShapeExpr> CheckNdimAndGetShape(const Call& call, const BlockBuilder& ctx,
-                                                const TensorStructInfo& sinfo, int expected_ndim,
-                                                const String& op_name) {
-  if (!sinfo->IsUnknownNdim() && sinfo->ndim != expected_ndim) {
-    ctx->ReportFatal(Diagnostic::Error(call->span)
-                     << op_name << " requires the input data and weight to be " << expected_ndim
-                     << "-dim tensors. However, the ndim of one of them is " << sinfo->ndim);
+inline Optional<ShapeExpr> CheckNdimPerLayoutAndGetShape(const Call& call, const BlockBuilder& ctx,
+                                                         const TensorStructInfo& sinfo,
+                                                         const tir::Layout& layout,
+                                                         const String& op_name) {
+  if (!sinfo->IsUnknownNdim() && sinfo->ndim != static_cast<int>(layout.ndim())) {
+    ctx->ReportFatal(Diagnostic::Error(call)
+                     << "In " << op_name << ", layout " << layout << " requires the input to be "
+                     << layout.ndim() << "-dim tensor. However, the given input has ndim "
+                     << sinfo->ndim);
   }
   return Downcast<Optional<ShapeExpr>>(sinfo->shape);
 }

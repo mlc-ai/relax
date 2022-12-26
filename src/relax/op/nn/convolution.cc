@@ -24,7 +24,6 @@
 
 #include "convolution.h"
 
-#include <unordered_map>
 #include <vector>
 
 namespace tvm {
@@ -49,18 +48,6 @@ Expr MakeConv2D(Expr data, Expr weight, Array<PrimExpr> strides, Array<PrimExpr>
   CHECK_EQ(dilation.size(), 2)
       << "The input dilation length is expected to be 2. However, the given dilation is "
       << dilation;
-  CHECK(CheckTensorLayout(data_layout, {'N', 'C', 'H', 'W'}))
-      << "The input data layout is expected to exactly contain \"N\", \"C\", \"H\" and \"W\". "
-         "However, the given data layout is "
-      << data_layout;
-  CHECK(CheckTensorLayout(kernel_layout, {'I', 'O', 'H', 'W'}))
-      << "The input kernel layout is expected to exactly contain \"I\", \"O\", \"H\" and \"W\". "
-         "However, the given kernel layout is "
-      << data_layout;
-  CHECK(!out_layout.defined() || CheckTensorLayout(out_layout.value(), {'N', 'C', 'H', 'W'}))
-      << "The given output layout is expected to exactly contain \"N\", \"C\", \"H\" and \"W\". "
-         "However, the given output layout is "
-      << out_layout.value();
   return MakeConv<Conv2DAttrs>(std::move(data), std::move(weight), std::move(strides),
                                std::move(padding), std::move(dilation), data_layout,
                                std::move(kernel_layout), out_layout.value_or(data_layout),
@@ -70,30 +57,40 @@ Expr MakeConv2D(Expr data, Expr weight, Array<PrimExpr> strides, Array<PrimExpr>
 TVM_REGISTER_GLOBAL("relax.op.nn.conv2d").set_body_typed(MakeConv2D);
 
 StructInfo InferStructInfoConv2d(const Call& call, const BlockBuilder& ctx) {
-  constexpr static int ndim = 4;
   auto [data_sinfo, weight_sinfo] = GetBinaryInputTensorStructInfo(call, ctx, /*op_name=*/"Conv2D");
 
-  Optional<ShapeExpr> data_shape =
-      CheckNdimAndGetShape(call, ctx, data_sinfo, ndim, /*op_name=*/"Conv2D");
-  Optional<ShapeExpr> weight_shape =
-      CheckNdimAndGetShape(call, ctx, weight_sinfo, ndim, /*op_name=*/"Conv2D");
   const auto* attrs = call->attrs.as<Conv2DAttrs>();
+  auto [data_layout, data2NCHW] = CheckTensorLayout(call, ctx, attrs->data_layout,  //
+                                                    /*tgt_layout=*/"NCHW",          //
+                                                    /*op_name=*/"Conv2D",           //
+                                                    /*tensor_name=*/"data");
+  auto [weight_layout, weight2OIHW] = CheckTensorLayout(call, ctx, attrs->kernel_layout,  //
+                                                        /*tgt_layout=*/"OIHW",            //
+                                                        /*op_name=*/"Conv2D",             //
+                                                        /*tensor_name=*/"kernel");
+  auto [out_layout, out2NCHW] = CheckTensorLayout(call, ctx, attrs->out_layout,  //
+                                                  /*tgt_layout=*/"NCHW",         //
+                                                  /*op_name=*/"Conv2D",          //
+                                                  /*tensor_name=*/"output");
+
+  Optional<ShapeExpr> data_shape =
+      CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout, /*op_name=*/"Conv2D");
+  Optional<ShapeExpr> weight_shape =
+      CheckNdimPerLayoutAndGetShape(call, ctx, weight_sinfo, weight_layout, /*op_name=*/"Conv2D");
 
   DataType out_dtype = attrs->out_dtype.is_void()
                            ? InferBinaryArithOpOutDtype(call, ctx, data_sinfo, weight_sinfo)
                            : attrs->out_dtype;
   if (!data_shape.defined() || !weight_shape.defined()) {
-    return TensorStructInfo(out_dtype, ndim);
+    return TensorStructInfo(out_dtype, out_layout.ndim());
   }
 
-  arith::Analyzer* analyzer = ctx->GetAnalyzer();
-  ShapeExpr _data_shape = data_shape.value();
-  ShapeExpr _weight_shape = weight_shape.value();
-  std::string _data_layout = attrs->data_layout.operator std::string();
-  std::string _kernel_layout = attrs->kernel_layout.operator std::string();
+  Array<PrimExpr> data_NCHW_shape = data2NCHW.ForwardShape(data_shape.value()->values);
+  Array<PrimExpr> weight_OIHW_shape = weight2OIHW.ForwardShape(weight_shape.value()->values);
 
-  PrimExpr input_channel_data = _data_shape->values[_data_layout.find('C')];
-  PrimExpr input_channel_kernel = _weight_shape->values[_kernel_layout.find('I')];
+  arith::Analyzer* analyzer = ctx->GetAnalyzer();
+  PrimExpr input_channel_data = data_NCHW_shape[1];
+  PrimExpr input_channel_kernel = weight_OIHW_shape[1];
   if (analyzer->CanProve(input_channel_data - input_channel_kernel != 0)) {
     ctx->ReportFatal(Diagnostic::Error(call->span)
                      << "The channel size of the data should equal to the input channel size of "
@@ -102,28 +99,24 @@ StructInfo InferStructInfoConv2d(const Call& call, const BlockBuilder& ctx) {
                      << input_channel_kernel);
   }
 
-  std::unordered_map<char, PrimExpr> output_shape;
-  PrimExpr batch = _data_shape->values[_data_layout.find('N')];
-  PrimExpr output_channel = _weight_shape->values[_kernel_layout.find('O')];
-  PrimExpr input_h = _data_shape->values[_data_layout.find('H')];
-  PrimExpr input_w = _data_shape->values[_data_layout.find('W')];
-  PrimExpr kernel_h = _weight_shape->values[_kernel_layout.find('H')];
-  PrimExpr kernel_w = _weight_shape->values[_kernel_layout.find('W')];
+  PrimExpr input_h = data_NCHW_shape[2];
+  PrimExpr input_w = data_NCHW_shape[3];
+  PrimExpr kernel_h = weight_OIHW_shape[2];
+  PrimExpr kernel_w = weight_OIHW_shape[3];
   PrimExpr padding_h = attrs->padding[0] + attrs->padding[2];
   PrimExpr padding_w = attrs->padding[1] + attrs->padding[3];
-  output_shape['N'] = batch;
-  output_shape['C'] = output_channel;
-  output_shape['H'] = analyzer->Simplify(
+
+  std::vector<PrimExpr> out_NCHW_shape;
+  out_NCHW_shape.resize(4);
+  out_NCHW_shape[0] = data_NCHW_shape[0];
+  out_NCHW_shape[1] = weight_OIHW_shape[0];
+  out_NCHW_shape[2] = analyzer->Simplify(
       (input_h + padding_h - attrs->dilation[0] * (kernel_h - 1) - 1) / attrs->strides[0] + 1);
-  output_shape['W'] = analyzer->Simplify(
+  out_NCHW_shape[3] = analyzer->Simplify(
       (input_w + padding_w - attrs->dilation[1] * (kernel_w - 1) - 1) / attrs->strides[1] + 1);
 
-  std::vector<PrimExpr> shape;
-  shape.reserve(ndim);
-  for (int i = 0; i < ndim; ++i) {
-    shape.push_back(output_shape[attrs->out_layout.at(i)]);
-  }
-  return TensorStructInfo(ShapeExpr(shape), out_dtype);
+  Array<PrimExpr> out_shape = out2NCHW.BackwardShape(out_NCHW_shape);
+  return TensorStructInfo(ShapeExpr(out_shape), out_dtype);
 }
 
 TVM_REGISTER_OP("relax.nn.conv2d")
