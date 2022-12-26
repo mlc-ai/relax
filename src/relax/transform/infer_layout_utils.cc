@@ -292,5 +292,45 @@ InferLayoutOutput InferLayoutTranspose(const Call& call,
   return InferLayoutOutput({exisiting_layout}, {InitialLayout(type->ndim)}, Attrs(new_attrs));
 }
 
+InferLayoutOutput InferLayoutExpandDims(const Call& call,
+                                        const Map<String, Array<String>>& desired_layouts,
+                                        VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr) << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+
+  const auto* attrs = call->attrs.as<ExpandDimsAttrs>();
+  ICHECK(attrs != nullptr) << "Invalid Call";
+  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(type != nullptr) << "Invalid Call";
+  ICHECK(!type->IsUnknownNdim()) << "Invalid Call";
+
+  Layout exisiting_layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  int ndim = type->ndim;
+  int n_new_dim = attrs->axis.size();
+  int output_ndim = ndim + n_new_dim;
+  std::vector<bool> is_new_dim(output_ndim, false);
+  for (const auto& axis : attrs->axis) {
+    is_new_dim[(axis->value + output_ndim) % output_ndim] = true;
+  }
+  std::string new_layout;
+  for (int i = 0; i < output_ndim; ++i) {
+    if (!is_new_dim[i]) {
+      new_layout.push_back('A' + i);
+    }
+  }
+  new_layout = TransposeStrLike(new_layout, InitialLayout(ndim), exisiting_layout);
+  std::string output_layout;
+  for (int i = 0, j = 0; i < output_ndim; ++i) {
+    if (is_new_dim[i]) {
+      output_layout.push_back('A' + i);
+    } else {
+      output_layout.push_back(new_layout.at(j++));
+    }
+  }
+  return InferLayoutOutput({exisiting_layout}, {Layout(output_layout)}, Attrs(call->attrs));
+}
 }  // namespace relax
 }  // namespace tvm

@@ -221,7 +221,8 @@ RELAX_REGISTER_OP("relax.expand_dims")
     .set_attrs_type<ExpandDimsAttrs>()
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeExpandDims)
-    .set_attr<FInferType>("FInferType", InferTypeExpandDims);
+    .set_attr<FInferType>("FInferType", InferTypeExpandDims)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutExpandDims);
 
 Expr MakeExpandDims(Expr data, Array<Integer> axis) {
   ObjectPtr<ExpandDimsAttrs> attrs = make_object<ExpandDimsAttrs>();
