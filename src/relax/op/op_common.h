@@ -89,7 +89,8 @@ bool EqualCheck(const PrimExpr& lhs, const PrimExpr& rhs);
       .set_num_inputs(1)                                                            \
       .add_argument("expr", "Tensor", "The input tensor")                           \
       .set_attr<FInferShape>("FInferShape", InferShapeReduction)                    \
-      .set_attr<FInferType>("FInferType", InferTypeReduction)
+      .set_attr<FInferType>("FInferType", InferTypeReduction)                       \
+      .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutReduce)
 
 }  // namespace relax
 }  // namespace tvm

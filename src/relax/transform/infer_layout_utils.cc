@@ -40,6 +40,16 @@ Layout TransposeLike(const Layout& input, const Layout& src, const Layout& dst) 
   return Layout(axes);
 }
 
+String TransposeStrLike(const String& input, const Layout& src, const Layout& dst) {
+  ICHECK(src.ndim() == dst.ndim() && input.size() == src.ndim())
+      << "Layouts must have the same size";
+  std::string axes;
+  for (size_t i = 0; i < src.ndim(); ++i) {
+    axes.push_back(input.at(src.IndexOf(dst[i])));
+  }
+  return axes;
+}
+
 Layout GetOneValidLayout(VarLayoutMap var_layout_map, const Expr& arg) {
   if (const auto* var = arg.as<VarNode>()) {
     auto it = var_layout_map.find(GetRef<Var>(var));
@@ -124,6 +134,7 @@ InferLayoutOutput InferLayoutBinaryEwise(const Call& call,
   const auto* lhs_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
   const auto* rhs_type = call->args[1]->checked_type().as<DynTensorTypeNode>();
   ICHECK(lhs_type != nullptr && rhs_type != nullptr) << "Invalid Call";
+  ICHECK(!lhs_type->IsUnknownNdim() && !rhs_type->IsUnknownNdim()) << "Invalid Call";
 
   if (lhs != nullptr) {
     lhs_layout_map = var_layout_map.at(GetRef<Var>(lhs));
@@ -164,6 +175,7 @@ InferLayoutOutput InferLayoutTernaryEwise(const Call& call,
     const auto* var = call->args[i].as<VarNode>();
     const auto* type = call->args[i]->checked_type().as<DynTensorTypeNode>();
     ICHECK(type != nullptr) << "Invalid Call";
+    ICHECK(!type->IsUnknownNdim()) << "Invalid Call";
     if (var != nullptr) {
       layout_map[i] = var_layout_map.at(GetRef<Var>(var));
     } else {
@@ -185,6 +197,60 @@ InferLayoutOutput InferLayoutTernaryEwise(const Call& call,
   // No common layout found.
   Layout layout = GetOneValidLayout(var_layout_map, call->args[0]);
   return InferLayoutOutput({layout, layout, layout}, {layout}, Attrs(call->attrs));
+}
+
+InferLayoutOutput InferLayoutReduce(const Call& call,
+                                    const Map<String, Array<String>>& desired_layouts,
+                                    VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr) << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+
+  const auto* attrs = call->attrs.as<ReduceAttrs>();
+  ICHECK(attrs != nullptr) << "Invalid Call";
+  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(type != nullptr) << "Invalid Call";
+  ICHECK(!type->IsUnknownNdim()) << "Invalid Call";
+
+  Array<Integer> axis;
+  if (attrs->axis.defined()) {
+    axis = attrs->axis.value();
+  } else {
+    axis.reserve(type->ndim);
+    for (int i = 0; i < type->ndim; ++i) {
+      axis.push_back(Integer(i));
+    }
+  }
+
+  std::string axis_str(type->ndim, '0');
+  for (const auto& iter : axis) {
+    axis_str[iter->value] = '1';
+  }
+  for (int i = 0, j = 0; i < type->ndim; ++i) {
+    if (axis_str[i] != '1') {
+      axis_str[i] = 'A' + j++;
+    }
+  }
+
+  Layout exisiting_layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  String new_axis_str = TransposeStrLike(axis_str, InitialLayout(type->ndim), exisiting_layout);
+  Array<Integer> new_axis;
+  for (size_t i = 0; i < new_axis_str.size(); ++i) {
+    if (new_axis_str.at(i) == '1') {
+      new_axis.push_back(Integer(i));
+    }
+  }
+  std::string output_layout = new_axis_str;
+  output_layout.erase(std::remove(output_layout.begin(), output_layout.end(), '1'),
+                      output_layout.end());
+
+  ObjectPtr<ReduceAttrs> new_attrs = make_object<ReduceAttrs>(*attrs);
+  new_attrs->axis = new_axis;
+  return InferLayoutOutput({exisiting_layout},
+                           {attrs->keepdims ? exisiting_layout : Layout(output_layout)},
+                           Attrs(new_attrs));
 }
 
 }  // namespace relax
