@@ -253,5 +253,44 @@ InferLayoutOutput InferLayoutReduce(const Call& call,
                            Attrs(new_attrs));
 }
 
+InferLayoutOutput InferLayoutTranspose(const Call& call,
+                                       const Map<String, Array<String>>& desired_layouts,
+                                       VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr) << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+
+  const auto* attrs = call->attrs.as<TransposeAttrs>();
+  ICHECK(attrs != nullptr) << "Invalid Call";
+  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(type != nullptr) << "Invalid Call";
+  ICHECK(!type->IsUnknownNdim()) << "Invalid Call";
+
+  Layout exisiting_layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  Array<Integer> order;
+  if (attrs->axes.defined()) {
+    order = attrs->axes.value();
+  } else {
+    order.reserve(type->ndim);
+    for (int i = 0; i < type->ndim; ++i) {
+      order.push_back(Integer(type->ndim - i - 1));
+    }
+  }
+  std::string order_str;
+  for (const auto& axis : order) {
+    order_str.push_back(axis->value + 'A');
+  }
+  String new_axes = TransposeStrLike(InitialLayout(type->ndim), exisiting_layout, order_str);
+  Array<Integer> new_order;
+  for (size_t i = 0; i < new_axes.size(); ++i) {
+    new_order.push_back(Integer(new_axes.at(i) - 'A'));
+  }
+  ObjectPtr<TransposeAttrs> new_attrs = make_object<TransposeAttrs>(*attrs);
+  new_attrs->axes = new_order;
+  return InferLayoutOutput({exisiting_layout}, {InitialLayout(type->ndim)}, Attrs(new_attrs));
+}
+
 }  // namespace relax
 }  // namespace tvm
