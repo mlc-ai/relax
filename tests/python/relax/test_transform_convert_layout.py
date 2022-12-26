@@ -571,8 +571,54 @@ def test_conv2d_expand_dims():
             return gv2
 
     mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dExpandDims)
-    print(mod.script())
     tvm.ir.assert_structural_equal(mod, conv2d_expand_dims)
+
+
+@I.ir_module
+class conv2d_expand_dims_squeeze:
+    @R.function
+    def main(
+        x: R.Tensor((2, 3, 28, 28), dtype="float32"), w: R.Tensor((4, 3, 3, 3), dtype="float32")
+    ) -> R.Tensor(None, dtype="float32", ndim=4):
+        # block 0
+        gv: R.Tensor((2, 28, 28, 3), dtype="float32") = R.transpose(x, axes=[0, 2, 3, 1])
+        gv1: R.Tensor((4, 3, 3, 3), dtype="float32") = R.transpose(w, axes=[0, 2, 3, 1])
+        gv2: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.conv2d(
+            gv,
+            gv1,
+            strides=[1, 1],
+            padding=[0, 0, 0, 0],
+            dilation=[1, 1],
+            groups=1,
+            channels=None,
+            kernel_size=[3, 3],
+            data_layout="NHWC",
+            kernel_layout="OHWI",
+            out_layout="NHWC",
+            out_dtype="float32",
+        )
+        gv3: R.Tensor((2, 1, 26, 1, 26, 4), dtype="float32") = R.expand_dims(gv2, axis=[-3, 1])
+        gv4: R.Tensor((2, 26, 26, 4), dtype="float32") = R.squeeze(gv3, axis=[1, 3])
+        gv5: R.Tensor((2, 4, 26, 26), dtype="float32") = R.transpose(gv4, axes=[0, 3, 1, 2])
+        return gv5
+
+
+def test_conv2d_expand_dims_squeeze():
+    @I.ir_module
+    class Conv2dExpandDimsSqueeze:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
+                x, w, kernel_size=[3, 3], out_dtype="float32"
+            )
+            gv2: R.Tensor((2, 1, 4, 1, 26, 26), "float32") = R.expand_dims(gv, axis=(-3, 1))
+            gv3: R.Tensor((2, 4, 26, 26), "float32") = R.squeeze(gv2, axis=[1, 3])
+            return gv3
+
+    mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dExpandDimsSqueeze)
+    tvm.ir.assert_structural_equal(mod, conv2d_expand_dims_squeeze)
 
 
 if __name__ == "__main__":
@@ -587,3 +633,4 @@ if __name__ == "__main__":
     test_conv2d_sum_keepdim()
     test_conv2d_transpose()
     test_conv2d_expand_dims()
+    test_conv2d_expand_dims_squeeze()

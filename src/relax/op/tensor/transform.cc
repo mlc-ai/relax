@@ -311,7 +311,8 @@ RELAX_REGISTER_OP("relax.squeeze")
     .set_attrs_type<SqueezeAttrs>()
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeSqueeze)
-    .set_attr<FInferType>("FInferType", InferTypeSqueeze);
+    .set_attr<FInferType>("FInferType", InferTypeSqueeze)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutSqueeze);
 
 Expr MakeSqueeze(Expr data, Optional<Array<Integer>> axis) {
   ObjectPtr<SqueezeAttrs> attrs = make_object<SqueezeAttrs>();
