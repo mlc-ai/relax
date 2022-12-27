@@ -119,7 +119,6 @@ Expr InferShapeMaxPool2d(const Call& call, DiagnosticContext diag_ctx) {
   }
 }
 
-
 RELAX_REGISTER_OP("relax.nn.max_pool2d")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
@@ -155,7 +154,8 @@ RELAX_REGISTER_OP("relax.nn.adaptive_avg_pool2d")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
     .set_attr<FInferShape>("FInferShape", InferShapeAdaptiveAvgPool2D)
-    .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast);
+    .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutAdaptiveAvgPool2D);
 
 Expr MakeAdaptiveAvgPool2D(Expr data, Optional<Array<PrimExpr>> output_size, String layout) {
   ObjectPtr<AdaptivePool2DAttrs> attrs = make_object<AdaptivePool2DAttrs>();

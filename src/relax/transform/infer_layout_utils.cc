@@ -131,6 +131,26 @@ InferLayoutOutput InferLayoutPool2d(const Call& call,
   return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
 }
 
+InferLayoutOutput InferLayoutAdaptiveAvgPool2D(const Call& call,
+                                               const Map<String, Array<String>>& desired_layouts,
+                                               VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr && op_node->name == "relax.nn.adaptive_avg_pool2d") << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(type != nullptr) << "Invalid Call";
+  ICHECK(type->ndim == 4) << "Invalid Call";
+  const auto* attrs = call->attrs.as<AdaptivePool2DAttrs>();
+  ICHECK(attrs) << "Invalid Call";
+
+  Layout layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  ObjectPtr<AdaptivePool2DAttrs> new_attrs = make_object<AdaptivePool2DAttrs>(*attrs);
+  new_attrs->layout = TransposeLike(attrs->layout, InitialLayout(4), layout).name();
+  return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
+}
+
 InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
                                         VarLayoutMap var_layout_map) {
