@@ -17,8 +17,6 @@
  * under the License.
  */
 
-#include <unordered_map>
-
 #include "../op_common.h"
 
 namespace tvm {
@@ -84,7 +82,6 @@ StructInfo InferStructInfoMaxPool2D(const Call& call, const BlockBuilder& ctx) {
 
   Array<PrimExpr> data_NCHW_shape = data2NCHW.ForwardShape(data_shape.value()->values);
 
-  std::unordered_map<char, PrimExpr> output_shape;
   PrimExpr input_h = data_NCHW_shape[2];
   PrimExpr input_w = data_NCHW_shape[3];
   PrimExpr kernel_h = attrs->pool_size[0];

@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """Relax Neural Network (NN) operators"""
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 from tvm.ir.expr import PrimExpr
 
@@ -326,3 +326,258 @@ def softmax(data: Expr, axis: int = -1) -> Expr:
         The computed result.
     """
     return _ffi_api.softmax(data, axis)  # type: ignore
+
+
+def batch_norm(
+    data: Expr,
+    gamma: Expr,
+    beta: Expr,
+    moving_mean: Expr,
+    moving_var: Expr,
+    axis: int,
+    epsilon: float = 1e-5,
+    center: bool = True,
+    scale: bool = True,
+) -> Expr:
+    r"""
+    Batch normalization layer (Ioffe and Szegedy, 2014).
+    Normalizes the input at each batch, i.e. applies a transformation
+    that maintains the mean activation close to 0 and the activation
+    standard deviation close to 1.
+
+    .. math::
+
+        data\_mean[i] = mean(data[:,i,:,...]) \\
+        data\_var[i] = var(data[:,i,:,...])
+
+    Then compute the normalized output, which has the same shape as input, as following:
+
+    .. math::
+
+        out[:,i,:,...] = \frac{data[:,i,:,...] - data\_mean[i]}{\sqrt{data\_var[i]+\epsilon}}
+            * gamma[i] + beta[i]
+
+    Both *mean* and *var* returns a scalar by treating the input as a vector.
+
+    Assume the input has size *k* on axis 1, then both ``gamma`` and ``beta``
+    have shape *(k,)*.
+
+    Besides the inputs and the outputs, this operator accepts two auxiliary
+    states, ``moving_mean`` and ``moving_var``, which are *k*-length
+    vectors. They are global statistics for the whole dataset, which are updated by
+
+    .. code:: python
+
+        moving_mean = moving_mean * momentum + data_mean * (1 - momentum)
+        moving_var = moving_var * momentum + data_var * (1 - momentum)
+
+    The parameter ``axis`` specifies which axis of the input shape denotes
+    the 'channel' (separately normalized groups).  The default is 1.
+    Specifying -1 sets the channel axis to be the last item in the input shape.
+
+    .. note::
+
+        This operator can be optimized away for inference.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    gamma : relax.Expr
+        The gamma scale factor.
+
+    beta : relax.Expr
+        The beta offset factor.
+
+    moving_mean : relax.Expr
+        Running mean of input,
+
+    moving_var : relax.Expr
+        Running variance of input.
+
+    axis : int
+        The axis along which the normalization is applied.
+
+    epsilon : float
+        Small float added to variance to avoid dividing by zero.
+
+    center : bool
+        Indicating if the beta offset will be added to the normalized tensor.
+
+    scale : bool
+        Indicating if the gamma scale will be multiplied.
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.batch_norm(  # type: ignore
+        data, gamma, beta, moving_mean, moving_var, axis, epsilon, center, scale
+    )
+
+
+def layer_norm(
+    data: Expr,
+    gamma: Expr,
+    beta: Expr,
+    axes: Union[int, List[int]],
+    epsilon: float = 1e-5,
+    center: bool = True,
+    scale: bool = True,
+) -> Expr:
+    r"""
+    Layer normalization (Lei Ba and et al., 2016).
+    Applies layer normalization to the n-dimensional input array.
+    This operator takes an n-dimensional input array and normalizes
+    the input using the given axis:
+
+    .. math::
+
+        out = \frac{data - mean(data, axis)}{\sqrt{var(data, axis)+\epsilon}}
+            * gamma + beta
+
+    Unlike batch normalization, the mean and var are computed along the channel dimension.
+
+    Assume the input has size k on axis 1, then both gamma and beta have shape (k,).
+
+    .. note::
+
+        This operator can be optimized away for inference.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        Input to which layer_norm will be applied.
+
+    gamma : relax.Expr
+        The gamma scale factor.
+
+    beta : relax.Expr
+        The beta offset factor.
+
+    axes : Union[int, List[int]]
+        The axes that along which the normalization is applied.
+
+    epsilon : float
+        Small float added to variance to avoid dividing by zero.
+
+    center : bool
+        Indicating if the beta offset will be added to the normalized tensor.
+
+    scale : bool
+        Indicating if the gamma scale will be multiplied.
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    if isinstance(axes, int):
+        axes = [axes]
+    return _ffi_api.layer_norm(data, gamma, beta, axes, epsilon, center, scale)  # type: ignore
+
+
+def matmul(a: Expr, b: Expr, out_dtype: Optional[str] = None) -> Expr:
+    """General matrix multiplication of two tensors.
+
+    (The below is copied from torch.matmul)
+    The behavior depends on the dimensionality of the tensors as follows:
+    * If both tensors are 1-dimensional, the dot product (scalar) is returned.
+    * If both arguments are 2-dimensional, the matrix-matrix product is returned.
+    * If the first argument is 1-dimensional and the second argument is 2-dimensional,
+      a 1 is prepended to its dimension for the purpose of the matrix multiply. After the
+      matrix multiply, the prepended dimension is removed.
+    * If the first argument is 2-dimensional and the second argument is 1-dimensional,
+      the matrix-vector product is returned.
+    * If both arguments are at least 1-dimensional and at least one argument is N-dimensional
+      (where N > 2), then a batched matrix multiply is returned. If the first argument is
+      1-dimensional, a 1 is prepended to its dimension for the purpose of the batched
+      matrix multiply and removed after. If the second argument is 1-dimensional, a 1 is
+      appended to its dimension for the purpose of the batched matrix multiple and remove
+      after. The non-matrix (i.e. batch) dimensions are broadcasted (and thus must be
+      broadcastable). For example, if `a` is a `(j, 1, n, n)` tensor and `b` is a `(k, n, n)`
+      tensor, the result will be a `(j, k, n, n)` tensor.
+
+    Parameters
+    ----------
+    a : relax.Expr
+        The left operand of the matmul.
+
+    b : relax.Expr
+        The right operand of the matmul.
+
+    out_dtype: Optional[str]
+        The data type of the matmul result.
+        When it is not specified, the output dtype will be the the same as input dtype.
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.matmul(a, b, out_dtype)  # type: ignore
+
+
+def dropout(data: Expr, rate: float = 0.5) -> Expr:
+    """Applies the dropout operation to the input array.
+
+    During training, each element of the input is set to zero with
+    probability ``p``. The whole array is scaled by ``1/(1-p)``
+    to keep the expected sum of the input unchanged.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    rate : float
+        The probability for an element to be reset to 0.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result of dropout, which is a tuple of two tensors.
+        The first one is the original tensor and the second one is a
+        mask tensor (1.0 where element not dropped, 0.0 where dropped)
+    """
+    return _ffi_api.dropout(data, rate)  # type: ignore
+
+
+def cross_entropy(predictions: Expr, targets: Expr) -> Expr:
+    """CrossEntropy without logits.
+
+    Parameters
+    ----------
+    predictions : relax.Expr
+      The predictions.
+
+    targets : relax.Expr
+      The targets.
+
+    Returns
+    -------
+    result : relax.Expr
+      The computed result.
+    """
+    return _ffi_api.cross_entropy(predictions, targets)  # type: ignore
+
+
+def softmax_cross_entropy(predictions: Expr, targets: Expr) -> Expr:
+    """Computes the softmax cross entropy between predictions and targets.
+
+    Parameters
+    ----------
+    predictions : relax.Expr
+      The predictions.
+
+    targets : relax.Expr
+      The targets.
+
+    Returns
+    -------
+    result : relax.Expr
+      The computed result.
+    """
+    return _ffi_api.softmax_cross_entropy(predictions, targets)  # type: ignore

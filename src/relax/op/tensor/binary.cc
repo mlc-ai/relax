@@ -22,8 +22,6 @@
  * \brief binary broadcast operators.
  */
 
-#include <algorithm>
-
 #include "../op_common.h"
 
 namespace tvm {
@@ -58,7 +56,10 @@ namespace relax {
 template <typename FType>
 StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx,
                                     FType f_compute_out_dtype) {
-  auto [lhs_sinfo, rhs_sinfo] = GetBinaryInputTensorStructInfo(call, ctx, /*op_name=*/"Binary");
+  Array<TensorStructInfo> input_sinfo =
+      GetInputTensorStructInfo(call, ctx, /*input_names=*/{"lhs", "rhs"}, /*op_name=*/"Binary");
+  TensorStructInfo lhs_sinfo = input_sinfo[0];
+  TensorStructInfo rhs_sinfo = input_sinfo[1];
 
   // DateType
   DataType output_dtype = f_compute_out_dtype(call, ctx, lhs_sinfo, rhs_sinfo);
@@ -73,44 +74,17 @@ StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx,
 
   auto* lhs_shape = lhs_sinfo->shape.as<ShapeExprNode>();
   auto* rhs_shape = rhs_sinfo->shape.as<ShapeExprNode>();
-  arith::Analyzer* analyzer = ctx->GetAnalyzer();
   // Shapes and ndims
   if (lhs_shape && rhs_shape) {
     // If all inputs have shapes, directly infer shapes
-    std::vector<PrimExpr> output_shape;
-
-    size_t lhs_ndim = lhs_sinfo->ndim;
-    size_t rhs_ndim = rhs_sinfo->ndim;
-    size_t max_ndim = std::max(lhs_ndim, rhs_ndim);
-
-    size_t i = 1;
-    for (; i <= std::min(lhs_ndim, rhs_ndim); ++i) {
-      const PrimExpr& dim0 = lhs_shape->values[lhs_ndim - i];
-      const PrimExpr& dim1 = rhs_shape->values[rhs_ndim - i];
-      const auto* int_dim0 = dim0.as<IntImmNode>();
-      const auto* int_dim1 = dim1.as<IntImmNode>();
-      if (int_dim0 != nullptr && int_dim0->value == 1) {
-        output_shape.push_back(dim1);
-      } else if (int_dim1 != nullptr && int_dim1->value == 1) {
-        output_shape.push_back(dim0);
-      } else if (analyzer->CanProveEqual(dim0, dim1)) {
-        output_shape.push_back(dim0);
-      } else if (int_dim0 && int_dim1 && int_dim0->value != int_dim1->value) {
-        ctx->ReportFatal(Diagnostic::Error(call)
-                         << "The lhs shape at dim " << lhs_ndim - i << " is " << dim0
-                         << " and the rhs shape at dim " << rhs_ndim - i << " is " << dim1
-                         << ", which are not broadcastable.");
-      } else {
-        // Use simple fallback when shape mismatch.
-        return TensorStructInfo(output_dtype, /*ndim=*/output_ndim);
-      }
+    Optional<Array<PrimExpr>> output_shape = InferBinaryBroadcastShape(
+        call, ctx, lhs_shape->values, rhs_shape->values, /*op_name=*/"binary op");
+    if (!output_shape.defined()) {
+      return TensorStructInfo(output_dtype, /*ndim=*/output_ndim);
+    } else {
+      ICHECK_EQ(static_cast<int>(output_shape.value().size()), output_ndim);
+      return TensorStructInfo(ShapeExpr(output_shape.value()), output_dtype);
     }
-    auto& longer_shape = (lhs_ndim > rhs_ndim) ? lhs_shape : rhs_shape;
-    for (; i <= max_ndim; ++i) {
-      output_shape.push_back(longer_shape->values[max_ndim - i]);
-    }
-    Expr shape = ShapeExpr(Array<PrimExpr>(output_shape.rbegin(), output_shape.rend()));
-    return TensorStructInfo(shape, output_dtype);
   } else {
     return TensorStructInfo(output_dtype, /*ndim=*/output_ndim);
   }

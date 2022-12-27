@@ -29,6 +29,26 @@ def test_op_correctness():
     assert relax.op.nn.gelu(x).op == Op.get("relax.nn.gelu")
     assert relax.op.nn.silu(x).op == Op.get("relax.nn.silu")
     assert relax.op.nn.softmax(x).op == Op.get("relax.nn.softmax")
+    assert relax.op.nn.dropout(x).op == Op.get("relax.nn.dropout")
+
+    x = relax.Var("x", R.Tensor((2, 3, 32, 32), "float32"))
+    gamma = relax.Var("gamma", R.Tensor((3,), "float32"))
+    beta = relax.Var("beta", R.Tensor((3,), "float32"))
+    moving_mean = relax.Var("moving_mean", R.Tensor((3,), "float32"))
+    moving_var = relax.Var("moving_var", R.Tensor((3,), "float32"))
+    assert relax.op.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=1).op == Op.get(
+        "relax.nn.batch_norm"
+    )
+    assert relax.op.nn.layer_norm(x, gamma, beta, axes=1).op == Op.get("relax.nn.layer_norm")
+
+    x = relax.Var("x", R.Tensor((2, 3), "float32"))
+    y = relax.Var("y", R.Tensor((3, 4), "float32"))
+    assert relax.op.nn.matmul(x, y).op == Op.get("relax.nn.matmul")
+
+    x = relax.Var("x", R.Tensor((2, 3), "float32"))
+    y = relax.Var("y", R.Tensor((2, 3), "float32"))
+    assert relax.op.nn.cross_entropy(x, y).op == Op.get("relax.nn.cross_entropy")
+    assert relax.op.nn.softmax_cross_entropy(x, y).op == Op.get("relax.nn.softmax_cross_entropy")
 
 
 def _check_inference(bb: relax.BlockBuilder, call: relax.Call, expected_sinfo: relax.StructInfo):
@@ -149,6 +169,855 @@ def test_softmax_infer_struct_info_wrong_input_type():
         bb.normalize(relax.op.nn.softmax(x0))
     with pytest.raises(TVMError):
         bb.normalize(relax.op.nn.softmax(x1))
+
+
+def test_batch_norm_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
+    x1 = relax.Var("x", R.Tensor("float32", ndim=4))
+    x2 = relax.Var("x", R.Tensor("float32"))
+    x3 = relax.Var("x", R.Tensor(ndim=4))
+    x4 = relax.Var("x", R.Tensor())
+    gamma0 = relax.Var("gamma", R.Tensor((3,), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor("float32", ndim=1))
+    gamma2 = relax.Var("gamma", R.Tensor(ndim=1))
+    beta0 = relax.Var("beta", R.Tensor((3,), "float32"))
+    beta1 = relax.Var("beta", R.Tensor((3,)))
+    moving_mean0 = relax.Var("moving_mean", R.Tensor((3,), "float32"))
+    moving_mean1 = relax.Var("moving_mean", R.Tensor((3,)))
+    moving_var0 = relax.Var("moving_var", R.Tensor((3,), "float32"))
+    moving_var1 = relax.Var("moving_var", R.Tensor("float32", ndim=1))
+    moving_var2 = relax.Var("moving_var", R.Tensor(ndim=1))
+
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma0, beta0, moving_mean0, moving_var0, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo((2, 3, 28, 28), "float32"),
+                relax.TensorStructInfo((3,), "float32"),
+                relax.TensorStructInfo((3,), "float32"),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma0, beta0, moving_mean0, moving_var0, axis=-3),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo((2, 3, 28, 28), "float32"),
+                relax.TensorStructInfo((3,), "float32"),
+                relax.TensorStructInfo((3,), "float32"),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x1, gamma0, beta0, moving_mean0, moving_var0, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(dtype="float32", ndim=4),
+                relax.TensorStructInfo((3,), "float32"),
+                relax.TensorStructInfo((3,), "float32"),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma1, beta0, moving_mean0, moving_var0, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo((2, 3, 28, 28), "float32"),
+                relax.TensorStructInfo((3,), "float32"),
+                relax.TensorStructInfo((3,), "float32"),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma0, beta0, moving_mean0, moving_var1, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo((2, 3, 28, 28), "float32"),
+                relax.TensorStructInfo((3,), "float32"),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x1, gamma1, beta0, moving_mean0, moving_var1, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(dtype="float32", ndim=4),
+                relax.TensorStructInfo((3,), "float32"),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x2, gamma1, beta0, moving_mean0, moving_var1, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(dtype="float32"),
+                relax.TensorStructInfo((3,), "float32"),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x3, gamma2, beta1, moving_mean1, moving_var2, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(ndim=4, dtype=""),
+                relax.TensorStructInfo((3,), dtype=""),
+                relax.TensorStructInfo(dtype="", ndim=1),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x4, gamma2, beta1, moving_mean1, moving_var2, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(dtype=""),
+                relax.TensorStructInfo((3,), dtype=""),
+                relax.TensorStructInfo(dtype="", ndim=1),
+            ]
+        ),
+    )
+
+
+def test_batch_norm_infer_struct_info_symbolic():
+    bb = relax.BlockBuilder()
+    n = tir.Var("n", "int64")
+    c0 = tir.Var("c", "int64")
+    c1 = tir.Var("c", "int64")
+    h = tir.Var("h", "int64")
+    w = tir.Var("w", "int64")
+    x0 = relax.Var("x", R.Tensor((n, c0, h, w), "float32"))
+    x1 = relax.Var("x", R.Tensor((n, c1, h, w), "float32"))
+    x2 = relax.Var("x", R.Tensor("float32", ndim=4))
+    gamma0 = relax.Var("gamma", R.Tensor((c0,), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor((c1,), "float32"))
+    gamma2 = relax.Var("gamma", R.Tensor("float32", ndim=1))
+    beta = relax.Var("beta", R.Tensor((c0,), "float32"))
+    moving_mean = relax.Var("moving_mean", R.Tensor((c0,), "float32"))
+    moving_var0 = relax.Var("moving_var", R.Tensor((c0,), "float32"))
+    moving_var1 = relax.Var("moving_var", R.Tensor((c1,), "float32"))
+    moving_var2 = relax.Var("moving_var", R.Tensor("float32", ndim=1))
+
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma0, beta, moving_mean, moving_var0, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo((n, c0, h, w), "float32"),
+                relax.TensorStructInfo((c0,), "float32"),
+                relax.TensorStructInfo((c0,), "float32"),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x1, gamma0, beta, moving_mean, moving_var0, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(dtype="float32", ndim=4),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x2, gamma0, beta, moving_mean, moving_var0, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(dtype="float32", ndim=4),
+                relax.TensorStructInfo((c0,), "float32"),
+                relax.TensorStructInfo((c0,), "float32"),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma1, beta, moving_mean, moving_var0, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(dtype="float32", ndim=4),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma0, beta, moving_mean, moving_var1, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(dtype="float32", ndim=4),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma2, beta, moving_mean, moving_var0, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo((n, c0, h, w), "float32"),
+                relax.TensorStructInfo((c0,), "float32"),
+                relax.TensorStructInfo((c0,), "float32"),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma0, beta, moving_mean, moving_var2, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo((n, c0, h, w), "float32"),
+                relax.TensorStructInfo((c0,), "float32"),
+                relax.TensorStructInfo(dtype="float32", ndim=1),
+            ]
+        ),
+    )
+
+
+def test_batch_norm_infer_struct_info_more_input_dtype():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 28, 28), "int8"))
+    gamma0 = relax.Var("gamma", R.Tensor((3,), "int8"))
+    beta0 = relax.Var("beta", R.Tensor((3,), "int8"))
+    moving_mean0 = relax.Var("moving_mean", R.Tensor((3,), "int8"))
+    moving_var0 = relax.Var("moving_var", R.Tensor((3,), "int8"))
+    x1 = relax.Var("x", R.Tensor((2, 3, 28, 28), "float16"))
+    gamma1 = relax.Var("gamma", R.Tensor((3,), "float16"))
+    beta1 = relax.Var("beta", R.Tensor((3,), "float16"))
+    moving_mean1 = relax.Var("moving_mean", R.Tensor((3,), "float16"))
+    moving_var1 = relax.Var("moving_var", R.Tensor((3,), "float16"))
+
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma0, beta0, moving_mean0, moving_var0, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo((2, 3, 28, 28), "int8"),
+                relax.TensorStructInfo((3,), "int8"),
+                relax.TensorStructInfo((3,), "int8"),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x1, gamma1, beta1, moving_mean1, moving_var1, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo((2, 3, 28, 28), "float16"),
+                relax.TensorStructInfo((3,), "float16"),
+                relax.TensorStructInfo((3,), "float16"),
+            ]
+        ),
+    )
+
+
+def test_batch_norm_infer_struct_info_axis_out_of_range():
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
+    gamma = relax.Var("gamma", R.Tensor((3,), "float32"))
+    beta = relax.Var("beta", R.Tensor((3,), "float32"))
+    moving_mean = relax.Var("moving_mean", R.Tensor((3,), "float32"))
+    moving_var = relax.Var("moving_var", R.Tensor((3,), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=4))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=-5))
+
+
+def test_batch_norm_infer_struct_info_dtype_mismatch():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
+    x1 = relax.Var("x", R.Tensor((2, 3, 28, 28), "int8"))
+    gamma0 = relax.Var("gamma", R.Tensor((3,), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor((3,)))
+    beta = relax.Var("beta", R.Tensor((3,), "float32"))
+    moving_mean = relax.Var("moving_mean", R.Tensor((3,), "float32"))
+    moving_var0 = relax.Var("moving_var", R.Tensor((3,), "float32"))
+    moving_var1 = relax.Var("moving_var", R.Tensor((3,), "float16"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x1, gamma0, beta, moving_mean, moving_var0, axis=1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x0, gamma1, beta, moving_mean, moving_var0, axis=1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x0, gamma0, beta, moving_mean, moving_var1, axis=1))
+
+
+def test_batch_norm_infer_struct_info_ndim_mismatch():
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
+    gamma0 = relax.Var("gamma", R.Tensor((3,), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor((3, 1), "float32"))
+    beta = relax.Var("beta", R.Tensor((3,), "float32"))
+    moving_mean = relax.Var("moving_mean", R.Tensor((3,), "float32"))
+    moving_var0 = relax.Var("moving_var", R.Tensor((3,), "float32"))
+    moving_var1 = relax.Var("moving_var", R.Tensor((1, 3), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x, gamma1, beta, moving_mean, moving_var0, axis=1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x, gamma0, beta, moving_mean, moving_var1, axis=1))
+
+
+def test_batch_norm_infer_struct_info_shape_mismatch():
+    bb = relax.BlockBuilder()
+    c = tir.Var("c", "int64")
+    x0 = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
+    x1 = relax.Var("x", R.Tensor((2, c, 28, 28), "float32"))
+    gamma0 = relax.Var("gamma", R.Tensor((3,), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor((4,), "float32"))
+    gamma2 = relax.Var("gamma", R.Tensor((c + 2,), "float32"))
+    beta0 = relax.Var("beta", R.Tensor((3,), "float32"))
+    beta1 = relax.Var("beta", R.Tensor((c,), "float32"))
+    moving_mean0 = relax.Var("moving_mean", R.Tensor((3,), "float32"))
+    moving_mean1 = relax.Var("moving_mean", R.Tensor((c,), "float32"))
+    moving_var0 = relax.Var("moving_var", R.Tensor((3,), "float32"))
+    moving_var1 = relax.Var("moving_var", R.Tensor((4,), "float32"))
+    moving_var2 = relax.Var("moving_var", R.Tensor((c,), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x0, gamma1, beta0, moving_mean0, moving_var0, axis=1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x0, gamma0, beta0, moving_mean0, moving_var1, axis=1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x1, gamma2, beta1, moving_mean1, moving_var2, axis=1))
+
+
+def test_batch_norm_infer_struct_info_wrong_input_type():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
+    x1 = relax.Var("x", relax.ShapeStructInfo((2, 3, 28, 28)))
+    gamma0 = relax.Var("gamma", R.Tensor((3,), "float32"))
+    gamma1 = relax.Var("gamma", relax.FuncStructInfo([], R.Tensor((3,), "float32")))
+    beta = relax.Var("beta", R.Tensor((3,), "float32"))
+    moving_mean = relax.Var("moving_mean", R.Tensor((3,), "float32"))
+    moving_var = relax.Var("moving_var", R.Tensor((3,), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x1, gamma0, beta, moving_mean, moving_var, axis=1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.batch_norm(x0, gamma1, beta, moving_mean, moving_var, axis=1))
+
+
+def test_layer_norm_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
+    x1 = relax.Var("x", R.Tensor("float32", ndim=4))
+    x2 = relax.Var("x", R.Tensor("float32"))
+    x3 = relax.Var("x", R.Tensor((2, 3, 4, 5)))
+    gamma0 = relax.Var("gamma", R.Tensor((4, 5), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor("float32", ndim=2))
+    gamma2 = relax.Var("gamma", R.Tensor((4, 5)))
+    beta0 = relax.Var("beta", R.Tensor((4, 5), "float32"))
+    beta1 = relax.Var("beta", R.Tensor((4, 5)))
+
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x0, gamma0, beta0, axes=[-2, -1]),
+        relax.TensorStructInfo((2, 3, 4, 5), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x0, gamma0, beta0, axes=[-2, 3]),
+        relax.TensorStructInfo((2, 3, 4, 5), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x1, gamma0, beta0, axes=[-2, -1]),
+        relax.TensorStructInfo(dtype="float32", ndim=4),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x2, gamma0, beta0, axes=[-2, -1]),
+        relax.TensorStructInfo(dtype="float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x0, gamma1, beta0, axes=[-2, -1]),
+        relax.TensorStructInfo((2, 3, 4, 5), dtype="float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x3, gamma2, beta1, axes=[-2, -1]),
+        relax.TensorStructInfo((2, 3, 4, 5), dtype=""),
+    )
+
+
+def test_layer_norm_infer_struct_info_symbolic():
+    bb = relax.BlockBuilder()
+    n = tir.Var("n", "int64")
+    a = tir.Var("a", "int64")
+    b = tir.Var("b", "int64")
+    c0 = tir.Var("c", "int64")
+    c1 = tir.Var("c", "int64")
+    x0 = relax.Var("x", R.Tensor((n, a, b, c0), "float32"))
+    x1 = relax.Var("x", R.Tensor((n, a, b, c1), "float32"))
+    x2 = relax.Var("x", R.Tensor("float32", ndim=4))
+    gamma0 = relax.Var("gamma", R.Tensor((b, c0), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor((b, c1), "float32"))
+    beta = relax.Var("beta", R.Tensor((b, c0), "float32"))
+
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x0, gamma0, beta, axes=[-2, -1]),
+        relax.TensorStructInfo((n, a, b, c0), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x1, gamma0, beta, axes=[-2, -1]),
+        relax.TensorStructInfo(dtype="float32", ndim=4),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x0, gamma1, beta, axes=[-2, -1]),
+        relax.TensorStructInfo(dtype="float32", ndim=4),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x2, gamma0, beta, axes=[-2, -1]),
+        relax.TensorStructInfo(dtype="float32", ndim=4),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x2, gamma1, beta, axes=[-2, -1]),
+        relax.TensorStructInfo(dtype="float32", ndim=4),
+    )
+
+
+def test_layer_norm_infer_struct_info_more_input_dtype():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 4, 5), "int8"))
+    gamma0 = relax.Var("gamma", R.Tensor((4, 5), "int8"))
+    beta0 = relax.Var("beta", R.Tensor((4, 5), "int8"))
+    x1 = relax.Var("x", R.Tensor((2, 3, 4, 5), "float16"))
+    gamma1 = relax.Var("gamma", R.Tensor((4, 5), "float16"))
+    beta1 = relax.Var("beta", R.Tensor((4, 5), "float16"))
+
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x0, gamma0, beta0, axes=[-2, -1]),
+        relax.TensorStructInfo((2, 3, 4, 5), "int8"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x1, gamma1, beta1, axes=[-2, -1]),
+        relax.TensorStructInfo((2, 3, 4, 5), "float16"),
+    )
+
+
+def test_layer_norm_infer_struct_info_axis_out_of_range_and_repetitive():
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
+    gamma = relax.Var("gamma", R.Tensor((4, 5), "float32"))
+    beta = relax.Var("beta", R.Tensor((4, 5), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x, gamma, beta, axes=[3, 4]))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x, gamma, beta, axes=[3, -1]))
+
+
+def test_layer_norm_infer_struct_info_dtype_mismatch():
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
+    gamma0 = relax.Var("gamma", R.Tensor((4, 5), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor((4, 5), "int8"))
+    beta0 = relax.Var("beta", R.Tensor((4, 5), "float32"))
+    beta1 = relax.Var("beta", R.Tensor((4, 5)))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x, gamma1, beta0, axes=[-2, -1]))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x, gamma0, beta1, axes=[-2, -1]))
+
+
+def test_layer_norm_infer_struct_info_ndim_mismatch():
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
+    gamma0 = relax.Var("gamma", R.Tensor((4, 5), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor((4,), "float32"))
+    beta0 = relax.Var("beta", R.Tensor((4, 5), "float32"))
+    beta1 = relax.Var("beta", R.Tensor((3, 4, 5), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x, gamma1, beta0, axes=[-2, -1]))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x, gamma0, beta1, axes=[-2, -1]))
+
+
+def test_layer_norm_infer_struct_info_shape_mismatch():
+    bb = relax.BlockBuilder()
+    c0 = tir.Var("c", "int64")
+    x0 = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
+    x1 = relax.Var("x", R.Tensor((2, 3, 4, c0), "float32"))
+    gamma0 = relax.Var("gamma", R.Tensor((4, 6), "float32"))
+    gamma1 = relax.Var("gamma", R.Tensor((4, c0), "float32"))
+    beta0 = relax.Var("beta", R.Tensor((4, 5), "float32"))
+    beta1 = relax.Var("beta", R.Tensor((4, c0 - 2), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x0, gamma0, beta0, axes=[-2, -1]))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x1, gamma1, beta1, axes=[-2, -1]))
+
+
+def test_layer_norm_infer_struct_info_wrong_input_type():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
+    x1 = relax.Var("x", relax.ShapeStructInfo((2, 3, 4, 5)))
+    gamma0 = relax.Var("gamma", R.Tensor((4, 5), "float32"))
+    gamma1 = relax.Var("gamma", relax.FuncStructInfo([], R.Tensor((4, 5), "float32")))
+    beta = relax.Var("beta", R.Tensor((4, 5), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x1, gamma0, beta, axes=[-2, -1]))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.layer_norm(x0, gamma1, beta, axes=[-2, -1]))
+
+
+def test_matmul_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((3, 4), "float32"))
+    x1 = relax.Var("x", R.Tensor((4,), "float32"))
+    x2 = relax.Var("x", R.Tensor((2, 3, 5, 4), "float32"))
+    x3 = relax.Var("x", R.Tensor((2, 1, 4, 5), "float32"))
+    x4 = relax.Var("x", R.Tensor((2, 1, 4, 5)))
+    x5 = relax.Var("x", R.Tensor("float32"))
+    x6 = relax.Var("x", R.Tensor((2, 1, 4, 5), "float16"))
+    y0 = relax.Var("y", R.Tensor((4, 5), "float32"))
+    y1 = relax.Var("y", R.Tensor((4,), "float32"))
+    y2 = relax.Var("y", R.Tensor((2, 3, 4, 5), "float32"))
+    y3 = relax.Var("y", R.Tensor((6, 1, 3, 5, 7), "float32"))
+    y4 = relax.Var("y", R.Tensor("float32", ndim=5))
+    y5 = relax.Var("y", R.Tensor())
+
+    _check_inference(bb, relax.op.nn.matmul(x0, y0), relax.TensorStructInfo((3, 5), "float32"))
+    _check_inference(bb, relax.op.nn.matmul(x1, y1), relax.TensorStructInfo((), "float32"))
+    _check_inference(bb, relax.op.nn.matmul(x1, y2), relax.TensorStructInfo((2, 3, 5), "float32"))
+    _check_inference(bb, relax.op.nn.matmul(x2, y1), relax.TensorStructInfo((2, 3, 5), "float32"))
+    _check_inference(
+        bb, relax.op.nn.matmul(x3, y3), relax.TensorStructInfo((6, 2, 3, 4, 7), "float32")
+    )
+    _check_inference(bb, relax.op.nn.matmul(x4, y3), relax.TensorStructInfo((6, 2, 3, 4, 7), ""))
+    _check_inference(
+        bb, relax.op.nn.matmul(x3, y4), relax.TensorStructInfo(dtype="float32", ndim=5)
+    )
+    _check_inference(bb, relax.op.nn.matmul(x5, y3), relax.TensorStructInfo(dtype="float32"))
+    _check_inference(bb, relax.op.nn.matmul(x3, y5), relax.TensorStructInfo(dtype=""))
+    _check_inference(
+        bb,
+        relax.op.nn.matmul(x3, y3, out_dtype="float16"),
+        relax.TensorStructInfo((6, 2, 3, 4, 7), "float16"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.matmul(x6, y3, out_dtype="float16"),
+        relax.TensorStructInfo((6, 2, 3, 4, 7), "float16"),
+    )
+
+
+def test_matmul_infer_struct_info_symbolic():
+    bb = relax.BlockBuilder()
+    m = tir.Var("m", "int64")
+    n = tir.Var("n", "int64")
+    k0 = tir.Var("k0", "int64")
+    k1 = tir.Var("k1", "int64")
+    a = tir.Var("a", "int64")
+    b = tir.Var("b", "int64")
+    b1 = tir.Var("b", "int64")
+    c = tir.Var("c", "int64")
+    x0 = relax.Var("x", R.Tensor((m, k0), "float32"))
+    x1 = relax.Var("x", R.Tensor((k0,), "float32"))
+    x2 = relax.Var("x", R.Tensor((a, b, m, k0), "float32"))
+    x3 = relax.Var("x", R.Tensor((b, 1, m, k0), "float32"))
+    x4 = relax.Var("x", R.Tensor((b, 1, m, k1), "float32"))
+    y0 = relax.Var("y", R.Tensor((k0, n), "float32"))
+    y1 = relax.Var("y", R.Tensor((k0,), "float32"))
+    y2 = relax.Var("y", R.Tensor((a, b, k0, n), "float32"))
+    y3 = relax.Var("y", R.Tensor((a, 1, c, k0, n), "float32"))
+    y4 = relax.Var("y", R.Tensor((a, b1, c, k0, n), "float32"))
+
+    _check_inference(bb, relax.op.nn.matmul(x0, y0), relax.TensorStructInfo((m, n), "float32"))
+    _check_inference(bb, relax.op.nn.matmul(x1, y1), relax.TensorStructInfo((), "float32"))
+    _check_inference(bb, relax.op.nn.matmul(x1, y2), relax.TensorStructInfo((a, b, n), "float32"))
+    _check_inference(bb, relax.op.nn.matmul(x2, y1), relax.TensorStructInfo((a, b, m), "float32"))
+    _check_inference(
+        bb, relax.op.nn.matmul(x3, y3), relax.TensorStructInfo((a, b, c, m, n), "float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.matmul(x4, y3), relax.TensorStructInfo((a, b, c, m, n), "float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.matmul(x3, y4), relax.TensorStructInfo(dtype="float32", ndim=5)
+    )
+
+
+def test_matmul_infer_struct_info_more_input_dtype():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((3, 4), "float16"))
+    y0 = relax.Var("y", R.Tensor((4, 5), "float16"))
+    x1 = relax.Var("x", R.Tensor((3, 4), "int8"))
+    y1 = relax.Var("y", R.Tensor((4, 5), "int8"))
+    x2 = relax.Var("x", R.Tensor((3, 4), "int64"))
+    y2 = relax.Var("y", R.Tensor((4, 5), "int64"))
+
+    _check_inference(bb, relax.op.nn.matmul(x0, y0), relax.TensorStructInfo((3, 5), "float16"))
+    _check_inference(bb, relax.op.nn.matmul(x1, y1), relax.TensorStructInfo((3, 5), "int8"))
+    _check_inference(bb, relax.op.nn.matmul(x2, y2), relax.TensorStructInfo((3, 5), "int64"))
+
+
+def test_matmul_infer_struct_info_zero_rank_input():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((3, 4), "float32"))
+    x1 = relax.Var("x", R.Tensor((), "float32"))
+    y0 = relax.Var("y", R.Tensor((4, 5), "float32"))
+    y1 = relax.Var("y", R.Tensor((), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.matmul(x0, y1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.matmul(x1, y0))
+
+
+def test_matmul_infer_struct_info_not_broadcastable():
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
+    y = relax.Var("y", R.Tensor((2, 8, 3, 5, 6), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.matmul(x, y))
+
+
+def test_matmul_infer_struct_info_unequal_reduction_length():
+    bb = relax.BlockBuilder()
+    k = tir.Var("k", "int64")
+    x0 = relax.Var("x", R.Tensor((3, 4), "float32"))
+    x1 = relax.Var("x", R.Tensor((3, k), "float32"))
+    y0 = relax.Var("y", R.Tensor((6, 5), "float32"))
+    y1 = relax.Var("y", R.Tensor((k + 1, 5), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.matmul(x0, y0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.matmul(x1, y1))
+
+
+def test_dropout_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3), "float32"))
+    x1 = relax.Var("x", R.Tensor("float32", ndim=3))
+    x2 = relax.Var("x", R.Tensor("float32", ndim=-1))
+    x3 = relax.Var("x", R.Tensor((2, 3)))
+    x4 = relax.Var("x", R.Tensor())
+
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x0),
+        relax.TupleStructInfo(
+            [relax.TensorStructInfo((2, 3), "float32"), relax.TensorStructInfo((2, 3), "float32")]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(dtype="float32", ndim=3),
+                relax.TensorStructInfo(dtype="float32", ndim=3),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x2),
+        relax.TupleStructInfo(
+            [relax.TensorStructInfo(dtype="float32"), relax.TensorStructInfo(dtype="float32")]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x3),
+        relax.TupleStructInfo(
+            [relax.TensorStructInfo((2, 3), dtype=""), relax.TensorStructInfo((2, 3), dtype="")]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x4),
+        relax.TupleStructInfo([relax.TensorStructInfo(dtype=""), relax.TensorStructInfo(dtype="")]),
+    )
+
+
+def test_dropout_infer_struct_info_symbolic():
+    bb = relax.BlockBuilder()
+    m = tir.Var("m", "int64")
+    n = tir.Var("n", "int64")
+    x = relax.Var("x", R.Tensor((m, n), "float32"))
+
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x),
+        relax.TupleStructInfo(
+            [relax.TensorStructInfo((m, n), "float32"), relax.TensorStructInfo((m, n), "float32")]
+        ),
+    )
+
+
+def test_dropout_infer_struct_info_more_input_dtype():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3), "float64"))
+    x1 = relax.Var("x", R.Tensor((2, 3), "int8"))
+    x2 = relax.Var("x", R.Tensor((2, 3), "int64"))
+
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x0),
+        relax.TupleStructInfo(
+            [relax.TensorStructInfo((2, 3), "float64"), relax.TensorStructInfo((2, 3), "float64")]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x1),
+        relax.TupleStructInfo(
+            [relax.TensorStructInfo((2, 3), "int8"), relax.TensorStructInfo((2, 3), "int8")]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x2),
+        relax.TupleStructInfo(
+            [relax.TensorStructInfo((2, 3), "int64"), relax.TensorStructInfo((2, 3), "int64")]
+        ),
+    )
+
+
+def test_dropout_infer_struct_info_wrong_input_type():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", relax.ShapeStructInfo((2, 3)))
+    x1 = relax.Var("x", relax.FuncStructInfo([], R.Tensor((2, 3), "float32")))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.dropout(x0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.dropout(x1))
+
+
+def test_cross_entropy_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((2, 3), "float32"))
+    y0 = relax.Var("y", R.Tensor((2, 3), "float32"))
+    y1 = relax.Var("y", R.Tensor("float32", ndim=2))
+    y2 = relax.Var("y", R.Tensor((2, 3)))
+    y3 = relax.Var("y", R.Tensor(ndim=2))
+
+    _check_inference(bb, relax.op.nn.cross_entropy(x, y0), relax.TensorStructInfo((), "float32"))
+    _check_inference(
+        bb, relax.op.nn.softmax_cross_entropy(x, y0), relax.TensorStructInfo((), "float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy(x, y1), relax.TensorStructInfo((), dtype="float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.softmax_cross_entropy(x, y2), relax.TensorStructInfo((), dtype="")
+    )
+    _check_inference(bb, relax.op.nn.cross_entropy(x, y3), relax.TensorStructInfo((), dtype=""))
+
+
+def test_cross_entropy_infer_struct_info_symbolic():
+    bb = relax.BlockBuilder()
+    m0 = tir.Var("m", "int64")
+    m1 = tir.Var("m", "int64")
+    n = tir.Var("n", "int64")
+    x0 = relax.Var("x", R.Tensor((m0, n), "float32"))
+    x1 = relax.Var("x", R.Tensor((m1, n), "float32"))
+    y = relax.Var("y", R.Tensor((m0, n), "float32"))
+
+    _check_inference(bb, relax.op.nn.cross_entropy(x0, y), relax.TensorStructInfo((), "float32"))
+    _check_inference(
+        bb, relax.op.nn.softmax_cross_entropy(x0, y), relax.TensorStructInfo((), "float32")
+    )
+    _check_inference(bb, relax.op.nn.cross_entropy(x1, y), relax.TensorStructInfo((), "float32"))
+
+
+def test_cross_entropy_infer_struct_info_more_input_dtype():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3), "float16"))
+    y0 = relax.Var("y", R.Tensor((2, 3), "float16"))
+    x1 = relax.Var("x", R.Tensor((2, 3), "int8"))
+    y1 = relax.Var("y", R.Tensor((2, 3), "int8"))
+    x2 = relax.Var("x", R.Tensor((2, 3), "int32"))
+    y2 = relax.Var("y", R.Tensor((2, 3), "int32"))
+
+    _check_inference(bb, relax.op.nn.cross_entropy(x0, y0), relax.TensorStructInfo((), "float16"))
+    _check_inference(bb, relax.op.nn.cross_entropy(x1, y1), relax.TensorStructInfo((), "int8"))
+    _check_inference(
+        bb, relax.op.nn.softmax_cross_entropy(x2, y2), relax.TensorStructInfo((), "int32")
+    )
+
+
+def test_cross_entropy_infer_struct_info_wrong_ndim():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3), "float32"))
+    x1 = relax.Var("x", R.Tensor((2, 3, 4), "float32"))
+    x2 = relax.Var("x", R.Tensor((2,), "float32"))
+    y0 = relax.Var("y", R.Tensor((2, 3), "float32"))
+    y1 = relax.Var("y", R.Tensor("float32", ndim=4))
+    y2 = relax.Var("y", R.Tensor("float32", ndim=-1))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy(x1, y0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.softmax_cross_entropy(x2, y0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy(x0, y1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.softmax_cross_entropy(x0, y2))
+
+
+def test_cross_entropy_infer_struct_info_shape_mismatch():
+    bb = relax.BlockBuilder()
+    m = tir.Var("m", "int64")
+    x0 = relax.Var("x", R.Tensor((2, 3), "float32"))
+    x1 = relax.Var("x", R.Tensor((m, 3), "float32"))
+    y0 = relax.Var("y", R.Tensor((2, 4), "float32"))
+    y1 = relax.Var("y", R.Tensor((m + 2, 3), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy(x0, y0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.softmax_cross_entropy(x1, y1))
+
+
+def test_cross_entropy_infer_struct_info_wrong_input_type():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", relax.ShapeStructInfo((2, 3)))
+    x1 = relax.Var("x", relax.FuncStructInfo([], R.Tensor((2, 3), "float32")))
+    y = relax.Var("y", R.Tensor((2, 3), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy(x0, y))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy(x1, y))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.softmax_cross_entropy(x0, y))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.softmax_cross_entropy(x1, y))
 
 
 if __name__ == "__main__":

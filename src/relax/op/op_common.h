@@ -41,6 +41,19 @@ namespace relax {
 /************ Op input struct info getter ************/
 
 /*!
+ * \brief Get the tensor struct info of the operator input.
+ * \param call call The Call of the binary tensor operators.
+ * \param ctx The error reporting context.
+ * \param input_names The name of each input.
+ * \param op_name The name of the operator that invokes this function.
+ * \return The tensor struct info of each input per input names.
+ * \note The number of call arguments is required to match the number of input names.
+ */
+Array<TensorStructInfo> GetInputTensorStructInfo(const Call& call, const BlockBuilder& ctx,
+                                                 const Array<String>& input_names,
+                                                 const String& op_name);
+
+/*!
  * \brief Get the tensor struct info of the unary operator input.
  * \param call The Call of the binary tensor operators.
  * \param ctx The error reporting context.
@@ -51,41 +64,7 @@ namespace relax {
  */
 inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const BlockBuilder& ctx,
                                                       const String& op_name) {
-  if (call->args.size() != 1) {
-    ctx->ReportFatal(Diagnostic::Error(call) << op_name << " op should have exactly 1 argument");
-  }
-  const auto* input_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[0]);
-  if (input_sinfo == nullptr) {
-    ctx->ReportFatal(Diagnostic::Error(call)
-                     << "The input of unary operator should be Tensor. However, the given input is "
-                     << call->args[0]->struct_info_->GetTypeKey());
-  }
-  return GetRef<TensorStructInfo>(input_sinfo);
-}
-
-/*!
- * \brief Get the tensor struct info of the binary operator inputs.
- * \param call The Call of the binary tensor operators.
- * \param ctx The error reporting context.
- * \param op_name The name of the operator that invokes this function.
- * \return A pair containing the input tensor struct info.
- * \throw Throw exception if the number of inputs is not two, or any of the input struct info is not
- * tensor struct info.
- */
-inline std::pair<TensorStructInfo, TensorStructInfo> GetBinaryInputTensorStructInfo(
-    const Call& call, const BlockBuilder& ctx, const String& op_name) {
-  if (call->args.size() != 2) {
-    ctx->ReportFatal(Diagnostic::Error(call) << op_name << " op should have 2 arguments");
-  }
-  auto* lhs_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[0]);
-  auto* rhs_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[1]);
-  if (!lhs_sinfo || !rhs_sinfo) {
-    ctx->ReportFatal(Diagnostic::Error(call)
-                     << "Both lhs and rhs should be Tensor for " << op_name << " operator, but got "
-                     << call->args[0]->struct_info_->GetTypeKey() << " and "
-                     << call->args[1]->struct_info_->GetTypeKey());
-  }
-  return {GetRef<TensorStructInfo>(lhs_sinfo), GetRef<TensorStructInfo>(rhs_sinfo)};
+  return GetInputTensorStructInfo(call, ctx, /*input_names=*/{"data"}, op_name)[0];
 }
 
 /************ Op registration macro ************/
@@ -126,18 +105,30 @@ inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx
 inline DataType InferBinaryArithOpOutDtype(const Call& call, const BlockBuilder& ctx,
                                            const TensorStructInfo& lhs_sinfo,
                                            const TensorStructInfo& rhs_sinfo) {
-  DataType output_dtype;
   if (lhs_sinfo->IsUnknownDtype() || rhs_sinfo->IsUnknownDtype()) {
-    output_dtype = DataType::Void();
+    return DataType::Void();
   } else if (lhs_sinfo->dtype != rhs_sinfo->dtype) {
     ctx->ReportFatal(Diagnostic::Error(call)
                      << "Data types " << lhs_sinfo->dtype << " and " << rhs_sinfo->dtype
-                     << " must be equal for broadcasting operators");
-  } else {
-    output_dtype = lhs_sinfo->dtype;
+                     << " must be equal for binary operators");
   }
-  return output_dtype;
+  return lhs_sinfo->dtype;
 }
+
+/*!
+ * \brief Infer the output shape for binary broadcast operators.
+ * \param call The Call of the binary tensor operators.
+ * \param ctx The error reporting context.
+ * \param lhs_shape The shape of the lhs operand.
+ * \param rhs_shape The shape of the rhs operand.
+ * \param op_name The name of the operator that invokes this function.
+ * \return The inferred output shape after broadcasting. Or `NullOpt` if the output shape cannot be
+ * determined due to symbolic broadcast.
+ */
+Optional<Array<PrimExpr>> InferBinaryBroadcastShape(const Call& call, const BlockBuilder& ctx,
+                                                    const Array<PrimExpr>& lhs_shape,
+                                                    const Array<PrimExpr>& rhs_shape,
+                                                    const String& op_name);
 
 /*!
  * \brief Complete the padding to a 4-length array.
@@ -172,7 +163,8 @@ inline Array<PrimExpr> GetCompletePadding2D(Array<PrimExpr> padding) {
  * \param tgt_layout The target layout to be matched
  * \param op_name The name of the operator that invokes this function.
  * \param tensor_name The name of the input tensor
- * \return std::pair<tir::Layout, tir::BijectiveLayout>
+ * \return The tensor layout and the bijective conversion in tir::Layout and tir::BijectiveLayout
+ * accordingly.
  */
 inline std::pair<tir::Layout, tir::BijectiveLayout> CheckTensorLayout(
     const Call& call, const BlockBuilder& ctx, const String& tensor_layout,
@@ -209,6 +201,34 @@ inline Optional<ShapeExpr> CheckNdimPerLayoutAndGetShape(const Call& call, const
                      << sinfo->ndim);
   }
   return Downcast<Optional<ShapeExpr>>(sinfo->shape);
+}
+
+/*!
+ * \brief Check if the given array of axes are all in range and non-repetitive with regards to the
+ * given ndim. And convert all axes to non-negative index.
+ * \param call The Call of the binary tensor operators.
+ * \param ctx The error reporting context.
+ * \param ndim The ndim constraint.
+ * \param axes The axis indices to be checked
+ * \param op_name The name of the operator that invokes this function.
+ * \return The input axes in non-negative indexing.
+ */
+Array<Integer> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilder& ctx, int ndim,
+                                             const Array<Integer>& axes, const String op_name);
+
+/*!
+ * \brief Check if the given axis is in range with regards to the given ndim. And convert it to
+ * non-negative index.
+ * \param call The Call of the binary tensor operators.
+ * \param ctx The error reporting context.
+ * \param ndim The ndim constraint.
+ * \param axis The axis index to be checked
+ * \param op_name The name of the operator that invokes this function.
+ * \return The input axis in non-negative indexing.
+ */
+inline int CheckAxisInRange(const Call& call, const BlockBuilder& ctx, int ndim, int axis,
+                            const String op_name) {
+  return CheckAxesInRangeNonRepetitive(call, ctx, ndim, {axis}, op_name)[0]->value;
 }
 
 }  // namespace relax
