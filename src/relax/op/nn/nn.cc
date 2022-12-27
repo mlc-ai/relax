@@ -240,7 +240,8 @@ RELAX_REGISTER_OP("relax.nn.dropout")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "Input to which dropout will be applied.")
     .set_attr<FInferShape>("FInferShape", InferShapeDropout)
-    .set_attr<FInferType>("FInferType", InferTypeDropout);
+    .set_attr<FInferType>("FInferType", InferTypeDropout)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutUnaryEwise);
 
 Expr MakeDropout(Expr data, double rate) {
   ObjectPtr<DropoutAttrs> attrs = make_object<DropoutAttrs>();

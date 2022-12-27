@@ -737,7 +737,8 @@ RELAX_REGISTER_OP("relax.cast")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
     .set_attr<FInferShape>("FInferShape", InferShapeCast)
-    .set_attr<FInferType>("FInferType", InferTypeCast);
+    .set_attr<FInferType>("FInferType", InferTypeCast)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutUnaryEwise);
 
 Expr MakeCast(Expr data, DataType dtype) {
   ObjectPtr<CastAttrs> attrs = make_object<CastAttrs>();
@@ -780,7 +781,8 @@ RELAX_REGISTER_OP("relax.wrap_param")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
     .set_attr<FInferShape>("FInferShape", InferShapeWrapParam)
-    .set_attr<FInferType>("FInferType", InferTypeWrapParam);
+    .set_attr<FInferType>("FInferType", InferTypeWrapParam)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutUnaryEwise);
 
 Expr MakeWrapParam(Expr data, DataType dtype) {
   ObjectPtr<WrapParamAttrs> attrs = make_object<WrapParamAttrs>();
