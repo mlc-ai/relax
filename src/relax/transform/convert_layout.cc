@@ -69,11 +69,12 @@ class LayoutConvertMutator : public ExprMutator {
         // This var already has the target layout
         return (*itt).second;
       }
-    } else {
-      auto it = other_var_map_.find(GetRef<Var>(op));
-      ICHECK(it != other_var_map_.end()) << "Cannot find var " << GetRef<Var>(op) << " in map";
+    }
+    auto it = other_var_map_.find(GetRef<Var>(op));
+    if (it != other_var_map_.end()) {
       return (*it).second;
     }
+    return ExprMutator::VisitExpr_(op);
   }
 
   Expr VisitExpr_(const VarNode* op) final { return VisitVars_(op); }
