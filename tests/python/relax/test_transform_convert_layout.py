@@ -861,6 +861,67 @@ def test_conv2d_relu_concat_split():
     tvm.ir.assert_structural_equal(mod, conv2d_relu_concat_split)
 
 
+@I.ir_module
+class conv2d_maxpool2d:
+    @R.function
+    def main(
+        x: R.Tensor((2, 3, 28, 28), dtype="float32"), w: R.Tensor((4, 3, 3, 3), dtype="float32")
+    ) -> R.Tensor(None, dtype="float32", ndim=4):
+        # block 0
+        gv: R.Tensor((2, 28, 28, 3), dtype="float32") = R.transpose(x, axes=[0, 2, 3, 1])
+        gv1: R.Tensor((4, 3, 3, 3), dtype="float32") = R.transpose(w, axes=[0, 2, 3, 1])
+        gv2: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.conv2d(
+            gv,
+            gv1,
+            strides=[1, 1],
+            padding=[0, 0, 0, 0],
+            dilation=[1, 1],
+            groups=1,
+            channels=None,
+            kernel_size=[3, 3],
+            data_layout="NHWC",
+            kernel_layout="OHWI",
+            out_layout="NHWC",
+            out_dtype="float32",
+        )
+        gv3: R.Tensor((2, 13, 13, 4), dtype="float32") = R.nn.max_pool2d(
+            gv2,
+            pool_size=[2, 2],
+            strides=[2, 2],
+            dilation=[1, 1],
+            padding=[0, 0, 0, 0],
+            layout="NHWC",
+            out_layout="NHWC",
+            ceil_mode=False,
+        )
+        gv4: R.Tensor((2, 4, 13, 13), dtype="float32") = R.transpose(gv3, axes=[0, 3, 1, 2])
+        return gv4
+
+
+def test_conv2d_maxpool2d():
+    @I.ir_module
+    class Conv2dMaxPool2d:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
+                x, w, kernel_size=[3, 3], out_dtype="float32"
+            )
+            gv2 = R.nn.max_pool2d(
+                gv,
+                pool_size=[2, 2],
+                strides=[2, 2],
+                padding=[0, 0],
+                layout="NCHW",
+                out_layout="NCHW",
+            )
+            return gv2
+
+    mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dMaxPool2d)
+    tvm.ir.assert_structural_equal(mod, conv2d_maxpool2d)
+
+
 if __name__ == "__main__":
     test_conv2d()
     test_conv2d_relu()
@@ -879,3 +940,4 @@ if __name__ == "__main__":
     test_conv2d_cumsum_default_axis()
     test_conv2d_relu_concat()
     test_conv2d_relu_concat_split()
+    test_conv2d_maxpool2d()

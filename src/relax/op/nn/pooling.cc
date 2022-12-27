@@ -84,20 +84,33 @@ Expr InferShapeMaxPool2d(const Call& call, DiagnosticContext diag_ctx) {
   Expr shape = call->args[0]->shape();
   auto* s = shape.as<ShapeExprNode>();
   if (s) {
-    Array<PrimExpr> output_shape;
+    int N = std::string(attrs->layout).find('N');
+    int C = std::string(attrs->layout).find('C');
+    int H = std::string(attrs->layout).find('H');
+    int W = std::string(attrs->layout).find('W');
+    int N_out = std::string(attrs->out_layout).find('N');
+    int C_out = std::string(attrs->out_layout).find('C');
+    int H_out = std::string(attrs->out_layout).find('H');
+    int W_out = std::string(attrs->out_layout).find('W');
+    std::vector<PrimExpr> output_shape(s->values.size(), 0);
+    output_shape.reserve(s->values.size());
     for (int i = 0; i < static_cast<int>(s->values.size()); i++) {
-      if (i == static_cast<int>(s->values.size()) - 2) {
-        output_shape.push_back((s->values[i] + 2 * attrs->padding[0] -
+      if (i == H) {
+        output_shape[H_out] = ((s->values[i] + 2 * attrs->padding[0] -
                                 attrs->dilation[0] * (attrs->pool_size[0] - 1) - 1) /
                                    attrs->strides[0] +
                                1);
-      } else if (i == static_cast<int>(s->values.size()) - 1) {
-        output_shape.push_back((s->values[i] + 2 * attrs->padding[1] -
+      } else if (i == W) {
+        output_shape[W_out] = ((s->values[i] + 2 * attrs->padding[1] -
                                 attrs->dilation[1] * (attrs->pool_size[1] - 1) - 1) /
                                    attrs->strides[1] +
                                1);
+      } else if (i == N) {
+        output_shape[N_out] = s->values[i];
+      } else if (i == C) {
+        output_shape[C_out] = s->values[i];
       } else {
-        output_shape.push_back(s->values[i]);
+        LOG(FATAL) << "Invalid layout " << attrs->layout;
       }
     }
     return ShapeExpr(Array<PrimExpr>{output_shape.begin(), output_shape.end()});
@@ -114,7 +127,8 @@ RELAX_REGISTER_OP("relax.nn.max_pool2d")
     .set_attr<FInferShape>("FInferShape", InferShapeMaxPool2d)
     .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast)
     // TODO(@tvm-team): Can we implement this in TOPI instead?
-    .set_attr<FTVMCompute>("FTVMCompute", Pool2DCompute<MaxPool2DAttrs, topi::nn::kMaxPool>);
+    .set_attr<FTVMCompute>("FTVMCompute", Pool2DCompute<MaxPool2DAttrs, topi::nn::kMaxPool>)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutPool2d);
 
 Expr MakeMaxPool2D(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides,
                    Array<PrimExpr> padding, Array<PrimExpr> dilation, String layout,
