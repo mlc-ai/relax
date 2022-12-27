@@ -421,7 +421,8 @@ RELAY_REGISTER_OP("relax.concatenate")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input list of tensors.")
     .set_attr<FInferShape>("FInferShape", InferShapeConcatenate)
-    .set_attr<FInferType>("FInferType", InferTypeConcatenate);
+    .set_attr<FInferType>("FInferType", InferTypeConcatenate)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutConcatenate);
 
 Expr MakeConcatenate(Expr data, Optional<Integer> axis) {
   ObjectPtr<ConcatenateAttrs> attrs = make_object<ConcatenateAttrs>();

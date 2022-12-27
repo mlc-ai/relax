@@ -765,6 +765,102 @@ def test_conv2d_cumsum_default_axis():
     tvm.ir.assert_structural_equal(mod, conv2d_cumsum_default_axis)
 
 
+@I.ir_module
+class conv2d_relu_concat:
+    @R.function
+    def main(
+        x: R.Tensor((2, 3, 28, 28), dtype="float32"), w: R.Tensor((4, 3, 3, 3), dtype="float32")
+    ) -> R.Tensor(None, dtype="float32", ndim=4):
+        # block 0
+        gv: R.Tensor((2, 28, 28, 3), dtype="float32") = R.transpose(x, axes=[0, 2, 3, 1])
+        gv1: R.Tensor((4, 3, 3, 3), dtype="float32") = R.transpose(w, axes=[0, 2, 3, 1])
+        gv2: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.conv2d(
+            gv,
+            gv1,
+            strides=[1, 1],
+            padding=[0, 0, 0, 0],
+            dilation=[1, 1],
+            groups=1,
+            channels=None,
+            kernel_size=[3, 3],
+            data_layout="NHWC",
+            kernel_layout="OHWI",
+            out_layout="NHWC",
+            out_dtype="float32",
+        )
+        gv3: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.relu(gv2)
+        gv4: R.Tensor((2, 26, 26, 8), dtype="float32") = R.concatenate((gv2, gv3), axis=3)
+        gv5: R.Tensor((2, 8, 26, 26), dtype="float32") = R.transpose(gv4, axes=[0, 3, 1, 2])
+        return gv5
+
+
+def test_conv2d_relu_concat():
+    @I.ir_module
+    class Conv2dReLUConcat:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")
+        ) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
+                x, w, kernel_size=[3, 3], out_dtype="float32"
+            )
+            gv2: R.Tensor((2, 4, 26, 26), "float32") = R.nn.relu(gv)
+            gv3: R.Tensor((2, 8, 26, 26), "float32") = R.concatenate((gv, gv2), axis=1)
+            return gv3
+
+    mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dReLUConcat)
+    tvm.ir.assert_structural_equal(mod, conv2d_relu_concat)
+
+
+@I.ir_module
+class conv2d_relu_concat_split:
+    @R.function
+    def main(
+        x: R.Tensor((2, 3, 28, 28), dtype="float32"), w: R.Tensor((4, 3, 3, 3), dtype="float32")
+    ) -> R.Tuple(R.Tensor(None, dtype="float32", ndim=4), R.Tensor(None, dtype="float32", ndim=4)):
+        # block 0
+        gv: R.Tensor((2, 28, 28, 3), dtype="float32") = R.transpose(x, axes=[0, 2, 3, 1])
+        gv1: R.Tensor((4, 3, 3, 3), dtype="float32") = R.transpose(w, axes=[0, 2, 3, 1])
+        gv2: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.conv2d(
+            gv,
+            gv1,
+            strides=[1, 1],
+            padding=[0, 0, 0, 0],
+            dilation=[1, 1],
+            groups=1,
+            channels=None,
+            kernel_size=[3, 3],
+            data_layout="NHWC",
+            kernel_layout="OHWI",
+            out_layout="NHWC",
+            out_dtype="float32",
+        )
+        gv3: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.relu(gv2)
+        gv4: R.Tensor((2, 26, 26, 8), dtype="float32") = R.concatenate((gv2, gv3), axis=3)
+        gv5: R.Tensor((2, 8, 26, 26), dtype="float32") = R.transpose(gv4, axes=[0, 3, 1, 2])
+        gv6: R.Tuple(
+            R.Tensor((2, 4, 26, 26), dtype="float32"), R.Tensor((2, 4, 26, 26), dtype="float32")
+        ) = R.split(gv5, indices_or_sections=2, axis=1)
+        return gv6
+
+
+def test_conv2d_relu_concat_split():
+    @I.ir_module
+    class Conv2dReLUConcatSplit:
+        @R.function
+        def main(x: R.Tensor((2, 3, 28, 28), "float32"), w: R.Tensor((4, 3, 3, 3), "float32")):
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
+                x, w, kernel_size=[3, 3], out_dtype="float32"
+            )
+            gv2: R.Tensor((2, 4, 26, 26), "float32") = R.nn.relu(gv)
+            gv3: R.Tensor((2, 8, 26, 26), "float32") = R.concatenate((gv, gv2), axis=1)
+            gv4 = R.split(gv3, indices_or_sections=2, axis=1)
+            return gv4
+
+    mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dReLUConcatSplit)
+    tvm.ir.assert_structural_equal(mod, conv2d_relu_concat_split)
+
+
 if __name__ == "__main__":
     test_conv2d()
     test_conv2d_relu()
@@ -781,3 +877,5 @@ if __name__ == "__main__":
     test_conv2d_strided_slice()
     test_conv2d_cumsum()
     test_conv2d_cumsum_default_axis()
+    test_conv2d_relu_concat()
+    test_conv2d_relu_concat_split()
