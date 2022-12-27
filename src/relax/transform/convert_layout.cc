@@ -43,6 +43,8 @@ class LayoutConvertMutator : public ExprMutator {
       if (const auto* type = param->checked_type().as<DynTensorTypeNode>()) {
         ICHECK(type->ndim > 0) << "Only support tensor with known rank";
         var_layout_map_[param].Set(InitialLayout(type->ndim), param);
+      } else {
+        other_var_map_[param] = param;
       }
     }
   }
@@ -67,6 +69,10 @@ class LayoutConvertMutator : public ExprMutator {
         // This var already has the target layout
         return (*itt).second;
       }
+    }
+    auto it = other_var_map_.find(GetRef<Var>(op));
+    if (it != other_var_map_.end()) {
+      return (*it).second;
     }
     return ExprMutator::VisitExpr_(op);
   }
@@ -97,14 +103,13 @@ class LayoutConvertMutator : public ExprMutator {
 
   // Convert the layout of the input arguments to the desired layout.
   // If input_layouts is not defined, the initial layout of the input arguments will be used.
-  size_t TransformArgs(Array<Expr> args, Optional<Array<Layout>> input_layouts, size_t offset,
+  size_t TransformArgs(Array<Expr> args, Array<Layout> input_layouts, size_t offset,
                        std::vector<Expr>* new_args) {
     for (size_t i = 0; i < args.size(); ++i) {
       if (const auto* var = args[i].as<VarNode>()) {
         const auto* type = var->checked_type().as<DynTensorTypeNode>();
         ICHECK(type != nullptr && !type->IsUnknownNdim()) << "Only support tensor with known rank";
-        Layout target_layout =
-            input_layouts.defined() ? input_layouts.value()[offset++] : InitialLayout(type->ndim);
+        Layout target_layout = input_layouts[offset++];
         auto it = var_layout_map_.find(GetRef<Var>(var));
         ICHECK(it != var_layout_map_.end()) << "Cannot find the layout of var: " << var;
         auto itt = it->second.find(target_layout.name());
@@ -128,8 +133,7 @@ class LayoutConvertMutator : public ExprMutator {
       } else if (const auto* constant = args[i].as<ConstantNode>()) {
         const auto* type = constant->checked_type().as<DynTensorTypeNode>();
         ICHECK(type != nullptr && !type->IsUnknownNdim()) << "Only support tensor with known rank";
-        Layout target_layout =
-            input_layouts.defined() ? input_layouts.value()[offset++] : InitialLayout(type->ndim);
+        Layout target_layout = input_layouts[offset++];
         Var converted_const = builder_->Emit(
             MakeTranspose(GetRef<Constant>(constant), LayoutToIntegers(target_layout)));
         new_args->push_back(converted_const);
@@ -150,6 +154,10 @@ class LayoutConvertMutator : public ExprMutator {
       }
       if (new_var->checked_type().as<DynTensorTypeNode>()) {
         this->UpdateLayoutMap(v, layout, new_var);
+      } else {
+        auto it = this->other_var_map_.find(v);
+        ICHECK(it == this->other_var_map_.end());
+        this->other_var_map_.insert({v, new_var});
       }
       return new_var;
     };
@@ -175,12 +183,18 @@ class LayoutConvertMutator : public ExprMutator {
           // We don't know how to convert the layout of this op.
           // Use the original layout.
           std::vector<Expr> new_args;
-          TransformArgs(call_node->args, NullOpt, 0, &new_args);
+          for (const auto& arg : call_node->args) {
+            new_args.push_back(VisitExpr(arg));
+          }
           const auto* type = binding->var->checked_type().as<DynTensorTypeNode>();
-          ICHECK(type != nullptr && !type->IsUnknownNdim())
-              << "Only support tensor with known rank";
-          emit(Call(call_node->op, new_args, call_node->attrs), binding->var,
-               InitialLayout(type->ndim));
+          int ndim;
+          if (type != nullptr) {
+            ICHECK(!type->IsUnknownNdim()) << "Only support tensor with known rank";
+            ndim = type->ndim;
+          } else {
+            ndim = 1;
+          }
+          emit(Call(call_node->op, new_args, call_node->attrs), binding->var, InitialLayout(ndim));
         }
       }
     } else {
@@ -189,6 +203,7 @@ class LayoutConvertMutator : public ExprMutator {
   }
 
   std::unordered_map<Var, Map<String, Var>, ObjectPtrHash, ObjectPtrEqual> var_layout_map_;
+  std::unordered_map<Var, Var, ObjectPtrHash, ObjectPtrEqual> other_var_map_;
   Map<String, Array<String>> desired_layouts_;
 };
 

@@ -436,7 +436,7 @@ InferLayoutOutput InferLayoutCumsum(const Call& call,
 
   Layout exisiting_layout = GetOneValidLayout(var_layout_map, call->args[0]);
   if (attrs->axis.defined()) {
-    int axis = attrs->axis.value()->value;
+    int axis = (attrs->axis.value()->value + type->ndim) % type->ndim;
     ObjectPtr<CumsumAttrs> new_attrs = make_object<CumsumAttrs>(*attrs);
     new_attrs->axis = Integer(exisiting_layout.name().find('A' + axis));
     return InferLayoutOutput({exisiting_layout}, {exisiting_layout}, Attrs(new_attrs));
@@ -444,5 +444,69 @@ InferLayoutOutput InferLayoutCumsum(const Call& call,
     return InferLayoutOutput({InitialLayout(type->ndim)}, {InitialLayout(1)}, Attrs(call->attrs));
   }
 }
+
+InferLayoutOutput InferLayoutConcatenate(const Call& call,
+                                         const Map<String, Array<String>>& desired_layouts,
+                                         VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr) << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_GE(call->args.size(), 1) << "Invalid Call";
+
+  const auto* attrs = call->attrs.as<ConcatenateAttrs>();
+  ICHECK(attrs != nullptr) << "Invalid Call";
+  const auto* tuple_shape = call->args[0]->shape().as<TupleNode>();
+  ICHECK(tuple_shape != nullptr) << "Invalid Call";
+
+  int n_tensor = tuple_shape->fields.size();
+  ICHECK_GE(n_tensor, 0) << "Invalid Call";
+  const auto* args = call->args[0].as<TupleNode>();
+  std::vector<Map<String, Var>> layout_maps;
+  for (int i = 0; i < n_tensor; ++i) {
+    const auto* type = args->fields[i]->checked_type().as<DynTensorTypeNode>();
+    ICHECK(type != nullptr && !type->IsUnknownNdim()) << "Invalid Call";
+    const auto* var = args->fields[i].as<VarNode>();
+    if (var != nullptr) {
+      const auto it = var_layout_map.find(GetRef<Var>(var));
+      ICHECK(it != var_layout_map.end()) << "var " << var->vid << " has no layout";
+      layout_maps.push_back((*it).second);
+    }
+  }
+
+  for (const auto it : layout_maps[0]) {
+    bool all_same = true;
+    for (int i = 1; i < n_tensor; ++i) {
+      if (layout_maps[i].find(it.first) == layout_maps[i].end()) {
+        all_same = false;
+        break;
+      }
+    }
+    if (all_same) {
+      // Fina a common layout for all tensors
+      Layout common_layout(it.first);
+      Array<Layout> input_layouts, output_layouts;
+      for (int i = 0; i < n_tensor; ++i) {
+        input_layouts.push_back(common_layout);
+      }
+      output_layouts.push_back(common_layout);
+      int axis = attrs->axis.defined() ? attrs->axis.value()->value : 0;
+      axis = (axis + common_layout.ndim()) % common_layout.ndim();
+      ObjectPtr<ConcatenateAttrs> new_attrs = make_object<ConcatenateAttrs>(*attrs);
+      new_attrs->axis = Integer(common_layout.name().find('A' + axis));
+      return InferLayoutOutput({input_layouts}, {output_layouts}, Attrs(new_attrs));
+    }
+  }
+
+  // No common layout, use initial layout
+  int ndim = args->fields[0]->checked_type().as<DynTensorTypeNode>()->ndim;
+  Array<Layout> input_layouts, output_layouts;
+  for (int i = 0; i < n_tensor; ++i) {
+    input_layouts.push_back(InitialLayout(ndim));
+  }
+  output_layouts.push_back(InitialLayout(ndim));
+  return InferLayoutOutput({input_layouts}, {output_layouts}, Attrs(call->attrs));
+}
+
 }  // namespace relax
 }  // namespace tvm
