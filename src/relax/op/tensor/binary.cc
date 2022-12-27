@@ -23,8 +23,6 @@
  */
 
 #include <algorithm>
-#include <utility>
-#include <vector>
 
 #include "../op_common.h"
 
@@ -57,22 +55,10 @@ namespace relax {
   RELAX_REGISTER_BINARY_OP(OpName).set_attr<FInferStructInfo>("FInferStructInfo", \
                                                               InferStructInfoBroadcastCMP)
 
-using FComputeOutDtype = std::function<DataType(
-    const Call&, const BlockBuilder&, const TensorStructInfoNode*, const TensorStructInfoNode*)>;
-
+template <typename FType>
 StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx,
-                                    FComputeOutDtype f_compute_out_dtype) {
-  if (call->args.size() != 2) {
-    ctx->ReportFatal(Diagnostic::Error(call) << "Binary op should have 2 arguments");
-  }
-  auto* lhs_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[0]);
-  auto* rhs_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[1]);
-  if (!lhs_sinfo || !rhs_sinfo) {
-    ctx->ReportFatal(Diagnostic::Error(call)
-                     << "Both lhs and rhs should be Tensor for binary operator, but got "
-                     << call->args[0]->struct_info_->GetTypeKey() << " and "
-                     << call->args[1]->struct_info_->GetTypeKey());
-  }
+                                    FType f_compute_out_dtype) {
+  auto [lhs_sinfo, rhs_sinfo] = GetBinaryInputTensorStructInfo(call, ctx, /*op_name=*/"Binary");
 
   // DateType
   DataType output_dtype = f_compute_out_dtype(call, ctx, lhs_sinfo, rhs_sinfo);
@@ -131,29 +117,14 @@ StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx,
 }
 
 StructInfo InferStructInfoBroadcastArith(const Call& call, const BlockBuilder& ctx) {
-  auto f_compute_out_dtype = [](const Call& call, const BlockBuilder& ctx,
-                                const TensorStructInfoNode* lhs_sinfo,
-                                const TensorStructInfoNode* rhs_sinfo) {
-    DataType output_dtype;
-    if (lhs_sinfo->IsUnknownDtype() || rhs_sinfo->IsUnknownDtype()) {
-      output_dtype = DataType::Void();
-    } else if (lhs_sinfo->dtype != rhs_sinfo->dtype) {
-      ctx->ReportFatal(Diagnostic::Error(call)
-                       << "Data types " << lhs_sinfo->dtype << " and " << rhs_sinfo->dtype
-                       << " must be equal for broadcasting operators");
-    } else {
-      output_dtype = lhs_sinfo->dtype;
-    }
-    return output_dtype;
-  };
-  return InferStructInfoBroadcast(call, ctx, std::move(f_compute_out_dtype));
+  return InferStructInfoBroadcast(call, ctx, InferBinaryArithOpOutDtype);
 }
 
 StructInfo InferStructInfoBroadcastCMP(const Call& call, const BlockBuilder& ctx) {
-  auto f_compute_out_dtype = [](const Call& call, const BlockBuilder& ctx,
-                                const TensorStructInfoNode* lhs_sinfo,
-                                const TensorStructInfoNode* rhs_sinfo) { return DataType::Bool(); };
-  return InferStructInfoBroadcast(call, ctx, std::move(f_compute_out_dtype));
+  return InferStructInfoBroadcast(
+      call, ctx,
+      [](const Call& call, const BlockBuilder& ctx, const TensorStructInfo& lhs_sinfo,
+         const TensorStructInfo& rhs_sinfo) { return DataType::Bool(); });
 }
 
 RELAX_REGISTER_BINARY_BROADCAST_OP("add").describe("Elementwise addition with broadcasting");
