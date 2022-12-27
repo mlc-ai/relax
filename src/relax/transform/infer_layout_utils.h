@@ -119,6 +119,10 @@ InferLayoutOutput InferLayoutAdaptiveAvgPool2D(const Call& call,
                                                const Map<String, Array<String>>& desired_layouts,
                                                VarLayoutMap var_layout_map);
 
+InferLayoutOutput InferLayoutSoftmax(const Call& call,
+                                     const Map<String, Array<String>>& desired_layouts,
+                                     VarLayoutMap var_layout_map);
+
 InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
                                         VarLayoutMap var_layout_map);

@@ -69,7 +69,8 @@ RELAX_REGISTER_OP("relax.nn.softmax")
 )code" TVM_ADD_FILELINE)
     .set_attrs_type<SoftmaxAttrs>()
     .set_attr<FInferShape>("FInferShape", InferShapeUnaryBroadcast)
-    .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast);
+    .set_attr<FInferType>("FInferType", InferTypeUnaryBroadcast)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutSoftmax);
 
 TVM_REGISTER_GLOBAL("relax.op.nn.softmax").set_body_typed(MakeSoftmax);
 
@@ -654,17 +655,21 @@ Expr InferShapeCrossEntropy(const Call& call, DiagnosticContext diag_ctx) {
     size_t ndim0 = s0->values.size();
     size_t ndim1 = s1->values.size();
     if (ndim0 != ndim1) {
-      diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "The 2 arguments of CrossEntropy should be of the same dimension.");
+      diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                         << "The 2 arguments of CrossEntropy should be of the same dimension.");
     }
     arith::Analyzer ana;
     Array<PrimExpr> predictions_shape = s0->values;
     Array<PrimExpr> targets_shape = s1->values;
-    if (ana.CanProve(predictions_shape[ndim0-1] != targets_shape[ndim1-1])) {
-      diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "The last dimension size of the 2 arguments of CrossEntropy must be equal.");
+    if (ana.CanProve(predictions_shape[ndim0 - 1] != targets_shape[ndim1 - 1])) {
+      diag_ctx.EmitFatal(
+          Diagnostic::Error(call->span)
+          << "The last dimension size of the 2 arguments of CrossEntropy must be equal.");
     }
     return ShapeExpr(Array<PrimExpr>{});
   } else {
-    return RuntimeDepShape();;
+    return RuntimeDepShape();
+    ;
   }
 }
 
@@ -685,8 +690,9 @@ Type InferTypeCrossEntropy(const Call& call, DiagnosticContext diag_ctx) {
   if (t0->IsUnknownDtype() || t1->IsUnknownDtype()) {
     output_dtype = DataType::Void();
   } else if (t0->dtype != t1->dtype) {
-    diag_ctx.EmitFatal(Diagnostic::Error(call->span) << "Data types " << t0->dtype << ", and"
-                                                     << t1->dtype << " must be equal for CrossEntropy");
+    diag_ctx.EmitFatal(Diagnostic::Error(call->span)
+                       << "Data types " << t0->dtype << ", and" << t1->dtype
+                       << " must be equal for CrossEntropy");
   } else {
     output_dtype = t0->dtype;
   }

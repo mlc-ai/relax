@@ -151,6 +151,25 @@ InferLayoutOutput InferLayoutAdaptiveAvgPool2D(const Call& call,
   return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
 }
 
+InferLayoutOutput InferLayoutSoftmax(const Call& call,
+                                     const Map<String, Array<String>>& desired_layouts,
+                                     VarLayoutMap var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr && op_node->name == "relax.nn.softmax") << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(type != nullptr) << "Invalid Call";
+  const auto* attrs = call->attrs.as<SoftmaxAttrs>();
+  ICHECK(attrs) << "Invalid Call";
+
+  Layout layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  ObjectPtr<SoftmaxAttrs> new_attrs = make_object<SoftmaxAttrs>(*attrs);
+  new_attrs->axis = layout.name().find('A' + attrs->axis);
+  return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
+}
+
 InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
                                         VarLayoutMap var_layout_map) {
