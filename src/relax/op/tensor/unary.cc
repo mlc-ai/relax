@@ -27,41 +27,6 @@
 namespace tvm {
 namespace relax {
 
-/*!
- * \brief Quick helper macro
- * - Expose a make function to construct the node.
- * - Register op to the registry.
- * \param OpName The name of operator to register. The name passed in will
- *  1. be prepended with a prefix "relax.op." as the FFI key string for the make function,
- *  2. be prepended with a prefix "relax." as the key string in the operator registry.
- */
-#define RELAX_REGISTER_UNARY_OP(OpName)                               \
-  TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr e) { \
-    static const Op& op = Op::Get("relax." OpName);                   \
-    return Call(op, {e}, Attrs(), {});                                \
-  });                                                                 \
-  TVM_REGISTER_OP("relax." OpName)                                    \
-      .set_num_inputs(1)                                              \
-      .add_argument("e", "Tensor", "The input tensor.")               \
-      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary)
-
-TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const BlockBuilder& ctx) {
-  if (call->args.size() != 1) {
-    ctx->ReportFatal(Diagnostic::Error(call) << "Unary op should have exactly 1 argument");
-  }
-  const auto* input_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[0]);
-  if (input_sinfo == nullptr) {
-    ctx->ReportFatal(Diagnostic::Error(call)
-                     << "The input of unary operator should be Tensor. However, the given input is "
-                     << call->args[0]->struct_info_->GetTypeKey());
-  }
-  return GetRef<TensorStructInfo>(input_sinfo);
-}
-
-StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx) {
-  return GetUnaryInputTensorStructInfo(call, ctx);
-}
-
 /* relax.negative */
 RELAX_REGISTER_UNARY_OP("negative");
 
@@ -99,7 +64,7 @@ Expr MakeUnique(Expr data, bool sorted, bool return_inverse, bool return_counts,
 TVM_REGISTER_GLOBAL("relax.op.unique").set_body_typed(MakeUnique);
 
 StructInfo InferStructInfoUnique(const Call& call, const BlockBuilder& ctx) {
-  TensorStructInfo input_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
+  TensorStructInfo input_sinfo = GetUnaryInputTensorStructInfo(call, ctx, /*op_name=*/"unique");
   const auto* unique_attrs = call->attrs.as<UniqueAttrs>();
   // Only default values of these attributes are supported right now.
   if (unique_attrs->return_counts || unique_attrs->return_inverse || unique_attrs->dim != -1) {
