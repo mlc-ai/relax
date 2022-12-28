@@ -25,9 +25,37 @@ namespace relax {
 using tir::IterVar;
 using tir::Layout;
 
-std::string InitialLayout(size_t ndim) {
+bool IsNLayout(const Type& type) {
+  if (const auto* tensor_type = type.as<DynTensorTypeNode>()) {
+    return !tensor_type->IsUnknownNdim();
+  } else if (const auto* tuple_type = type.as<TupleTypeNode>()) {
+    for (const auto& field : tuple_type->fields) {
+      if (!IsNLayout(field)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+Layout InitialLayout(size_t ndim) {
   ICHECK(ndim > 0 && ndim <= 26) << "Only support up to 26 dimensions";
-  return Layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ").SubLayout(0, ndim).name();
+  return Layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ").SubLayout(0, ndim);
+}
+
+NLayout InitialNLayout(const Type& type) {
+  if (const auto* tensor_type = type.as<DynTensorTypeNode>()) {
+    ICHECK(!tensor_type->IsUnknownNdim()) << "Only support tensor with known rank";
+    return NLayout(InitialLayout(tensor_type->ndim));
+  } else if (const auto* tuple_type = type.as<TupleTypeNode>()) {
+    Array<NLayout> fields;
+    for (const auto& field : tuple_type->fields) {
+      fields.push_back(InitialNLayout(field));
+    }
+    return NLayout(fields);
+  }
+  LOG(FATAL) << "Unsupported type " << type;
 }
 
 Layout TransposeLike(const Layout& input, const Layout& src, const Layout& dst) {
@@ -50,23 +78,28 @@ String TransposeStrLike(const String& input, const Layout& src, const Layout& ds
   return axes;
 }
 
-Layout GetOneValidLayout(VarLayoutMap var_layout_map, const Expr& arg) {
+NLayout GetOneValidNLayout(VarLayoutMapWrapper var_layout_map, const Expr& arg) {
   if (const auto* var = arg.as<VarNode>()) {
-    auto it = var_layout_map.find(GetRef<Var>(var));
-    if (it != var_layout_map.end()) {
+    auto it = var_layout_map->inner.find(GetRef<Var>(var));
+    if (it != var_layout_map->inner.end()) {
       ICHECK((*it).second.size() >= 1) << "No valid layout for " << (*it).first;
-      auto itt = (*it).second.begin();
-      return Layout((*itt).first);
+      return (*it).second.begin()->first;
     }
   } else if (const auto* constant = arg.as<ConstantNode>()) {
-    return InitialLayout(constant->checked_type_.as<DynTensorTypeNode>()->ndim);
+    return InitialNLayout(constant->checked_type());
   }
   LOG(FATAL) << "Cannot get layout for " << arg;
 }
 
+Layout GetOneValidLayout(VarLayoutMapWrapper var_layout_map, const Expr& arg) {
+  NLayout nlayout = GetOneValidNLayout(var_layout_map, arg);
+  ICHECK(nlayout.IsLeaf()) << "Cannot get layout for " << arg;
+  return nlayout.LeafValue();
+}
+
 InferLayoutOutput InferLayoutConv2d(const Call& call,
                                     const Map<String, Array<String>>& desired_layouts,
-                                    VarLayoutMap var_layout_map) {
+                                    VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr && op_node->name == "relax.nn.conv2d") << "Invalid Call";
   const auto& it = desired_layouts.find("relax.nn.conv2d");
@@ -110,7 +143,7 @@ InferLayoutOutput InferLayoutConv2d(const Call& call,
 
 InferLayoutOutput InferLayoutPool2d(const Call& call,
                                     const Map<String, Array<String>>& desired_layouts,
-                                    VarLayoutMap var_layout_map) {
+                                    VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr && op_node->name == "relax.nn.max_pool2d") << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -133,7 +166,7 @@ InferLayoutOutput InferLayoutPool2d(const Call& call,
 
 InferLayoutOutput InferLayoutAdaptiveAvgPool2D(const Call& call,
                                                const Map<String, Array<String>>& desired_layouts,
-                                               VarLayoutMap var_layout_map) {
+                                               VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr && op_node->name == "relax.nn.adaptive_avg_pool2d") << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -153,7 +186,7 @@ InferLayoutOutput InferLayoutAdaptiveAvgPool2D(const Call& call,
 
 InferLayoutOutput InferLayoutSoftmax(const Call& call,
                                      const Map<String, Array<String>>& desired_layouts,
-                                     VarLayoutMap var_layout_map) {
+                                     VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr && op_node->name == "relax.nn.softmax") << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -170,27 +203,47 @@ InferLayoutOutput InferLayoutSoftmax(const Call& call,
   return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
 }
 
+InferLayoutOutput InferLayoutBatchNorm(const Call& call,
+                                       const Map<String, Array<String>>& desired_layouts,
+                                       VarLayoutMapWrapper var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr && op_node->name == "relax.nn.softmax") << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(type != nullptr) << "Invalid Call";
+  const auto* attrs = call->attrs.as<BatchNormAttrs>();
+  ICHECK(attrs) << "Invalid Call";
+
+  Layout layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  ObjectPtr<BatchNormAttrs> new_attrs = make_object<BatchNormAttrs>(*attrs);
+  new_attrs->axis = layout.name().find('A' + attrs->axis);
+  return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
+}
+
 InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
-                                        VarLayoutMap var_layout_map) {
+                                        VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
   ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
   ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+
   Layout layout = GetOneValidLayout(var_layout_map, call->args[0]);
   return InferLayoutOutput({layout}, {layout}, Attrs(call->attrs));
 }
 
 InferLayoutOutput InferLayoutBinaryEwise(const Call& call,
                                          const Map<String, Array<String>>& desired_layouts,
-                                         VarLayoutMap var_layout_map) {
+                                         VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
   ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
   ICHECK_EQ(call->args.size(), 2) << "Invalid Call";
-  Map<String, Var> lhs_layout_map, rhs_layout_map;
+  LayoutMap lhs_layout_map, rhs_layout_map;
   const auto* lhs = call->args[0].as<VarNode>();
   const auto* rhs = call->args[1].as<VarNode>();
   const auto* lhs_type = call->args[0]->checked_type().as<DynTensorTypeNode>();
@@ -199,21 +252,22 @@ InferLayoutOutput InferLayoutBinaryEwise(const Call& call,
   ICHECK(!lhs_type->IsUnknownNdim() && !rhs_type->IsUnknownNdim()) << "Invalid Call";
 
   if (lhs != nullptr) {
-    lhs_layout_map = var_layout_map.at(GetRef<Var>(lhs));
+    lhs_layout_map = var_layout_map->inner.at(GetRef<Var>(lhs));
   } else {
-    lhs_layout_map.Set(InitialLayout(lhs_type->ndim), Var());
+    lhs_layout_map.insert({InitialNLayout(lhs->checked_type()), Var()});
   }
   if (rhs != nullptr) {
-    rhs_layout_map = var_layout_map.at(GetRef<Var>(rhs));
+    rhs_layout_map = var_layout_map->inner.at(GetRef<Var>(rhs));
   } else {
-    rhs_layout_map.Set(InitialLayout(rhs_type->ndim), Var());
+    rhs_layout_map.insert({InitialNLayout(rhs->checked_type()), Var()});
   }
   // Find a common layout.
   for (const auto& lhs_iter : lhs_layout_map) {
     for (const auto& rhs_iter : rhs_layout_map) {
-      if (lhs_iter.first == rhs_iter.first) {
-        Layout lhs_layout = Layout(std::string(lhs_iter.first));
-        Layout rhs_layout = Layout(std::string(rhs_iter.first));
+      ICHECK(lhs_iter.first.IsLeaf() && rhs_iter.first.IsLeaf()) << "Invalid Call";
+      Layout lhs_layout = lhs_iter.first.LeafValue();
+      Layout rhs_layout = rhs_iter.first.LeafValue();
+      if (lhs_layout.name() == rhs_layout.name()) {
         return InferLayoutOutput({lhs_layout, rhs_layout}, {lhs_layout}, Attrs(call->attrs));
       }
     }
@@ -225,23 +279,23 @@ InferLayoutOutput InferLayoutBinaryEwise(const Call& call,
 
 InferLayoutOutput InferLayoutTernaryEwise(const Call& call,
                                           const Map<String, Array<String>>& desired_layouts,
-                                          VarLayoutMap var_layout_map) {
+                                          VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
   ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
   ICHECK_EQ(call->args.size(), 3) << "Invalid Call";
 
-  Map<String, Var> layout_map[3];
+  LayoutMap layout_map[3];
   for (size_t i = 0; i < 3; ++i) {
     const auto* var = call->args[i].as<VarNode>();
     const auto* type = call->args[i]->checked_type().as<DynTensorTypeNode>();
     ICHECK(type != nullptr) << "Invalid Call";
     ICHECK(!type->IsUnknownNdim()) << "Invalid Call";
     if (var != nullptr) {
-      layout_map[i] = var_layout_map.at(GetRef<Var>(var));
+      layout_map[i] = var_layout_map->inner.at(GetRef<Var>(var));
     } else {
-      layout_map[i].Set(InitialLayout(type->ndim), Var());
+      layout_map[i].insert({InitialNLayout(GetRef<Type>(type)), Var()});
     }
   }
 
@@ -249,9 +303,13 @@ InferLayoutOutput InferLayoutTernaryEwise(const Call& call,
   for (const auto& iter0 : layout_map[0]) {
     for (const auto& iter1 : layout_map[1]) {
       for (const auto& iter2 : layout_map[2]) {
-        if (iter0.first == iter1.first && iter1.first == iter2.first) {
-          Layout layout = Layout(std::string(iter0.first));
-          return InferLayoutOutput({layout, layout, layout}, {layout}, Attrs(call->attrs));
+        ICHECK(iter0.first.IsLeaf() && iter1.first.IsLeaf() && iter2.first.IsLeaf())
+            << "Invalid Call";
+        Layout layout0 = iter0.first.LeafValue();
+        Layout layout1 = iter1.first.LeafValue();
+        Layout layout2 = iter2.first.LeafValue();
+        if (layout0.name() == layout1.name() && layout0.name() == layout2.name()) {
+          return InferLayoutOutput({layout0, layout0, layout0}, {layout0}, Attrs(call->attrs));
         }
       }
     }
@@ -263,7 +321,7 @@ InferLayoutOutput InferLayoutTernaryEwise(const Call& call,
 
 InferLayoutOutput InferLayoutReduce(const Call& call,
                                     const Map<String, Array<String>>& desired_layouts,
-                                    VarLayoutMap var_layout_map) {
+                                    VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -295,7 +353,9 @@ InferLayoutOutput InferLayoutReduce(const Call& call,
     }
   }
 
-  Layout exisiting_layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  NLayout nlayout = GetOneValidNLayout(var_layout_map, call->args[0]);
+  ICHECK(nlayout.IsLeaf()) << "Invalid Call";
+  Layout exisiting_layout = nlayout.LeafValue();
   String new_axis_str = TransposeStrLike(axis_str, InitialLayout(type->ndim), exisiting_layout);
   Array<Integer> new_axis;
   for (size_t i = 0; i < new_axis_str.size(); ++i) {
@@ -316,7 +376,7 @@ InferLayoutOutput InferLayoutReduce(const Call& call,
 
 InferLayoutOutput InferLayoutTranspose(const Call& call,
                                        const Map<String, Array<String>>& desired_layouts,
-                                       VarLayoutMap var_layout_map) {
+                                       VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -342,7 +402,7 @@ InferLayoutOutput InferLayoutTranspose(const Call& call,
   for (const auto& axis : order) {
     order_str.push_back(axis->value + 'A');
   }
-  String new_axes = TransposeStrLike(InitialLayout(type->ndim), exisiting_layout, order_str);
+  String new_axes = TransposeStrLike(InitialLayout(type->ndim).name(), exisiting_layout, order_str);
   Array<Integer> new_order;
   for (size_t i = 0; i < new_axes.size(); ++i) {
     new_order.push_back(Integer(new_axes.at(i) - 'A'));
@@ -354,7 +414,7 @@ InferLayoutOutput InferLayoutTranspose(const Call& call,
 
 InferLayoutOutput InferLayoutExpandDims(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
-                                        VarLayoutMap var_layout_map) {
+                                        VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -394,7 +454,7 @@ InferLayoutOutput InferLayoutExpandDims(const Call& call,
 
 InferLayoutOutput InferLayoutSqueeze(const Call& call,
                                      const Map<String, Array<String>>& desired_layouts,
-                                     VarLayoutMap var_layout_map) {
+                                     VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -444,12 +504,12 @@ InferLayoutOutput InferLayoutSqueeze(const Call& call,
 
   ObjectPtr<SqueezeAttrs> new_attrs = make_object<SqueezeAttrs>(*attrs);
   new_attrs->axis = new_axis;
-  return InferLayoutOutput({exisiting_layout}, {output_layout}, Attrs(new_attrs));
+  return InferLayoutOutput({exisiting_layout}, {Layout(output_layout)}, Attrs(new_attrs));
 }
 
 InferLayoutOutput InferLayoutStridedSlice(const Call& call,
                                           const Map<String, Array<String>>& desired_layouts,
-                                          VarLayoutMap var_layout_map) {
+                                          VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -484,7 +544,7 @@ InferLayoutOutput InferLayoutStridedSlice(const Call& call,
 
 InferLayoutOutput InferLayoutCumsum(const Call& call,
                                     const Map<String, Array<String>>& desired_layouts,
-                                    VarLayoutMap var_layout_map) {
+                                    VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -509,7 +569,7 @@ InferLayoutOutput InferLayoutCumsum(const Call& call,
 
 InferLayoutOutput InferLayoutConcatenate(const Call& call,
                                          const Map<String, Array<String>>& desired_layouts,
-                                         VarLayoutMap var_layout_map) {
+                                         VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
   ICHECK(op_node != nullptr) << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
@@ -524,14 +584,14 @@ InferLayoutOutput InferLayoutConcatenate(const Call& call,
   int n_tensor = tuple_shape->fields.size();
   ICHECK_GE(n_tensor, 0) << "Invalid Call";
   const auto* args = call->args[0].as<TupleNode>();
-  std::vector<Map<String, Var>> layout_maps;
+  std::vector<LayoutMap> layout_maps;
   for (int i = 0; i < n_tensor; ++i) {
     const auto* type = args->fields[i]->checked_type().as<DynTensorTypeNode>();
     ICHECK(type != nullptr && !type->IsUnknownNdim()) << "Invalid Call";
     const auto* var = args->fields[i].as<VarNode>();
     if (var != nullptr) {
-      const auto it = var_layout_map.find(GetRef<Var>(var));
-      ICHECK(it != var_layout_map.end()) << "var " << var->vid << " has no layout";
+      const auto it = var_layout_map->inner.find(GetRef<Var>(var));
+      ICHECK(it != var_layout_map->inner.end()) << "var " << var->vid << " has no layout";
       layout_maps.push_back((*it).second);
     }
   }
@@ -546,23 +606,24 @@ InferLayoutOutput InferLayoutConcatenate(const Call& call,
     }
     if (all_same) {
       // Fina a common layout for all tensors
-      Layout common_layout(it.first);
-      Array<Layout> input_layouts, output_layouts;
+      NLayout nlayout = it.first;
+      ICHECK(nlayout.IsLeaf()) << "Invalid Call";
+      Layout common_layout = nlayout.LeafValue();
+      Array<NLayout> input_layouts;
       for (int i = 0; i < n_tensor; ++i) {
         input_layouts.push_back(common_layout);
       }
-      output_layouts.push_back(common_layout);
       int axis = attrs->axis.defined() ? attrs->axis.value()->value : 0;
       axis = (axis + common_layout.ndim()) % common_layout.ndim();
       ObjectPtr<ConcatenateAttrs> new_attrs = make_object<ConcatenateAttrs>(*attrs);
       new_attrs->axis = Integer(common_layout.name().find('A' + axis));
-      return InferLayoutOutput({input_layouts}, {output_layouts}, Attrs(new_attrs));
+      return InferLayoutOutput({NLayout(input_layouts)}, {common_layout}, Attrs(new_attrs));
     }
   }
 
   // No common layout, use initial layout
   int ndim = args->fields[0]->checked_type().as<DynTensorTypeNode>()->ndim;
-  Array<Layout> input_layouts, output_layouts;
+  Array<NLayout> input_layouts, output_layouts;
   for (int i = 0; i < n_tensor; ++i) {
     input_layouts.push_back(InitialLayout(ndim));
   }

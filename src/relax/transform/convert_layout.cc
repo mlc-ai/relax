@@ -22,6 +22,7 @@
  */
 
 #include <tvm/relax/expr_functor.h>
+#include <tvm/relax/nested_msg.h>
 #include <tvm/relax/op_attr_types.h>
 #include <tvm/relax/transform.h>
 
@@ -40,47 +41,13 @@ class LayoutConvertMutator : public ExprMutator {
 
   void InitVarMap(const Function& func) {
     for (const auto& param : func->params) {
-      if (const auto* type = param->checked_type().as<DynTensorTypeNode>()) {
-        ICHECK(type->ndim > 0) << "Only support tensor with known rank";
-        var_layout_map_[param].Set(InitialLayout(type->ndim), param);
-      } else {
-        other_var_map_[param] = param;
+      if (IsNLayout(param->checked_type())) {
+        var_layout_map_->inner[param].insert({InitialNLayout(param->checked_type()), param});
       }
     }
   }
 
  private:
-  Expr VisitVars_(const VarNode* op) {
-    if (const auto* type = op->checked_type_.as<DynTensorTypeNode>()) {
-      ICHECK(type->ndim > 0) << "Only support tensor with known rank";
-      auto it = var_layout_map_.find(GetRef<Var>(op));
-      ICHECK(it != var_layout_map_.end()) << "Cannot find var " << GetRef<Var>(op) << " in map";
-      Layout target_layout = InitialLayout(type->ndim);
-      Layout existing_layout = GetOneValidLayout(var_layout_map_, GetRef<Var>(op));
-      auto itt = (*it).second.find(target_layout.name());
-      if (itt == (*it).second.end()) {
-        // This var does not have the target layout, so we need to convert it.
-        Layout axes = TransposeLike(target_layout, existing_layout, target_layout);
-        Var converted_var = builder_->Emit(
-            MakeTranspose((*it).second[existing_layout.name()], LayoutToIntegers(axes)));
-        (*it).second.Set(target_layout.name(), converted_var);
-        return converted_var;
-      } else {
-        // This var already has the target layout
-        return (*itt).second;
-      }
-    }
-    auto it = other_var_map_.find(GetRef<Var>(op));
-    if (it != other_var_map_.end()) {
-      return (*it).second;
-    }
-    return ExprMutator::VisitExpr_(op);
-  }
-
-  Expr VisitExpr_(const VarNode* op) final { return VisitVars_(op); }
-
-  Expr VisitExpr_(const DataflowVarNode* op) final { return VisitVars_(op); }
-
   Array<Integer> LayoutToIntegers(const Layout& layout) {
     Array<Integer> ret;
     Layout src = InitialLayout(layout.ndim());
@@ -90,74 +57,116 @@ class LayoutConvertMutator : public ExprMutator {
     return ret;
   }
 
-  void UpdateLayoutMap(const Var& var, const Layout& layout, const Var& converted_var) {
-    auto it = var_layout_map_.find(var);
-    if (it == var_layout_map_.end()) {
-      std::unordered_map<String, Var, ObjectHash, ObjectEqual> layout_map;
-      layout_map[layout.name()] = converted_var;
-      var_layout_map_[var] = layout_map;
+  void UpdateLayoutMap(const Var& var, const NLayout& layout, const Var& converted_var) {
+    auto it = var_layout_map_->inner.find(var);
+    if (it == var_layout_map_->inner.end()) {
+      LayoutMap layout_map;
+      layout_map[layout] = converted_var;
+      var_layout_map_->inner[var] = layout_map;
     } else {
-      it->second.Set(layout.name(), converted_var);
+      it->second.insert({layout, converted_var});
     }
   }
 
   // Convert the layout of the input arguments to the desired layout.
-  // If input_layouts is not defined, the initial layout of the input arguments will be used.
-  size_t TransformArgs(Array<Expr> args, Array<Layout> input_layouts, size_t offset,
-                       std::vector<Expr>* new_args) {
+  // Note: this function is only used when var does not have the desired layout.
+  //       because it will not look up the layout map.
+  Var TransformVar(const Var& var, const NLayout& from, const NLayout& to) {
+    if (const auto* type = var->checked_type().as<DynTensorTypeNode>()) {
+      ICHECK(from.IsLeaf() && to.IsLeaf()) << "Invalid layout for var: " << var;
+      Layout axes = TransposeLike(InitialLayout(type->ndim), from.LeafValue(), to.LeafValue());
+      Var converted_var = builder_->Emit(MakeTranspose(var, LayoutToIntegers(axes)));
+      UpdateLayoutMap(var, to, converted_var);
+      return converted_var;
+    } else if (const auto* type = var->checked_type().as<TupleTypeNode>()) {
+      ICHECK(from.IsNested() && to.IsNested()) << "Invalid layout for var: " << var;
+      Array<Expr> fields;
+      for (size_t i = 0; i < type->fields.size(); ++i) {
+        Var field = builder_->Emit(TupleGetItem(var, i));
+        Var new_filed = TransformVar(field, from.NestedArray()[i], to.NestedArray()[i]);
+        fields.push_back(new_filed);
+        UpdateLayoutMap(field, to.NestedArray()[i], new_filed);
+      }
+      Var converted_var = builder_->Emit(Tuple(fields));
+      UpdateLayoutMap(var, to, converted_var);
+      return converted_var;
+    } else {
+      LOG(FATAL) << "Unsupported type: " << var->checked_type();
+      return Var();
+    }
+  }
+
+  Expr VisitVars_(const VarNode* op) {
+    if (IsNLayout(op->checked_type())) {
+      auto it = var_layout_map_->inner.find(GetRef<Var>(op));
+      ICHECK(it != var_layout_map_->inner.end()) << "Cannot find var " << GetRef<Var>(op);
+      NLayout target_layout = InitialNLayout(op->checked_type());
+      NLayout existing_layout = GetOneValidNLayout(var_layout_map_, GetRef<Var>(op));
+      LayoutMap& layout_map = it->second;
+      auto itt = layout_map.find(target_layout);
+      if (itt == layout_map.end()) {
+        // This var does not have the target layout, so we need to convert it.
+        return TransformVar(itt->second, existing_layout, target_layout);
+      } else {
+        // This var already has the target layout
+        return itt->second;
+      }
+    }
+    return ExprMutator::VisitExpr_(op);
+  }
+
+  Expr VisitExpr_(const VarNode* op) final { return VisitVars_(op); }
+
+  Expr VisitExpr_(const DataflowVarNode* op) final { return VisitVars_(op); }
+
+  // Convert the layout of the input arguments to the desired layout.
+  // Note: This function will look up the layout map to find the var with the desired layout.
+  void TransformArgs(Array<Expr> args, Array<NLayout> input_layouts, std::vector<Expr>* new_args) {
+    ICHECK(args.size() == input_layouts.size()) << "Invalid input layouts";
     for (size_t i = 0; i < args.size(); ++i) {
       if (const auto* var = args[i].as<VarNode>()) {
-        const auto* type = var->checked_type().as<DynTensorTypeNode>();
-        ICHECK(type != nullptr && !type->IsUnknownNdim()) << "Only support tensor with known rank";
-        Layout target_layout = input_layouts[offset++];
-        auto it = var_layout_map_.find(GetRef<Var>(var));
-        ICHECK(it != var_layout_map_.end()) << "Cannot find the layout of var: " << var;
-        auto itt = it->second.find(target_layout.name());
-        if (itt != it->second.end()) {
-          // This var already has the desired layout.
-          new_args->push_back((*itt).second);
+        NLayout existing_layout = GetOneValidNLayout(var_layout_map_, GetRef<Var>(var));
+        auto it = var_layout_map_->inner.find(GetRef<Var>(var));
+        ICHECK(it != var_layout_map_->inner.end()) << "Cannot find var " << GetRef<Var>(var);
+        LayoutMap& layout_map = it->second;
+        auto itt = layout_map.find(input_layouts[i]);
+        if (itt == layout_map.end()) {
+          // This var does not have the target layout, so we need to convert it.
+          itt = layout_map.find(existing_layout);
+          ICHECK(itt != layout_map.end()) << "Cannot find layout for var " << GetRef<Var>(var);
+          new_args->push_back(TransformVar(itt->second, existing_layout, input_layouts[i]));
         } else {
-          // This var does not have the desired layout.
-          // Emit a layout transform op.
-          Layout existing_layout = GetOneValidLayout(var_layout_map_, GetRef<Var>(var));
-          Var existing_var = it->second[existing_layout.name()];
-          Layout axes = TransposeLike(InitialLayout(type->ndim), existing_layout, target_layout);
-          Var converted_var = builder_->Emit(MakeTranspose(existing_var, LayoutToIntegers(axes)));
-          new_args->push_back(converted_var);
-          UpdateLayoutMap(GetRef<Var>(var), target_layout, converted_var);
+          // This var already has the target layout
+          new_args->push_back(itt->second);
         }
       } else if (const auto* tuple = args[i].as<TupleNode>()) {
-        std::vector<Expr> new_tuple_args;
-        offset = TransformArgs(tuple->fields, input_layouts, offset, &new_tuple_args);
-        new_args->push_back(Tuple(new_tuple_args));
+        ICHECK(input_layouts[i].IsNested()) << "Invalid layout for tuple: " << args[i];
+        std::vector<Expr> new_fields;
+        TransformArgs(tuple->fields, input_layouts[i].NestedArray(), &new_fields);
+        new_args->push_back(Tuple(new_fields));
       } else if (const auto* constant = args[i].as<ConstantNode>()) {
         const auto* type = constant->checked_type().as<DynTensorTypeNode>();
         ICHECK(type != nullptr && !type->IsUnknownNdim()) << "Only support tensor with known rank";
-        Layout target_layout = input_layouts[offset++];
-        Var converted_const = builder_->Emit(
-            MakeTranspose(GetRef<Constant>(constant), LayoutToIntegers(target_layout)));
+        ICHECK(input_layouts[i].IsLeaf()) << "Invalid layout for constant: " << args[i];
+        Var converted_const = builder_->Emit(MakeTranspose(
+            GetRef<Constant>(constant), LayoutToIntegers(input_layouts[i].LeafValue())));
         new_args->push_back(converted_const);
       } else {
         LOG(FATAL) << "Unsupported argument type: " << args[i]->GetTypeKey();
       }
     }
-    return offset;
   }
 
   void VisitBinding_(const VarBindingNode* binding) override {
-    auto emit = [this, binding](Expr e, Var v, Layout layout) -> Var {
+    auto emit = [this, binding](Expr e, Var v, NLayout layout) -> Var {
       relax::Var new_var;
       if (this->builder_->CurrentBlockIsDataFlow() && !binding->var.as<DataflowVarNode>()) {
         new_var = this->builder_->EmitOutput(e);
       } else {
         new_var = this->builder_->Emit(e);
       }
-      if (new_var->checked_type().as<DynTensorTypeNode>()) {
+      if (IsNLayout(v->checked_type())) {
         this->UpdateLayoutMap(v, layout, new_var);
-      } else {
-        auto it = this->other_var_map_.find(v);
-        ICHECK(it == this->other_var_map_.end());
-        this->other_var_map_.insert({v, new_var});
       }
       return new_var;
     };
@@ -170,14 +179,13 @@ class LayoutConvertMutator : public ExprMutator {
         if (infer_layout_map.count(op)) {
           // Infer the layout convertion from the input layouts and the desired layouts.
           FRelaxInferLayout f = infer_layout_map[op];
-          InferLayoutOutput layouts = f(GetRef<Call>(call_node), desired_layouts_, var_layout_map_);
-          ICHECK_EQ(layouts->output_layouts.size(), 1) << "Only support single output op for now";
+          InferLayoutOutput res = f(GetRef<Call>(call_node), desired_layouts_, var_layout_map_);
+          ICHECK_EQ(res->output_layouts.size(), 1);
           // Convert the layout of inputs
           std::vector<Expr> new_args;
-          TransformArgs(call_node->args, layouts->input_layouts, 0, &new_args);
+          TransformArgs(call_node->args, res->input_layouts, &new_args);
           // Emit the op with the new inputs.
-          emit(Call(call_node->op, new_args, layouts->new_attrs), binding->var,
-               layouts->output_layouts[0]);
+          emit(Call(call_node->op, new_args, res->new_attrs), binding->var, res->output_layouts[0]);
           return;
         } else {
           // We don't know how to convert the layout of this op.
@@ -186,24 +194,32 @@ class LayoutConvertMutator : public ExprMutator {
           for (const auto& arg : call_node->args) {
             new_args.push_back(VisitExpr(arg));
           }
-          const auto* type = binding->var->checked_type().as<DynTensorTypeNode>();
-          int ndim;
-          if (type != nullptr) {
-            ICHECK(!type->IsUnknownNdim()) << "Only support tensor with known rank";
-            ndim = type->ndim;
-          } else {
-            ndim = 1;
-          }
-          emit(Call(call_node->op, new_args, call_node->attrs), binding->var, InitialLayout(ndim));
+          emit(Call(call_node->op, new_args, call_node->attrs), binding->var,
+               InitialNLayout(binding->var->checked_type()));
         }
+      }
+    } else if (const TupleGetItemNode* get_node = binding->value.as<TupleGetItemNode>()) {
+      // Convert the layout of the tuple.
+      if (const auto* var = get_node->tuple.as<VarNode>()) {
+        // The tuple is a var.
+        NLayout exisiting_layout = GetOneValidNLayout(var_layout_map_, GetRef<Var>(var));
+        auto it = var_layout_map_->inner.find(GetRef<Var>(var));
+        ICHECK(it != var_layout_map_->inner.end()) << "Cannot find the layout of var: " << var;
+        auto itt = it->second.find(exisiting_layout);
+        ICHECK(itt != it->second.end()) << "Cannot find the layout of var: " << var;
+        ICHECK(exisiting_layout.IsNested());
+        emit(TupleGetItem(itt->second, get_node->index), binding->var,
+             exisiting_layout.NestedArray()[get_node->index]);
+      } else {
+        // The tuple is an expr.
+        ExprMutator::VisitBinding_(binding);
       }
     } else {
       ExprMutator::VisitBinding_(binding);
     }
   }
 
-  std::unordered_map<Var, Map<String, Var>, ObjectPtrHash, ObjectPtrEqual> var_layout_map_;
-  std::unordered_map<Var, Var, ObjectPtrHash, ObjectPtrEqual> other_var_map_;
+  VarLayoutMapWrapper var_layout_map_;
   Map<String, Array<String>> desired_layouts_;
 };
 
