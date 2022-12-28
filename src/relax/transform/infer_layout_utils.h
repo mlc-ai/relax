@@ -86,7 +86,17 @@ struct NLayoutEqual {
   }
 };
 
-using LayoutMap = std::unordered_map<NLayout, Var, ObjectPtrHash, NLayoutEqual>;
+struct NLayoutHash {
+  size_t operator()(const NLayout& a) const {
+    std::string res = "";
+    auto fvisit = [&res](const Layout& l) { res += l.name(); };
+    ForEachLeaf(a, fvisit);
+    String str = String(res);
+    return String::HashBytes(str.data(), str.size());
+  }
+};
+
+using LayoutMap = std::unordered_map<NLayout, Var, NLayoutHash, NLayoutEqual>;
 using VarLayoutMap = std::unordered_map<Var, LayoutMap, ObjectPtrHash, ObjectPtrEqual>;
 
 class VarLayoutMapWrapperNode : public Object {

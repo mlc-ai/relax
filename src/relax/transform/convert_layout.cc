@@ -37,12 +37,23 @@ using tir::Layout;
 class LayoutConvertMutator : public ExprMutator {
  public:
   explicit LayoutConvertMutator(Map<String, Array<String>> desired_layouts)
-      : desired_layouts_(desired_layouts) {}
+      : desired_layouts_(desired_layouts) {
+    ObjectPtr<VarLayoutMapWrapperNode> var_layout_map = make_object<VarLayoutMapWrapperNode>();
+    var_layout_map_ = VarLayoutMapWrapper(var_layout_map);
+  }
 
   void InitVarMap(const Function& func) {
+    ICHECK(var_layout_map_.defined());
     for (const auto& param : func->params) {
       if (IsNLayout(param->checked_type())) {
-        var_layout_map_->inner[param].insert({InitialNLayout(param->checked_type()), param});
+        auto it = var_layout_map_->inner.find(param);
+        if (it == var_layout_map_->inner.end()) {
+          LayoutMap layout_map;
+          layout_map[InitialNLayout(param->checked_type())] = param;
+          var_layout_map_->inner[param] = std::move(layout_map);
+        } else {
+          it->second.insert({InitialNLayout(param->checked_type()), param});
+        }
       }
     }
   }
@@ -83,9 +94,9 @@ class LayoutConvertMutator : public ExprMutator {
       Array<Expr> fields;
       for (size_t i = 0; i < type->fields.size(); ++i) {
         Var field = builder_->Emit(TupleGetItem(var, i));
+        UpdateLayoutMap(field, from.NestedArray()[i], field);
         Var new_filed = TransformVar(field, from.NestedArray()[i], to.NestedArray()[i]);
         fields.push_back(new_filed);
-        UpdateLayoutMap(field, to.NestedArray()[i], new_filed);
       }
       Var converted_var = builder_->Emit(Tuple(fields));
       UpdateLayoutMap(var, to, converted_var);
@@ -106,7 +117,7 @@ class LayoutConvertMutator : public ExprMutator {
       auto itt = layout_map.find(target_layout);
       if (itt == layout_map.end()) {
         // This var does not have the target layout, so we need to convert it.
-        return TransformVar(itt->second, existing_layout, target_layout);
+        return TransformVar(layout_map[existing_layout], existing_layout, target_layout);
       } else {
         // This var already has the target layout
         return itt->second;
