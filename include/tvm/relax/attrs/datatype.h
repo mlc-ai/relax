@@ -47,6 +47,10 @@ struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
   }
 };  // struct WrapParamAttrs.
 
+Expr MakeOnes(Expr shape, DataType dtype);
+
+Expr MakeZeros(Expr shape, DataType dtype);
+
 }  // namespace relax
 }  // namespace tvm
 
