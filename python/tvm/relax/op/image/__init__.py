@@ -14,15 +14,6 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=wildcard-import, redefined-builtin
-"""Relax core operators."""
-
-# Operators
-from .base import *
-from .tensor import *
-from .op_attrs import *
-from .reduce import *
-from . import builtin
-from . import image
-from . import memory
-from . import nn
+# pylint: disable=wildcard-import
+"""Image operators."""
+from .image import *
