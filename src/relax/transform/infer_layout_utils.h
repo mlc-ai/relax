@@ -179,6 +179,10 @@ InferLayoutOutput InferLayoutLayerNorm(const Call& call,
                                        const Map<String, Array<String>>& desired_layouts,
                                        VarLayoutMapWrapper var_layout_map);
 
+InferLayoutOutput InferLayoutResize2d(const Call& call,
+                                      const Map<String, Array<String>>& desired_layouts,
+                                      VarLayoutMapWrapper var_layout_map);
+
 InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
                                         VarLayoutMapWrapper var_layout_map);

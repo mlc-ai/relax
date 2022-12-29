@@ -35,7 +35,8 @@ RELAX_REGISTER_OP("relax.image.resize2d")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeResize2d)
-    .set_attr<FInferType>("FInferType", InferTypeResize2d);
+    .set_attr<FInferType>("FInferType", InferTypeResize2d)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutResize2d);
 
 Expr MakeResize2D(Expr data, Array<PrimExpr> size, Array<FloatImm> roi, String layout,
                   String method, String coordinate_transformation_mode, String rounding_method,
