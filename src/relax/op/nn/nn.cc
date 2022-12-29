@@ -294,7 +294,8 @@ RELAX_REGISTER_OP("relax.nn.layer_norm")
     .add_argument("gamma", "Tensor", "The gamma scale factor.")
     .add_argument("beta", "Tensor", "The beta offset factor.")
     .set_attr<FInferShape>("FInferShape", InferShapeLayerNorm)
-    .set_attr<FInferType>("FInferType", InferTypeLayerNorm);
+    .set_attr<FInferType>("FInferType", InferTypeLayerNorm)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutLayerNorm);
 
 Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axis, double epsilon,
                    bool center, bool scale) {
