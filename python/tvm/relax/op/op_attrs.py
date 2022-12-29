@@ -97,3 +97,13 @@ class MatmulAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.DropoutAttrs")
 class DropoutAttrs(Attrs):
     """Attributes for dropout operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.Resize2DAttrs")
+class Resize2DAttrs(Attrs):
+    """Attributes used in image resize2d operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.ReduceAttrs")
+class ReduceAttrs(Attrs):
+    """Attributes used in reduction operator"""

@@ -67,8 +67,9 @@ bool NormCheckDtypeAndShape(const Call& call, const BlockBuilder& ctx,
 
   TensorStructInfo data_sinfo = input_sinfo[0];
 
+  std::vector<int> axes_non_neg;
   if (!data_sinfo->IsUnknownNdim()) {
-    axes = CheckAxesInRangeNonRepetitive(call, ctx, data_sinfo->ndim, axes);
+    axes_non_neg = CheckAxesInRangeNonRepetitive(call, ctx, data_sinfo->ndim, axes);
   }
   int n_axis = axes.size();
 
@@ -95,7 +96,7 @@ bool NormCheckDtypeAndShape(const Call& call, const BlockBuilder& ctx,
     std::vector<PrimExpr> lengths;
     lengths.reserve(n_axis);
     for (int d = 0; d < n_axis; ++d) {
-      lengths.push_back(data_shape->values[axes[d]->value]);
+      lengths.push_back(data_shape->values[axes_non_neg[d]]);
     }
     axis_lengths.push_back(lengths);
   }

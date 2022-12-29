@@ -204,8 +204,8 @@ inline Optional<ShapeExpr> CheckNdimPerLayoutAndGetShape(const Call& call, const
  * \param axes The axis indices to be checked
  * \return The input axes in non-negative indexing.
  */
-Array<Integer> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilder& ctx, int ndim,
-                                             const Array<Integer>& axes);
+std::vector<int> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilder& ctx, int ndim,
+                                               const Array<Integer>& axes);
 
 /*!
  * \brief Check if the given axis is in range with regards to the given ndim. And convert it to
@@ -217,7 +217,7 @@ Array<Integer> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilde
  * \return The input axis in non-negative indexing.
  */
 inline int CheckAxisInRange(const Call& call, const BlockBuilder& ctx, int ndim, int axis) {
-  return CheckAxesInRangeNonRepetitive(call, ctx, ndim, {axis})[0]->value;
+  return CheckAxesInRangeNonRepetitive(call, ctx, ndim, {axis})[0];
 }
 
 }  // namespace relax
