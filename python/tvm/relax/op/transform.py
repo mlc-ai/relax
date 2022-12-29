@@ -15,11 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 """Transform operators."""
-from typing import List, Optional, Tuple, Union
+from typing import Union
 
 import tvm
 from tvm import relax
-from tvm.ir.expr import PrimExpr
 
 from . import _ffi_api
 from ..expr import Expr
