@@ -1015,6 +1015,80 @@ def test_conv2d_softmax():
     tvm.ir.assert_structural_equal(mod, conv2d_softmax)
 
 
+@I.ir_module
+class conv2d_batchnorm:
+    @R.function
+    def main(
+        x: R.Tensor((2, 3, 28, 28), dtype="float32"),
+        w: R.Tensor((4, 3, 3, 3), dtype="float32"),
+        gamma: R.Tensor((4,), dtype="float32"),
+        beta: R.Tensor((4,), dtype="float32"),
+        moving_mean: R.Tensor((4,), dtype="float32"),
+        moving_var: R.Tensor((4,), dtype="float32"),
+    ) -> R.Tensor(None, dtype="float32", ndim=4):
+        # block 0
+        gv: R.Tensor((2, 28, 28, 3), dtype="float32") = R.transpose(x, axes=[0, 2, 3, 1])
+        gv1: R.Tensor((4, 3, 3, 3), dtype="float32") = R.transpose(w, axes=[0, 2, 3, 1])
+        gv2: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.conv2d(
+            gv,
+            gv1,
+            strides=[1, 1],
+            padding=[0, 0, 0, 0],
+            dilation=[1, 1],
+            groups=1,
+            channels=None,
+            kernel_size=[3, 3],
+            data_layout="NHWC",
+            kernel_layout="OHWI",
+            out_layout="NHWC",
+            out_dtype="float32",
+        )
+        gv3: R.Tuple(
+            R.Tensor((2, 26, 26, 4), dtype="float32"),
+            R.Tensor((4,), dtype="float32"),
+            R.Tensor((4,), dtype="float32"),
+        ) = R.nn.batch_norm(
+            gv2,
+            gamma,
+            beta,
+            moving_mean,
+            moving_var,
+            axis=3,
+            epsilon=1e-05,
+            center=True,
+            scale=True,
+        )
+        gv4: R.Tensor((2, 26, 26, 4), dtype="float32") = gv3[0]
+        gv5: R.Tensor((2, 4, 26, 26), dtype="float32") = R.transpose(gv4, axes=[0, 3, 1, 2])
+        return gv5
+
+
+def test_conv2d_batchnorm():
+    @I.ir_module
+    class Conv2dBatchNorm:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"),
+            w: R.Tensor((4, 3, 3, 3), "float32"),
+            gamma: R.Tensor((4,), dtype="float32"),
+            beta: R.Tensor((4,), dtype="float32"),
+            moving_mean: R.Tensor((4,), dtype="float32"),
+            moving_var: R.Tensor((4,), dtype="float32"),
+        ) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(
+                x, w, kernel_size=[3, 3], out_dtype="float32"
+            )
+            gv2: R.Tuple(
+                R.Tensor((2, 4, 26, 26), dtype="float32"),
+                R.Tensor((4,), dtype="float32"),
+                R.Tensor((4,), dtype="float32"),
+            ) = R.nn.batch_norm(gv, gamma, beta, moving_mean, moving_var, axis=1)
+            return gv2[0]
+
+    mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dBatchNorm)
+    tvm.ir.assert_structural_equal(mod, conv2d_batchnorm)
+
+
 if __name__ == "__main__":
     test_conv2d()
     test_conv2d_relu()
@@ -1036,3 +1110,4 @@ if __name__ == "__main__":
     test_conv2d_maxpool2d()
     test_conv2d_avgpool2d()
     test_conv2d_softmax()
+    test_conv2d_batchnorm()

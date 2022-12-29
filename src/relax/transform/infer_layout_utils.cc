@@ -207,19 +207,25 @@ InferLayoutOutput InferLayoutBatchNorm(const Call& call,
                                        const Map<String, Array<String>>& desired_layouts,
                                        VarLayoutMapWrapper var_layout_map) {
   const OpNode* op_node = call->op.as<OpNode>();
-  ICHECK(op_node != nullptr && op_node->name == "relax.nn.softmax") << "Invalid Call";
+  ICHECK(op_node != nullptr && op_node->name == "relax.nn.batch_norm") << "Invalid Call";
   const auto& it = desired_layouts.find(op_node->name);
   ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
-  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
-  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
-  ICHECK(type != nullptr) << "Invalid Call";
+  ICHECK_EQ(call->args.size(), 5) << "Invalid Call";
+  std::vector<NLayout> initial_layouts;
+  for (size_t i = 0; i < 5; ++i) {
+    const auto* type = call->args[i]->checked_type().as<DynTensorTypeNode>();
+    ICHECK(type != nullptr) << "Invalid Call";
+    initial_layouts.push_back(InitialLayout(type->ndim));
+  }
   const auto* attrs = call->attrs.as<BatchNormAttrs>();
   ICHECK(attrs) << "Invalid Call";
 
   Layout layout = GetOneValidLayout(var_layout_map, call->args[0]);
   ObjectPtr<BatchNormAttrs> new_attrs = make_object<BatchNormAttrs>(*attrs);
   new_attrs->axis = layout.name().find('A' + attrs->axis);
-  return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
+  return InferLayoutOutput(
+      {layout, initial_layouts[1], initial_layouts[2], initial_layouts[3], initial_layouts[4]},
+      {{layout, initial_layouts[3], initial_layouts[4]}}, Attrs(new_attrs));
 }
 
 InferLayoutOutput InferLayoutUnaryEwise(const Call& call,

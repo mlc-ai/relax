@@ -107,7 +107,8 @@ RELAX_REGISTER_OP("relax.nn.batch_norm")
     .add_argument("moving_mean", "Tensor", "Running mean of input.")
     .add_argument("moving_var", "Tensor", "Running variance of input.")
     .set_attr<FInferShape>("FInferShape", InferShapeBatchNorm)
-    .set_attr<FInferType>("FInferType", InferTypeBatchNorm);
+    .set_attr<FInferType>("FInferType", InferTypeBatchNorm)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutBatchNorm);
 
 Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,  //
                    int axis, double epsilon, bool center, bool scale) {
