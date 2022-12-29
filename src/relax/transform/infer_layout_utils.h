@@ -32,6 +32,8 @@
 #include <tvm/relax/op_attr_types.h>
 #include <tvm/tir/data_layout.h>
 
+#include "../op/tensor/transform.h"
+
 namespace tvm {
 namespace relax {
 
@@ -212,6 +214,10 @@ InferLayoutOutput InferLayoutCumsum(const Call& call,
 InferLayoutOutput InferLayoutConcatenate(const Call& call,
                                          const Map<String, Array<String>>& desired_layouts,
                                          VarLayoutMapWrapper var_layout_map);
+
+InferLayoutOutput InferLayoutSplit(const Call& call,
+                                   const Map<String, Array<String>>& desired_layouts,
+                                   VarLayoutMapWrapper var_layout_map);
 
 }  // namespace relax
 }  // namespace tvm

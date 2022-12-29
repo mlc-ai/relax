@@ -1327,7 +1327,8 @@ RELAX_REGISTER_OP("relax.split")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferShape>("FInferShape", InferShapeSplit)
-    .set_attr<FInferType>("FInferType", InferTypeSplit);
+    .set_attr<FInferType>("FInferType", InferTypeSplit)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutSplit);
 
 Expr MakeSplit(Expr data, ObjectRef indices_or_sections, int axis) {
   ObjectPtr<SplitAttrs> attrs = make_object<SplitAttrs>();

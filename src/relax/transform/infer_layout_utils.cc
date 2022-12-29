@@ -631,5 +631,30 @@ InferLayoutOutput InferLayoutConcatenate(const Call& call,
   return InferLayoutOutput({input_layouts}, {output_layouts}, Attrs(call->attrs));
 }
 
+InferLayoutOutput InferLayoutSplit(const Call& call,
+                                   const Map<String, Array<String>>& desired_layouts,
+                                   VarLayoutMapWrapper var_layout_map) {
+  const OpNode* op_node = call->op.as<OpNode>();
+  ICHECK(op_node != nullptr) << "Invalid Call";
+  const auto& it = desired_layouts.find(op_node->name);
+  ICHECK(it == desired_layouts.end()) << "Unsupported desired layout for " << op_node->name;
+  ICHECK_EQ(call->args.size(), 1) << "Invalid Call";
+
+  const auto* attrs = call->attrs.as<SplitAttrs>();
+  ICHECK(attrs != nullptr) << "Invalid Call";
+  const auto* type = call->args[0]->checked_type().as<DynTensorTypeNode>();
+  ICHECK(type != nullptr && !type->IsUnknownNdim()) << "Invalid Call";
+
+  Layout exisiting_layout = GetOneValidLayout(var_layout_map, call->args[0]);
+  ObjectPtr<SplitAttrs> new_attrs = make_object<SplitAttrs>(*attrs);
+  int new_axis = (attrs->axis + type->ndim) % type->ndim;
+  new_attrs->axis = exisiting_layout.name().find('A' + new_axis);
+  Expr tuple_out = InferShapeSplit(call, DiagnosticContext::Default(IRModule()));
+  const auto* tuple_ptr = tuple_out.as<TupleNode>();
+  ICHECK(tuple_ptr != nullptr) << "Invalid Call";
+  Array<NLayout> tuple_layouts = std::vector<NLayout>(tuple_ptr->fields.size(), exisiting_layout);
+  return InferLayoutOutput({exisiting_layout}, {tuple_layouts}, Attrs(new_attrs));
+}
+
 }  // namespace relax
 }  // namespace tvm
