@@ -48,6 +48,13 @@ StructInfo InferStructInfoReduction(const Call& call, const BlockBuilder& ctx) {
     ICHECK_GE(out_ndim, 0);
   }
 
+  // The inference rule for reduction operator output shapes:
+  // - axes is None, keepdims is false -> return the zero-rank shape;
+  // - axes is None, keepdims is true -> return the shape whose ndim is the same as input and every
+  // value is 1.
+  // - axes is not None, keepdims is false -> the returned shape does not contain the input axes.
+  // - axes is not None, keepdims is true -> the returned shape has value 1 at the positions of the
+  // input axes
   const auto* data_shape = data_sinfo->shape.as<ShapeExprNode>();
   if (data_shape == nullptr) {
     if (!attrs->axis.defined() && attrs->keepdims && out_ndim != kUnknownNDim) {
