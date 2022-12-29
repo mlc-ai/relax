@@ -57,26 +57,25 @@ Expr MakeConv2D(Expr data, Expr weight, Array<PrimExpr> strides, Array<PrimExpr>
 TVM_REGISTER_GLOBAL("relax.op.nn.conv2d").set_body_typed(MakeConv2D);
 
 StructInfo InferStructInfoConv2d(const Call& call, const BlockBuilder& ctx) {
-  auto [data_sinfo, weight_sinfo] = GetBinaryInputTensorStructInfo(call, ctx, /*op_name=*/"Conv2D");
+  Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
+  TensorStructInfo data_sinfo = input_sinfo[0];
+  TensorStructInfo weight_sinfo = input_sinfo[1];
 
   const auto* attrs = call->attrs.as<Conv2DAttrs>();
   auto [data_layout, data2NCHW] = CheckTensorLayout(call, ctx, attrs->data_layout,  //
                                                     /*tgt_layout=*/"NCHW",          //
-                                                    /*op_name=*/"Conv2D",           //
                                                     /*tensor_name=*/"data");
   auto [weight_layout, weight2OIHW] = CheckTensorLayout(call, ctx, attrs->kernel_layout,  //
                                                         /*tgt_layout=*/"OIHW",            //
-                                                        /*op_name=*/"Conv2D",             //
                                                         /*tensor_name=*/"kernel");
   auto [out_layout, out2NCHW] = CheckTensorLayout(call, ctx, attrs->out_layout,  //
                                                   /*tgt_layout=*/"NCHW",         //
-                                                  /*op_name=*/"Conv2D",          //
                                                   /*tensor_name=*/"output");
 
   Optional<ShapeExpr> data_shape =
-      CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout, /*op_name=*/"Conv2D");
+      CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout);
   Optional<ShapeExpr> weight_shape =
-      CheckNdimPerLayoutAndGetShape(call, ctx, weight_sinfo, weight_layout, /*op_name=*/"Conv2D");
+      CheckNdimPerLayoutAndGetShape(call, ctx, weight_sinfo, weight_layout);
 
   DataType out_dtype = attrs->out_dtype.is_void()
                            ? InferBinaryArithOpOutDtype(call, ctx, data_sinfo, weight_sinfo)
@@ -91,7 +90,7 @@ StructInfo InferStructInfoConv2d(const Call& call, const BlockBuilder& ctx) {
   arith::Analyzer* analyzer = ctx->GetAnalyzer();
   PrimExpr input_channel_data = data_NCHW_shape[1];
   PrimExpr input_channel_kernel = weight_OIHW_shape[1];
-  if (analyzer->CanProve(input_channel_data - input_channel_kernel != 0)) {
+  if (analyzer->CanProve(input_channel_data != input_channel_kernel)) {
     ctx->ReportFatal(Diagnostic::Error(call->span)
                      << "The channel size of the data should equal to the input channel size of "
                         "the weight. However, the data channel size is "

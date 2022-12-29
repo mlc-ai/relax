@@ -77,3 +77,23 @@ class AdaptivePool2DAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.SoftmaxAttrs")
 class SoftmaxAttrs(Attrs):
     """Attributes for nn.softmax"""
+
+
+@tvm._ffi.register_object("relax.attrs.BatchNormAttrs")
+class BatchNormAttrs(Attrs):
+    """Attributes used in batch_norm operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.LayerNormAttrs")
+class LayerNormAttrs(Attrs):
+    """Attributes used in layer_norm operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.MatmulAttrs")
+class MatmulAttrs(Attrs):
+    """Attributes for matmul operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.DropoutAttrs")
+class DropoutAttrs(Attrs):
+    """Attributes for dropout operator"""
