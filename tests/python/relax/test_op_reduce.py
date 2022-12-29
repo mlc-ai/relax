@@ -100,7 +100,7 @@ def test_reduction_infer_struct_info():
     _check_inference(bb, relax.op.sum(x0, axis=[]), relax.TensorStructInfo((2, 3, 4, 5), "float32"))
 
 
-def test_reduction_infer_struct_info_symbolic():
+def test_reduction_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     a = tir.Var("a", "int64")
     b = tir.Var("b", "int64")
@@ -119,6 +119,33 @@ def test_reduction_infer_struct_info_symbolic():
         bb,
         relax.op.min(x, axis=None, keepdims=True),
         relax.TensorStructInfo((1, 1, 1, 1), "float32"),
+    )
+
+
+def test_reduction_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo(ndim=4))
+    s1 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+
+    _check_inference(bb, relax.op.max(x0), relax.TensorStructInfo((), dtype="float32"))
+    _check_inference(
+        bb, relax.op.max(x0, keepdims=True), relax.TensorStructInfo((1, 1, 1, 1), dtype="float32")
+    )
+    _check_inference(
+        bb, relax.op.max(x0, axis=[2, 3]), relax.TensorStructInfo(dtype="float32", ndim=2)
+    )
+    _check_inference(
+        bb,
+        relax.op.max(x0, axis=[2, 3], keepdims=True),
+        relax.TensorStructInfo(dtype="float32", ndim=4),
+    )
+    _check_inference(bb, relax.op.max(x1), relax.TensorStructInfo((), dtype="float32"))
+    _check_inference(bb, relax.op.max(x1, keepdims=True), relax.TensorStructInfo(dtype="float32"))
+    _check_inference(bb, relax.op.max(x1, axis=[2, 3]), relax.TensorStructInfo(dtype="float32"))
+    _check_inference(
+        bb, relax.op.max(x1, axis=[2, 3], keepdims=True), relax.TensorStructInfo(dtype="float32")
     )
 
 

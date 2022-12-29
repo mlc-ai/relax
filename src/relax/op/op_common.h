@@ -192,7 +192,10 @@ inline Optional<ShapeExpr> CheckNdimPerLayoutAndGetShape(const Call& call, const
                      << layout.ndim() << "-dim tensor. However, the given input has ndim "
                      << sinfo->ndim);
   }
-  return Downcast<Optional<ShapeExpr>>(sinfo->shape);
+  if (const auto* shape_expr = sinfo->shape.as<ShapeExprNode>()) {
+    return GetRef<ShapeExpr>(shape_expr);
+  }
+  return NullOpt;
 }
 
 /*!

@@ -96,7 +96,7 @@ def test_resize2d_infer_struct_info():
     )
 
 
-def test_resize2d_infer_struct_info_symbolic():
+def test_resize2d_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     n = tir.Var("n", "int64")
     c = tir.Var("c", "int64")
@@ -119,6 +119,30 @@ def test_resize2d_infer_struct_info_symbolic():
         bb,
         relax.op.image.resize2d(x1, size=(oh, ow), layout="NCHW16c"),
         relax.TensorStructInfo((n, c, oh, ow, 16), "float32"),
+    )
+
+
+def test_resize2d_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo(ndim=4))
+    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=5))
+    s2 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    x2 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
+
+    _check_inference(
+        bb, relax.op.image.resize2d(x0, size=32), relax.TensorStructInfo(dtype="float32", ndim=4)
+    )
+    _check_inference(
+        bb,
+        relax.op.image.resize2d(x1, size=32, layout="NCHW16c"),
+        relax.TensorStructInfo(dtype="float32", ndim=5),
+    )
+    _check_inference(
+        bb,
+        relax.op.image.resize2d(x2, size=32, layout="NCHW16c"),
+        relax.TensorStructInfo(dtype="float32", ndim=5),
     )
 
 

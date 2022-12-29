@@ -55,7 +55,7 @@ def test_unary_arith_infer_struct_info():
     _check_inference(bb, relax.op.tanh(x4), relax.TensorStructInfo(dtype=""))
 
 
-def test_unary_arith_infer_struct_info_symbolic():
+def test_unary_arith_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     m = tir.Var("m", "int64")
     n = tir.Var("n", "int64")
@@ -64,6 +64,17 @@ def test_unary_arith_infer_struct_info_symbolic():
 
     _check_inference(bb, relax.op.sqrt(x0), relax.TensorStructInfo((m, n), "float32"))
     _check_inference(bb, relax.op.sigmoid(x1), relax.TensorStructInfo((4, n), "int32"))
+
+
+def test_unary_arith_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
+    s1 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+
+    _check_inference(bb, relax.op.log(x0), relax.TensorStructInfo(s0, "float32"))
+    _check_inference(bb, relax.op.tanh(x1), relax.TensorStructInfo(s1, "float32"))
 
 
 def test_unary_arith_infer_struct_info_more_input_dtype():

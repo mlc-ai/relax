@@ -84,6 +84,8 @@ StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx,
       ICHECK_EQ(static_cast<int>(output_shape.value().size()), output_ndim);
       return TensorStructInfo(ShapeExpr(output_shape.value()), output_dtype);
     }
+  } else if (lhs_sinfo->shape.defined() && lhs_sinfo->shape.same_as(rhs_sinfo->shape)) {
+    return TensorStructInfo(lhs_sinfo->shape.value(), output_dtype);
   } else {
     return TensorStructInfo(output_dtype, /*ndim=*/output_ndim);
   }

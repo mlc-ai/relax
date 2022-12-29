@@ -71,7 +71,7 @@ def test_linear_unit_infer_struct_info():
     _check_inference(bb, relax.op.nn.gelu(x4), relax.TensorStructInfo(dtype=""))
 
 
-def test_linear_unit_infer_struct_info_symbolic():
+def test_linear_unit_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     m = tir.Var("m", "int64")
     n = tir.Var("n", "int64")
@@ -80,6 +80,17 @@ def test_linear_unit_infer_struct_info_symbolic():
 
     _check_inference(bb, relax.op.nn.silu(x0), relax.TensorStructInfo((m, n), "float32"))
     _check_inference(bb, relax.op.nn.relu(x1), relax.TensorStructInfo((4, n), "float32"))
+
+
+def test_linear_unit_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
+    s1 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+
+    _check_inference(bb, relax.op.nn.gelu(x0), relax.TensorStructInfo(s0, "float32"))
+    _check_inference(bb, relax.op.nn.relu(x1), relax.TensorStructInfo(s1, "float32"))
 
 
 def test_linear_unit_infer_struct_info_more_input_dtype():
@@ -121,7 +132,7 @@ def test_softmax_infer_struct_info():
     _check_inference(bb, relax.op.nn.softmax(x4, axis=-2), relax.TensorStructInfo(dtype=""))
 
 
-def test_softmax_infer_struct_info_symbolic():
+def test_softmax_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     m = tir.Var("m", "int64")
     n = tir.Var("n", "int64")
@@ -130,6 +141,17 @@ def test_softmax_infer_struct_info_symbolic():
 
     _check_inference(bb, relax.op.nn.softmax(x0), relax.TensorStructInfo((m, n), "float32"))
     _check_inference(bb, relax.op.nn.softmax(x1, axis=0), relax.TensorStructInfo((4, n), "float32"))
+
+
+def test_softmax_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
+    s1 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+
+    _check_inference(bb, relax.op.nn.softmax(x0), relax.TensorStructInfo(s0, "float32"))
+    _check_inference(bb, relax.op.nn.softmax(x1), relax.TensorStructInfo(s1, "float32"))
 
 
 def test_softmax_infer_struct_info_more_input_dtype():
@@ -290,7 +312,7 @@ def test_batch_norm_infer_struct_info():
     )
 
 
-def test_batch_norm_infer_struct_info_symbolic():
+def test_batch_norm_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     n = tir.Var("n", "int64")
     c0 = tir.Var("c", "int64")
@@ -383,6 +405,43 @@ def test_batch_norm_infer_struct_info_symbolic():
                 relax.TensorStructInfo((n, c0, h, w), "float32"),
                 relax.TensorStructInfo((c0,), "float32"),
                 relax.TensorStructInfo(dtype="float32", ndim=1),
+            ]
+        ),
+    )
+
+
+def test_batch_norm_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s0", relax.ShapeStructInfo(ndim=4))
+    s1 = relax.Var("s1", relax.ShapeStructInfo())
+    s2 = relax.Var("s2", relax.ShapeStructInfo(ndim=1))
+    s3 = relax.Var("s3", relax.ShapeStructInfo(ndim=1))
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    gamma = relax.Var("gamma", relax.TensorStructInfo(s2, "float32"))
+    beta = relax.Var("beta", relax.TensorStructInfo(s3, "float32"))
+    moving_mean = relax.Var("moving_mean", relax.TensorStructInfo(s2, "float32"))
+    moving_var = relax.Var("moving_var", relax.TensorStructInfo(s3, "float32"))
+
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x0, gamma, beta, moving_mean, moving_var, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(s0, "float32"),
+                relax.TensorStructInfo(s2, "float32"),
+                relax.TensorStructInfo(s3, "float32"),
+            ]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.batch_norm(x1, gamma, beta, moving_mean, moving_var, axis=1),
+        relax.TupleStructInfo(
+            [
+                relax.TensorStructInfo(s1, "float32"),
+                relax.TensorStructInfo(s2, "float32"),
+                relax.TensorStructInfo(s3, "float32"),
             ]
         ),
     )
@@ -558,7 +617,7 @@ def test_layer_norm_infer_struct_info():
     )
 
 
-def test_layer_norm_infer_struct_info_symbolic():
+def test_layer_norm_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     n = tir.Var("n", "int64")
     a = tir.Var("a", "int64")
@@ -596,6 +655,29 @@ def test_layer_norm_infer_struct_info_symbolic():
         bb,
         relax.op.nn.layer_norm(x2, gamma1, beta, axes=[-2, -1]),
         relax.TensorStructInfo(dtype="float32", ndim=4),
+    )
+
+
+def test_layer_norm_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s0", relax.ShapeStructInfo(ndim=4))
+    s1 = relax.Var("s1", relax.ShapeStructInfo())
+    s2 = relax.Var("s2", relax.ShapeStructInfo(ndim=2))
+    s3 = relax.Var("s3", relax.ShapeStructInfo(ndim=2))
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    gamma = relax.Var("gamma", relax.TensorStructInfo(s2, "float32"))
+    beta = relax.Var("beta", relax.TensorStructInfo(s3, "float32"))
+
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x0, gamma, beta, axes=[2, 3]),
+        relax.TensorStructInfo(s0, "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.layer_norm(x1, gamma, beta, axes=[2, 3]),
+        relax.TensorStructInfo(s1, "float32"),
     )
 
 
@@ -731,7 +813,7 @@ def test_matmul_infer_struct_info():
     )
 
 
-def test_matmul_infer_struct_info_symbolic():
+def test_matmul_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     m = tir.Var("m", "int64")
     n = tir.Var("n", "int64")
@@ -764,6 +846,39 @@ def test_matmul_infer_struct_info_symbolic():
     )
     _check_inference(
         bb, relax.op.nn.matmul(x3, y4), relax.TensorStructInfo(dtype="float32", ndim=5)
+    )
+
+
+def test_matmul_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s0", relax.ShapeStructInfo(ndim=4))
+    s1 = relax.Var("s1", relax.ShapeStructInfo(ndim=3))
+    s2 = relax.Var("s3", relax.ShapeStructInfo(ndim=1))
+    s3 = relax.Var("s4", relax.ShapeStructInfo(ndim=1))
+    s5 = relax.Var("s5", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
+    x2 = relax.Var("x", relax.TensorStructInfo(s5, "float32"))
+    y0 = relax.Var("y", relax.TensorStructInfo(s1, "float32"))
+    y1 = relax.Var("y", relax.TensorStructInfo(s2, "float32"))
+    y2 = relax.Var("y", relax.TensorStructInfo(s3, "float32"))
+
+    _check_inference(
+        bb, relax.op.nn.matmul(x0, y0), relax.TensorStructInfo(dtype="float32", ndim=4)
+    )
+    _check_inference(
+        bb, relax.op.nn.matmul(x1, y0), relax.TensorStructInfo(dtype="float32", ndim=2)
+    )
+    _check_inference(bb, relax.op.nn.matmul(x2, y0), relax.TensorStructInfo(dtype="float32"))
+    _check_inference(
+        bb, relax.op.nn.matmul(x0, y1), relax.TensorStructInfo(dtype="float32", ndim=3)
+    )
+    _check_inference(
+        bb, relax.op.nn.matmul(x1, y1), relax.TensorStructInfo(dtype="float32", ndim=0)
+    )
+    _check_inference(bb, relax.op.nn.matmul(x2, y1), relax.TensorStructInfo(dtype="float32"))
+    _check_inference(
+        bb, relax.op.nn.matmul(x1, y2), relax.TensorStructInfo(dtype="float32", ndim=0)
     )
 
 
@@ -863,7 +978,7 @@ def test_dropout_infer_struct_info():
     )
 
 
-def test_dropout_infer_struct_info_symbolic():
+def test_dropout_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     m = tir.Var("m", "int64")
     n = tir.Var("n", "int64")
@@ -874,6 +989,29 @@ def test_dropout_infer_struct_info_symbolic():
         relax.op.nn.dropout(x),
         relax.TupleStructInfo(
             [relax.TensorStructInfo((m, n), "float32"), relax.TensorStructInfo((m, n), "float32")]
+        ),
+    )
+
+
+def test_dropout_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
+    s1 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x0),
+        relax.TupleStructInfo(
+            [relax.TensorStructInfo(s0, "float32"), relax.TensorStructInfo(s0, "float32")]
+        ),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.dropout(x1),
+        relax.TupleStructInfo(
+            [relax.TensorStructInfo(s1, "float32"), relax.TensorStructInfo(s1, "float32")]
         ),
     )
 
@@ -939,7 +1077,7 @@ def test_cross_entropy_infer_struct_info():
     _check_inference(bb, relax.op.nn.cross_entropy(x, y3), relax.TensorStructInfo((), dtype=""))
 
 
-def test_cross_entropy_infer_struct_info_symbolic():
+def test_cross_entropy_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     m0 = tir.Var("m", "int64")
     m1 = tir.Var("m", "int64")
@@ -953,6 +1091,18 @@ def test_cross_entropy_infer_struct_info_symbolic():
         bb, relax.op.nn.softmax_cross_entropy(x0, y), relax.TensorStructInfo((), "float32")
     )
     _check_inference(bb, relax.op.nn.cross_entropy(x1, y), relax.TensorStructInfo((), "float32"))
+
+
+def test_cross_entropy_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
+    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
+    x = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    y0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    y1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+
+    _check_inference(bb, relax.op.nn.cross_entropy(x, y0), relax.TensorStructInfo((), "float32"))
+    _check_inference(bb, relax.op.nn.cross_entropy(x, y1), relax.TensorStructInfo((), "float32"))
 
 
 def test_cross_entropy_infer_struct_info_more_input_dtype():

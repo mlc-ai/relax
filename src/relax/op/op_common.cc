@@ -28,7 +28,8 @@ Array<TensorStructInfo> GetInputTensorStructInfo(const Call& call, const BlockBu
   Op op = Downcast<Op>(call->op);
   int n_input = op->arguments.size();
   if (static_cast<int>(call->args.size()) != n_input) {
-    ctx->ReportFatal(Diagnostic::Error(call) << op << " op should have 2 arguments");
+    ctx->ReportFatal(Diagnostic::Error(call)
+                     << op << " op should have " << n_input << " arguments");
   }
   Array<TensorStructInfo> input_tensor_sinfo;
   input_tensor_sinfo.reserve(n_input);
