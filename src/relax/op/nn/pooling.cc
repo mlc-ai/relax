@@ -17,8 +17,6 @@
  * under the License.
  */
 
-#include <unordered_map>
-
 #include "../op_common.h"
 
 namespace tvm {
@@ -64,27 +62,24 @@ Expr MakeMaxPool2D(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides
 TVM_REGISTER_GLOBAL("relax.op.nn.max_pool2d").set_body_typed(MakeMaxPool2D);
 
 StructInfo InferStructInfoMaxPool2D(const Call& call, const BlockBuilder& ctx) {
-  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx, /*op_name=*/"MaxPool2D");
+  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
 
   const auto* attrs = call->attrs.as<MaxPool2DAttrs>();
   auto [data_layout, data2NCHW] = CheckTensorLayout(call, ctx, attrs->layout,  //
                                                     /*tgt_layout=*/"NCHW",     //
-                                                    /*op_name=*/"MaxPool2D",   //
                                                     /*tensor_name=*/"data");
   auto [out_layout, out2NCHW] = CheckTensorLayout(call, ctx, attrs->out_layout,  //
                                                   /*tgt_layout=*/"NCHW",         //
-                                                  /*op_name=*/"MaxPool2D",       //
                                                   /*tensor_name=*/"output");
 
   Optional<ShapeExpr> data_shape =
-      CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout, /*op_name=*/"MaxPool2D");
+      CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout);
   if (!data_shape.defined()) {
     return TensorStructInfo(data_sinfo->dtype, out_layout.ndim());
   }
 
   Array<PrimExpr> data_NCHW_shape = data2NCHW.ForwardShape(data_shape.value()->values);
 
-  std::unordered_map<char, PrimExpr> output_shape;
   PrimExpr input_h = data_NCHW_shape[2];
   PrimExpr input_w = data_NCHW_shape[3];
   PrimExpr kernel_h = attrs->pool_size[0];
@@ -138,21 +133,18 @@ Expr MakeAdaptiveAvgPool2D(Expr data, Optional<Array<PrimExpr>> output_size, Str
 TVM_REGISTER_GLOBAL("relax.op.nn.adaptive_avg_pool2d").set_body_typed(MakeAdaptiveAvgPool2D);
 
 StructInfo InferStructInfoAdaptiveAvgPool2D(const Call& call, const BlockBuilder& ctx) {
-  TensorStructInfo data_sinfo =
-      GetUnaryInputTensorStructInfo(call, ctx, /*op_name=*/"AdaptiveAvgPool2D");
+  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
 
   const auto* attrs = call->attrs.as<AdaptivePool2DAttrs>();
-  auto [data_layout, data2NCHW] = CheckTensorLayout(call, ctx, attrs->layout,         //
-                                                    /*tgt_layout=*/"NCHW",            //
-                                                    /*op_name=*/"AdaptiveAvgPool2D",  //
+  auto [data_layout, data2NCHW] = CheckTensorLayout(call, ctx, attrs->layout,  //
+                                                    /*tgt_layout=*/"NCHW",     //
                                                     /*tensor_name=*/"data");
-  auto [out_layout, out2NCHW] = CheckTensorLayout(call, ctx, attrs->out_layout,     //
-                                                  /*tgt_layout=*/"NCHW",            //
-                                                  /*op_name=*/"AdaptiveAvgPool2D",  //
+  auto [out_layout, out2NCHW] = CheckTensorLayout(call, ctx, attrs->out_layout,  //
+                                                  /*tgt_layout=*/"NCHW",         //
                                                   /*tensor_name=*/"output");
 
-  Optional<ShapeExpr> data_shape = CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout,
-                                                                 /*op_name=*/"AdaptiveAvgPool2D");
+  Optional<ShapeExpr> data_shape =
+      CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout);
   if (!data_shape.defined()) {
     return TensorStructInfo(data_sinfo->dtype, out_layout.ndim());
   }
