@@ -39,7 +39,7 @@ def cast(data: Expr, dtype: Union[str, tvm.DataType]) -> Expr:
     """
     if isinstance(dtype, str):
         dtype = tvm.DataType(dtype)
-    return _ffi_api.cast(data, dtype)
+    return _ffi_api.cast(data, dtype)  # type: ignore
 
 
 def wrap_param(data: Expr, dtype: Union[str, tvm.DataType] = "float32") -> Expr:
@@ -61,4 +61,4 @@ def wrap_param(data: Expr, dtype: Union[str, tvm.DataType] = "float32") -> Expr:
         return data
     if isinstance(dtype, str):
         dtype = tvm.DataType(dtype)
-    return _ffi_api.wrap_param(data, dtype)
+    return _ffi_api.wrap_param(data, dtype)  # type: ignore
