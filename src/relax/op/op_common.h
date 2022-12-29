@@ -42,7 +42,7 @@ namespace relax {
 
 /*!
  * \brief Get the tensor struct info of the operator input.
- * \param call call The Call of the binary tensor operators.
+ * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \return The tensor struct info of each input.
  * \note This function require every input to be Tensor. The number of call arguments is required
@@ -52,7 +52,7 @@ Array<TensorStructInfo> GetInputTensorStructInfo(const Call& call, const BlockBu
 
 /*!
  * \brief Get the tensor struct info of the unary operator input.
- * \param call The Call of the binary tensor operators.
+ * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \return The tensor struct info of the unary operator input.
  * \throw Throw exception if the number of input is not one, or the struct info of the input is not
@@ -90,7 +90,7 @@ inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx
 
 /*!
  * \brief Infer the output datatype for binary arithmetic operators.
- * \param call The Call of the binary tensor operators.
+ * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \param lhs_sinfo The struct info of the left operand
  * \param rhs_sinfo The struct info of the right operand
@@ -112,7 +112,7 @@ inline DataType InferBinaryArithOpOutDtype(const Call& call, const BlockBuilder&
 
 /*!
  * \brief Infer the output shape for binary broadcast operators.
- * \param call The Call of the binary tensor operators.
+ * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \param lhs_shape The shape of the lhs operand.
  * \param rhs_shape The shape of the rhs operand.
@@ -150,7 +150,7 @@ inline Array<PrimExpr> GetCompletePadding2D(Array<PrimExpr> padding) {
  * \brief Check if the given tensor layout can be converted to the given target layout.
  * If convertible, return the tensor layout and the bijective conversion in tir::Layout and
  * tir::BijectiveLayout accordingly.
- * \param call The Call of the binary tensor operators.
+ * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \param tensor_layout The tensor layout to be checked
  * \param tgt_layout The target layout to be matched
@@ -177,7 +177,7 @@ inline std::pair<tir::Layout, tir::BijectiveLayout> CheckTensorLayout(const Call
 /*!
  * \brief Check if the given tensor struct info has expected ndim per the given layout (or the ndim
  * is unknown), and try to cast the shape to ShapeExpr.
- * \param call The Call of the binary tensor operators.
+ * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \param sinfo The input tensor struct info to be checked.
  * \param layout The layout that the given tensor is expected to have.
@@ -198,9 +198,9 @@ inline Optional<ShapeExpr> CheckNdimPerLayoutAndGetShape(const Call& call, const
 /*!
  * \brief Check if the given array of axes are all in range and non-repetitive with regards to the
  * given ndim. And convert all axes to non-negative index.
- * \param call The Call of the binary tensor operators.
+ * \param call The context Call to the operator.
  * \param ctx The error reporting context.
- * \param ndim The ndim constraint.
+ * \param ndim The ndim constraint, which is required to be known already.
  * \param axes The axis indices to be checked
  * \return The input axes in non-negative indexing.
  */
@@ -210,7 +210,7 @@ Array<Integer> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilde
 /*!
  * \brief Check if the given axis is in range with regards to the given ndim. And convert it to
  * non-negative index.
- * \param call The Call of the binary tensor operators.
+ * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \param ndim The ndim constraint.
  * \param axis The axis index to be checked

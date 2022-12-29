@@ -87,6 +87,7 @@ Optional<Array<PrimExpr>> InferBinaryBroadcastShape(const Call& call, const Bloc
 
 Array<Integer> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilder& ctx, int ndim,
                                              const Array<Integer>& axes) {
+  ICHECK_NE(ndim, kUnknownNDim) << "The ndim is required to be known for this function.";
   std::vector<bool> appeared_dims_set;
   Array<Integer> axes_non_neg;
   appeared_dims_set.resize(ndim, /*value=*/false);

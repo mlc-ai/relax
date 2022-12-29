@@ -391,7 +391,7 @@ def batch_norm(
         The beta offset factor.
 
     moving_mean : relax.Expr
-        Running mean of input,
+        Running mean of input.
 
     moving_var : relax.Expr
         Running variance of input.

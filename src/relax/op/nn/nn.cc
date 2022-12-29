@@ -233,7 +233,7 @@ StructInfo InferStructInfoMatmul(const Call& call, const BlockBuilder& ctx) {
   int rhs_ndim = rhs_sinfo->ndim;
   if (lhs_ndim == 0 || rhs_ndim == 0) {
     ctx->ReportFatal(Diagnostic::Error(call)
-                     << "Matmul requires both input to have at least 1 dimension. However, "
+                     << "Matmul requires both inputs to have at least 1 dimension. However, "
                      << (lhs_ndim == 0 ? "lhs" : "rhs") << " is a 0-rank tensor.");
   }
 
