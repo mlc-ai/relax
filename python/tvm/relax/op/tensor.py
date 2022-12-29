@@ -150,6 +150,10 @@ def sin(data: Expr) -> Expr:
     -------
     result : relax.Expr
         The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
     """
     return _ffi_api.sin(data)  # type: ignore
 
@@ -166,6 +170,10 @@ def cos(data: Expr) -> Expr:
     -------
     result : relax.Expr
         The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
     """
     return _ffi_api.cos(data)  # type: ignore
 
@@ -182,6 +190,10 @@ def tanh(data: Expr) -> Expr:
     -------
     result : relax.Expr
         The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
     """
     return _ffi_api.tanh(data)  # type: ignore
 
@@ -198,6 +210,10 @@ def sqrt(data: Expr) -> Expr:
     -------
     result : relax.Expr
         The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
     """
     return _ffi_api.sqrt(data)  # type: ignore
 
@@ -213,7 +229,11 @@ def log(data: Expr) -> Expr:
     Returns
     -------
     result : relax.Expr
-        The computed result
+        The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
     """
     return _ffi_api.log(data)  # type: ignore
 
@@ -230,6 +250,10 @@ def sigmoid(data: Expr) -> Expr:
     -------
     result : relax.Expr
         The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
     """
     return _ffi_api.sigmoid(data)  # type: ignore
 

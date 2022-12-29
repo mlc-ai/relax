@@ -23,13 +23,13 @@ namespace tvm {
 namespace relax {
 
 /* relax.nn.relu */
-RELAX_REGISTER_UNARY_OP("nn.relu");
+RELAX_REGISTER_UNARY_OP("nn.relu", /*require_float_dtype=*/false);
 
 /* relax.nn.gelu */
-RELAX_REGISTER_UNARY_OP("nn.gelu");
+RELAX_REGISTER_UNARY_OP("nn.gelu", /*require_float_dtype=*/true);
 
 /* relax.nn.silu */
-RELAX_REGISTER_UNARY_OP("nn.silu");
+RELAX_REGISTER_UNARY_OP("nn.silu", /*require_float_dtype=*/true);
 
 /* relax.nn.softmax */
 TVM_REGISTER_NODE_TYPE(SoftmaxAttrs);
@@ -47,6 +47,11 @@ StructInfo InferStructInfoSoftmax(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
   if (data_sinfo->IsUnknownNdim()) {
     return data_sinfo;
+  }
+  if (!data_sinfo->IsUnknownDtype() && !data_sinfo->dtype.is_float()) {
+    ctx->ReportFatal(Diagnostic::Error(call) << "Softmax requires the input tensor to have float "
+                                                "dtype. However, the given input dtype is "
+                                             << data_sinfo->dtype);
   }
   const auto* attrs = call->attrs.as<SoftmaxAttrs>();
   CheckAxisInRange(call, ctx, data_sinfo->ndim, attrs->axis);
@@ -72,7 +77,12 @@ bool NormCheckDtypeAndShape(const Call& call, const BlockBuilder& ctx,
     axes_non_neg = CheckAxesInRangeNonRepetitive(call, ctx, data_sinfo->ndim, axes);
   }
   int n_axis = axes.size();
-
+  if (!data_sinfo->IsUnknownDtype() && !data_sinfo->dtype.is_float()) {
+    ctx->ReportFatal(
+        Diagnostic::Error(call)
+        << op << " requires the input data to have float dtype. However, the given data dtype is "
+        << data_sinfo->dtype);
+  }
   for (int i = 1; i < n_input; ++i) {
     if (input_sinfo[i]->dtype != data_sinfo->dtype) {
       ctx->ReportFatal(Diagnostic::Error(call)

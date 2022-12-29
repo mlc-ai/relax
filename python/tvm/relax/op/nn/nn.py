@@ -282,6 +282,10 @@ def gelu(data: Expr) -> Expr:
     -------
     result : relax.Expr
         The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
     """
     return _ffi_api.gelu(data)  # type: ignore
 
@@ -301,6 +305,10 @@ def silu(data: Expr) -> Expr:
     -------
     result : relax.Expr
         The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
     """
     return _ffi_api.silu(data)  # type: ignore
 
@@ -324,6 +332,10 @@ def softmax(data: Expr, axis: int = -1) -> Expr:
     -------
     result : relax.Expr
         The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
     """
     return _ffi_api.softmax(data, axis)  # type: ignore
 
