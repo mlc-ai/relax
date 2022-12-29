@@ -41,7 +41,7 @@ Expr MakeCast(Expr data, DataType dtype) {
 TVM_REGISTER_GLOBAL("relax.op.cast").set_body_typed(MakeCast);
 
 StructInfo InferStructInfoCast(const Call& call, const BlockBuilder& ctx) {
-  TensorStructInfo sinfo = GetUnaryInputTensorStructInfo(call, ctx, "cast");
+  TensorStructInfo sinfo = GetUnaryInputTensorStructInfo(call, ctx);
   const auto* attrs = call->attrs.as<CastAttrs>();
   ObjectPtr<TensorStructInfoNode> new_sinfo = make_object<TensorStructInfoNode>(*sinfo.get());
   new_sinfo->dtype = attrs->dtype;
@@ -68,7 +68,7 @@ Expr MakeWrapParam(Expr data, DataType dtype) {
 TVM_REGISTER_GLOBAL("relax.op.wrap_param").set_body_typed(MakeWrapParam);
 
 StructInfo InferStructInfoWrapParam(const Call& call, const BlockBuilder& ctx) {
-  TensorStructInfo sinfo = GetUnaryInputTensorStructInfo(call, ctx, "wrap_param");
+  TensorStructInfo sinfo = GetUnaryInputTensorStructInfo(call, ctx);
   const auto* attrs = call->attrs.as<WrapParamAttrs>();
   ObjectPtr<TensorStructInfoNode> new_sinfo = make_object<TensorStructInfoNode>(*sinfo.get());
   new_sinfo->dtype = attrs->dtype;
