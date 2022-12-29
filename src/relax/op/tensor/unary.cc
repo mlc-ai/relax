@@ -64,7 +64,7 @@ Expr MakeUnique(Expr data, bool sorted, bool return_inverse, bool return_counts,
 TVM_REGISTER_GLOBAL("relax.op.unique").set_body_typed(MakeUnique);
 
 StructInfo InferStructInfoUnique(const Call& call, const BlockBuilder& ctx) {
-  TensorStructInfo input_sinfo = GetUnaryInputTensorStructInfo(call, ctx, /*op_name=*/"unique");
+  TensorStructInfo input_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
   const auto* unique_attrs = call->attrs.as<UniqueAttrs>();
   // Only default values of these attributes are supported right now.
   if (unique_attrs->return_counts || unique_attrs->return_inverse || unique_attrs->dim != -1) {

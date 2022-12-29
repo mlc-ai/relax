@@ -24,12 +24,11 @@
 namespace tvm {
 namespace relax {
 
-Array<TensorStructInfo> GetInputTensorStructInfo(const Call& call, const BlockBuilder& ctx,
-                                                 const Array<String>& input_names,
-                                                 const String& op_name) {
-  int n_input = input_names.size();
+Array<TensorStructInfo> GetInputTensorStructInfo(const Call& call, const BlockBuilder& ctx) {
+  Op op = Downcast<Op>(call->op);
+  int n_input = op->arguments.size();
   if (static_cast<int>(call->args.size()) != n_input) {
-    ctx->ReportFatal(Diagnostic::Error(call) << op_name << " op should have 2 arguments");
+    ctx->ReportFatal(Diagnostic::Error(call) << op << " op should have 2 arguments");
   }
   Array<TensorStructInfo> input_tensor_sinfo;
   input_tensor_sinfo.reserve(n_input);
@@ -37,7 +36,7 @@ Array<TensorStructInfo> GetInputTensorStructInfo(const Call& call, const BlockBu
     const auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[i]);
     if (sinfo == nullptr) {
       ctx->ReportFatal(Diagnostic::Error(call)
-                       << op_name << " requires the input " << input_names[i]
+                       << op << " requires the input " << op->arguments[i]->name
                        << " to be Tensor. However, the given one is "
                        << call->args[i]->struct_info_->GetTypeKey());
     }
@@ -48,8 +47,7 @@ Array<TensorStructInfo> GetInputTensorStructInfo(const Call& call, const BlockBu
 
 Optional<Array<PrimExpr>> InferBinaryBroadcastShape(const Call& call, const BlockBuilder& ctx,
                                                     const Array<PrimExpr>& lhs_shape,
-                                                    const Array<PrimExpr>& rhs_shape,
-                                                    const String& op_name) {
+                                                    const Array<PrimExpr>& rhs_shape) {
   arith::Analyzer* analyzer = ctx->GetAnalyzer();
   int lhs_ndim = lhs_shape.size();
   int rhs_ndim = rhs_shape.size();
@@ -72,7 +70,7 @@ Optional<Array<PrimExpr>> InferBinaryBroadcastShape(const Call& call, const Bloc
       output_shape.push_back(dim0);
     } else if (int_dim0 && int_dim1 && int_dim0->value != int_dim1->value) {
       ctx->ReportFatal(Diagnostic::Error(call)
-                       << "In " << op_name << ", the lhs shape at dim " << lhs_ndim - i << " is "
+                       << "In " << call->op << ", the lhs shape at dim " << lhs_ndim - i << " is "
                        << dim0 << " and the rhs shape at dim " << rhs_ndim - i << " is " << dim1
                        << ", which are not broadcastable.");
     } else {
@@ -88,15 +86,15 @@ Optional<Array<PrimExpr>> InferBinaryBroadcastShape(const Call& call, const Bloc
 }
 
 Array<Integer> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilder& ctx, int ndim,
-                                             const Array<Integer>& axes, const String op_name) {
+                                             const Array<Integer>& axes) {
   std::vector<bool> appeared_dims_set;
   Array<Integer> axes_non_neg;
-  appeared_dims_set.resize(ndim);
+  appeared_dims_set.resize(ndim, /*value=*/false);
   axes_non_neg.reserve(axes.size());
   for (const Integer& axis : axes) {
     int _axis = axis->value;
     if (_axis < -ndim || _axis >= ndim) {
-      ctx->ReportFatal(Diagnostic::Error(call) << "In " << op_name << ", the input axis " << _axis
+      ctx->ReportFatal(Diagnostic::Error(call) << "In " << call->op << ", the input axis " << _axis
                                                << " is out of range. The input tensor has " << ndim
                                                << " dimensions, so axis should be in range ["
                                                << -ndim << ", " << ndim << ").");
@@ -106,7 +104,7 @@ Array<Integer> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilde
 
     if (appeared_dims_set[_axis]) {
       ctx->ReportFatal(Diagnostic::Error(call)
-                       << "In " << op_name
+                       << "In " << call->op
                        << ", the input axes is required to be non-repetitive. However, there are "
                           "multiple given axes referring to axis "
                        << _axis);

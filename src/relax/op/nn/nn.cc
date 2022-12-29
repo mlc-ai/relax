@@ -44,12 +44,12 @@ Expr MakeSoftmax(Expr data, int axis) {
 TVM_REGISTER_GLOBAL("relax.op.nn.softmax").set_body_typed(MakeSoftmax);
 
 StructInfo InferStructInfoSoftmax(const Call& call, const BlockBuilder& ctx) {
-  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx, /*op_name=*/"Softmax");
+  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
   if (data_sinfo->IsUnknownNdim()) {
     return data_sinfo;
   }
   const auto* attrs = call->attrs.as<SoftmaxAttrs>();
-  CheckAxisInRange(call, ctx, data_sinfo->ndim, attrs->axis, /*op_name=*/"Softmax");
+  CheckAxisInRange(call, ctx, data_sinfo->ndim, attrs->axis);
 
   return data_sinfo;
 }
@@ -61,27 +61,27 @@ TVM_REGISTER_OP("relax.nn.softmax")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoSoftmax);
 
 bool NormCheckDtypeAndShape(const Call& call, const BlockBuilder& ctx,
-                            const Array<TensorStructInfo>& input_sinfo,
-                            const Array<String>& input_names, Array<Integer> axes,
-                            const String& op_name) {
+                            const Array<TensorStructInfo>& input_sinfo, Array<Integer> axes) {
+  Op op = Downcast<Op>(call->op);
+  int n_input = op->arguments.size();
+
   TensorStructInfo data_sinfo = input_sinfo[0];
-  int n_input = input_sinfo.size();
 
   if (!data_sinfo->IsUnknownNdim()) {
-    axes = CheckAxesInRangeNonRepetitive(call, ctx, data_sinfo->ndim, axes, op_name);
+    axes = CheckAxesInRangeNonRepetitive(call, ctx, data_sinfo->ndim, axes);
   }
   int n_axis = axes.size();
 
   for (int i = 1; i < n_input; ++i) {
     if (input_sinfo[i]->dtype != data_sinfo->dtype) {
       ctx->ReportFatal(Diagnostic::Error(call)
-                       << op_name
+                       << op
                        << " requires all the input tensors to have the same dtype. However, the "
-                       << input_names[i] << " has dtype " << input_sinfo[i]->dtype
+                       << op->arguments[i]->name << " has dtype " << input_sinfo[i]->dtype
                        << " which is other than the input data's dtype " << data_sinfo->dtype);
     } else if (input_sinfo[i]->ndim != n_axis) {
       ctx->ReportFatal(Diagnostic::Error(call)
-                       << op_name << " requires the input " << input_names[i]
+                       << op << " requires the input " << op->arguments[i]->name
                        << " to have as many dimensions as the length of input axes. However, the "
                           "given one has ndim "
                        << input_sinfo[i]->ndim << ", which is other than the length of axes "
@@ -110,7 +110,7 @@ bool NormCheckDtypeAndShape(const Call& call, const BlockBuilder& ctx,
     for (int d = 0; d < n_axis; ++d) {
       if (analyzer->CanProve(axis_lengths[0][d] != axis_lengths[i][d])) {
         ctx->ReportFatal(Diagnostic::Error(call)
-                         << op_name
+                         << op
                          << " requires the input gamma, beta, etc., to have size same as the "
                             "lengths of the data on the given axes. However, there exists "
                          << axis_lengths[0] << " and " << axis_lengths[i] << " that are unequal.");
@@ -143,13 +143,10 @@ Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr movi
 TVM_REGISTER_GLOBAL("relax.op.nn.batch_norm").set_body_typed(MakeBatchNorm);
 
 StructInfo InferStructInfoBatchNorm(const Call& call, const BlockBuilder& ctx) {
-  static const Array<String>& input_names{"data", "gamma", "beta", "moving_mean", "moving_var"};
-  Array<TensorStructInfo> input_sinfo =
-      GetInputTensorStructInfo(call, ctx, /*input_names=*/input_names, /*op_name=*/"BatchNorm");
+  Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
 
   const auto* attrs = call->attrs.as<BatchNormAttrs>();
-  bool unknown_shape = NormCheckDtypeAndShape(call, ctx, input_sinfo, input_names, {attrs->axis},
-                                              /*op_name=*/"BatchNorm");
+  bool unknown_shape = NormCheckDtypeAndShape(call, ctx, input_sinfo, {attrs->axis});
 
   DataType dtype = input_sinfo[0]->dtype;
   if (unknown_shape) {
@@ -189,14 +186,10 @@ Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double
 TVM_REGISTER_GLOBAL("relax.op.nn.layer_norm").set_body_typed(MakeLayerNorm);
 
 StructInfo InferStructInfoLayerNorm(const Call& call, const BlockBuilder& ctx) {
-  static const Array<String>& input_names{"data", "gamma", "beta"};
-  Array<TensorStructInfo> input_sinfo =
-      GetInputTensorStructInfo(call, ctx, /*input_names=*/input_names,
-                               /*op_name=*/"LayerNorm");
+  Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
 
   const auto* attrs = call->attrs.as<LayerNormAttrs>();
-  bool unknown_shape = NormCheckDtypeAndShape(call, ctx, input_sinfo, input_names, attrs->axes,
-                                              /*op_name=*/"LayerNorm");
+  bool unknown_shape = NormCheckDtypeAndShape(call, ctx, input_sinfo, attrs->axes);
 
   return unknown_shape ? TensorStructInfo(input_sinfo[0]->dtype, input_sinfo[0]->ndim)
                        : input_sinfo[0];
@@ -224,8 +217,7 @@ Expr MakeMatmul(Expr a, Expr b, DataType out_dtype) {
 TVM_REGISTER_GLOBAL("relax.op.nn.matmul").set_body_typed(MakeMatmul);
 
 StructInfo InferStructInfoMatmul(const Call& call, const BlockBuilder& ctx) {
-  Array<TensorStructInfo> input_sinfo =
-      GetInputTensorStructInfo(call, ctx, /*input_names=*/{"lhs", "rhs"}, /*op_name=*/"Matmul");
+  Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
   TensorStructInfo lhs_sinfo = input_sinfo[0];
   TensorStructInfo rhs_sinfo = input_sinfo[1];
 
@@ -267,8 +259,8 @@ StructInfo InferStructInfoMatmul(const Call& call, const BlockBuilder& ctx) {
                                    lhs_shape->values.end() - 2 + lhs_prepended};
   Array<PrimExpr> rhs_shape_prefix{rhs_shape->values.begin(),
                                    rhs_shape->values.end() - 2 + rhs_appended};
-  Optional<Array<PrimExpr>> output_shape_prefix = InferBinaryBroadcastShape(
-      call, ctx, lhs_shape_prefix, rhs_shape_prefix, /*op_name=*/"Matmul");
+  Optional<Array<PrimExpr>> output_shape_prefix =
+      InferBinaryBroadcastShape(call, ctx, lhs_shape_prefix, rhs_shape_prefix);
   if (!output_shape_prefix.defined()) {
     return TensorStructInfo(out_dtype, output_ndim);
   }
@@ -315,7 +307,7 @@ Expr MakeDropout(Expr data, double rate) {
 TVM_REGISTER_GLOBAL("relax.op.nn.dropout").set_body_typed(MakeDropout);
 
 StructInfo InferStructInfoDropout(const Call& call, const BlockBuilder& ctx) {
-  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx, /*op_name=*/"Dropout");
+  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
   return TupleStructInfo({data_sinfo, data_sinfo});
 }
 
@@ -327,8 +319,7 @@ TVM_REGISTER_OP("relax.nn.dropout")
 
 // Structure info inference for cross entropy and softmax cross entropy
 StructInfo InferStructInfoCrossEntropy(const Call& call, const BlockBuilder& ctx) {
-  Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(
-      call, ctx, /*input_names=*/{"prediction", "target"}, /*op_name=*/"Loss function");
+  Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
   TensorStructInfo pred_sinfo = input_sinfo[0];
   TensorStructInfo tgt_sinfo = input_sinfo[1];
 

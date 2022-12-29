@@ -56,8 +56,7 @@ namespace relax {
 template <typename FType>
 StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx,
                                     FType f_compute_out_dtype) {
-  Array<TensorStructInfo> input_sinfo =
-      GetInputTensorStructInfo(call, ctx, /*input_names=*/{"lhs", "rhs"}, /*op_name=*/"Binary");
+  Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
   TensorStructInfo lhs_sinfo = input_sinfo[0];
   TensorStructInfo rhs_sinfo = input_sinfo[1];
 
@@ -77,8 +76,8 @@ StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx,
   // Shapes and ndims
   if (lhs_shape && rhs_shape) {
     // If all inputs have shapes, directly infer shapes
-    Optional<Array<PrimExpr>> output_shape = InferBinaryBroadcastShape(
-        call, ctx, lhs_shape->values, rhs_shape->values, /*op_name=*/"binary op");
+    Optional<Array<PrimExpr>> output_shape =
+        InferBinaryBroadcastShape(call, ctx, lhs_shape->values, rhs_shape->values);
     if (!output_shape.defined()) {
       return TensorStructInfo(output_dtype, /*ndim=*/output_ndim);
     } else {
