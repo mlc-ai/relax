@@ -241,6 +241,32 @@ def test_conv2d_infer_struct_info_more_input_dtype():
     )
 
 
+def test_conv2d_infer_struct_info_mixed_precision():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 28, 28), "float16"))
+    w0 = relax.Var("w", R.Tensor((4, 3, 3, 3), "float16"))
+    x1 = relax.Var("x", R.Tensor((2, 3, 28, 28), "int8"))
+    w1 = relax.Var("w", R.Tensor((4, 3, 3, 3), "int8"))
+    x2 = relax.Var("x", R.Tensor((2, 3, 28, 28)))
+    w2 = relax.Var("w", R.Tensor((4, 3, 3, 3)))
+
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(x0, w0, out_dtype="float32"),
+        relax.TensorStructInfo((2, 4, 26, 26), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(x1, w1, out_dtype="int32"),
+        relax.TensorStructInfo((2, 4, 26, 26), "int32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(x2, w2, out_dtype="float32"),
+        relax.TensorStructInfo((2, 4, 26, 26), "float32"),
+    )
+
+
 def test_conv2d_unequal_input_channel():
     bb = relax.BlockBuilder()
     ic = tir.Var("ic", "int64")

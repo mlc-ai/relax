@@ -896,6 +896,30 @@ def test_matmul_infer_struct_info_more_input_dtype():
     _check_inference(bb, relax.op.nn.matmul(x2, y2), relax.TensorStructInfo((3, 5), "int64"))
 
 
+def test_matmul_infer_struct_info_mixed_precision():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((3, 4), "float16"))
+    y0 = relax.Var("y", R.Tensor((4, 5), "float16"))
+    x1 = relax.Var("x", R.Tensor((3, 4), "int8"))
+    y1 = relax.Var("y", R.Tensor((4, 5), "int8"))
+    x2 = relax.Var("x", R.Tensor((3, 4)))
+    y2 = relax.Var("y", R.Tensor((4, 5)))
+
+    _check_inference(
+        bb,
+        relax.op.nn.matmul(x0, y0, out_dtype="float32"),
+        relax.TensorStructInfo((3, 5), "float32"),
+    )
+    _check_inference(
+        bb, relax.op.nn.matmul(x1, y1, out_dtype="int32"), relax.TensorStructInfo((3, 5), "int32")
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.matmul(x2, y2, out_dtype="float32"),
+        relax.TensorStructInfo((3, 5), "float32"),
+    )
+
+
 def test_matmul_infer_struct_info_zero_rank_input():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((3, 4), "float32"))
