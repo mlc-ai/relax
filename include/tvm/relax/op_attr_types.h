@@ -253,6 +253,78 @@ struct DropoutAttrs : public tvm::AttrsNode<DropoutAttrs> {
   }
 };  // struct DropoutAttrs
 
+/*! \brief Attributes used in image resize2d operator */
+struct Resize2DAttrs : public tvm::AttrsNode<Resize2DAttrs> {
+  Array<PrimExpr> size;
+  Array<FloatImm> roi;
+  String layout;
+  String method;
+  String coordinate_transformation_mode;
+  String rounding_method;
+  double cubic_alpha;
+  int cubic_exclude;
+  double extrapolation_value;
+  DataType out_dtype;
+
+  TVM_DECLARE_ATTRS(Resize2DAttrs, "relax.attrs.Resize2DAttrs") {
+    TVM_ATTR_FIELD(size).describe("Output image size.");
+    TVM_ATTR_FIELD(roi).describe(
+        "Region of Interest for coordinate transformation mode 'tf_crop_and_resize'");
+    TVM_ATTR_FIELD(layout).describe(
+        "Dimension ordering of input data. Can be 'NCHW', 'NHWC', etc."
+        "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
+        "dimensions respectively. Resize is applied on the 'H' and"
+        "'W' dimensions.");
+    TVM_ATTR_FIELD(method).describe(
+        "Specify the mode to use for scaling."
+        "nearest_neighbor -  Nearest Neighbor"
+        "linear - Bilinear Interpolation"
+        "cubic - Bicubic Interpolation");
+    TVM_ATTR_FIELD(coordinate_transformation_mode)
+        .describe(
+            "Describes how to transform the coordinate in the resized tensor"
+            "to the coordinate in the original tensor."
+            "Refer to the ONNX Resize operator specification for details"
+            "Available options are half_pixel, align_corners and asymmetric");
+    TVM_ATTR_FIELD(rounding_method)
+        .describe(
+            "indicates how to find the \"nearest\" pixel in nearest_neighbor method"
+            "Available options are round, floor, and ceil.");
+    TVM_ATTR_FIELD(cubic_alpha).describe("Spline Coefficient for Bicubic Interpolation");
+    TVM_ATTR_FIELD(cubic_exclude)
+        .describe("Flag to exclude exterior of the image during bicubic interpolation");
+    TVM_ATTR_FIELD(extrapolation_value)
+        .describe("Value to return when roi is outside of the image");
+    TVM_ATTR_FIELD(out_dtype).describe(
+        "The dtype of the output tensor. It it is not specified, the output will have the same "
+        "dtype as input if not specified.");
+  }
+};  // struct Resize2dAttrs
+
+/*! \brief Attributes for reduction operators */
+struct ReduceAttrs : public tvm::AttrsNode<ReduceAttrs> {
+  Optional<Array<Integer>> axis;
+  bool keepdims;
+
+  TVM_DECLARE_ATTRS(ReduceAttrs, "relax.attrs.ReduceAttrs") {
+    TVM_ATTR_FIELD(axis).describe(R"code(The axis or axes along which to perform the reduction.
+
+      The default, `axis=()`, will compute over all elements into a
+      scalar array with shape `(1,)`.
+
+      If `axis` is int, a reduction is performed on a particular axis.
+
+      If `axis` is a tuple of ints, a reduction is performed on all the axes
+      specified in the tuple.
+
+      If `exclude` is true, reduction will be performed on the axes that are
+      NOT in axis instead.)code");
+    TVM_ATTR_FIELD(keepdims).describe(
+        "If this is set to `True`, the reduced axes are left in the result as dimension with size "
+        "one.");
+  }
+};  // struct ReduceAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_
