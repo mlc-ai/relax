@@ -117,7 +117,8 @@ TVM_REGISTER_OP("relax.matmul")
     .set_num_inputs(2)
     .add_argument("x1", "Tensor", "The first input tensor.")
     .add_argument("x2", "Tensor", "The second input tensor.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoMatmul);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoMatmul)
+    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionMatmul);
 
 }  // namespace relax
 }  // namespace tvm

@@ -123,7 +123,8 @@ TVM_REGISTER_OP("relax.nn.conv2d")
     .add_argument("data", "Tensor", "The input tensor.")
     .add_argument("weight", "Tensor", "The weight tensor.")
     .set_attrs_type<Conv2DAttrs>()
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoConv2d);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoConv2d)
+    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionConv2D);
 
 }  // namespace relax
 }  // namespace tvm

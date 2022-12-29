@@ -291,7 +291,8 @@ TVM_REGISTER_OP("relax.concat")
     .set_attrs_type<ConcatAttrs>()
     .set_num_inputs(1)
     .add_argument("tensors", "Tuple of Tensors", "The input list of tensors.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoConcat);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoConcat)
+    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow);
 
 /* relax.expand_dims */
 TVM_REGISTER_NODE_TYPE(ExpandDimsAttrs);
@@ -695,7 +696,8 @@ TVM_REGISTER_OP("relax.split")
     .set_attrs_type<SplitAttrs>()
     .set_num_inputs(1)
     .add_argument("x", "Tensor", "The input tensor.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoSplit);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoSplit)
+    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow);
 
 /* relax.squeeze */
 TVM_REGISTER_NODE_TYPE(SqueezeAttrs);
