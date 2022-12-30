@@ -40,8 +40,18 @@ namespace relax {
 // TODO(chaofan, yixin): support constants
 class GradientMutator : public ExprMutator {
  public:
-  explicit GradientMutator(IRModule mod, const Array<Var>& require_grads)
-      : ExprMutator(std::move(mod)), require_grads_(std::move(require_grads)) {}
+  explicit GradientMutator(IRModule mod, const GlobalVar &gvar, const Array<Var>& require_grads)
+      : ExprMutator(mod), mod_(mod), gvar_(gvar), require_grads_(std::move(require_grads)) { }
+
+  IRModule Transform() {
+    auto new_module = GetRef<IRModule>(mod_.CopyOnWrite());
+
+    auto func_before = Downcast<Function>(mod_->Lookup(gvar_));
+    auto func_after_var = GlobalVar(gvar_->name_hint + "_adjoint");
+    auto func_after = Downcast<Function>(this->VisitExpr(func_before));
+    new_module->Add(func_after_var, func_after);
+    return new_module;
+  }
 
   Expr VisitExpr_(const FunctionNode* func) override {
     // copy the parameters and set var_remap_
@@ -91,45 +101,6 @@ class GradientMutator : public ExprMutator {
 
     this->Epilogue();
     return builder_->EndBlock();
-  }
-
-  // handle return values of the AD function
-  // the return value would be like:
-  // Tuple(original_return_value, Tuple(adjoint_of_require_grads_1, adjoint_of_require_grads_2, ...))
-  void Epilogue() {
-    // create adjoint var for inputs
-    for (size_t i = 0; i < new_params.size(); ++i) {
-      if (std::find(require_grads_.begin(), require_grads_.end(), func->params[i]) !=
-          require_grads_.end()) {
-        CreateAdjointVar(new_params[i], /*is_datalfow_var=*/false);
-      } else {
-        CreateAdjointVar(new_params[i], /*is_datalfow_var=*/true);
-      }
-    }
-    // handle the return values and types
-    Array<Expr> out_expr, out_adjoints;
-    out_expr.push_back(seq_expr->body);
-
-    // emit the input adjoints
-    static const Op& default_op = Op::Get("relax.zeros");
-    for (size_t i = 0; i < new_params.size(); ++i) {
-      if (std::find(require_grads_.begin(), require_grads_.end(), func->params[i]) != require_grads_.end()) {
-        const Var& adjoint_var = adjoint_var_map_[new_params[i]];
-        if (adjoint_expr_map_.count(new_params[i])) {
-          BindAndEmit(adjoint_var, adjoint_expr_map_[new_params[i]]);
-        } else {
-          ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
-          auto type = Downcast<DynTensorType>(new_params[i]->checked_type());
-          attrs->dtype = type->dtype;
-
-          const Expr& default_adjoint = Call(default_op, {new_params[i]->shape()}, Attrs(attrs));
-          BindAndEmit(adjoint_var, default_adjoint);
-        }
-        out_adjoints.push_back(adjoint_var);
-      }
-    }
-
-    out_expr.push_back(Tuple(out_adjoints));
   }
 
   void VisitBinding(const Binding& binding) override {
@@ -195,12 +166,18 @@ class GradientMutator : public ExprMutator {
   // b = a[0]
   // a_adjoint_expr[0] (in fields) += b_adjoint_var
   void VisitBinding_(const VarBindingNode* binding, const TupleGetItemNode* tuple_get_item) override {
+    // var = var: straight add
+    // tuple = tuple: add recursively
     UpdateExprMap(GetRef<TupleGetItem>(tuple_get_item), adjoint_expr_map_[binding->var]);
   }
 
   // for assign nodes, we add the adjoint of output to the adjoint of input
+  void VisitBinding_(const VarBindingNode* binding, const DataflowVarNode* var) override {
+    UpdateExprMap(GetRef<Var>(var), adjoint_expr_map_[binding->var]);
+  }
+
   void VisitBinding_(const VarBindingNode* binding, const VarNode* var) override {
-    UpdateExprMap(GetRef<Var>(var), adjoint_var_map_[binding->var]);
+    UpdateExprMap(GetRef<Var>(var), adjoint_expr_map_[binding->var]);
   }
 
  private:
@@ -212,8 +189,6 @@ class GradientMutator : public ExprMutator {
   }
 
   Var CreateAdjointVar(Var v, bool is_dataflow_var) {
-    // the adjoint var has been created
-    if (adjoint_var_map_.count(v)) return; //?
     Var adjoint;
     if (is_dataflow_var) {
       adjoint = DataflowVar(v->name_hint() + "_adjoint", v->shape(), v->checked_type());
@@ -341,9 +316,38 @@ class GradientMutator : public ExprMutator {
     }
   }
 
+  // init the gradient of the target_var_
+  // and update it in adjoint_expr_map_
+  void InitGradAsOnes(const Var& var) {
+    Expr ones = MakeOnes(var->shape(), Downcast<DynTensorType>(var->checked_type())->dtype);
+    adjoint_expr_map_.Set(var, ones);
+  }
+
+  // handle the return value of the AD function
+  // the return value would be like:
+  // Tuple(original_return_value,
+  //       Tuple(adjoint_of_require_grads_1, adjoint_of_require_grads_2, ...))
+  void Epilogue() {
+    // create adjoint variables for inputs, and then bind adjoints
+    Array<Expr> out_adjoints;
+    for (Var x : require_grads_) {
+      Var new_var = this->var_remap_[x->vid];
+      Var adjoint_var = CreateAdjointVar(new_var, /*is_datalfow_var=*/false);
+
+      if (adjoint_expr_map_.count(new_var)) {
+        BindAndEmit(adjoint_var, adjoint_expr_map_[new_var]);
+      } else {
+        BindAndEmit(adjoint_var, MakeZeros(new_var->shape(), Downcast<DynTensorType>(new_var->checked_type())->dtype));
+      }
+      out_adjoints.push_back(adjoint_var);
+    }
+
+    this->return_expr_ = Tuple(Array<Expr>{target_var_, Tuple(out_adjoints)});
+  }
+
   // check that the target should be a VarNode, not DataflowVarNode
   // and a scalar of type "DynTensorType"
-  void CheckTarget(Expr e) {
+  static void CheckTarget(Expr e) {
     CHECK(e->IsInstance<VarNode>()) << "target must be VarNode";
     CHECK(!e->IsInstance<DataflowVarNode>()) << "target is not an output node";
     CHECK(e->checked_type().as<DynTensorTypeNode>()) << "the type of target must be DynTensorType";
@@ -352,18 +356,14 @@ class GradientMutator : public ExprMutator {
     CHECK(shape_node->values.size() == 0) << "target must be a scalar";
   }
 
-  // init the gradient of the target_var_
-  // and update it in adjoint_expr_map_
-  void InitGradAsOnes(const Var& var) {
-    Expr ones = MakeOnes(var->shape(), Downcast<DynTensorType>(var->checked_type())->dtype);
-    adjoint_expr_map_.Set(var, ones);
-  }
+  // inputs
+  IRModule mod_;
+  GlobalVar gvar_;
+  Array<Var> require_grads_;
 
   // the differentiation target
   Var target_var_;
-  // the arguments to differentiate
-  Array<Var> require_grads_;
-
+  // the return value of the differentiated function
   Expr return_expr_;
 
   // var to its adjoints var
@@ -376,36 +376,32 @@ class GradientMutator : public ExprMutator {
   std::unordered_set<Expr, ObjectPtrHash, ObjectPtrEqual> zeros_tracker_;
 };
 
-/* This is the internal function of tvm::relax::transform::Gradient. */
-IRModule Gradient(IRModule m, const GlobalVar& gvar,
-                  Optional<Array<Var>> require_grads = runtime::NullOptType()) {
-  auto* func = m->Lookup(gvar).as<FunctionNode>();
+/*!
+ * \brief This is the internal function of tvm::relax::transform::Gradient.
+ * \param mod The module
+ * \param gvar The GlobalVar of the specified function
+ * \param require_grads The relax variables whose adjoints are needed.
+ * \return The module after transformation.
+ */
+IRModule Gradient(const IRModule &mod, const GlobalVar& gvar, Optional<Array<Var>> require_grads) {
+  auto* func = mod->Lookup(gvar).as<FunctionNode>();
+  CHECK(func) << "relax function " << gvar->name_hint << " is not found";
 
-  if (func == nullptr) {
-    LOG(FATAL) << "relax function " << gvar->name_hint << " not found";
-    return m;
-  }
-
-  auto f_before = GetRef<Function>(func);
   if (require_grads.defined()) {
-    for (auto input : require_grads.value()) {
-      ICHECK(std::find(func->params.begin(), func->params.end(), input) != func->params.end())
-          << "function " << gvar->name_hint << " has no var named " << input->name_hint();
+    // there should be no duplicate var, and every var should be a parameter of the input function
+    std::unordered_set<Var, ObjectPtrHash, ObjectPtrEqual> var_set;
+    for (auto var : require_grads.value()) {
+      CHECK(std::find(func->params.begin(), func->params.end(), var) != func->params.end())
+          << "function " << gvar->name_hint << " has no var named " << var->name_hint();
+      CHECK(var_set.count(var) == 0) << "variable " << var->name_hint() << " appears more than once";
+      var_set.emplace(var);
     }
   } else {
-    // the default case, require_grads = all params of function
+    // when require_grads is not specified, it would be set to all params of the function
     require_grads = func->params;
   }
 
-  IRModuleNode* new_module_node = m.CopyOnWrite();
-  auto new_module = GetRef<IRModule>(new_module_node);
-  auto mutator = GradientMutator(new_module, require_grads.value());
-
-  auto adjoint_var = GlobalVar(gvar->name_hint + "_adjoint");
-  Function f_after = mutator.FuncTransform(GetRef<Function>(func));
-  new_module->Add(adjoint_var, f_after);
-
-  return new_module;
+  return GradientMutator(mod, gvar, require_grads.value()).Transform();
 }
 
 namespace transform {

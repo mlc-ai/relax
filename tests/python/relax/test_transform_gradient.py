@@ -104,6 +104,7 @@ def test_assign_binding():
             return (lv3, (x_adjoint,))
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    After.show()
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
@@ -400,6 +401,71 @@ def test_tuple():
                 z_adjoint: R.Tensor((3, 3), dtype="float32") = lv
                 R.output(lv5, x_adjoint, y_adjoint, z_adjoint)
             return (lv5, (x_adjoint, y_adjoint, z_adjoint))
+
+    After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+
+
+def test_tuple_assignment():
+    @I.ir_module
+    class Before:
+        @R.function
+        def main(
+            x: R.Tensor((3, 3), "float32"),
+            y: R.Tensor((3, 3), "float32"),
+        ):
+            with R.dataflow():
+                lv1 = (x, y)
+                lv4 = lv1[0]
+                lv7 = R.add(lv4, x)
+                lv2 = lv1
+                lv3 = lv2[0]
+                lv5 = R.add(lv3, lv7)
+                lv6 = R.sum(lv5)
+                R.output(lv6)
+            return lv6
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=0):
+            # block 0
+            with R.dataflow():
+                lv1: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")) = (x, y)
+                lv4: R.Tensor((3, 3), dtype="float32") = lv1[0]
+                lv7: R.Tensor((3, 3), dtype="float32") = R.add(lv4, x)
+                lv2: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")) = lv1
+                lv3: R.Tensor((3, 3), dtype="float32") = lv2[0]
+                lv5: R.Tensor((3, 3), dtype="float32") = R.add(lv3, lv7)
+                lv6: R.Tensor((), dtype="float32") = R.sum(lv5, axis=None, keepdims=False)
+                R.output(lv6)
+            return lv6
+
+        @R.function
+        def main_adjoint(x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3, 3), dtype="float32")) -> R.Tuple(R.Tensor(None, dtype="float32", ndim=0), R.Tuple(R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=2))):
+            # block 0
+            with R.dataflow():
+                lv1: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")) = (x, y)
+                lv4: R.Tensor((3, 3), dtype="float32") = lv1[0]
+                lv7: R.Tensor((3, 3), dtype="float32") = R.add(lv4, x)
+                lv2: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")) = lv1
+                lv3: R.Tensor((3, 3), dtype="float32") = lv2[0]
+                lv5: R.Tensor((3, 3), dtype="float32") = R.add(lv3, lv7)
+                lv6: R.Tensor((), dtype="float32") = R.sum(lv5, axis=None, keepdims=False)
+                lv6_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+                lv5_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(lv6_adjoint, (3, 3))
+                lv3_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(lv5_adjoint, (3, 3))
+                lv: R.Tensor((3, 3), dtype="float32") = R.zeros((3, 3), dtype="float32")
+                lv2_adjoint: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")) = (lv3_adjoint, lv)
+                lv7_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(lv5_adjoint, (3, 3))
+                lv4_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(lv7_adjoint, (3, 3))
+                lv11: R.Tensor((3, 3), dtype="float32") = R.add(lv3_adjoint, lv4_adjoint)
+                lv1_adjoint: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")) = (lv11, lv)
+                lv21: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(lv7_adjoint, (3, 3))
+                x_adjoint: R.Tensor((3, 3), dtype="float32") = R.add(lv21, lv11)
+                y_adjoint: R.Tensor((3, 3), dtype="float32") = lv
+                R.output(lv6, x_adjoint, y_adjoint)
+            return (lv6, (x_adjoint, y_adjoint))
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
