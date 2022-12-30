@@ -25,14 +25,13 @@
  * with respect to the only return value of the function, which needs to be scalar.
  */
 
-#include <unordered_set>
-
 #include <tvm/relax/expr_functor.h>
 #include <tvm/relax/op_attr_types.h>
 #include <tvm/relax/transform.h>
 
-#include "../op/make_op.h"
+#include <unordered_set>
 
+#include "../op/make_op.h"
 
 namespace tvm {
 namespace relax {
@@ -40,8 +39,9 @@ namespace relax {
 // TODO(chaofan, yixin): support constants
 class GradientMutator : public ExprMutator {
  public:
-  explicit GradientMutator(IRModule mod, const GlobalVar &gvar, const Array<Var>& require_grads)
-      : ExprMutator(mod), mod_(mod), gvar_(gvar), require_grads_(std::move(require_grads)) { }
+  explicit GradientMutator(const IRModule& mod, const GlobalVar& gvar,
+                           const Array<Var>& require_grads)
+      : ExprMutator(mod), mod_(mod), gvar_(gvar), require_grads_(std::move(require_grads)) {}
 
   IRModule Transform() {
     auto new_module = GetRef<IRModule>(mod_.CopyOnWrite());
@@ -63,7 +63,9 @@ class GradientMutator : public ExprMutator {
     }
 
     // use VisitExpr to remap the variables in the input body
-    CHECK(func->body->IsInstance<SeqExprNode>()) << "the body of the function is not SeqExprNode. Please use relax.transform.Normalize to normalize the function first.";
+    CHECK(func->body->IsInstance<SeqExprNode>())
+        << "the body of the function is not SeqExprNode. Please use relax.transform.Normalize to "
+           "normalize the function first.";
     Expr body_with_remapped_var = static_cast<ExprMutator>(*this).VisitExpr(func->body);
 
     // AD transformation
@@ -76,7 +78,8 @@ class GradientMutator : public ExprMutator {
     // TODO(chaofan, yixin): multiple blocks AD
     CHECK(seq_expr->blocks.size() == 1) << "now only support one dataflow block";
     // TODO(chaofan, yixin): AD in non-dataflow block.
-    CHECK(seq_expr->blocks[0]->IsInstance<DataflowBlockNode>()) << "now only support one dataflow block";
+    CHECK(seq_expr->blocks[0]->IsInstance<DataflowBlockNode>())
+        << "now only support one dataflow block";
 
     // the return value should be a VarNode, and a scalar
     CheckTarget(seq_expr->body);
@@ -85,7 +88,6 @@ class GradientMutator : public ExprMutator {
     BindingBlock new_block = this->VisitBindingBlock(seq_expr->blocks[0]);
     return SeqExpr({new_block}, this->return_expr_);
   }
-
 
   BindingBlock VisitBindingBlock_(const DataflowBlockNode* block) override {
     builder_->BeginDataflowBlock();
@@ -125,8 +127,10 @@ class GradientMutator : public ExprMutator {
 
     Expr value = var_binding->value;
     // TODO(chaofan, yixin): support other types of binding values
-    CHECK(value->IsInstance<CallNode>() || value->IsInstance<TupleNode>() || value->IsInstance<TupleGetItemNode>() || value->IsInstance<VarNode>())
-      << "now does not support the type of binding value: " << value;
+    CHECK(value->IsInstance<CallNode>() || value->IsInstance<TupleNode>() ||
+          value->IsInstance<TupleGetItemNode>() || value->IsInstance<VarNode>() ||
+          value->IsInstance<ConstantNode>())
+        << "now does not support the type of binding value: " << value;
 
     ExprMutator::VisitBinding_(var_binding);
   }
@@ -138,15 +142,12 @@ class GradientMutator : public ExprMutator {
         Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
 
     Var adjoint_var = adjoint_var_map_[binding->var];
-    Op call_op = GetRef<Op>(call->op.as<OpNode>());
-    Array<Expr> partials = gradient_op_map[call_op](GetRef<Call>(call), adjoint_var);
+    const Op& call_op = GetRef<Op>(call->op.as<OpNode>());
+    const Array<Expr>& partials = gradient_op_map[call_op](GetRef<Call>(call), adjoint_var);
     ICHECK(partials.size() == call->args.size()) << "partials number != inputs number";
 
     for (size_t i = 0; i < partials.size(); ++i) {
-      const VarNode* arg = call->args[i].as<VarNode>();
-      ICHECK(arg != nullptr);
-      // TODO(chaofan, yixin): support Ops taking tuple input or returning tuple output
-      UpdateExprMap(GetRef<Var>(arg), partials[i]);
+      UpdateExprMap(call->args[i], partials[i]);
     }
   }
 
@@ -165,9 +166,8 @@ class GradientMutator : public ExprMutator {
   // e.g.
   // b = a[0]
   // a_adjoint_expr[0] (in fields) += b_adjoint_var
-  void VisitBinding_(const VarBindingNode* binding, const TupleGetItemNode* tuple_get_item) override {
-    // var = var: straight add
-    // tuple = tuple: add recursively
+  void VisitBinding_(const VarBindingNode* binding,
+                     const TupleGetItemNode* tuple_get_item) override {
     UpdateExprMap(GetRef<TupleGetItem>(tuple_get_item), adjoint_expr_map_[binding->var]);
   }
 
@@ -179,6 +179,9 @@ class GradientMutator : public ExprMutator {
   void VisitBinding_(const VarBindingNode* binding, const VarNode* var) override {
     UpdateExprMap(GetRef<Var>(var), adjoint_expr_map_[binding->var]);
   }
+
+  // for constant nodes, we do not have to handle it because it does not produce adjoint
+  void VisitBinding_(const VarBindingNode* binding, const ConstantNode* var) override { return; }
 
  private:
   Expr ReplaceExprByVar(Expr expr) {
@@ -235,6 +238,8 @@ class GradientMutator : public ExprMutator {
       ICHECK(adjoint_expr_map_[v].as<TupleNode>()) << "adjoint of var is not tuple";
       adjoint_expr_map_.Set(
           v, DoAddInTuple(Downcast<Tuple>(adjoint_expr_map_[v]), node->index, increment));
+    } else if (base.as<ConstantNode>()) {
+      // nothing to do
     } else {
       LOG(FATAL) << "not a leaf node";
     }
@@ -337,7 +342,9 @@ class GradientMutator : public ExprMutator {
       if (adjoint_expr_map_.count(new_var)) {
         BindAndEmit(adjoint_var, adjoint_expr_map_[new_var]);
       } else {
-        BindAndEmit(adjoint_var, MakeZeros(new_var->shape(), Downcast<DynTensorType>(new_var->checked_type())->dtype));
+        BindAndEmit(
+            adjoint_var,
+            MakeZeros(new_var->shape(), Downcast<DynTensorType>(new_var->checked_type())->dtype));
       }
       out_adjoints.push_back(adjoint_var);
     }
@@ -383,7 +390,7 @@ class GradientMutator : public ExprMutator {
  * \param require_grads The relax variables whose adjoints are needed.
  * \return The module after transformation.
  */
-IRModule Gradient(const IRModule &mod, const GlobalVar& gvar, Optional<Array<Var>> require_grads) {
+IRModule Gradient(const IRModule& mod, const GlobalVar& gvar, Optional<Array<Var>> require_grads) {
   auto* func = mod->Lookup(gvar).as<FunctionNode>();
   CHECK(func) << "relax function " << gvar->name_hint << " is not found";
 
@@ -393,7 +400,8 @@ IRModule Gradient(const IRModule &mod, const GlobalVar& gvar, Optional<Array<Var
     for (auto var : require_grads.value()) {
       CHECK(std::find(func->params.begin(), func->params.end(), var) != func->params.end())
           << "function " << gvar->name_hint << " has no var named " << var->name_hint();
-      CHECK(var_set.count(var) == 0) << "variable " << var->name_hint() << " appears more than once";
+      CHECK(var_set.count(var) == 0)
+          << "variable " << var->name_hint() << " appears more than once";
       var_set.emplace(var);
     }
   } else {
