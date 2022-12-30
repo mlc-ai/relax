@@ -148,7 +148,7 @@ class GradientMutator : public ExprMutator {
     ICHECK(partials.size() == call->args.size()) << "partials number != inputs number";
 
     for (size_t i = 0; i < partials.size(); ++i) {
-      UpdateExprMap(call->args[i], partials[i]);
+      UpdateAdjointForLeaf(call->args[i], partials[i]);
     }
   }
 
@@ -160,7 +160,7 @@ class GradientMutator : public ExprMutator {
   // b_adjoint_expr += a_adjoint_var[0][0], c_adjoint_expr += a_adjoint_var[0][1],
   // d_adjoint_expr += a_adjoint_var[1]
   void VisitBinding_(const VarBindingNode* binding, const TupleNode* tuple) override {
-    UpdateExprMap(GetRef<Tuple>(tuple), adjoint_expr_map_[binding->var]);
+    UpdateAdjointForLeaf(GetRef<Tuple>(tuple), adjoint_expr_map_[binding->var]);
   }
 
   // for TupleGetItem nodes, we do a partial update
@@ -169,16 +169,37 @@ class GradientMutator : public ExprMutator {
   // a_adjoint_expr[0] (in fields) += b_adjoint_var
   void VisitBinding_(const VarBindingNode* binding,
                      const TupleGetItemNode* tuple_get_item) override {
-    UpdateExprMap(GetRef<TupleGetItem>(tuple_get_item), adjoint_expr_map_[binding->var]);
+    ICHECK(tuple_get_item->tuple->IsInstance<VarNode>())
+        << "The tuple field of a TupleGetItem is not bound to a Var";
+    Type tuple_type = tuple_get_item->tuple->checked_type();
+    ICHECK(tuple_type.as<TupleTypeNode>())
+        << "Shape of the tuple field of a TupleGetItem must be a Tuple";
+    Expr tuple_shape = tuple_get_item->tuple->shape();
+    ICHECK(tuple_shape.as<TupleNode>())
+        << "Type of the tuple field of a TupleGetItem must be TupleType";
+
+    const Var& tuple_var = Downcast<Var>(tuple_get_item->tuple);
+    if (adjoint_expr_map_.count(tuple_var) == 0) {
+      const Tuple& init =
+          BuildEmptyNestedTupleExpr(Downcast<Tuple>(tuple_shape), Downcast<TupleType>(tuple_type));
+      init->checked_type_ = tuple_var->checked_type();
+      adjoint_expr_map_.Set(tuple_var, init);
+    }
+
+    ICHECK(adjoint_expr_map_[tuple_var].as<TupleNode>())
+        << "Adjoint of " << tuple_var << " is expected to be a tuple";
+    adjoint_expr_map_.Set(
+        tuple_var, AddInTuple(Downcast<Tuple>(adjoint_expr_map_[tuple_var]), tuple_get_item->index,
+                              adjoint_expr_map_[binding->var]));
   }
 
   // for assign nodes, we add the adjoint of output to the adjoint of input
   void VisitBinding_(const VarBindingNode* binding, const DataflowVarNode* var) override {
-    UpdateExprMap(GetRef<Var>(var), adjoint_expr_map_[binding->var]);
+    UpdateAdjointForLeaf(GetRef<Var>(var), adjoint_expr_map_[binding->var]);
   }
 
   void VisitBinding_(const VarBindingNode* binding, const VarNode* var) override {
-    UpdateExprMap(GetRef<Var>(var), adjoint_expr_map_[binding->var]);
+    UpdateAdjointForLeaf(GetRef<Var>(var), adjoint_expr_map_[binding->var]);
   }
 
   // for constant nodes, we do not have to handle it because it does not produce adjoint
@@ -203,42 +224,26 @@ class GradientMutator : public ExprMutator {
     return adjoint;
   }
 
-  void UpdateExprMap(const Expr& base, const Expr& increment) {
-    if (const auto* node = base.as<VarNode>()) {
+  void UpdateAdjointForLeaf(const Expr& leaf, const Expr& partial) {
+    if (const auto* node = leaf.as<VarNode>()) {
       const Var& v = GetRef<Var>(node);
       if (adjoint_expr_map_.count(v) == 0) {
-        adjoint_expr_map_.Set(v, ReplaceExprByVar(increment));
+        adjoint_expr_map_.Set(v, ReplaceExprByVar(partial));
       } else {
-        const Expr& updated = DoAdd(adjoint_expr_map_[v], increment);
+        const Expr& updated = TupleAwareAdd(adjoint_expr_map_[v], partial);
         adjoint_expr_map_.Set(v, updated);
       }
-    } else if (const auto* node = base.as<TupleNode>()) {
-      const auto* node1 = increment.as<TupleNode>();
+    } else if (const auto* node0 = leaf.as<TupleNode>()) {
+      const auto* node1 = partial.as<TupleNode>();
       ICHECK(node1) << "base and increment should be both tuple";
-      for (size_t i = 0; i < node->fields.size(); ++i) {
-        UpdateExprMap(node->fields[i], node1->fields[i]);
+      for (size_t i = 0; i < node0->fields.size(); ++i) {
+        UpdateAdjointForLeaf(node0->fields[i], node1->fields[i]);
       }
-    } else if (const auto* node = base.as<TupleGetItemNode>()) {
-      ICHECK(node->tuple->IsInstance<VarNode>()) << "Tuple of TupleGetItem must be bound to a Var";
-      ICHECK(!node->tuple->shape().as<TupleGetItemNode>()) << "Error: no nested TupleGetItem";
-      ICHECK(node->tuple->shape().as<TupleNode>()) << "Type of tuple of TupleGetItem must be tuple";
-
-      const Var& v = Downcast<Var>(node->tuple);
-      if (adjoint_expr_map_.count(v) == 0) {
-        const Tuple& init =
-            BuildEmptyNestedTupleExpr(Downcast<Tuple>(node->tuple->shape()),
-                                      Downcast<TupleType>(node->tuple->checked_type()));
-        init->checked_type_ = v->checked_type();
-        adjoint_expr_map_.Set(v, init);
-      }
-
-      ICHECK(adjoint_expr_map_[v].as<TupleNode>()) << "adjoint of var is not tuple";
-      adjoint_expr_map_.Set(
-          v, DoAddInTuple(Downcast<Tuple>(adjoint_expr_map_[v]), node->index, increment));
-    } else if (base.as<ConstantNode>()) {
+    } else if (leaf.as<ConstantNode>()) {
       // nothing to do
     } else {
-      LOG(FATAL) << "not a leaf node";
+      LOG(FATAL)
+          << "The base is expected to a leaf node. Currently supported: Var, Tuple, Constant.";
     }
   }
 
@@ -260,7 +265,7 @@ class GradientMutator : public ExprMutator {
     return Tuple(ret);
   }
 
-  Expr DoAdd(const Expr& base, const Expr& increment) {
+  Expr TupleAwareAdd(const Expr& base, const Expr& increment) {
     if (zeros_tracker_.count(base) != 0) {
       return ReplaceExprByVar(increment);
     } else if (zeros_tracker_.count(increment) != 0) {
@@ -274,21 +279,24 @@ class GradientMutator : public ExprMutator {
           << "size of tuple not match";
       Array<Expr> result;
       for (size_t i = 0; i < base_node->fields.size(); ++i) {
-        result.push_back(DoAdd(base_node->fields[i], increment_node->fields[i]));
+        result.push_back(TupleAwareAdd(base_node->fields[i], increment_node->fields[i]));
       }
       return Tuple(result);
     } else {
+      // Here we don't ReplaceExprByVar(base) because base is an adjoint_expr that
+      // already bound to a adjoint_var. We wnat to update the adjoint_expr.
       return MakeAdd(base, ReplaceExprByVar(increment));
     }
   }
 
-  Tuple DoAddInTuple(const Tuple& origin, int index, const Expr& increment) {
+  // Perform an addition in a specified position of tuple.
+  Tuple AddInTuple(const Tuple& tuple, int index, const Expr& increment) {
     Array<Expr> ret;
-    for (size_t i = 0; i < origin->fields.size(); ++i) {
+    for (size_t i = 0; i < tuple->fields.size(); ++i) {
       if ((int)i == index) {
-        ret.push_back(DoAdd(origin->fields[i], increment));
+        ret.push_back(TupleAwareAdd(tuple->fields[i], increment));
       } else {
-        ret.push_back(origin->fields[i]);
+        ret.push_back(tuple->fields[i]);
       }
     }
     return Tuple(ret);
