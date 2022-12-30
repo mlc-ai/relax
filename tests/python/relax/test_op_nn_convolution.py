@@ -126,7 +126,7 @@ def test_conv2d_infer_struct_info():
     _check_inference(bb, relax.op.nn.conv2d(x4, w0), relax.TensorStructInfo(dtype="", ndim=4))
 
 
-def test_conv2d_infer_struct_info_symbolic():
+def test_conv2d_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     n = tir.Var("n", "int64")
     c = tir.Var("c", "int64")
@@ -189,6 +189,35 @@ def test_conv2d_infer_struct_info_symbolic():
     )
 
 
+def test_conv2d_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo(ndim=4))
+    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=5))
+    s2 = relax.Var("s", relax.ShapeStructInfo(ndim=4))
+    s3 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    x2 = relax.Var("x", relax.TensorStructInfo(s3, "float32"))
+    w = relax.Var("w", relax.TensorStructInfo(s2, "float32"))
+
+    _check_inference(bb, relax.op.nn.conv2d(x0, w), relax.TensorStructInfo(dtype="float32", ndim=4))
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(x1, w, data_layout="NCHW16c"),
+        relax.TensorStructInfo(dtype="float32", ndim=5),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(x0, w, out_layout="NCHW16c"),
+        relax.TensorStructInfo(dtype="float32", ndim=5),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(x2, w),
+        relax.TensorStructInfo(dtype="float32", ndim=4),
+    )
+
+
 def test_conv2d_infer_struct_info_more_input_dtype():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((2, 3, 28, 28), "float16"))
@@ -209,6 +238,32 @@ def test_conv2d_infer_struct_info_more_input_dtype():
     _check_inference(bb, relax.op.nn.conv2d(x2, w2), relax.TensorStructInfo((2, 4, 26, 26), "int8"))
     _check_inference(
         bb, relax.op.nn.conv2d(x3, w3), relax.TensorStructInfo((2, 4, 26, 26), "int32")
+    )
+
+
+def test_conv2d_infer_struct_info_mixed_precision():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 28, 28), "float16"))
+    w0 = relax.Var("w", R.Tensor((4, 3, 3, 3), "float16"))
+    x1 = relax.Var("x", R.Tensor((2, 3, 28, 28), "int8"))
+    w1 = relax.Var("w", R.Tensor((4, 3, 3, 3), "int8"))
+    x2 = relax.Var("x", R.Tensor((2, 3, 28, 28)))
+    w2 = relax.Var("w", R.Tensor((4, 3, 3, 3)))
+
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(x0, w0, out_dtype="float32"),
+        relax.TensorStructInfo((2, 4, 26, 26), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(x1, w1, out_dtype="int32"),
+        relax.TensorStructInfo((2, 4, 26, 26), "int32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv2d(x2, w2, out_dtype="float32"),
+        relax.TensorStructInfo((2, 4, 26, 26), "float32"),
     )
 
 
@@ -268,6 +323,8 @@ def test_conv2d_wrong_input_ndim():
 
     with pytest.raises(TVMError):
         bb.normalize(relax.op.nn.conv2d(x0, w1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.conv2d(x0, w1, data_layout="NCHW16c"))
     with pytest.raises(TVMError):
         bb.normalize(relax.op.nn.conv2d(x0, w2))
     with pytest.raises(TVMError):

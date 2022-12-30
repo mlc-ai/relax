@@ -75,7 +75,7 @@ def test_binary_cmp_infer_struct_info():
     _check_inference(bb, relax.op.less(x, y1), relax.TensorStructInfo((2, 3), "bool"))
 
 
-def test_binary_infer_struct_info_symbolic():
+def test_binary_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     m = tir.Var("m", "int64")
     n = tir.Var("n", "int64")
@@ -103,6 +103,27 @@ def test_binary_infer_struct_info_symbolic():
     _check_inference(bb, relax.op.add(x4, y2), relax.TensorStructInfo(dtype="float32", ndim=4))
     _check_inference(bb, relax.op.add(x4, y3), relax.TensorStructInfo(dtype="float32", ndim=2))
     _check_inference(bb, relax.op.add(x4, y4), relax.TensorStructInfo(dtype="float32", ndim=-1))
+
+
+def test_binary_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s0", relax.ShapeStructInfo(ndim=2))
+    s1 = relax.Var("s1", relax.ShapeStructInfo(ndim=2))
+    s2 = relax.Var("s2", relax.ShapeStructInfo(ndim=4))
+    s3 = relax.Var("s3", relax.ShapeStructInfo(ndim=1))
+    s4 = relax.Var("s4", relax.ShapeStructInfo())
+    x = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    y0 = relax.Var("y", relax.TensorStructInfo(s0, "float32"))
+    y1 = relax.Var("y", relax.TensorStructInfo(s1, "float32"))
+    y2 = relax.Var("y", relax.TensorStructInfo(s2, "float32"))
+    y3 = relax.Var("y", relax.TensorStructInfo(s3, "float32"))
+    y4 = relax.Var("y", relax.TensorStructInfo(s4, "float32"))
+
+    _check_inference(bb, relax.op.subtract(x, y0), relax.TensorStructInfo(s0, "float32"))
+    _check_inference(bb, relax.op.subtract(x, y1), relax.TensorStructInfo(dtype="float32", ndim=2))
+    _check_inference(bb, relax.op.subtract(x, y2), relax.TensorStructInfo(dtype="float32", ndim=4))
+    _check_inference(bb, relax.op.subtract(x, y3), relax.TensorStructInfo(dtype="float32", ndim=2))
+    _check_inference(bb, relax.op.subtract(x, y4), relax.TensorStructInfo(dtype="float32"))
 
 
 def test_binary_arith_infer_struct_info_more_input_dtype():

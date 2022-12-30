@@ -54,7 +54,7 @@ def test_ewise_fma_infer_struct_info():
     _check_inference(bb, relax.op.ewise_fma(x1, y0, z0), relax.TensorStructInfo((2, 3), dtype=""))
 
 
-def test_ewise_fma_infer_struct_info_symbolic():
+def test_ewise_fma_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     m = tir.Var("m", "int64")
     n = tir.Var("n", "int64")
@@ -66,6 +66,26 @@ def test_ewise_fma_infer_struct_info_symbolic():
     _check_inference(bb, relax.op.ewise_fma(x0, y0, z0), relax.TensorStructInfo((m, n), "float32"))
     _check_inference(
         bb, relax.op.ewise_fma(x0, y1, z0), relax.TensorStructInfo(dtype="float32", ndim=2)
+    )
+
+
+def test_ewise_fma_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
+    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
+    s2 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    x2 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
+    y = relax.Var("y", relax.TensorStructInfo(s0, "float32"))
+    z = relax.Var("z", relax.TensorStructInfo(s0, "float32"))
+
+    _check_inference(bb, relax.op.ewise_fma(x0, y, z), relax.TensorStructInfo(s0, "float32"))
+    _check_inference(
+        bb, relax.op.ewise_fma(x1, y, z), relax.TensorStructInfo(dtype="float32", ndim=2)
+    )
+    _check_inference(
+        bb, relax.op.ewise_fma(x2, y, z), relax.TensorStructInfo(dtype="float32", ndim=2)
     )
 
 

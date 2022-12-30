@@ -71,8 +71,9 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
  * \param OpName The name of operator to register. The name passed in will
  *  1. be prepended with a prefix "relax.op." as the FFI key string for the make function,
  *  2. be prepended with a prefix "relax." as the key string in the operator registry.
+ * \param RequireFloatDtype A boolean indicating if the input is required to have float dtype.
  */
-#define RELAX_REGISTER_UNARY_OP(OpName)                               \
+#define RELAX_REGISTER_UNARY_OP(OpName, RequireFloatDtype)            \
   TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr e) { \
     static const Op& op = Op::Get("relax." OpName);                   \
     return Call(op, {e}, Attrs(), {});                                \
@@ -80,10 +81,19 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
   TVM_REGISTER_OP("relax." OpName)                                    \
       .set_num_inputs(1)                                              \
       .add_argument("e", "Tensor", "The input tensor.")               \
-      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary)
+      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary<RequireFloatDtype>)
 
+template <bool require_float_dtype>
 inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx) {
-  return GetUnaryInputTensorStructInfo(call, ctx);
+  TensorStructInfo input_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
+  if (require_float_dtype && !input_sinfo->IsUnknownDtype() && !input_sinfo->dtype.is_float()) {
+    ctx->ReportFatal(
+        Diagnostic::Error(call)
+        << call->op
+        << " requires the input tensor to have float dtype. However, the given input dtype is "
+        << input_sinfo->dtype);
+  }
+  return input_sinfo;
 }
 
 /************ Utilities ************/
@@ -192,7 +202,10 @@ inline Optional<ShapeExpr> CheckNdimPerLayoutAndGetShape(const Call& call, const
                      << layout.ndim() << "-dim tensor. However, the given input has ndim "
                      << sinfo->ndim);
   }
-  return Downcast<Optional<ShapeExpr>>(sinfo->shape);
+  if (const auto* shape_expr = sinfo->shape.as<ShapeExprNode>()) {
+    return GetRef<ShapeExpr>(shape_expr);
+  }
+  return NullOpt;
 }
 
 /*!

@@ -146,7 +146,12 @@ StructInfo InferStructInfoAdaptiveAvgPool2D(const Call& call, const BlockBuilder
   Optional<ShapeExpr> data_shape =
       CheckNdimPerLayoutAndGetShape(call, ctx, data_sinfo, data_layout);
   if (!data_shape.defined()) {
-    return TensorStructInfo(data_sinfo->dtype, out_layout.ndim());
+    if (data_sinfo->shape.defined() && attrs->out_layout == attrs->layout &&
+        !attrs->output_size.defined()) {
+      return data_sinfo;
+    } else {
+      return TensorStructInfo(data_sinfo->dtype, out_layout.ndim());
+    }
   }
 
   Array<PrimExpr> data_NCHW_shape = data2NCHW.ForwardShape(data_shape.value()->values);

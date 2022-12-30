@@ -28,17 +28,10 @@ namespace tvm {
 namespace relax {
 
 StructInfo InferStructInfoEwiseFMA(const Call& call, const BlockBuilder& ctx) {
-  if (call->args.size() != 3) {
-    ctx->ReportFatal(Diagnostic::Error(call) << "EwiseFMA op should have 3 arguments");
-  }
-
-  auto* t0 = GetStructInfoAs<TensorStructInfoNode>(call->args[0]);
-  auto* t1 = GetStructInfoAs<TensorStructInfoNode>(call->args[1]);
-  auto* t2 = GetStructInfoAs<TensorStructInfoNode>(call->args[2]);
-
-  if (!t0 || !t1 || !t2) {
-    ctx->ReportFatal(Diagnostic::Error(call) << "EwiseFMA expects three tensor inputs");
-  }
+  Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
+  TensorStructInfo t0 = input_sinfo[0];
+  TensorStructInfo t1 = input_sinfo[1];
+  TensorStructInfo t2 = input_sinfo[2];
 
   int ndim = kUnknownNDim;
   if (!t0->IsUnknownNdim()) {
@@ -90,6 +83,8 @@ StructInfo InferStructInfoEwiseFMA(const Call& call, const BlockBuilder& ctx) {
       }
     }
     return TensorStructInfo(ShapeExpr(output_shape), output_dtype);
+  } else if (t0->shape.defined() && t0->shape.same_as(t1->shape) && t0->shape.same_as(t2->shape)) {
+    return TensorStructInfo(t0->shape.value(), output_dtype);
   }
 
   return TensorStructInfo(output_dtype, ndim);

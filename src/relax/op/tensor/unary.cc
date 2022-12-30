@@ -28,25 +28,25 @@ namespace tvm {
 namespace relax {
 
 /* relax.negative */
-RELAX_REGISTER_UNARY_OP("negative");
+RELAX_REGISTER_UNARY_OP("negative", /*require_float_dtype=*/false);
 
 /* relax.sin */
-RELAX_REGISTER_UNARY_OP("sin");
+RELAX_REGISTER_UNARY_OP("sin", /*require_float_dtype=*/true);
 
 /* relax.cos */
-RELAX_REGISTER_UNARY_OP("cos");
+RELAX_REGISTER_UNARY_OP("cos", /*require_float_dtype=*/true);
 
 /* relax.tanh */
-RELAX_REGISTER_UNARY_OP("tanh");
+RELAX_REGISTER_UNARY_OP("tanh", /*require_float_dtype=*/true);
 
 /* relax.sqrt */
-RELAX_REGISTER_UNARY_OP("sqrt");
+RELAX_REGISTER_UNARY_OP("sqrt", /*require_float_dtype=*/true);
 
 /* relax.log */
-RELAX_REGISTER_UNARY_OP("log");
+RELAX_REGISTER_UNARY_OP("log", /*require_float_dtype=*/true);
 
 /* relax.sigmoid */
-RELAX_REGISTER_UNARY_OP("sigmoid");
+RELAX_REGISTER_UNARY_OP("sigmoid", /*require_float_dtype=*/true);
 
 /* relax.unique */
 TVM_REGISTER_NODE_TYPE(UniqueAttrs);
