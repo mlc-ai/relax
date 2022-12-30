@@ -58,6 +58,8 @@ from tvm.relax.op import (
     tanh,
     unique,
     variance,
+    cast,
+    wrap_param,
 )
 from tvm.relax.utils import convert_to_expr
 from tvm.runtime import Object as tvm_Object
@@ -458,4 +460,6 @@ __all__ = [
     "tensor",
     "unique",
     "variance",
+    "cast",
+    "wrap_param",
 ]

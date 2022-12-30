@@ -20,6 +20,7 @@
 # Operators
 from .base import *
 from .tensor import *
+from .transform import *
 from .op_attrs import *
 from .reduce import *
 from . import builtin

@@ -181,6 +181,24 @@ struct UniqueAttrs : public tvm::AttrsNode<UniqueAttrs> {
   }
 };  // struct UniqueAttrs
 
+/*! \brief Attributes used in cast operator */
+struct CastAttrs : public tvm::AttrsNode<CastAttrs> {
+  DataType dtype;
+
+  TVM_DECLARE_ATTRS(CastAttrs, "relax.attrs.CastAttrs") {
+    TVM_ATTR_FIELD(dtype).describe("Target data type");
+  }
+};  // struct CastAttrs.
+
+/*! \brief Attributes used in cast operator */
+struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
+  DataType dtype;
+
+  TVM_DECLARE_ATTRS(WrapParamAttrs, "relax.attrs.WrapParamAttrs") {
+    TVM_ATTR_FIELD(dtype).describe("Target data type");
+  }
+};  // struct WrapParamAttrs.
+
 struct PrintAttrs : public tvm::AttrsNode<PrintAttrs> {
   std::string format;
   TVM_DECLARE_ATTRS(PrintAttrs, "relax.attrs.PrintAttrs") {
