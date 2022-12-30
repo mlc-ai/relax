@@ -47,6 +47,8 @@ struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
   }
 };  // struct WrapParamAttrs.
 
+Expr MakeAdd(Expr lhs, Expr rhs);
+
 Expr MakeOnes(Expr shape, DataType dtype);
 
 Expr MakeZeros(Expr shape, DataType dtype);

@@ -36,7 +36,6 @@
 namespace tvm {
 namespace relax {
 
-// TODO(chaofan, yixin): support constants
 class GradientMutator : public ExprMutator {
  public:
   explicit GradientMutator(const IRModule& mod, const GlobalVar& gvar,
@@ -62,7 +61,7 @@ class GradientMutator : public ExprMutator {
       new_params.push_back(new_param);
     }
 
-    // use VisitExpr to remap the variables in the input body
+    // use VisitExpr of ExprMutator to remap the variables in the input body
     CHECK(func->body->IsInstance<SeqExprNode>())
         << "the body of the function is not SeqExprNode. Please use relax.transform.Normalize to "
            "normalize the function first.";
@@ -92,6 +91,8 @@ class GradientMutator : public ExprMutator {
   BindingBlock VisitBindingBlock_(const DataflowBlockNode* block) override {
     builder_->BeginDataflowBlock();
     // copy bindings in the original block
+    // to achieve this, we use the original VisitBinding function in ExprMutator
+    // since we have overridden it, a static_cast is necessary
     for (const auto& binding : block->bindings) {
       static_cast<ExprMutator>(*this).VisitBinding(binding);
     }
@@ -202,8 +203,6 @@ class GradientMutator : public ExprMutator {
     return adjoint;
   }
 
-  // base could only be one of these types:
-  // Var, Tuple, TupleGetItem
   void UpdateExprMap(const Expr& base, const Expr& increment) {
     if (const auto* node = base.as<VarNode>()) {
       const Var& v = GetRef<Var>(node);
@@ -214,12 +213,10 @@ class GradientMutator : public ExprMutator {
         adjoint_expr_map_.Set(v, updated);
       }
     } else if (const auto* node = base.as<TupleNode>()) {
-      if (const auto* node1 = increment.as<TupleNode>()) {
-        for (size_t i = 0; i < node->fields.size(); ++i) {
-          UpdateExprMap(node->fields[i], node1->fields[i]);
-        }
-      } else {
-        LOG(FATAL) << "base and increment should be both tuple";
+      const auto* node1 = increment.as<TupleNode>();
+      ICHECK(node1) << "base and increment should be both tuple";
+      for (size_t i = 0; i < node->fields.size(); ++i) {
+        UpdateExprMap(node->fields[i], node1->fields[i]);
       }
     } else if (const auto* node = base.as<TupleGetItemNode>()) {
       ICHECK(node->tuple->IsInstance<VarNode>()) << "Tuple of TupleGetItem must be bound to a Var";
@@ -246,19 +243,14 @@ class GradientMutator : public ExprMutator {
   }
 
   Tuple BuildEmptyNestedTupleExpr(const Tuple& shape, const TupleType& type) {
-    static const Op& zeros_op = Op::Get("relax.zeros");
-
     Array<Expr> ret;
     for (size_t i = 0; i < shape->fields.size(); ++i) {
       if (const auto* node = shape->fields[i].as<TupleNode>()) {
         ret.push_back(
             BuildEmptyNestedTupleExpr(GetRef<Tuple>(node), Downcast<TupleType>(type->fields[i])));
       } else if (shape->fields[i].as<ShapeExprNode>()) {
-        ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
-        auto tensortype = Downcast<DynTensorType>(type->fields[i]);
-        attrs->dtype = tensortype->dtype;
-
-        const Expr& init = Call(zeros_op, {shape->fields[i]}, Attrs(attrs));
+        const Expr& init =
+            MakeZeros(shape->fields[i], Downcast<DynTensorType>(type->fields[i])->dtype);
         zeros_tracker_.emplace(init);
         ret.push_back(init);
       } else {
@@ -268,29 +260,25 @@ class GradientMutator : public ExprMutator {
     return Tuple(ret);
   }
 
-  Expr DoAdd(const Expr& src1, const Expr& src2) {
-    static const Op& add_op = Op::Get("relax.add");
-
-    if (zeros_tracker_.count(src1) != 0) {
-      return ReplaceExprByVar(src2);
-    } else if (zeros_tracker_.count(src2) != 0) {
-      return ReplaceExprByVar(src1);
+  Expr DoAdd(const Expr& base, const Expr& increment) {
+    if (zeros_tracker_.count(base) != 0) {
+      return ReplaceExprByVar(increment);
+    } else if (zeros_tracker_.count(increment) != 0) {
+      return ReplaceExprByVar(base);
     }
 
-    if (const auto* node1 = src1.as<TupleNode>()) {
-      if (const auto* node2 = src2.as<TupleNode>()) {
-        ICHECK(node1->fields.size() == node2->fields.size()) << "size of tuple not match";
-        Array<Expr> result;
-        for (size_t i = 0; i < node1->fields.size(); ++i) {
-          result.push_back(DoAdd(node1->fields[i], node2->fields[i]));
-        }
-        return Tuple(result);
-      } else {
-        LOG(FATAL) << "Type not match: src1 and src2 should be both tuple";
-        return Expr();
+    if (const auto* base_node = base.as<TupleNode>()) {
+      const TupleNode* increment_node = increment.as<TupleNode>();
+      ICHECK(increment_node) << "Type not match: base and increment should be both tuple";
+      ICHECK(base_node->fields.size() == increment_node->fields.size())
+          << "size of tuple not match";
+      Array<Expr> result;
+      for (size_t i = 0; i < base_node->fields.size(); ++i) {
+        result.push_back(DoAdd(base_node->fields[i], increment_node->fields[i]));
       }
+      return Tuple(result);
     } else {
-      return Call(add_op, {src1, ReplaceExprByVar(src2)});
+      return MakeAdd(base, ReplaceExprByVar(increment));
     }
   }
 
@@ -355,12 +343,11 @@ class GradientMutator : public ExprMutator {
   // check that the target should be a VarNode, not DataflowVarNode
   // and a scalar of type "DynTensorType"
   static void CheckTarget(Expr e) {
-    CHECK(e->IsInstance<VarNode>()) << "target must be VarNode";
+    CHECK(e->IsInstance<VarNode>()) << "target must be a VarNode";
     CHECK(!e->IsInstance<DataflowVarNode>()) << "target is not an output node";
     CHECK(e->checked_type().as<DynTensorTypeNode>()) << "the type of target must be DynTensorType";
     CHECK(e->shape().as<ShapeExprNode>()) << "error when getting target shape";
-    const auto* shape_node = e->shape().as<ShapeExprNode>();
-    CHECK(shape_node->values.size() == 0) << "target must be a scalar";
+    CHECK(e->shape().as<ShapeExprNode>()->values.size() == 0) << "target must be a scalar";
   }
 
   // inputs
