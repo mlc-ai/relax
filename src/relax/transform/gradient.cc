@@ -181,7 +181,7 @@ class GradientMutator : public ExprMutator {
     const Var& tuple_var = Downcast<Var>(tuple_get_item->tuple);
     if (adjoint_expr_map_.count(tuple_var) == 0) {
       const Tuple& init =
-          BuildEmptyNestedTupleExpr(Downcast<Tuple>(tuple_shape), Downcast<TupleType>(tuple_type));
+          BuildZerosTuple(Downcast<Tuple>(tuple_shape), Downcast<TupleType>(tuple_type));
       init->checked_type_ = tuple_var->checked_type();
       adjoint_expr_map_.Set(tuple_var, init);
     }
@@ -206,6 +206,14 @@ class GradientMutator : public ExprMutator {
   void VisitBinding_(const VarBindingNode* binding, const ConstantNode* var) override { return; }
 
  private:
+  bool IsCallZeros(Expr expr) {
+    static const Op& zeros = Op::Get("relax.zeros");
+    if (const auto* node = expr.as<CallNode>()) {
+      return node->op == zeros;
+    }
+    return false;
+  }
+
   Expr ReplaceExprByVar(Expr expr) {
     if (adjoint_expr_to_var_.count(expr)) {
       return adjoint_expr_to_var_[expr];
@@ -224,6 +232,7 @@ class GradientMutator : public ExprMutator {
     return adjoint;
   }
 
+  // Update the adjoint of leaf by partial: adjoint_expr_map_[leaf] += partial
   void UpdateAdjointForLeaf(const Expr& leaf, const Expr& partial) {
     if (const auto* node = leaf.as<VarNode>()) {
       const Var& v = GetRef<Var>(node);
@@ -247,16 +256,15 @@ class GradientMutator : public ExprMutator {
     }
   }
 
-  Tuple BuildEmptyNestedTupleExpr(const Tuple& shape, const TupleType& type) {
+  // Build a "zeros" tuple with specified shape and type
+  Tuple BuildZerosTuple(const Tuple& shape, const TupleType& type) {
     Array<Expr> ret;
     for (size_t i = 0; i < shape->fields.size(); ++i) {
       if (const auto* node = shape->fields[i].as<TupleNode>()) {
-        ret.push_back(
-            BuildEmptyNestedTupleExpr(GetRef<Tuple>(node), Downcast<TupleType>(type->fields[i])));
+        ret.push_back(BuildZerosTuple(GetRef<Tuple>(node), Downcast<TupleType>(type->fields[i])));
       } else if (shape->fields[i].as<ShapeExprNode>()) {
         const Expr& init =
             MakeZeros(shape->fields[i], Downcast<DynTensorType>(type->fields[i])->dtype);
-        zeros_tracker_.emplace(init);
         ret.push_back(init);
       } else {
         LOG(FATAL) << "Unsupported emtpy expr: " << shape->fields[i];
@@ -265,10 +273,11 @@ class GradientMutator : public ExprMutator {
     return Tuple(ret);
   }
 
+  // Return base + increment. A tuple-aware addition.
   Expr TupleAwareAdd(const Expr& base, const Expr& increment) {
-    if (zeros_tracker_.count(base) != 0) {
+    if (IsCallZeros(base)) {
       return ReplaceExprByVar(increment);
-    } else if (zeros_tracker_.count(increment) != 0) {
+    } else if (IsCallZeros(increment)) {
       return ReplaceExprByVar(base);
     }
 
@@ -290,6 +299,7 @@ class GradientMutator : public ExprMutator {
   }
 
   // Perform an addition in a specified position of tuple.
+  // e.g. tuple=(a, b, c), index=1, increment=d, then return (a, b+d, c)
   Tuple AddInTuple(const Tuple& tuple, int index, const Expr& increment) {
     Array<Expr> ret;
     for (size_t i = 0; i < tuple->fields.size(); ++i) {
@@ -317,15 +327,14 @@ class GradientMutator : public ExprMutator {
     }
   }
 
-  // init the gradient of the target_var_
-  // and update it in adjoint_expr_map_
+  // Init the gradient of the target_var_ and update it in adjoint_expr_map_.
   void InitGradAsOnes(const Var& var) {
     Expr ones = MakeOnes(var->shape(), Downcast<DynTensorType>(var->checked_type())->dtype);
     adjoint_expr_map_.Set(var, ones);
   }
 
-  // handle the return value of the AD function
-  // the return value would be like:
+  // Handle the return value of the AD function.
+  // The return value would be like:
   // Tuple(original_return_value,
   //       Tuple(adjoint_of_require_grads_1, adjoint_of_require_grads_2, ...))
   void Epilogue() {
@@ -374,8 +383,6 @@ class GradientMutator : public ExprMutator {
   Map<Var, Expr> adjoint_expr_map_;
   // trace binding
   Map<Expr, Var> adjoint_expr_to_var_;
-  // track zeros introduced
-  std::unordered_set<Expr, ObjectPtrHash, ObjectPtrEqual> zeros_tracker_;
 };
 
 /*!
