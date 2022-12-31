@@ -52,103 +52,60 @@ def test_cast():
 
 
 def test_wrap_param():
-    metadata = tvm.ir.load_json({
-        "root": 1,
-        "nodes": [
-            {
-            "type_key": ""
-            },
-            {
-            "type_key": "Map",
-            "keys": [
-                "relax.expr.Constant"
+    metadata = tvm.ir.load_json(
+        {
+            "root": 1,
+            "nodes": [
+                {"type_key": ""},
+                {"type_key": "Map", "keys": ["relax.expr.Constant"], "data": [2]},
+                {"type_key": "Array", "data": [3]},
+                {
+                    "type_key": "relax.expr.Constant",
+                    "attrs": {
+                        "_checked_type_": "11",
+                        "data": "0",
+                        "span": "0",
+                        "struct_info_": "4",
+                    },
+                },
+                {
+                    "type_key": "relax.TensorStructInfo",
+                    "attrs": {"dtype": "float16", "ndim": "2", "shape": "5", "span": "0"},
+                },
+                {
+                    "type_key": "relax.expr.ShapeExpr",
+                    "attrs": {
+                        "_checked_type_": "10",
+                        "span": "0",
+                        "struct_info_": "9",
+                        "values": "6",
+                    },
+                },
+                {"type_key": "Array", "data": [7, 8]},
+                {"type_key": "IntImm", "attrs": {"dtype": "int64", "span": "0", "value": "2"}},
+                {"type_key": "IntImm", "attrs": {"dtype": "int64", "span": "0", "value": "3"}},
+                {
+                    "type_key": "relax.ShapeStructInfo",
+                    "attrs": {"ndim": "2", "span": "0", "values": "6"},
+                },
+                {"type_key": "relax.ShapeType", "attrs": {"ndim": "2", "span": "0"}},
+                {
+                    "type_key": "relax.DynTensorType",
+                    "attrs": {"dtype": "float16", "ndim": "2", "span": "0"},
+                },
             ],
-            "data": [2]
-            },
-            {
-            "type_key": "Array",
-            "data": [3]
-            },
-            {
-            "type_key": "relax.expr.Constant",
-            "attrs": {
-                "_checked_type_": "11",
-                "data": "0",
-                "span": "0",
-                "struct_info_": "4"
-            }
-            },
-            {
-            "type_key": "relax.TensorStructInfo",
-            "attrs": {
-                "dtype": "float16",
-                "ndim": "2",
-                "shape": "5",
-                "span": "0"
-            }
-            },
-            {
-            "type_key": "relax.expr.ShapeExpr",
-            "attrs": {
-                "_checked_type_": "10",
-                "span": "0",
-                "struct_info_": "9",
-                "values": "6"
-            }
-            },
-            {
-            "type_key": "Array",
-            "data": [7, 8]
-            },
-            {
-            "type_key": "IntImm",
-            "attrs": {
-                "dtype": "int64",
-                "span": "0",
-                "value": "2"
-            }
-            },
-            {
-            "type_key": "IntImm",
-            "attrs": {
-                "dtype": "int64",
-                "span": "0",
-                "value": "3"
-            }
-            },
-            {
-            "type_key": "relax.ShapeStructInfo",
-            "attrs": {
-                "ndim": "2",
-                "span": "0",
-                "values": "6"
-            }
-            },
-            {
-            "type_key": "relax.ShapeType",
-            "attrs": {
-                "ndim": "2",
-                "span": "0"
-            }
-            },
-            {
-            "type_key": "relax.DynTensorType",
-            "attrs": {
-                "dtype": "float16",
-                "ndim": "2",
-                "span": "0"
-            }
-            }
-        ],
-        "b64ndarrays": [
-            "P6G0lvBAXt0AAAAAAAAAAAEAAAAAAAAAAgAAAAIQAQACAAAAAAAAAAMAAAAAAAAADAAAAAAAAAAAPABAAEIARABFAEY="
-        ],
-        "attrs": {"tvm_version": "0.11.dev0"}
-    })
+            "b64ndarrays": [
+                "P6G0lvBAXt0AAAAAAAAAAAEAAAAAAAAAAgAAAAIQAQACAAAAAAAAAAMAAAAAAAAADAAAAAAAAAAAPABAAEIARABFAEY="
+            ],
+            "attrs": {"tvm_version": "0.11.dev0"},
+        }
+    )
 
     @R.function
     def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float16", ndim=2):
-        gv: R.Tensor((2, 3), "float16") = R.wrap_param(metadata["relax.expr.Constant"][0], "float16")
+        gv: R.Tensor((2, 3), "float16") = R.wrap_param(
+            metadata["relax.expr.Constant"][0], "float16"
+        )
         return gv
 
     x = relax.Var("x", R.Tensor((2, 3), "float32"))
