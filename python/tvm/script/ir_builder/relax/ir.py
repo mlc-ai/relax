@@ -32,6 +32,7 @@ from tvm.relax.op import (
     assert_op,
     builtin,
     call_tir,
+    cast,
     cos,
     divide,
     ewise_fma,
@@ -58,7 +59,6 @@ from tvm.relax.op import (
     tanh,
     unique,
     variance,
-    cast,
     wrap_param,
 )
 from tvm.relax.utils import convert_to_expr
@@ -422,6 +422,7 @@ __all__ = [
     "builtin",
     "call_packed",
     "call_tir",
+    "cast",
     "const",
     "cos",
     "dataflow",
@@ -460,6 +461,5 @@ __all__ = [
     "tensor",
     "unique",
     "variance",
-    "cast",
     "wrap_param",
 ]

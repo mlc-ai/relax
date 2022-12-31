@@ -57,8 +57,4 @@ def wrap_param(data: Expr, dtype: Union[str, tvm.DataType] = "float32") -> Expr:
         The casted result.
     """
     assert isinstance(data, relax.Constant)
-    if data.data.dtype == dtype:
-        return data
-    if isinstance(dtype, str):
-        dtype = tvm.DataType(dtype)
     return _ffi_api.wrap_param(data, dtype)  # type: ignore
