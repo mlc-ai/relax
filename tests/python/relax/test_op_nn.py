@@ -104,7 +104,7 @@ def test_linear_unit_infer_struct_info_more_input_dtype():
     _check_inference(bb, relax.op.nn.relu(x2), relax.TensorStructInfo((2, 3), "int64"))
 
 
-def test_unary_arith_infer_struct_info_invalid_input_dtype():
+def test_linear_unit_infer_struct_info_invalid_input_dtype():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((2, 3), "int8"))
     x1 = relax.Var("x", R.Tensor((2, 3), "int64"))

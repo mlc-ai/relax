@@ -377,6 +377,15 @@ struct SqueezeAttrs : public tvm::AttrsNode<SqueezeAttrs> {
   }
 };  // struct SqueezeAttrs
 
+/*! \brief Attributes used in full, ones, and zeros operators */
+struct InitAttrs : public tvm::AttrsNode<InitAttrs> {
+  DataType dtype;
+
+  TVM_DECLARE_ATTRS(InitAttrs, "relax.attrs.InitAttrs") {
+    TVM_ATTR_FIELD(dtype).describe("The data type of the created tensor.");
+  }
+};  // struct InitAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_
