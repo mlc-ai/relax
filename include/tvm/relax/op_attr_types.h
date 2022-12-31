@@ -190,7 +190,7 @@ struct CastAttrs : public tvm::AttrsNode<CastAttrs> {
   }
 };  // struct CastAttrs.
 
-/*! \brief Attributes used in cast operator */
+/*! \brief Attributes used in wrap_param operator */
 struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
   DataType dtype;
 
