@@ -124,9 +124,9 @@ class ReshapeAttrs(Attrs):
     """Attributes used in reshape operator"""
 
 
-@tvm._ffi.register_object("relax.attrs.TransposeAttrs")
-class TransposeAttrs(Attrs):
-    """Attributes for transpose operator"""
+@tvm._ffi.register_object("relax.attrs.PermuteDimsAttrs")
+class PermuteDimsAttrs(Attrs):
+    """Attributes for permute_dims operator"""
 
 
 @tvm._ffi.register_object("relax.attrs.ExpandDimsAttrs")

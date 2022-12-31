@@ -345,22 +345,21 @@ struct ReduceAttrs : public tvm::AttrsNode<ReduceAttrs> {
 
 /*! \brief Attributes used in reshape operator */
 struct ReshapeAttrs : public tvm::AttrsNode<ReshapeAttrs> {
-  Array<PrimExpr> new_shape;
+  Array<PrimExpr> shape;
 
   TVM_DECLARE_ATTRS(ReshapeAttrs, "relax.attrs.ReshapeAttrs") {
-    TVM_ATTR_FIELD(new_shape).describe(
-        "The new shape. Should be compatible with the original shape.");
+    TVM_ATTR_FIELD(shape).describe("The new shape. Should be compatible with the original shape.");
   }
 };
 
-/*! \brief Attributes used in transpose operator */
-struct TransposeAttrs : public tvm::AttrsNode<TransposeAttrs> {
+/*! \brief Attributes used in permute_dims operator */
+struct PermuteDimsAttrs : public tvm::AttrsNode<PermuteDimsAttrs> {
   Optional<Array<Integer>> axes;
 
-  TVM_DECLARE_ATTRS(TransposeAttrs, "relax.attrs.TransposeAttrs") {
+  TVM_DECLARE_ATTRS(PermuteDimsAttrs, "relax.attrs.PermuteDimsAttrs") {
     TVM_ATTR_FIELD(axes).describe("The target axes order, reverse order if not specified.");
   }
-};  // struct TransposeAttrs
+};  // struct PermuteDimsAttrs
 
 /*! \brief Attributes used in expand_dims operators */
 struct ExpandDimsAttrs : public tvm::AttrsNode<ExpandDimsAttrs> {
