@@ -128,12 +128,14 @@ std::pair<PrimExpr, int> CheckNewShape(const Call& call, const BlockBuilder& ctx
                          << call->args[1]);
       }
       dim_to_infer = i;
-    } else if (ctx->GetAnalyzer()->CanProveLess(new_shape[i], 1)) {
+    } else if (int_len != nullptr && int_len->value <= 0) {
       ctx->ReportFatal(Diagnostic::Error(call)
                        << "Reshape requires all values in the new shape to be positive except a "
                           "single \"-1\". However, the given new shape is "
                        << call->args[1]);
     } else {
+      // We expect any symbolic not to signal the intent of -1, and therefore do no check for
+      // symbolic
       new_shape_prod = new_shape_prod * new_shape[i];
     }
   }
@@ -276,7 +278,7 @@ StructInfo InferStructInfoTranspose(const Call& call, const BlockBuilder& ctx) {
 
   std::vector<int> axes;
   if (attrs->axes.defined()) {
-    axes = CheckAxesInRangeNonRepetitive(call, ctx, data_sinfo->ndim, attrs->axes.value());
+    axes = NormalizeAxes(call, ctx, data_sinfo->ndim, attrs->axes.value());
   } else {
     // Construct the reverse permutation via std::iota
     axes.resize(data_sinfo->ndim);
@@ -330,7 +332,7 @@ StructInfo InferStructInfoExpandDims(const Call& call, const BlockBuilder& ctx) 
 
   int n_new_dim = attrs->axis.size();
   int output_ndim = data_sinfo->ndim + n_new_dim;
-  std::vector<int> axes = CheckAxesInRangeNonRepetitive(call, ctx, output_ndim, attrs->axis);
+  std::vector<int> axes = NormalizeAxes(call, ctx, output_ndim, attrs->axis);
 
   const auto* data_shape = data_sinfo->shape.as<ShapeExprNode>();
   if (data_shape == nullptr) {
@@ -395,16 +397,17 @@ StructInfo InferStructInfoSqueeze(const Call& call, const BlockBuilder& ctx) {
   axis_removal_mask.resize(data_sinfo->ndim, /*value=*/false);
 
   if (attrs->axis.defined()) {
-    std::vector<int> axes =
-        CheckAxesInRangeNonRepetitive(call, ctx, data_sinfo->ndim, attrs->axis.value());
+    std::vector<int> axes = NormalizeAxes(call, ctx, data_sinfo->ndim, attrs->axis.value());
 
     if (!shape_value.defined()) {
       return TensorStructInfo(data_sinfo->dtype, data_sinfo->ndim - axes.size());
     }
     for (int i = 0; i < static_cast<int>(axes.size()); ++i) {
-      // When `axis` is given, the dim length at the axes must be static constant integer 1.
+      // When `axis` is given, the dim lengths at the axes must be static constant integer 1.
       const auto* int_len = shape_value.value()[axes[i]].as<IntImmNode>();
       if (int_len == nullptr || int_len->value != 1) {
+        // We would like to ensure safety, and therefore placed a stronger requirement for user to
+        // use MatchCast.
         ctx->ReportFatal(Diagnostic::Error(call)
                          << "Squeeze expects the input tensor shape values at the given axis "
                             "positions to be all 1. However, the tensor shape at axis "
@@ -415,6 +418,10 @@ StructInfo InferStructInfoSqueeze(const Call& call, const BlockBuilder& ctx) {
       axis_removal_mask[axes[i]] = true;
     }
   } else {
+    // When `axis` is not defined, squeeze all unit-length dimensions.
+    // Note: This is a less well-defined path in Array API standard's squeeze
+    // (https://data-apis.org/array-api/latest/API_specification/generated/array_api.squeeze.html).
+    // Consider discourage usage later.
     if (!shape_value.defined()) {
       return TensorStructInfo(data_sinfo->dtype, kUnknownNDim);
     }
@@ -468,7 +475,7 @@ TVM_REGISTER_GLOBAL("relax.op.flatten").set_body_typed(MakeFlatten);
 StructInfo InferStructInfoFlatten(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
   if (data_sinfo->IsUnknownNdim()) {
-    return TensorStructInfo(data_sinfo->dtype, kUnknownNDim);
+    return TensorStructInfo(data_sinfo->dtype, /*ndim=*/1);
   } else if (data_sinfo->ndim == 0) {
     return TensorStructInfo(ShapeExpr({1}), data_sinfo->dtype);
   } else if (data_sinfo->ndim == 1) {

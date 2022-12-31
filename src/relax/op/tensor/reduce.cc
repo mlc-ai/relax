@@ -33,7 +33,7 @@ StructInfo InferStructInfoReduction(const Call& call, const BlockBuilder& ctx) {
 
   std::vector<int> axes;
   if (!data_sinfo->IsUnknownNdim() && attrs->axis.defined()) {
-    axes = CheckAxesInRangeNonRepetitive(call, ctx, data_sinfo->ndim, attrs->axis.value());
+    axes = NormalizeAxes(call, ctx, data_sinfo->ndim, attrs->axis.value());
   }
 
   int out_ndim;

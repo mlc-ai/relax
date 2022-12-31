@@ -54,7 +54,7 @@ StructInfo InferStructInfoSoftmax(const Call& call, const BlockBuilder& ctx) {
                                              << data_sinfo->dtype);
   }
   const auto* attrs = call->attrs.as<SoftmaxAttrs>();
-  CheckAxisInRange(call, ctx, data_sinfo->ndim, attrs->axis);
+  NormalizeAxis(call, ctx, data_sinfo->ndim, attrs->axis);
 
   return data_sinfo;
 }
@@ -74,7 +74,7 @@ bool NormCheckDtypeAndShape(const Call& call, const BlockBuilder& ctx,
 
   std::vector<int> axes_non_neg;
   if (!data_sinfo->IsUnknownNdim()) {
-    axes_non_neg = CheckAxesInRangeNonRepetitive(call, ctx, data_sinfo->ndim, axes);
+    axes_non_neg = NormalizeAxes(call, ctx, data_sinfo->ndim, axes);
   }
   int n_axis = axes.size();
   if (!data_sinfo->IsUnknownDtype() && !data_sinfo->dtype.is_float()) {

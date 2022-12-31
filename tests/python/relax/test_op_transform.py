@@ -905,14 +905,14 @@ def test_flatten_infer_struct_info():
     _check_inference(bb, relax.op.flatten(x3), relax.TensorStructInfo(dtype="float32", ndim=1))
     _check_inference(bb, relax.op.flatten(x4), relax.TensorStructInfo(dtype="float32", ndim=1))
     _check_inference(bb, relax.op.flatten(x5), relax.TensorStructInfo((1,), "float32"))
-    _check_inference(bb, relax.op.flatten(x6), relax.TensorStructInfo(dtype="float32"))
+    _check_inference(bb, relax.op.flatten(x6), relax.TensorStructInfo(dtype="float32", ndim=1))
     _check_inference(bb, relax.op.flatten(x7), relax.TensorStructInfo((60,), dtype=""))
     _check_inference(bb, relax.op.flatten(x8), relax.TensorStructInfo((3,), dtype=""))
     _check_inference(bb, relax.op.flatten(x9), relax.TensorStructInfo((1,), dtype=""))
     _check_inference(bb, relax.op.flatten(x10), relax.TensorStructInfo(dtype="", ndim=1))
     _check_inference(bb, relax.op.flatten(x11), relax.TensorStructInfo(dtype="", ndim=1))
     _check_inference(bb, relax.op.flatten(x12), relax.TensorStructInfo((1,), dtype=""))
-    _check_inference(bb, relax.op.flatten(x13), relax.TensorStructInfo(dtype=""))
+    _check_inference(bb, relax.op.flatten(x13), relax.TensorStructInfo(dtype="", ndim=1))
 
 
 def test_flatten_infer_struct_info_shape_symbolic():
@@ -949,7 +949,7 @@ def test_flatten_infer_struct_info_shape_var():
     _check_inference(bb, relax.op.flatten(x3), relax.TensorStructInfo(dtype="float32", ndim=1))
     _check_inference(bb, relax.op.flatten(x4), relax.TensorStructInfo(s4, "float32"))
     _check_inference(bb, relax.op.flatten(x5), relax.TensorStructInfo((1,), "float32"))
-    _check_inference(bb, relax.op.flatten(x6), relax.TensorStructInfo(dtype="float32"))
+    _check_inference(bb, relax.op.flatten(x6), relax.TensorStructInfo(dtype="float32", ndim=1))
 
 
 def test_flatten_infer_struct_info_more_input_dtype():

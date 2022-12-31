@@ -86,8 +86,8 @@ Optional<Array<PrimExpr>> InferBinaryBroadcastShape(const Call& call, const Bloc
   return Array<PrimExpr>(output_shape.rbegin(), output_shape.rend());
 }
 
-std::vector<int> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilder& ctx, int ndim,
-                                               const Array<Integer>& axes) {
+std::vector<int> NormalizeAxes(const Call& call, const BlockBuilder& ctx, int ndim,
+                               const Array<Integer>& axes) {
   ICHECK_NE(ndim, kUnknownNDim) << "The ndim is required to be known for this function.";
   std::vector<bool> appeared_dims_set;
   std::vector<int> axes_non_neg;
