@@ -26,7 +26,7 @@ from tvm.script import relax as R
 def test_op_correctness():
     x = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
     fill_value = relax.Var("fill_value", R.Tensor((), "float32"))
-    assert relax.op.full(fill_value, (2, 3)).op == Op.get("relax.full")
+    assert relax.op.full((2, 3), fill_value).op == Op.get("relax.full")
     assert relax.op.full_like(x, fill_value).op == Op.get("relax.full_like")
     assert relax.op.ones((2, 3), "float32").op == Op.get("relax.ones")
     assert relax.op.ones_like(x).op == Op.get("relax.ones_like")
@@ -51,61 +51,75 @@ def test_full_infer_struct_info():
     s3 = relax.Var("s", relax.ShapeStructInfo())
 
     _check_inference(
-        bb, relax.op.full(v0, (2, 3), "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full((2, 3), v0, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
-    _check_inference(bb, relax.op.full(v0, (2, 3)), relax.TensorStructInfo((2, 3), "float32"))
+    _check_inference(bb, relax.op.full((2, 3), v0), relax.TensorStructInfo((2, 3), "float32"))
     _check_inference(
-        bb, relax.op.full(v0, s0, "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full(s0, v0, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
-    _check_inference(bb, relax.op.full(v0, s0), relax.TensorStructInfo((2, 3), "float32"))
-    _check_inference(bb, relax.op.full(v0, s1, "float16"), relax.TensorStructInfo(s1, "float16"))
-    _check_inference(bb, relax.op.full(v0, s1), relax.TensorStructInfo(s1, "float32"))
-    _check_inference(bb, relax.op.full(v0, s2, "float16"), relax.TensorStructInfo(s2, "float16"))
-    _check_inference(bb, relax.op.full(v0, s2), relax.TensorStructInfo(s2, "float32"))
-    _check_inference(bb, relax.op.full(v0, s3, "float16"), relax.TensorStructInfo(s3, "float16"))
-    _check_inference(bb, relax.op.full(v0, s3), relax.TensorStructInfo(s3, "float32"))
+    _check_inference(bb, relax.op.full(s0, v0), relax.TensorStructInfo((2, 3), "float32"))
+    _check_inference(bb, relax.op.full(s1, v0, "float16"), relax.TensorStructInfo(s1, "float16"))
+    _check_inference(bb, relax.op.full(s1, v0), relax.TensorStructInfo(s1, "float32"))
+    _check_inference(bb, relax.op.full(s2, v0, "float16"), relax.TensorStructInfo(s2, "float16"))
+    _check_inference(bb, relax.op.full(s2, v0), relax.TensorStructInfo(s2, "float32"))
+    _check_inference(bb, relax.op.full(s3, v0, "float16"), relax.TensorStructInfo(s3, "float16"))
+    _check_inference(bb, relax.op.full(s3, v0), relax.TensorStructInfo(s3, "float32"))
     _check_inference(
-        bb, relax.op.full(v1, (2, 3), "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full((2, 3), v1, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
-    _check_inference(bb, relax.op.full(v1, (2, 3)), relax.TensorStructInfo((2, 3), "float32"))
+    _check_inference(bb, relax.op.full((2, 3), v1), relax.TensorStructInfo((2, 3), "float32"))
     _check_inference(
-        bb, relax.op.full(v1, s0, "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full(s0, v1, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
-    _check_inference(bb, relax.op.full(v1, s0), relax.TensorStructInfo((2, 3), "float32"))
-    _check_inference(bb, relax.op.full(v1, s1, "float16"), relax.TensorStructInfo(s1, "float16"))
-    _check_inference(bb, relax.op.full(v1, s1), relax.TensorStructInfo(s1, "float32"))
-    _check_inference(bb, relax.op.full(v1, s2, "float16"), relax.TensorStructInfo(s2, "float16"))
-    _check_inference(bb, relax.op.full(v1, s2), relax.TensorStructInfo(s2, "float32"))
-    _check_inference(bb, relax.op.full(v1, s3, "float16"), relax.TensorStructInfo(s3, "float16"))
-    _check_inference(bb, relax.op.full(v1, s3), relax.TensorStructInfo(s3, "float32"))
+    _check_inference(bb, relax.op.full(s0, v1), relax.TensorStructInfo((2, 3), "float32"))
+    _check_inference(bb, relax.op.full(s1, v1, "float16"), relax.TensorStructInfo(s1, "float16"))
+    _check_inference(bb, relax.op.full(s1, v1), relax.TensorStructInfo(s1, "float32"))
+    _check_inference(bb, relax.op.full(s2, v1, "float16"), relax.TensorStructInfo(s2, "float16"))
+    _check_inference(bb, relax.op.full(s2, v1), relax.TensorStructInfo(s2, "float32"))
+    _check_inference(bb, relax.op.full(s3, v1, "float16"), relax.TensorStructInfo(s3, "float16"))
+    _check_inference(bb, relax.op.full(s3, v1), relax.TensorStructInfo(s3, "float32"))
     _check_inference(
-        bb, relax.op.full(v2, (2, 3), "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full((2, 3), v2, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
-    _check_inference(bb, relax.op.full(v2, (2, 3)), relax.TensorStructInfo((2, 3), dtype=""))
+    _check_inference(bb, relax.op.full((2, 3), v2), relax.TensorStructInfo((2, 3), dtype=""))
     _check_inference(
-        bb, relax.op.full(v2, s0, "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full(s0, v2, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
-    _check_inference(bb, relax.op.full(v2, s0), relax.TensorStructInfo((2, 3), dtype=""))
-    _check_inference(bb, relax.op.full(v2, s1, "float16"), relax.TensorStructInfo(s1, "float16"))
-    _check_inference(bb, relax.op.full(v2, s1), relax.TensorStructInfo(s1, dtype=""))
-    _check_inference(bb, relax.op.full(v2, s2, "float16"), relax.TensorStructInfo(s2, "float16"))
-    _check_inference(bb, relax.op.full(v2, s2), relax.TensorStructInfo(s2, dtype=""))
-    _check_inference(bb, relax.op.full(v2, s3, "float16"), relax.TensorStructInfo(s3, "float16"))
-    _check_inference(bb, relax.op.full(v2, s3), relax.TensorStructInfo(s3, dtype=""))
+    _check_inference(bb, relax.op.full(s0, v2), relax.TensorStructInfo((2, 3), dtype=""))
+    _check_inference(bb, relax.op.full(s1, v2, "float16"), relax.TensorStructInfo(s1, "float16"))
+    _check_inference(bb, relax.op.full(s1, v2), relax.TensorStructInfo(s1, dtype=""))
+    _check_inference(bb, relax.op.full(s2, v2, "float16"), relax.TensorStructInfo(s2, "float16"))
+    _check_inference(bb, relax.op.full(s2, v2), relax.TensorStructInfo(s2, dtype=""))
+    _check_inference(bb, relax.op.full(s3, v2, "float16"), relax.TensorStructInfo(s3, "float16"))
+    _check_inference(bb, relax.op.full(s3, v2), relax.TensorStructInfo(s3, dtype=""))
     _check_inference(
-        bb, relax.op.full(v3, (2, 3), "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full((2, 3), v3, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
-    _check_inference(bb, relax.op.full(v3, (2, 3)), relax.TensorStructInfo((2, 3), dtype=""))
+    _check_inference(bb, relax.op.full((2, 3), v3), relax.TensorStructInfo((2, 3), dtype=""))
     _check_inference(
-        bb, relax.op.full(v3, s0, "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full(s0, v3, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
-    _check_inference(bb, relax.op.full(v3, s0), relax.TensorStructInfo((2, 3), dtype=""))
-    _check_inference(bb, relax.op.full(v3, s1, "float16"), relax.TensorStructInfo(s1, "float16"))
-    _check_inference(bb, relax.op.full(v3, s1), relax.TensorStructInfo(s1, dtype=""))
-    _check_inference(bb, relax.op.full(v3, s2, "float16"), relax.TensorStructInfo(s2, "float16"))
-    _check_inference(bb, relax.op.full(v3, s2), relax.TensorStructInfo(s2, dtype=""))
-    _check_inference(bb, relax.op.full(v3, s3, "float16"), relax.TensorStructInfo(s3, "float16"))
-    _check_inference(bb, relax.op.full(v3, s3), relax.TensorStructInfo(s3, dtype=""))
+    _check_inference(bb, relax.op.full(s0, v3), relax.TensorStructInfo((2, 3), dtype=""))
+    _check_inference(bb, relax.op.full(s1, v3, "float16"), relax.TensorStructInfo(s1, "float16"))
+    _check_inference(
+        bb,
+        relax.op.full(
+            s1,
+            v3,
+        ),
+        relax.TensorStructInfo(s1, dtype=""),
+    )
+    _check_inference(bb, relax.op.full(s2, v3, "float16"), relax.TensorStructInfo(s2, "float16"))
+    _check_inference(
+        bb,
+        relax.op.full(
+            s2,
+            v3,
+        ),
+        relax.TensorStructInfo(s2, dtype=""),
+    )
+    _check_inference(bb, relax.op.full(s3, v3, "float16"), relax.TensorStructInfo(s3, "float16"))
+    _check_inference(bb, relax.op.full(s3, v3), relax.TensorStructInfo(s3, dtype=""))
 
 
 def test_full_infer_struct_info_shape_symbolic():
@@ -116,13 +130,13 @@ def test_full_infer_struct_info_shape_symbolic():
     s1 = relax.Var("s", relax.ShapeStructInfo((a, 3)))
 
     _check_inference(
-        bb, relax.op.full(v, (a, 3), "float16"), relax.TensorStructInfo((a, 3), "float16")
+        bb, relax.op.full((a, 3), v, "float16"), relax.TensorStructInfo((a, 3), "float16")
     )
-    _check_inference(bb, relax.op.full(v, (a, 3)), relax.TensorStructInfo((a, 3), "float32"))
-    _check_inference(bb, relax.op.full(v, s0, "float16"), relax.TensorStructInfo((a, 3), "float16"))
-    _check_inference(bb, relax.op.full(v, s0), relax.TensorStructInfo((a, 3), "float32"))
-    _check_inference(bb, relax.op.full(v, s1, "float16"), relax.TensorStructInfo(s1, "float16"))
-    _check_inference(bb, relax.op.full(v, s1), relax.TensorStructInfo(s1, "float32"))
+    _check_inference(bb, relax.op.full((a, 3), v), relax.TensorStructInfo((a, 3), "float32"))
+    _check_inference(bb, relax.op.full(s0, v, "float16"), relax.TensorStructInfo((a, 3), "float16"))
+    _check_inference(bb, relax.op.full(s0, v), relax.TensorStructInfo((a, 3), "float32"))
+    _check_inference(bb, relax.op.full(s1, v, "float16"), relax.TensorStructInfo(s1, "float16"))
+    _check_inference(bb, relax.op.full(s1, v), relax.TensorStructInfo(s1, "float32"))
 
 
 def test_full_infer_struct_info_shape_var():
@@ -133,10 +147,10 @@ def test_full_infer_struct_info_shape_var():
     v1 = relax.Var("v", relax.TensorStructInfo(s1, "float32"))
 
     _check_inference(
-        bb, relax.op.full(v0, (2, 3), "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full((2, 3), v0, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
     _check_inference(
-        bb, relax.op.full(v1, (2, 3), "float16"), relax.TensorStructInfo((2, 3), "float16")
+        bb, relax.op.full((2, 3), v1, "float16"), relax.TensorStructInfo((2, 3), "float16")
     )
 
 
@@ -147,15 +161,15 @@ def test_full_infer_struct_info_more_input_dtype():
     v2 = relax.Var("v", R.Tensor((), "int32"))
 
     _check_inference(
-        bb, relax.op.full(v0, (2, 3), "float32"), relax.TensorStructInfo((2, 3), "float32")
+        bb, relax.op.full((2, 3), v0, "float32"), relax.TensorStructInfo((2, 3), "float32")
     )
-    _check_inference(bb, relax.op.full(v0, (2, 3)), relax.TensorStructInfo((2, 3), "float16"))
+    _check_inference(bb, relax.op.full((2, 3), v0), relax.TensorStructInfo((2, 3), "float16"))
     _check_inference(
-        bb, relax.op.full(v1, (2, 3), "int32"), relax.TensorStructInfo((2, 3), "int32")
+        bb, relax.op.full((2, 3), v1, "int32"), relax.TensorStructInfo((2, 3), "int32")
     )
-    _check_inference(bb, relax.op.full(v1, (2, 3)), relax.TensorStructInfo((2, 3), "int8"))
-    _check_inference(bb, relax.op.full(v2, (2, 3), "int8"), relax.TensorStructInfo((2, 3), "int8"))
-    _check_inference(bb, relax.op.full(v2, (2, 3)), relax.TensorStructInfo((2, 3), "int32"))
+    _check_inference(bb, relax.op.full((2, 3), v1), relax.TensorStructInfo((2, 3), "int8"))
+    _check_inference(bb, relax.op.full((2, 3), v2, "int8"), relax.TensorStructInfo((2, 3), "int8"))
+    _check_inference(bb, relax.op.full((2, 3), v2), relax.TensorStructInfo((2, 3), "int32"))
 
 
 def test_full_infer_struct_info_fill_value_not_scalar_tensor():
@@ -171,17 +185,17 @@ def test_full_infer_struct_info_fill_value_not_scalar_tensor():
     v5 = relax.Var("v", relax.TensorStructInfo(s2, "float32"))
 
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.full(v0, (2, 3)))
+        bb.normalize(relax.op.full((2, 3), v0))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.full(v1, (2, 3)))
+        bb.normalize(relax.op.full((2, 3), v1))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.full(v2, (2, 3)))
+        bb.normalize(relax.op.full((2, 3), v2))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.full(v3, (2, 3)))
+        bb.normalize(relax.op.full((2, 3), v3))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.full(v4, (2, 3)))
+        bb.normalize(relax.op.full((2, 3), v4))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.full(v5, (2, 3)))
+        bb.normalize(relax.op.full((2, 3), v5))
 
 
 def test_full_shape_not_tuple():
@@ -189,9 +203,9 @@ def test_full_shape_not_tuple():
     v = relax.Var("v", R.Tensor((), "float32"))
 
     with pytest.raises(TVMError):
-        relax.op.full(v, 4)
+        relax.op.full(4, v)
     with pytest.raises(TVMError):
-        relax.op.full(v, m)
+        relax.op.full(m, v)
 
 
 def test_full_infer_struct_info_wrong_input_type():
@@ -202,11 +216,11 @@ def test_full_infer_struct_info_wrong_input_type():
     s = relax.Var("s", R.Tensor((2, 3)))
 
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.full(v0, s))
+        bb.normalize(relax.op.full(s, v0))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.full(v1, (2, 3)))
+        bb.normalize(relax.op.full((2, 3), v1))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.full(v2, (2, 3)))
+        bb.normalize(relax.op.full((2, 3), v2))
 
 
 def test_full_like_infer_struct_info():

@@ -31,7 +31,7 @@ namespace relax {
 TVM_REGISTER_NODE_TYPE(InitAttrs);
 
 /* relax.full */
-Expr MakeFull(Expr fill_value, ObjectRef shape, DataType dtype) {
+Expr MakeFull(ObjectRef shape, Expr fill_value, DataType dtype) {
   Expr shape_in_expr{nullptr};
   if (const auto* expr = shape.as<ExprNode>()) {
     shape_in_expr = GetRef<Expr>(expr);
@@ -47,7 +47,7 @@ Expr MakeFull(Expr fill_value, ObjectRef shape, DataType dtype) {
   attrs->dtype = dtype;
 
   static const Op& op = Op::Get("relax.full");
-  return Call(op, {std::move(fill_value), std::move(shape_in_expr)}, Attrs(attrs), {});
+  return Call(op, {std::move(shape_in_expr), std::move(fill_value)}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relax.op.full").set_body_typed(MakeFull);
@@ -56,30 +56,30 @@ StructInfo InferStructInfoFull(const Call& call, const BlockBuilder& ctx) {
   if (call->args.size() != 2) {
     ctx->ReportFatal(Diagnostic::Error(call) << "Full op should have 2 arguments");
   }
-  const auto* fill_value_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[0]);
-  const auto* shape_sinfo = GetStructInfoAs<ShapeStructInfoNode>(call->args[1]);
+  const auto* shape_sinfo = GetStructInfoAs<ShapeStructInfoNode>(call->args[0]);
+  const auto* fill_value_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[1]);
+  if (shape_sinfo == nullptr) {
+    ctx->ReportFatal(Diagnostic::Error(call)
+                     << "Full requires the input shape to be a Shape. However, the given one is "
+                     << call->args[0]->struct_info_->GetTypeKey());
+  }
   if (fill_value_sinfo == nullptr || fill_value_sinfo->ndim != 0) {
     ctx->ReportFatal(
         Diagnostic::Error(call)
         << "Full requires the input fill value to be zero rank Tensor. However, the given one is "
-        << call->args[0]->struct_info_);
-  }
-  if (shape_sinfo == nullptr) {
-    ctx->ReportFatal(Diagnostic::Error(call)
-                     << "Full requires the input shape to be a Shape. However, the given one is "
-                     << call->args[1]->struct_info_->GetTypeKey());
+        << call->args[1]->struct_info_);
   }
 
   const auto* attrs = call->attrs.as<InitAttrs>();
   DataType out_dtype = attrs->dtype.is_void() ? fill_value_sinfo->dtype : attrs->dtype;
-  return TensorStructInfo(/*shape=*/call->args[1], out_dtype);
+  return TensorStructInfo(/*shape=*/call->args[0], out_dtype);
 }
 
 TVM_REGISTER_OP("relax.full")
     .set_attrs_type<InitAttrs>()
     .set_num_inputs(2)
-    .add_argument("fill_value", "Tensor", "The scalar tensor, denoting the value to fill.")
     .add_argument("shape", "Shape", "The shape of the created tensor.")
+    .add_argument("fill_value", "Tensor", "The scalar tensor, denoting the value to fill.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoFull);
 
 /* relax.full_like */

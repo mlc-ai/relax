@@ -37,13 +37,13 @@ def _check(
 def test_full():
     @R.function
     def foo(v: R.Tensor((), "int32")) -> R.Tensor((2, 3), "float32"):
-        gv: R.Tensor((2, 3), "float32") = R.full(v, (2, 3), dtype="float32")
+        gv: R.Tensor((2, 3), "float32") = R.full((2, 3), v, dtype="float32")
         return gv
 
     bb = relax.BlockBuilder()
     v = relax.Var("v", R.Tensor((), "int32"))
     with bb.function("foo", [v]):
-        gv = bb.emit(relax.op.full(v, (2, 3), "float32"))
+        gv = bb.emit(relax.op.full((2, 3), v, "float32"))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])

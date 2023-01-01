@@ -27,19 +27,19 @@ PrimExprLike = Union[int, PrimExpr]
 
 
 def full(
-    fill_value: Expr,
     shape: Union[Tuple[PrimExprLike], Expr],
+    fill_value: Expr,
     dtype: Optional[Union[str, DataType]] = None,
 ) -> Expr:
     """Fill array with scalar value.
 
     Parameters
     ----------
-    fill_value : relax.Expr
-        The value to fill. Must be a scalar tensor.
-
     shape : Union[Tuple[PrimExprLike], Expr]
         The shape of the created tensor.
+
+    fill_value : relax.Expr
+        The value to fill. Must be a scalar tensor.
 
     dtype : Optional[Union[str, DataType]]
         The data type of the created tensor.
@@ -50,7 +50,7 @@ def full(
     result : relax.Expr
         The result tensor.
     """
-    return _ffi_api.full(fill_value, shape, dtype)  # type: ignore
+    return _ffi_api.full(shape, fill_value, dtype)  # type: ignore
 
 
 def full_like(data: Expr, fill_value: Expr) -> Expr:
