@@ -107,3 +107,13 @@ class Resize2DAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.ReduceAttrs")
 class ReduceAttrs(Attrs):
     """Attributes used in reduction operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.CastAttrs")
+class CastAttrs(Attrs):
+    """Attributes used in cast operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.WrapParamAttrs")
+class WrapParamAttrs(Attrs):
+    """Attributes used in wrap_param operator"""
