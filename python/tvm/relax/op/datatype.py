@@ -20,7 +20,7 @@ from typing import Union
 from tvm import DataType
 
 from . import _ffi_api
-from ..expr import Expr
+from ..expr import Constant, Expr
 
 
 def astype(x: Expr, dtype: Union[str, DataType]) -> Expr:
@@ -40,3 +40,24 @@ def astype(x: Expr, dtype: Union[str, DataType]) -> Expr:
         The casted result.
     """
     return _ffi_api.astype(x, dtype)  # type: ignore
+
+
+def wrap_param(data: Expr, dtype: Union[str, DataType] = "float32") -> Expr:
+    """Cast input tensor which is model param to data type if the dtype of the input data is not
+    the same as the given dtype.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    dtype : Union[str, DataType]
+        The target data type
+
+    Returns
+    -------
+    result : relax.Expr
+        The casted result.
+    """
+    assert isinstance(data, Constant)
+    return _ffi_api.wrap_param(data, dtype)  # type: ignore

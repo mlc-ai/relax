@@ -89,6 +89,11 @@ class AstypeAttrs(Attrs):
     """Attributes used in astype operator"""
 
 
+@tvm._ffi.register_object("relax.attrs.WrapParamAttrs")
+class WrapParamAttrs(Attrs):
+    """Attributes used in wrap_param operator"""
+
+
 @tvm._ffi.register_object("relax.attrs.Conv2DAttrs")
 class Conv2DAttrs(Attrs):
     """Attributes for nn.conv2d"""
