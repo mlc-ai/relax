@@ -19,10 +19,11 @@
 
 # Operators
 from .base import *
-from .tensor import *
-from .transform import *
+from .manipulate import *
 from .op_attrs import *
 from .reduce import *
+from .tensor import *
+from .transform import *
 from . import builtin
 from . import image
 from . import memory

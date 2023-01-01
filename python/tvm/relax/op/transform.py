@@ -18,20 +18,22 @@
 from typing import Union
 
 import tvm
-from tvm import relax
 
 from . import _ffi_api
-from ..expr import Expr
+from ..expr import Constant, Expr
 
 
 def cast(data: Expr, dtype: Union[str, tvm.DataType]) -> Expr:
     """Cast input tensor to data type.
+
     Parameters
     ----------
     data : relax.Expr
         The input data to the operator.
+
     dtype: Union[str, tvm.DataType]
         The target data type
+
     Returns
     -------
     result : relax.Expr
@@ -45,16 +47,19 @@ def cast(data: Expr, dtype: Union[str, tvm.DataType]) -> Expr:
 def wrap_param(data: Expr, dtype: Union[str, tvm.DataType] = "float32") -> Expr:
     """Cast input tensor which is model param to data type if the dtype of the input data is not
     the same as the given dtype.
+
     Parameters
     ----------
     data : relax.Expr
         The input data to the operator.
+
     dtype: Union[str, tvm.DataType]
         The target data type
+
     Returns
     -------
     result : relax.Expr
         The casted result.
     """
-    assert isinstance(data, relax.Constant)
+    assert isinstance(data, Constant)
     return _ffi_api.wrap_param(data, dtype)  # type: ignore

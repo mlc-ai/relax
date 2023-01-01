@@ -117,3 +117,18 @@ class CastAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.WrapParamAttrs")
 class WrapParamAttrs(Attrs):
     """Attributes used in wrap_param operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.PermuteDimsAttrs")
+class PermuteDimsAttrs(Attrs):
+    """Attributes for permute_dims operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.ExpandDimsAttrs")
+class ExpandDimsAttrs(Attrs):
+    """Attributes for expand_dims operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.SqueezeAttrs")
+class SqueezeAttrs(Attrs):
+    """Attributes for squeeze operator"""

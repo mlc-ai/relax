@@ -209,28 +209,30 @@ inline Optional<ShapeExpr> CheckNdimPerLayoutAndGetShape(const Call& call, const
 }
 
 /*!
- * \brief Check if the given array of axes are all in range and non-repetitive with regards to the
- * given ndim. And convert all axes to non-negative index.
+ * \brief Convert all axes to non-negative indices, and meanwhile check if the given array of axes
+ * are all in range and non-repetitive with regards to the given ndim.
  * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \param ndim The ndim constraint, which is required to be known already.
  * \param axes The axis indices to be checked
  * \return The input axes in non-negative indexing.
+ * \throw Throw exception if there exists out-of-range axis index or repetitive indices.
  */
-std::vector<int> CheckAxesInRangeNonRepetitive(const Call& call, const BlockBuilder& ctx, int ndim,
-                                               const Array<Integer>& axes);
+std::vector<int> NormalizeAxes(const Call& call, const BlockBuilder& ctx, int ndim,
+                               const Array<Integer>& axes);
 
 /*!
- * \brief Check if the given axis is in range with regards to the given ndim. And convert it to
- * non-negative index.
+ * \brief Convert the given axis to non-negative index. Meanwhile check if the axis is in range
+ * with regards to the given ndim.
  * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \param ndim The ndim constraint.
  * \param axis The axis index to be checked
  * \return The input axis in non-negative indexing.
+ * \throw Throw exception the given axis is out-of-range.
  */
-inline int CheckAxisInRange(const Call& call, const BlockBuilder& ctx, int ndim, int axis) {
-  return CheckAxesInRangeNonRepetitive(call, ctx, ndim, {axis})[0];
+inline int NormalizeAxis(const Call& call, const BlockBuilder& ctx, int ndim, int axis) {
+  return NormalizeAxes(call, ctx, ndim, {axis})[0];
 }
 
 }  // namespace relax

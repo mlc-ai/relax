@@ -22,8 +22,6 @@ import tvm.testing
 from tvm import IRModule, relax
 from tvm.script.parser import relax as R
 
-import numpy as np
-
 
 def _check(
     parsed: Union[relax.Function, IRModule],
@@ -117,5 +115,5 @@ def test_wrap_param():
     _check(expected, bb.get()["main"])
 
 
-if __name__ == "__main__":
+if __name__ == "__foo__":
     tvm.testing.main()

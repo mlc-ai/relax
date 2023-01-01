@@ -343,6 +343,40 @@ struct ReduceAttrs : public tvm::AttrsNode<ReduceAttrs> {
   }
 };  // struct ReduceAttrs
 
+/*! \brief Attributes used in permute_dims operator */
+struct PermuteDimsAttrs : public tvm::AttrsNode<PermuteDimsAttrs> {
+  Optional<Array<Integer>> axes;
+
+  TVM_DECLARE_ATTRS(PermuteDimsAttrs, "relax.attrs.PermuteDimsAttrs") {
+    TVM_ATTR_FIELD(axes).describe("The target axes order, reverse order if not specified.");
+  }
+};  // struct PermuteDimsAttrs
+
+/*! \brief Attributes used in expand_dims operators */
+struct ExpandDimsAttrs : public tvm::AttrsNode<ExpandDimsAttrs> {
+  Array<Integer> axis;
+
+  TVM_DECLARE_ATTRS(ExpandDimsAttrs, "relax.attrs.ExpandDimsAttrs") {
+    TVM_ATTR_FIELD(axis).describe(
+        "The axes at which the input array are expanded. "
+        "All values are required to lie in range `[-data.ndim - 1, data.ndim]`, "
+        "with the convention of negative indexing.");
+  }
+};  // struct ExpandDimsAttrs
+
+/*! \brief Attributes used in squeeze operators */
+struct SqueezeAttrs : public tvm::AttrsNode<SqueezeAttrs> {
+  Optional<Array<Integer>> axis;
+
+  TVM_DECLARE_ATTRS(SqueezeAttrs, "relax.attrs.SqueezeAttrs") {
+    TVM_ATTR_FIELD(axis).describe(
+        "The axis to squeeze in the input tensor."
+        "If `axis = None`, all axis of dimension 1 get squeezed;"
+        "Else, the dimension in axes get squeezed."
+        "It is an error if an axis does not has dimension 1.");
+  }
+};  // struct SqueezeAttrs
+
 }  // namespace relax
 }  // namespace tvm
 #endif  // TVM_RELAX_OP_ATTR_TYPES_H_
