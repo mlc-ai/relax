@@ -107,6 +107,7 @@ from tvm.relax.op import (
     variance,
     vm,
     where,
+    wrap_param,
     zeros,
     zeros_like,
 )
@@ -542,6 +543,7 @@ __all__ = [
     "variance",
     "vm",
     "where",
+    "wrap_param",
     "zeros",
     "zeros_like",
 ]
