@@ -88,6 +88,7 @@ from tvm.relax.op import (
     unique,
     variance,
     where,
+    wrap_param,
     zeros,
     zeros_like,
 )
@@ -460,6 +461,7 @@ __all__ = [
     "unique",
     "variance",
     "where",
+    "wrap_param",
     "zeros",
     "zeros_like",
 ]
