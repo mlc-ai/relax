@@ -17,6 +17,7 @@
 """Relax Neural Network (NN) operators"""
 from typing import List, Optional, Tuple, Union
 
+from tvm import DataType
 from tvm.ir.expr import PrimExpr
 
 from . import _ffi_api
@@ -34,7 +35,7 @@ def conv2d(
     data_layout: str = "NCHW",
     kernel_layout: str = "OIHW",
     out_layout: Optional[str] = None,
-    out_dtype: Optional[str] = None,
+    out_dtype: Optional[Union[str, DataType]] = None,
 ) -> Expr:
     r"""2D convolution.
 
@@ -90,7 +91,7 @@ def conv2d(
     out_layout : Optional[str]
         Layout of the output. If not specified, it is the same as data_layout
 
-    out_dtype : Optional[str]
+    out_dtype : Optional[Union[str, DataType]]
         Specifies the output data type for mixed precision conv2d.
 
     Returns
@@ -491,7 +492,7 @@ def layer_norm(
     return _ffi_api.layer_norm(data, gamma, beta, axes, epsilon, center, scale)  # type: ignore
 
 
-def matmul(a: Expr, b: Expr, out_dtype: Optional[str] = None) -> Expr:
+def matmul(a: Expr, b: Expr, out_dtype: Optional[Union[str, DataType]] = None) -> Expr:
     """General matrix multiplication of two tensors.
 
     (The below is copied from torch.matmul)
@@ -520,7 +521,7 @@ def matmul(a: Expr, b: Expr, out_dtype: Optional[str] = None) -> Expr:
     b : relax.Expr
         The right operand of the matmul.
 
-    out_dtype: Optional[str]
+    out_dtype: Optional[Union[str, DataType]]
         The data type of the matmul result.
         When it is not specified, the output dtype will be the the same as input dtype.
 

@@ -223,6 +223,16 @@ def test_reshape_infer_struct_info_inference_not_deducible():
         bb.normalize(relax.op.reshape(x3, (2, 3, -1)))
 
 
+def test_reshape_new_shape_not_tuple():
+    m = tir.Var("m", "int64")
+    x = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
+
+    with pytest.raises(TVMError):
+        relax.op.reshape(x, 120)
+    with pytest.raises(TVMError):
+        relax.op.reshape(x, m)
+
+
 def test_reshape_infer_struct_info_new_shape_not_integer():
     bb = relax.BlockBuilder()
     x = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))

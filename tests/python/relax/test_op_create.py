@@ -184,6 +184,16 @@ def test_full_infer_struct_info_fill_value_not_scalar_tensor():
         bb.normalize(relax.op.full(v5, (2, 3)))
 
 
+def test_full_shape_not_tuple():
+    m = tir.Var("m", "int64")
+    v = relax.Var("v", R.Tensor((), "float32"))
+
+    with pytest.raises(TVMError):
+        relax.op.full(v, 4)
+    with pytest.raises(TVMError):
+        relax.op.full(v, m)
+
+
 def test_full_infer_struct_info_wrong_input_type():
     bb = relax.BlockBuilder()
     v0 = relax.Var("v", R.Tensor((), "float32"))
@@ -395,6 +405,15 @@ def test_ones_zeros_infer_struct_info_more_input_dtype():
     _check_inference(bb, relax.op.ones(s1, "int8"), relax.TensorStructInfo(s1, "int8"))
     _check_inference(bb, relax.op.zeros(s2, "int32"), relax.TensorStructInfo(s2, "int32"))
     _check_inference(bb, relax.op.zeros(s3, "float64"), relax.TensorStructInfo(s3, "float64"))
+
+
+def test_ones_zeros_shape_not_tuple():
+    m = tir.Var("m", "int64")
+
+    with pytest.raises(TVMError):
+        relax.op.ones(10, "float32")
+    with pytest.raises(TVMError):
+        relax.op.zeros(m, "float32")
 
 
 def test_ones_zeros_wrong_dtype():

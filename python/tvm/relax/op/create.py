@@ -17,6 +17,7 @@
 """Creation operators."""
 from typing import Optional, Tuple, Union
 
+from tvm import DataType
 from tvm.ir.expr import PrimExpr
 
 from . import _ffi_api
@@ -27,8 +28,8 @@ PrimExprLike = Union[int, PrimExpr]
 
 def full(
     fill_value: Expr,
-    shape: Union[PrimExprLike, Tuple[PrimExprLike], Expr],
-    dtype: Optional[str] = None,
+    shape: Union[Tuple[PrimExprLike], Expr],
+    dtype: Optional[Union[str, DataType]] = None,
 ) -> Expr:
     """Fill array with scalar value.
 
@@ -37,10 +38,10 @@ def full(
     fill_value : relax.Expr
         The value to fill. Must be a scalar tensor.
 
-    shape : Union[PrimExprLike, Tuple[PrimExprLike], Expr]
+    shape : Union[Tuple[PrimExprLike], Expr]
         The shape of the created tensor.
 
-    dtype : Optional[str]
+    dtype : Optional[Union[str, DataType]]
         The data type of the created tensor.
         If dtype is not given, it will by default use the dtype of fill_value.
 
@@ -73,15 +74,15 @@ def full_like(data: Expr, fill_value: Expr) -> Expr:
     return _ffi_api.full_like(data, fill_value)  # type: ignore
 
 
-def ones(shape: Union[PrimExprLike, Tuple[PrimExprLike], Expr], dtype: str) -> Expr:
+def ones(shape: Union[Tuple[PrimExprLike], Expr], dtype: Union[str, DataType]) -> Expr:
     """Construct a tensor of all ones, with the input shape and dtype.
 
     Parameters
     ----------
-    shape : Union[PrimExprLike, Tuple[PrimExprLike], Expr]
+    shape : Union[Tuple[PrimExprLike], Expr]
         The shape of the created tensor.
 
-    dtype : Optional[str]
+    dtype : Union[str, DataType]
         The data type of the created tensor.
 
     Returns
@@ -110,15 +111,15 @@ def ones_like(data: Expr) -> Expr:
     return _ffi_api.ones_like(data)  # type: ignore
 
 
-def zeros(shape: Union[PrimExprLike, Tuple[PrimExprLike], Expr], dtype: str) -> Expr:
+def zeros(shape: Union[Tuple[PrimExprLike], Expr], dtype: Union[str, DataType]) -> Expr:
     """Construct a tensor of all zeros, with the input shape and dtype.
 
     Parameters
     ----------
-    shape : Union[PrimExprLike, Tuple[PrimExprLike], Expr]
+    shape : Union[Tuple[PrimExprLike], Expr]
         The shape of the created tensor.
 
-    dtype : str
+    dtype : Union[str, DataType]
         The data type of the created tensor.
 
     Returns

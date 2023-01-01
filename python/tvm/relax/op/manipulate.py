@@ -26,7 +26,7 @@ from ..expr import Expr
 PrimExprLike = Union[int, PrimExpr]
 
 
-def reshape(data: Expr, shape: Union[PrimExprLike, Tuple[PrimExprLike], Expr]) -> Expr:
+def reshape(data: Expr, shape: Union[Tuple[PrimExprLike], Expr]) -> Expr:
     """Reshape the input array.
 
     ``-1`` infers the dimension of the output shape by using the remainder of
@@ -44,7 +44,7 @@ def reshape(data: Expr, shape: Union[PrimExprLike, Tuple[PrimExprLike], Expr]) -
     data : relax.Expr
         The input data to the operator.
 
-    shape : Union[PrimExprLike, Tuple[PrimExprLike], Expr]
+    shape : Union[Tuple[PrimExprLike], Expr]
         The new shape. Should be compatible with the original shape.
 
     Returns
