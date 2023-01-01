@@ -29,150 +29,130 @@
 namespace tvm {
 namespace relax {
 
+PrimExpr ComputeShapeProduct(const Array<PrimExpr>& shape_values) {
+  PrimExpr shape_prod = IntImm(DataType::Int(64), 1);
+  for (PrimExpr value : shape_values) {
+    shape_prod *= value;
+  }
+  return shape_prod;
+}
+
 /* relax.reshape */
-TVM_REGISTER_NODE_TYPE(ReshapeAttrs);
+Expr ConvertNewShapeToExpr(const Expr& data, const ObjectRef& shape) {
+  if (const auto* e = shape.as<ExprNode>()) {
+    return GetRef<Expr>(e);
+  }
+
+  const auto* array = shape.as<ArrayNode>();
+  CHECK(array != nullptr) << "Reshape only expects the input new shape to be either an Expr or an "
+                             "Array of PrimExprs. However, the given new shape is "
+                          << shape;
+  int dim_to_infer = -1;
+  PrimExpr new_shape_prod = IntImm(DataType::Int(64), 1);
+  for (int i = 0; i < static_cast<int>(array->size()); ++i) {
+    const auto* _len = array->at(i).as<PrimExprNode>();
+    CHECK(_len != nullptr) << "Reshape only expects the input new shape to be either an Expr or an "
+                              "Array of PrimExprs. However, the given new shape is "
+                           << shape;
+    PrimExpr len = GetRef<PrimExpr>(_len);
+    CHECK(len->dtype.is_int()) << "Reshape requires the new shape values to be all "
+                                  "integers. However, the give new shape is "
+                               << shape;
+    const auto* int_len = len.as<IntImmNode>();
+    if (int_len != nullptr && int_len->value == -1) {
+      CHECK_EQ(dim_to_infer, -1) << "Reshape accepts at most one \"-1\" in the new shape. However, "
+                                    "there are multiple \"-1\" in the given new shape  "
+                                 << shape;
+      dim_to_infer = i;
+    } else {
+      CHECK(int_len == nullptr || int_len->value > 0)
+          << "Reshape requires all values in the new shape to be positive except a single \"-1\". "
+             "However, the given new shape is "
+          << shape;
+      // We expect any symbolic not to signal the intent of -1, and therefore do no check for
+      // symbolic value here.
+      new_shape_prod = new_shape_prod * len;
+    }
+  }
+
+  Array<PrimExpr> array_ref = GetRef<Array<PrimExpr>>(array);
+  // When there is no dimension to infer, just return the input array as ShapeExpr.
+  if (dim_to_infer == -1) {
+    return ShapeExpr(array_ref);
+  }
+
+  // Otherwise, we require the input tensor to have known shape value for inference.
+  const auto* data_sinfo = GetStructInfoAs<TensorStructInfoNode>(data);
+  CHECK(data_sinfo != nullptr)
+      << "Reshape expects the input data to be a Tensor. However, the given input is "
+      << data->struct_info_->GetTypeKey();
+  CHECK(data_sinfo->shape.defined())
+      << "Reshape expects the input tensor to have known shape when there is some dimension length "
+         "to infer. However, the given input has no shape.";
+  const auto* shape_sinfo = GetStructInfoAs<ShapeStructInfoNode>(data_sinfo->shape.value());
+  CHECK(shape_sinfo != nullptr && shape_sinfo->values.defined())
+      << "Reshape expects the input tensor to have known shape when there is some dimension length "
+         "to infer. However, the given input shape is "
+      << data_sinfo->shape << " whose shape value is unknown.";
+
+  arith::Analyzer analyzer;
+  PrimExpr old_shape_prod = ComputeShapeProduct(shape_sinfo->values.value());
+  array_ref.Set(dim_to_infer, analyzer.Simplify(floordiv(old_shape_prod, new_shape_prod)));
+  return ShapeExpr(array_ref);
+}
 
 Expr MakeReshape(Expr data, ObjectRef shape) {
+  Expr shape_in_expr = ConvertNewShapeToExpr(data, shape);
   static const Op& op = Op::Get("relax.reshape");
-  if (const auto* expr = shape.as<ExprNode>()) {
-    return Call(op, {std::move(data), GetRef<Expr>(expr)}, Attrs(), {});
-  } else if (const auto* _array = shape.as<ArrayNode>()) {
-    ObjectPtr<ReshapeAttrs> attrs = make_object<ReshapeAttrs>();
-    attrs->shape = GetRef<Array<PrimExpr>>(_array);
-    return Call(op, {std::move(data)}, Attrs(attrs), {});
-  }
-  LOG(FATAL) << "Reshape only expects the input new shape to be either an Expr or an Array of "
-                "PrimExpr. However, the given one is "
-             << shape->GetTypeKey();
-  throw;
+  return Call(op, {std::move(data), std::move(shape_in_expr)}, Attrs(), {});
 }
 
 TVM_REGISTER_GLOBAL("relax.op.reshape").set_body_typed(MakeReshape);
 
-std::pair<PrimExpr, int> CheckNewShape(const Call& call, const BlockBuilder& ctx,
-                                       const Array<PrimExpr>& new_shape, bool allow_dim_inference) {
-  int dim_to_infer = -1;
-  int new_ndim = new_shape.size();
-  PrimExpr new_shape_prod = IntImm(DataType::Int(64), 1);
-  for (int i = 0; i < new_ndim; ++i) {
-    if (!new_shape[i]->dtype.is_int()) {
-      ctx->ReportFatal(Diagnostic::Error(call) << "Reshape requires the new shape values to be all "
-                                                  "integers. However, the give new shape is "
-                                               << new_shape);
-    }
-    const auto* int_len = new_shape[i].as<IntImmNode>();
-    if (int_len != nullptr && int_len->value == -1) {
-      if (!allow_dim_inference) {
-        ctx->ReportFatal(Diagnostic::Error(call)
-                         << "Reshape expects the new shape not to contain \"-1\" when the data "
-                            "shape is not known symbolically. However, the new shape is "
-                         << call->args[1]);
-      } else if (dim_to_infer != -1) {
-        ctx->ReportFatal(Diagnostic::Error(call)
-                         << "Reshape accepts at most one \"-1\" in the new shape. However, there "
-                            "are multiple \"-1\" in the given one "
-                         << call->args[1]);
-      }
-      dim_to_infer = i;
-    } else if (int_len != nullptr && int_len->value <= 0) {
-      ctx->ReportFatal(Diagnostic::Error(call)
-                       << "Reshape requires all values in the new shape to be positive except a "
-                          "single \"-1\". However, the given new shape is "
-                       << call->args[1]);
-    } else {
-      // We expect any symbolic not to signal the intent of -1, and therefore do no check for
-      // symbolic
-      new_shape_prod = new_shape_prod * new_shape[i];
-    }
-  }
-  return {new_shape_prod, dim_to_infer};
-}
-
 StructInfo InferStructInfoReshape(const Call& call, const BlockBuilder& ctx) {
-  if (call->args.size() > 2) {
-    ctx->ReportFatal(Diagnostic::Error(call) << "Reshape op should no more than 2 arguments");
+  if (call->args.size() != 2) {
+    ctx->ReportFatal(Diagnostic::Error(call) << "Reshape op should take 2 arguments");
   }
   const auto* data_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[0]);
+  const auto* new_shape_sinfo = GetStructInfoAs<ShapeStructInfoNode>(call->args[1]);
   if (data_sinfo == nullptr) {
     ctx->ReportFatal(Diagnostic::Error(call)
                      << "Reshape requires the input data to be Tensor. However, the given one is "
                      << call->args[0]->struct_info_->GetTypeKey());
   }
+  if (new_shape_sinfo == nullptr) {
+    ctx->ReportFatal(
+        Diagnostic::Error(call)
+        << "Reshape requires the input new shape to be Shape. However, the given one is "
+        << call->args[1]->struct_info_->GetTypeKey());
+  }
 
-  Optional<PrimExpr> old_shape_prod;
+  Optional<Array<PrimExpr>> old_shape_values;
   if (data_sinfo->shape.defined()) {
     const auto* old_shape_sinfo = GetStructInfoAs<ShapeStructInfoNode>(data_sinfo->shape.value());
     ICHECK_NOTNULL(old_shape_sinfo);
-    if (old_shape_sinfo->values.defined()) {
-      PrimExpr _old_shape_prod = IntImm(DataType::Int(64), 1);
-      for (int i = 0; i < data_sinfo->ndim; ++i) {
-        _old_shape_prod = _old_shape_prod * old_shape_sinfo->values.value()[i];
-      }
-      old_shape_prod = _old_shape_prod;
+    old_shape_values = old_shape_sinfo->values;
+  }
+
+  if (new_shape_sinfo->values.defined() && old_shape_values.defined()) {
+    PrimExpr new_shape_prod = ComputeShapeProduct(new_shape_sinfo->values.value());
+    PrimExpr old_shape_prod = ComputeShapeProduct(old_shape_values.value());
+    if (ctx->GetAnalyzer()->CanProve(old_shape_prod != new_shape_prod)) {
+      ctx->ReportFatal(Diagnostic::Error(call)
+                       << "Reshape expects the new shape to be convertible from the old shape. "
+                          "However, the old shape is "
+                       << data_sinfo->shape << ", with product " << old_shape_prod
+                       << ", while the new shape is " << call->args[1] << ", with product "
+                       << new_shape_prod);
     }
   }
-
-  arith::Analyzer* analyzer = ctx->GetAnalyzer();
-  if (call->args.size() == 2) {
-    ICHECK(call->attrs.get() == nullptr);
-    const auto* new_shape_sinfo = GetStructInfoAs<ShapeStructInfoNode>(call->args[1]);
-    if (new_shape_sinfo == nullptr) {
-      ctx->ReportFatal(
-          Diagnostic::Error(call)
-          << "Reshape requires the input new shape to be Shape. However, the given one is "
-          << call->args[1]->struct_info_->GetTypeKey());
-    }
-
-    if (new_shape_sinfo->values.defined() && old_shape_prod.defined()) {
-      PrimExpr new_shape_prod = IntImm(DataType::Int(64), 1);
-      for (int i = 0; i < new_shape_sinfo->ndim; ++i) {
-        new_shape_prod = new_shape_prod * new_shape_sinfo->values.value()[i];
-      }
-      if (analyzer->CanProve(old_shape_prod.value() != new_shape_prod)) {
-        ctx->ReportFatal(Diagnostic::Error(call)
-                         << "Reshape expects the new shape to be convertible from the old shape. "
-                            "However, the old shape is "
-                         << data_sinfo->shape << ", with product " << old_shape_prod.value()
-                         << ", while the new shape is " << call->args[1] << ", with product "
-                         << new_shape_prod);
-      }
-    }
-    return TensorStructInfo(call->args[1], data_sinfo->dtype);
-  }
-
-  const auto* attrs = call->attrs.as<ReshapeAttrs>();
-  ICHECK_NOTNULL(attrs);
-  Array<PrimExpr> new_shape = attrs->shape;
-  if (!old_shape_prod.defined()) {
-    CheckNewShape(call, ctx, new_shape, /*allow_dim_inference=*/false);
-    return TensorStructInfo(ShapeExpr(new_shape), data_sinfo->dtype);
-  }
-
-  auto [new_shape_prod, dim_to_infer] =
-      CheckNewShape(call, ctx, new_shape, /*allow_dim_inference=*/true);
-
-  if (dim_to_infer != -1) {
-    PrimExpr inferred_len = analyzer->Simplify(floordiv(old_shape_prod.value(), new_shape_prod));
-    new_shape_prod *= inferred_len;
-    new_shape.Set(dim_to_infer, inferred_len);
-  }
-
-  if (analyzer->CanProve(old_shape_prod.value() != new_shape_prod)) {
-    ctx->ReportFatal(Diagnostic::Error(call)
-                     << "Reshape expects the new shape to be convertible from the old shape. "
-                        "However, the old shape is "
-                     << data_sinfo->shape << ", with product " << old_shape_prod.value()
-                     << ", while the new shape is " << new_shape << ", with product "
-                     << new_shape_prod);
-  }
-
-  return TensorStructInfo(ShapeExpr(new_shape), data_sinfo->dtype);
+  return TensorStructInfo(call->args[1], data_sinfo->dtype);
 }
 
 TVM_REGISTER_OP("relax.reshape")
     .set_num_inputs(2)
     .add_argument("data", "Tensor", "The input tensor.")
-    .add_argument("new_shape", "Shape", "The input new shape.")
+    .add_argument("shape", "Shape", "The input new shape.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoReshape);
 
 /* relax.permute_dims */
@@ -432,11 +412,8 @@ StructInfo InferStructInfoFlatten(const Call& call, const BlockBuilder& ctx) {
   if (data_shape == nullptr) {
     return TensorStructInfo(data_sinfo->dtype, /*ndim=*/1);
   }
-  PrimExpr shape_prod = IntImm(DataType::Int(64), 1);
-  for (int i = 0; i < static_cast<int>(data_shape->values.size()); ++i) {
-    shape_prod *= data_shape->values[i];
-  }
-  return TensorStructInfo(ShapeExpr({shape_prod}), data_sinfo->dtype);
+  PrimExpr shape_prod = ComputeShapeProduct(data_shape->values);
+  return TensorStructInfo(ShapeExpr({std::move(shape_prod)}), data_sinfo->dtype);
 }
 
 TVM_REGISTER_OP("relax.flatten")

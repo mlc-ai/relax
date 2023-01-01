@@ -119,11 +119,6 @@ class WrapParamAttrs(Attrs):
     """Attributes used in wrap_param operator"""
 
 
-@tvm._ffi.register_object("relax.attrs.ReshapeAttrs")
-class ReshapeAttrs(Attrs):
-    """Attributes used in reshape operator"""
-
-
 @tvm._ffi.register_object("relax.attrs.PermuteDimsAttrs")
 class PermuteDimsAttrs(Attrs):
     """Attributes for permute_dims operator"""

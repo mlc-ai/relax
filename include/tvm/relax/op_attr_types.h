@@ -343,15 +343,6 @@ struct ReduceAttrs : public tvm::AttrsNode<ReduceAttrs> {
   }
 };  // struct ReduceAttrs
 
-/*! \brief Attributes used in reshape operator */
-struct ReshapeAttrs : public tvm::AttrsNode<ReshapeAttrs> {
-  Array<PrimExpr> shape;
-
-  TVM_DECLARE_ATTRS(ReshapeAttrs, "relax.attrs.ReshapeAttrs") {
-    TVM_ATTR_FIELD(shape).describe("The new shape. Should be compatible with the original shape.");
-  }
-};
-
 /*! \brief Attributes used in permute_dims operator */
 struct PermuteDimsAttrs : public tvm::AttrsNode<PermuteDimsAttrs> {
   Optional<Array<Integer>> axes;
