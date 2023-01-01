@@ -17,6 +17,7 @@
 """Image operators."""
 from typing import Optional, Tuple, Union
 
+from tvm import DataType
 from tvm.ir.expr import PrimExpr
 
 from . import _ffi_api
@@ -37,7 +38,7 @@ def resize2d(
     cubic_alpha: float = -0.5,
     cubic_exclude: int = 0,
     extrapolation_value: float = 0.0,
-    out_dtype: Optional[str] = None,
+    out_dtype: Optional[Union[str, DataType]] = None,
 ) -> Expr:
     """Image resize2d operator.
 
@@ -89,7 +90,7 @@ def resize2d(
     extrapolation_value: float
         Fill value to use when roi is outside of the image
 
-    out_dtype : Optional[str]
+    out_dtype : Optional[Union[str, DataType]]
         The dtype of the output tensor.
         It it is not specified, the output will have the same dtype as input if not specified.
 

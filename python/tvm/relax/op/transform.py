@@ -17,13 +17,13 @@
 """Transform operators."""
 from typing import Union
 
-import tvm
+from tvm import DataType
 
 from . import _ffi_api
 from ..expr import Constant, Expr
 
 
-def cast(data: Expr, dtype: Union[str, tvm.DataType]) -> Expr:
+def cast(data: Expr, dtype: Union[str, DataType]) -> Expr:
     """Cast input tensor to data type.
 
     Parameters
@@ -31,7 +31,7 @@ def cast(data: Expr, dtype: Union[str, tvm.DataType]) -> Expr:
     data : relax.Expr
         The input data to the operator.
 
-    dtype: Union[str, tvm.DataType]
+    dtype: Union[str, DataType]
         The target data type
 
     Returns
@@ -39,12 +39,10 @@ def cast(data: Expr, dtype: Union[str, tvm.DataType]) -> Expr:
     result : relax.Expr
         The casted result.
     """
-    if isinstance(dtype, str):
-        dtype = tvm.DataType(dtype)
     return _ffi_api.cast(data, dtype)  # type: ignore
 
 
-def wrap_param(data: Expr, dtype: Union[str, tvm.DataType] = "float32") -> Expr:
+def wrap_param(data: Expr, dtype: Union[str, DataType] = "float32") -> Expr:
     """Cast input tensor which is model param to data type if the dtype of the input data is not
     the same as the given dtype.
 
@@ -53,7 +51,7 @@ def wrap_param(data: Expr, dtype: Union[str, tvm.DataType] = "float32") -> Expr:
     data : relax.Expr
         The input data to the operator.
 
-    dtype: Union[str, tvm.DataType]
+    dtype: Union[str, DataType]
         The target data type
 
     Returns

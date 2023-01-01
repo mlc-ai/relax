@@ -132,3 +132,8 @@ class ExpandDimsAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.SqueezeAttrs")
 class SqueezeAttrs(Attrs):
     """Attributes for squeeze operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.InitAttrs")
+class InitAttrs(Attrs):
+    """Attributes used in full operator"""

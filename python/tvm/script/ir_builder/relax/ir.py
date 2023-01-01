@@ -39,6 +39,8 @@ from tvm.relax.op import (
     expand_dims,
     flatten,
     floor_divide,
+    full,
+    full_like,
     image,
     invoke_closure,
     less,
@@ -51,6 +53,8 @@ from tvm.relax.op import (
     multiply,
     negative,
     nn,
+    ones,
+    ones_like,
     permute_dims,
     print,
     reshape,
@@ -65,6 +69,8 @@ from tvm.relax.op import (
     unique,
     variance,
     wrap_param,
+    zeros,
+    zeros_like,
 )
 from tvm.relax.utils import convert_to_expr
 from tvm.runtime import Object as tvm_Object
@@ -438,6 +444,8 @@ __all__ = [
     "expand_dims",
     "flatten",
     "floor_divide",
+    "full",
+    "full_like",
     "func_attr",
     "func_name",
     "func_ret_struct_info",
@@ -455,6 +463,8 @@ __all__ = [
     "multiply",
     "negative",
     "nn",
+    "ones",
+    "ones_like",
     "output",
     "permute_dims",
     "print",
@@ -471,4 +481,6 @@ __all__ = [
     "unique",
     "variance",
     "wrap_param",
+    "zeros",
+    "zeros_like",
 ]
