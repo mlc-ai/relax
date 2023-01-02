@@ -36,7 +36,7 @@ def _check(
 
 def test_cast():
     @R.function
-    def expected(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor(None, "float16", ndim=3):
+    def expected(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor((2, 3, 4), "float16"):
         gv: R.Tensor((2, 3, 4), "float16") = R.cast(x, "float16")
         return gv
 
@@ -100,7 +100,7 @@ def test_wrap_param():
     )
 
     @R.function
-    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor(None, "float16", ndim=2):
+    def expected(x: R.Tensor((2, 3), "float32")) -> R.Tensor((2, 3), "float16"):
         gv: R.Tensor((2, 3), "float16") = R.wrap_param(
             metadata["relax.expr.Constant"][0], "float16"
         )
@@ -115,5 +115,5 @@ def test_wrap_param():
     _check(expected, bb.get()["main"])
 
 
-if __name__ == "__foo__":
+if __name__ == "__main__":
     tvm.testing.main()

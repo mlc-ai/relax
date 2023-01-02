@@ -157,5 +157,5 @@ def test_relax_ewise_fma():
     _check(foo, bb.get()["foo"])
 
 
-if __name__ == "__foo__":
+if __name__ == "__main__":
     tvm.testing.main()

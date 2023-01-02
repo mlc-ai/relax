@@ -134,6 +134,16 @@ class SqueezeAttrs(Attrs):
     """Attributes for squeeze operator"""
 
 
+@tvm._ffi.register_object("relax.attrs.ConcatAttrs")
+class ConcatAttrs(Attrs):
+    """Attributes for concat operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.SplitAttrs")
+class SplitAttrs(Attrs):
+    """Attributes used in split operator"""
+
+
 @tvm._ffi.register_object("relax.attrs.InitAttrs")
 class InitAttrs(Attrs):
     """Attributes used in full operator"""

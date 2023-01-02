@@ -49,5 +49,5 @@ def test_resize2d():
     _check(foo, bb.get()["foo"])
 
 
-if __name__ == "__foo__":
+if __name__ == "__main__":
     tvm.testing.main()

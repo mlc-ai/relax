@@ -377,6 +377,29 @@ struct SqueezeAttrs : public tvm::AttrsNode<SqueezeAttrs> {
   }
 };  // struct SqueezeAttrs
 
+/*! \brief Attributes used in concat operators */
+struct ConcatAttrs : public tvm::AttrsNode<ConcatAttrs> {
+  Optional<Integer> axis;
+
+  TVM_DECLARE_ATTRS(ConcatAttrs, "relax.attrs.ConcatAttrs") {
+    TVM_ATTR_FIELD(axis).describe(
+        "The axis at which the input arrays are concatenated."
+        "Should lie in range `[-ndim, ndim)`.");
+  }
+};  // struct ConcatAttrs
+
+/*! \brief Attributes used in split operator */
+struct SplitAttrs : public tvm::AttrsNode<SplitAttrs> {
+  ObjectRef indices_or_sections;
+  int axis;
+
+  TVM_DECLARE_ATTRS(SplitAttrs, "relax.attrs.SplitAttrs") {
+    TVM_ATTR_FIELD(indices_or_sections)
+        .describe("The input array of indices or the number of split sections.");
+    TVM_ATTR_FIELD(axis).describe("The axis to be splitted");
+  }
+};  // struct SplitAttrs
+
 /*! \brief Attributes used in full, ones, and zeros operators */
 struct InitAttrs : public tvm::AttrsNode<InitAttrs> {
   DataType dtype;

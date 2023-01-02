@@ -18,9 +18,10 @@
 from typing import List, Optional, Tuple, Union
 
 from tvm.ir.expr import PrimExpr
+from tvm.tir import IntImm
 
 from . import _ffi_api
-from ..expr import Expr
+from ..expr import Expr, Tuple as RxTuple
 
 
 PrimExprLike = Union[int, PrimExpr]
@@ -140,3 +141,60 @@ def flatten(data: Expr) -> Expr:
         The flattened result.
     """
     return _ffi_api.flatten(data)  # type: ignore
+
+
+def concat(data: Union[Expr, List[Expr]], axis: Optional[int] = 0) -> Expr:
+    """Concatenate the input tensors along the given axis.
+
+    Parameters
+    ----------
+    data : Union[relax.Expr, List[relax.Expr]]
+        An Expr in Tuple type, containing the tensors to be concatenated.
+
+    axis : Optional[int]
+        The axis along which the tensors are concatenated.
+        If `axis` is `None`, arrays must be flattened before concatenation.
+
+    Returns
+    -------
+    result: relax.Expr
+        The concatenated tensor.
+    """
+    if isinstance(data, (list, tuple)):
+        data = RxTuple(data)
+    return _ffi_api.concat(data, axis)  # type: ignore
+
+
+def split(
+    data: Expr,
+    indices_or_sections: Union[int, List[PrimExprLike]],
+    axis: int = 0,
+) -> Expr:
+    """Split input tensor along axis by sections or indices.
+
+    If indices_or_sections is an integer, the input will be divided equally
+    along given axis (if possible). Last section will be smaller if the tensor
+    size along the given dimension is not divisible by the integer.
+
+    If indices_or_sections is a tuple of mixture of int or PrimExpr,
+    the entries indicate the indices where along axis the array is split.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The tensor to be split.
+
+    indices_or_sections : Union[int, List[PrimExprLike]]
+        Indices or sections to split into. Accepts an int or a list.
+
+    axis : int
+        The axis over which to split.
+
+    Returns
+    -------
+    ret : relax.Expr
+        The computed result.
+    """
+    if isinstance(indices_or_sections, int):
+        indices_or_sections = IntImm("int64", indices_or_sections)
+    return _ffi_api.split(data, indices_or_sections, axis)  # type: ignore
