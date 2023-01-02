@@ -386,7 +386,7 @@ def Gradient(
 
     Parameters
     ----------
-    func: relax.GlobalVar
+    global_var: relax.GlobalVar
         The GlobalVar of the specific function.
     require_grads: Optional[Union[relax.Var, List[relax.Var]]]
         The relax variables whose adjoints is needed. Must be parameters of the given function.
