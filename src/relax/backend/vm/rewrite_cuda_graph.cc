@@ -131,7 +131,6 @@ class StaticRegionExtractor : public ExprVisitor {
     static const auto& alloc_tensor_op = Op::Get("relax.builtin.alloc_tensor");
     if (const auto* var = value.as<VarNode>()) {
       // var -> var re-binding is not needed as we expect the binding is canonicalized
-      ICHECK(0);
       return;
     }
     if (const auto* call = value.as<CallNode>()) {

@@ -39,18 +39,19 @@ class CUDAGraphCache : public Object {
     std::vector<ObjectRef> states;
     CUDAGraph graph;
   };
-  static std::unordered_map<String, Entry> cache_;
-};
+  std::unordered_map<String, Entry> entries;
 
-std::unordered_map<String, CUDAGraphCache::Entry> CUDAGraphCache::cache_;
+  static CUDAGraphCache* Get() { return dmlc::ThreadLocalStore<CUDAGraphCache>::Get(); }
+};
 
 struct CaptureContext {
   cudaGraph_t graph;
   cudaStream_t stream;
-  bool is_warp_up;
+  // TODO: refactor CUDA graph rewrite pass so that warm up run is not needed
+  bool is_warm_up;
 };
 
-CaptureContext* capture_context = nullptr;
+typedef dmlc::ThreadLocalStore<CaptureContext*> CaptureContextStore;
 
 TVM_REGISTER_GLOBAL("vm.builtin.get_captured_cuda_graph")
     .set_body([](TVMArgs args, TVMRetValue* rv) {
@@ -58,7 +59,8 @@ TVM_REGISTER_GLOBAL("vm.builtin.get_captured_cuda_graph")
       void* vm_ptr = args[0];
       VirtualMachine* vm = static_cast<VirtualMachine*>(vm_ptr);
       String func_name = args[1];
-      if (auto it = CUDAGraphCache::cache_.find(func_name); it == CUDAGraphCache::cache_.end()) {
+      CUDAGraphCache* cache = CUDAGraphCache::Get();
+      if (auto it = cache->entries.find(func_name); it == cache->entries.end()) {
         CaptureContext ctx;
 
         const auto& device = vm->devices[0];  // FIXME: can't assume it's devices[0]
@@ -66,8 +68,8 @@ TVM_REGISTER_GLOBAL("vm.builtin.get_captured_cuda_graph")
 
         CUDA_CALL(cudaStreamCreate(&ctx.stream));
         // ctx.stream = static_cast<cudaStream_t>(device_api->CreateStream(device));
-        ctx.is_warp_up = true;
-        capture_context = &ctx;
+        ctx.is_warm_up = true;
+        *CaptureContextStore::Get() = &ctx;
 
         PackedFunc func{nullptr};
         func = vm->GetFunction(func_name, GetObjectPtr<Object>(vm));
@@ -79,7 +81,7 @@ TVM_REGISTER_GLOBAL("vm.builtin.get_captured_cuda_graph")
         func.CallPacked(func_args, &func_rv);
 
         // capture
-        ctx.is_warp_up = false;
+        ctx.is_warm_up = false;
         func.CallPacked(func_args, &func_rv);
 
         ADT tensors = func_rv;
@@ -89,16 +91,17 @@ TVM_REGISTER_GLOBAL("vm.builtin.get_captured_cuda_graph")
           entry.states.push_back(tensor);
         }
         entry.graph = CUDAGraph(ctx.graph);
-        CUDAGraphCache::cache_[func_name] = entry;
+        cache->entries[func_name] = entry;
         CUDA_CALL(cudaStreamDestroy(ctx.stream));
       }
-      const auto& cached = CUDAGraphCache::cache_[func_name];
+      const auto& cached = cache->entries[func_name];
       *rv = ADT::Tuple(ObjectRef(cached.graph), ObjectRef(ADT::Tuple(cached.states)));
     });
 
 TVM_REGISTER_GLOBAL("vm.builtin.cuda_graph_begin_capture").set_body_typed([]() {
+  CaptureContext* capture_context = *CaptureContextStore::Get();
   ICHECK(capture_context != nullptr);
-  if (capture_context->is_warp_up) {
+  if (capture_context->is_warm_up) {
     return;
   }
   std::swap(capture_context->stream, CUDAThreadEntry::ThreadLocal()->stream);
@@ -107,8 +110,9 @@ TVM_REGISTER_GLOBAL("vm.builtin.cuda_graph_begin_capture").set_body_typed([]() {
 });
 
 TVM_REGISTER_GLOBAL("vm.builtin.cuda_graph_end_capture").set_body_typed([]() {
+  CaptureContext* capture_context = *CaptureContextStore::Get();
   ICHECK(capture_context != nullptr);
-  if (capture_context->is_warp_up) {
+  if (capture_context->is_warm_up) {
     return;
   }
   CUDA_CALL(cudaStreamEndCapture(CUDAThreadEntry::ThreadLocal()->stream, &capture_context->graph));
