@@ -104,9 +104,9 @@ class Resize2DAttrs(Attrs):
     """Attributes used in image resize2d operator"""
 
 
-@tvm._ffi.register_object("relax.attrs.ReduceAttrs")
-class ReduceAttrs(Attrs):
-    """Attributes used in reduction operator"""
+@tvm._ffi.register_object("relax.attrs.StatisticalAttrs")
+class StatisticalAttrs(Attrs):
+    """Attributes used in statistical operator"""
 
 
 @tvm._ffi.register_object("relax.attrs.CastAttrs")

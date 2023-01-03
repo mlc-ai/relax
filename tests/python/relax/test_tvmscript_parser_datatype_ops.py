@@ -43,7 +43,7 @@ def test_cast():
     x = relax.Var("x", R.Tensor((2, 3, 4), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("main", [x]):
-        gv = bb.emit(relax.op.transform.cast(x, "float16"))
+        gv = bb.emit(relax.op.cast(x, "float16"))
         bb.emit_func_output(gv)
 
     _check(expected, bb.get()["main"])
@@ -109,7 +109,7 @@ def test_wrap_param():
     x = relax.Var("x", R.Tensor((2, 3), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("main", [x]):
-        gv = bb.emit(relax.op.transform.wrap_param(metadata["relax.expr.Constant"][0], "float16"))
+        gv = bb.emit(relax.op.wrap_param(metadata["relax.expr.Constant"][0], "float16"))
         bb.emit_func_output(gv)
 
     _check(expected, bb.get()["main"])

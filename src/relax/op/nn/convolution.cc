@@ -24,6 +24,8 @@
 
 #include "convolution.h"
 
+#include <tvm/relax/attrs/nn.h>
+
 #include <vector>
 
 namespace tvm {

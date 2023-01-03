@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 # pylint: disable=redefined-builtin
-"""Reduction operators."""
+"""Statistical operators."""
 from typing import List, Optional, Union
 
 from . import _ffi_api

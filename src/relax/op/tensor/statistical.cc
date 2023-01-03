@@ -18,18 +18,20 @@
  */
 
 /*!
- * \file reduce.cc
- * \brief Reduction operators.
+ * \file statistical.cc
+ * \brief Statistical operators.
  */
+
+#include <tvm/relax/attrs/statistical.h>
 
 #include "../op_common.h"
 
 namespace tvm {
 namespace relax {
 
-StructInfo InferStructInfoReduction(const Call& call, const BlockBuilder& ctx) {
+StructInfo InferStructInfoStatistical(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
-  const auto* attrs = call->attrs.as<ReduceAttrs>();
+  const auto* attrs = call->attrs.as<StatisticalAttrs>();
 
   std::vector<int> axes;
   if (!data_sinfo->IsUnknownNdim() && attrs->axis.defined()) {
@@ -88,10 +90,10 @@ StructInfo InferStructInfoReduction(const Call& call, const BlockBuilder& ctx) {
  *  1. be prepended with a prefix "relax.op." as the FFI key string for the make function,
  *  2. be prepended with a prefix "relax." as the key string in the operator registry.
  */
-#define RELAX_REGISTER_REDUCTION_OP(OpName)                                         \
+#define RELAX_REGISTER_STATISTICAL_OP(OpName)                                       \
   TVM_REGISTER_GLOBAL("relax.op." OpName)                                           \
       .set_body_typed([](Expr data, Optional<Array<Integer>> axis, bool keepdims) { \
-        ObjectPtr<ReduceAttrs> attrs = make_object<ReduceAttrs>();                  \
+        ObjectPtr<StatisticalAttrs> attrs = make_object<StatisticalAttrs>();        \
         attrs->axis = std::move(axis);                                              \
         attrs->keepdims = keepdims;                                                 \
         static const Op& op = Op::Get("relax." OpName);                             \
@@ -100,24 +102,24 @@ StructInfo InferStructInfoReduction(const Call& call, const BlockBuilder& ctx) {
   TVM_REGISTER_OP("relax." OpName)                                                  \
       .set_num_inputs(1)                                                            \
       .add_argument("expr", "Tensor", "The input tensor")                           \
-      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoReduction)
+      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoStatistical)
 
-TVM_REGISTER_NODE_TYPE(ReduceAttrs);
+TVM_REGISTER_NODE_TYPE(StatisticalAttrs);
 
 /* relax.sum */
-RELAX_REGISTER_REDUCTION_OP("sum");
+RELAX_REGISTER_STATISTICAL_OP("sum");
 
 /* relax.mean */
-RELAX_REGISTER_REDUCTION_OP("mean");
+RELAX_REGISTER_STATISTICAL_OP("mean");
 
 /* relax.variance */
-RELAX_REGISTER_REDUCTION_OP("variance");
+RELAX_REGISTER_STATISTICAL_OP("variance");
 
 /* relax.max */
-RELAX_REGISTER_REDUCTION_OP("max");
+RELAX_REGISTER_STATISTICAL_OP("max");
 
 /* relax.min */
-RELAX_REGISTER_REDUCTION_OP("min");
+RELAX_REGISTER_STATISTICAL_OP("min");
 
 }  // namespace relax
 }  // namespace tvm

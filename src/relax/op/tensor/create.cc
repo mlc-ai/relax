@@ -22,6 +22,8 @@
  * \brief Creation operators.
  */
 
+#include <tvm/relax/attrs/create.h>
+
 #include "../op_common.h"
 
 namespace tvm {

@@ -17,6 +17,8 @@
  * under the License.
  */
 
+#include <tvm/relax/attrs/nn.h>
+
 #include "../op_common.h"
 
 namespace tvm {
