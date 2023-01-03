@@ -1570,18 +1570,16 @@ def test_split_infer_struct_info_by_indices_shape_symbolic():
     bb = relax.BlockBuilder()
     a = tir.Var("a", "int64")
     b = tir.Var("b", "int64")
-    c = tir.Var("c", "int64")
-    d = tir.Var("d", "int64")
     x = relax.Var("x", R.Tensor((a, b), "float32"))
 
     _check_inference(
         bb,
-        relax.op.split(x, [c, d], axis=1),
+        relax.op.split(x, [10, 20], axis=1),
         relax.TupleStructInfo(
             [
-                relax.TensorStructInfo((a, tir.max(0, tir.min(b, c))), "float32"),
-                relax.TensorStructInfo((a, tir.max(0, tir.min(b, d) - tir.max(0, c))), "float32"),
-                relax.TensorStructInfo((a, tir.max(0, b - tir.max(0, d))), "float32"),
+                relax.TensorStructInfo(dtype="float32", ndim=2),
+                relax.TensorStructInfo(dtype="float32", ndim=2),
+                relax.TensorStructInfo(dtype="float32", ndim=2),
             ]
         ),
     )
@@ -1901,6 +1899,16 @@ def test_split_infer_struct_info_single_output():
         relax.op.split(x5, 1, axis=1),
         relax.TupleStructInfo([relax.TensorStructInfo(s2, "float32")]),
     )
+
+
+def test_split_infer_struct_info_non_integer_indices():
+    bb = relax.BlockBuilder()
+    a = tir.Var("c", "int64")
+    b = tir.Var("d", "int64")
+    x = relax.Var("x", R.Tensor((3, 4), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.split(x, [a, b], axis=1))
 
 
 def test_split_invalid_n_section():

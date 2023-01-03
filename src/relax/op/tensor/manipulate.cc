@@ -459,13 +459,14 @@ Array<TensorStructInfo> GetTensorSInfoFromTuple(const Call& call, const BlockBui
   return tensor_sinfo;
 }
 
-Optional<Array<PrimExpr>> CheckComputeOutputShape(const Call& call, const BlockBuilder& ctx,
-                                                  const std::vector<Array<PrimExpr>>& shape_values,
-                                                  int axis) {
+Optional<Array<PrimExpr>> CheckConcatOutputShape(const Call& call, const BlockBuilder& ctx,
+                                                 const std::vector<Array<PrimExpr>>& shape_values,
+                                                 int axis) {
   bool shape_unknown = false;
   arith::Analyzer* analyzer = ctx->GetAnalyzer();
   PrimExpr concat_sum = IntImm(DataType::Int(64), 0);
   for (int d = 0; d < static_cast<int>(shape_values[0].size()); ++d) {
+    // For the specified axis, we compute the sum of shape value over each tensor.
     if (d == axis) {
       for (Array<PrimExpr> shape_value : shape_values) {
         concat_sum += shape_value[d];
@@ -473,6 +474,7 @@ Optional<Array<PrimExpr>> CheckComputeOutputShape(const Call& call, const BlockB
       continue;
     }
 
+    // For other axes, we check the equality of all tensors' shape values, to ensure safety.
     for (int i = 1; i < static_cast<int>(shape_values.size()); ++i) {
       if (analyzer->CanProve(shape_values[i][d] != shape_values[0][d])) {
         ctx->ReportFatal(Diagnostic::Error(call)
@@ -582,7 +584,7 @@ StructInfo InferStructInfoConcat(const Call& call, const BlockBuilder& ctx) {
   }
 
   // As long as the there is known shape value, we will do the best effort check to ensure safety.
-  Optional<Array<PrimExpr>> output_shape = CheckComputeOutputShape(call, ctx, shape_values, axis);
+  Optional<Array<PrimExpr>> output_shape = CheckConcatOutputShape(call, ctx, shape_values, axis);
 
   if (shape_unknown || !output_shape.defined()) {
     return TensorStructInfo(output_dtype, output_ndim);
@@ -602,16 +604,23 @@ TVM_REGISTER_NODE_TYPE(SplitAttrs);
 
 Expr MakeSplit(Expr data, ObjectRef indices_or_sections, int axis) {
   ObjectPtr<SplitAttrs> attrs = make_object<SplitAttrs>();
-  attrs->indices_or_sections = indices_or_sections;
-  if (!indices_or_sections->IsInstance<ArrayNode>()) {
-    const auto* n_section = indices_or_sections.as<IntImmNode>();
-    CHECK(n_section != nullptr) << "Split op expects the input indices_or_sections to be either an "
-                                   "Array of PrimExpr or an integer. However, the given one is "
-                                << indices_or_sections->GetTypeKey();
+  if (const auto* indices = indices_or_sections.as<ArrayNode>()) {
+    for (int i = 0; i < static_cast<int>(indices->size()); ++i) {
+      const auto* idx = indices->at(i).as<IntImmNode>();
+      CHECK(idx != nullptr) << "Split op only accepts an array of integers as the indices. "
+                               "However, the given indices "
+                            << indices_or_sections << " contains some non-integer.";
+    }
+  } else if (const auto* n_section = indices_or_sections.as<IntImmNode>()) {
     CHECK_GT(n_section->value, 0) << "Split op expects the input number of sections to be a "
                                      "positive integer. However, the given number of sections is "
                                   << n_section->value;
+  } else {
+    LOG(FATAL) << "Split op expects the input indices_or_sections to be either an Array of "
+                  "PrimExpr or an integer. However, the given one is "
+               << indices_or_sections->GetTypeKey();
   }
+  attrs->indices_or_sections = indices_or_sections;
   attrs->axis = axis;
 
   static const Op& op = Op::Get("relax.split");
@@ -624,34 +633,33 @@ StructInfo InferStructInfoSplit(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
   const auto* attrs = call->attrs.as<SplitAttrs>();
   const auto* data_shape = data_sinfo->shape.as<ShapeExprNode>();
-  int axis = data_sinfo->IsUnknownNdim() ? attrs->axis
-                                         : NormalizeAxis(call, ctx, data_sinfo->ndim, attrs->axis);
+  int axis =
+      data_sinfo->IsUnknownNdim() ? -1 : NormalizeAxis(call, ctx, data_sinfo->ndim, attrs->axis);
 
   if (const auto* p_indices = attrs->indices_or_sections.as<ArrayNode>()) {
+    // When there is not index, return the input tensor's struct info.
     if (p_indices->size() == 0) {
       return TupleStructInfo({data_sinfo});
     }
-    for (int i = 0; i < static_cast<int>(p_indices->size()); ++i) {
-      ObjectRef idx = p_indices->at(i);
-      const auto* p_idx = idx.as<PrimExprNode>();
-      if (p_idx == nullptr) {
-        ctx->ReportFatal(
-            Diagnostic::Error(call)
-            << "Split expects the given indices to all be PrimExpr. However, the given indices is "
-            << attrs->indices_or_sections << ", which contains " << idx << " that is "
-            << idx->GetTypeKey());
-      }
-    }
-
+    // Fall back to unknown shape when the input tensor doesn't have ShapeExpr as shape.
     if (data_shape == nullptr) {
       return TupleStructInfo(Array<StructInfo>(
           p_indices->size() + 1, TensorStructInfo(data_sinfo->dtype, data_sinfo->ndim)));
     }
 
-    Array<PrimExpr> indices = GetRef<Array<PrimExpr>>(p_indices);
-    PrimExpr zero = IntImm(DataType::Int(64), /*value=*/0);
+    ICHECK_NE(axis, -1);
+    const auto* axis_length = data_shape->values[axis].as<IntImmNode>();
+    // Fall back to unknown shape when the input tensor shape at the given axis is symbolic.
+    if (axis_length == nullptr) {
+      return TupleStructInfo(Array<StructInfo>(
+          p_indices->size() + 1, TensorStructInfo(data_sinfo->dtype, data_sinfo->ndim)));
+    }
+
+    // Only do output shape inference when all the indices and the total length are integers.
+    Array<IntImm> indices = GetRef<Array<IntImm>>(p_indices);
+    IntImm zero(DataType::Int(64), /*value=*/0);
     indices.insert(indices.begin(), zero);
-    indices.insert(indices.end(), data_shape->values[axis]);
+    indices.insert(indices.end(), Downcast<IntImm>(data_shape->values[axis]));
 
     std::vector<StructInfo> output_sinfo;
     output_sinfo.reserve(indices.size() - 1);
@@ -664,17 +672,19 @@ StructInfo InferStructInfoSplit(const Call& call, const BlockBuilder& ctx) {
       output_sinfo.push_back(TensorStructInfo(ShapeExpr(shape), data_sinfo->dtype));
     }
     return TupleStructInfo(output_sinfo);
-
   } else if (const auto* p_n_section = attrs->indices_or_sections.as<IntImmNode>()) {
     ICHECK_GT(p_n_section->value, 0);
     int n_section = p_n_section->value;
+    // When the number of section is one, return the input tensor's struct info.
     if (n_section == 1) {
       return TupleStructInfo({data_sinfo});
     }
+    // Fall back to unknown shape when the input tensor doesn't have ShapeExpr as shape.
     if (data_shape == nullptr) {
       return TupleStructInfo(
           Array<StructInfo>(n_section, TensorStructInfo(data_sinfo->dtype, data_sinfo->ndim)));
     }
+    ICHECK_NE(axis, -1);
     PrimExpr split_len = ceildiv(data_shape->values[axis], n_section);
 
     // Construct struct info for tensors except the last one.
@@ -688,10 +698,7 @@ StructInfo InferStructInfoSplit(const Call& call, const BlockBuilder& ctx) {
     output_sinfo.push_back(TensorStructInfo(ShapeExpr(shape), data_sinfo->dtype));
     return TupleStructInfo(output_sinfo);
   }
-  ctx->ReportFatal(Diagnostic::Error(call)
-                   << "Invalid attribute. `indices_or_sections` is expected to be either an Array "
-                      "of PrimExprs, or a single integer. However, the given one is "
-                   << attrs->indices_or_sections->GetTypeKey());
+  ICHECK(false) << "Cannot reach here.";
   throw;
 }
 
