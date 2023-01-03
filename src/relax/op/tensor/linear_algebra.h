@@ -18,24 +18,22 @@
  */
 
 /*!
- * \file datatype.h
- * \brief The functions to make Relax datatype operator calls.
+ * \file linear_algebra.h
+ * \brief The functions to make Relax linear algebra operator calls.
  */
-#ifndef TVM_RELAX_OP_TENSOR_DATATYPE_H_
-#define TVM_RELAX_OP_TENSOR_DATATYPE_H_
+#ifndef TVM_RELAX_OP_TENSOR_LINEAR_ALGEBRA_H_
+#define TVM_RELAX_OP_TENSOR_LINEAR_ALGEBRA_H_
 
-#include <tvm/relax/attrs/datatype.h>
+#include <tvm/relax/attrs/linear_algebra.h>
 
 #include "../op_common.h"
 
 namespace tvm {
 namespace relax {
 
-Expr astype(Expr data, DataType dtype);
-
-Expr WrapParam(Expr data, DataType dtype);
+Expr Matmul(Expr a, Expr b, DataType out_dtype);
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_OP_TENSOR_DATATYPE_H_
+#endif  // TVM_RELAX_OP_TENSOR_LINEAR_ALGEBRA_H_

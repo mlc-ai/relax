@@ -29,14 +29,14 @@
 namespace tvm {
 namespace relax {
 
-/*! \brief Attributes used in cast operator */
-struct CastAttrs : public tvm::AttrsNode<CastAttrs> {
+/*! \brief Attributes used in astype operator */
+struct AstypeAttrs : public tvm::AttrsNode<AstypeAttrs> {
   DataType dtype;
 
-  TVM_DECLARE_ATTRS(CastAttrs, "relax.attrs.CastAttrs") {
+  TVM_DECLARE_ATTRS(AstypeAttrs, "relax.attrs.AstypeAttrs") {
     TVM_ATTR_FIELD(dtype).describe("Target data type");
   }
-};  // struct CastAttrs.
+};  // struct AstypeAttrs.
 
 /*! \brief Attributes used in wrap_param operator */
 struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {

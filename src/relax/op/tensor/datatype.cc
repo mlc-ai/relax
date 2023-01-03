@@ -29,32 +29,32 @@
 namespace tvm {
 namespace relax {
 
-/* relax.cast */
-TVM_REGISTER_NODE_TYPE(CastAttrs);
+/* relax.astype */
+TVM_REGISTER_NODE_TYPE(AstypeAttrs);
 
-Expr Cast(Expr data, DataType dtype) {
-  ObjectPtr<CastAttrs> attrs = make_object<CastAttrs>();
+Expr astype(Expr data, DataType dtype) {
+  ObjectPtr<AstypeAttrs> attrs = make_object<AstypeAttrs>();
   attrs->dtype = dtype;
 
-  static const Op& op = Op::Get("relax.cast");
+  static const Op& op = Op::Get("relax.astype");
   return Call(op, {std::move(data)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.cast").set_body_typed(Cast);
+TVM_REGISTER_GLOBAL("relax.op.astype").set_body_typed(astype);
 
-StructInfo InferStructInfoCast(const Call& call, const BlockBuilder& ctx) {
+StructInfo InferStructInfoAstype(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo sinfo = GetUnaryInputTensorStructInfo(call, ctx);
-  const auto* attrs = call->attrs.as<CastAttrs>();
+  const auto* attrs = call->attrs.as<AstypeAttrs>();
   ObjectPtr<TensorStructInfoNode> new_sinfo = make_object<TensorStructInfoNode>(*sinfo.get());
   new_sinfo->dtype = attrs->dtype;
   return TensorStructInfo(new_sinfo);
 }
 
-TVM_REGISTER_OP("relax.cast")
-    .set_attrs_type<CastAttrs>()
+TVM_REGISTER_OP("relax.astype")
+    .set_attrs_type<AstypeAttrs>()
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoCast);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoAstype);
 
 /* relax.wrap_param */
 TVM_REGISTER_NODE_TYPE(WrapParamAttrs);

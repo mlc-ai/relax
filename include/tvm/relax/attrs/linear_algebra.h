@@ -18,24 +18,27 @@
  */
 
 /*!
- * \file datatype.h
- * \brief The functions to make Relax datatype operator calls.
+ * \file tvm/relax/attrs/linear_algebra.h
+ * \brief Attributes for linear algebra operators.
  */
-#ifndef TVM_RELAX_OP_TENSOR_DATATYPE_H_
-#define TVM_RELAX_OP_TENSOR_DATATYPE_H_
+#ifndef TVM_RELAX_ATTRS_LINEAR_ALGEBRA_H_
+#define TVM_RELAX_ATTRS_LINEAR_ALGEBRA_H_
 
-#include <tvm/relax/attrs/datatype.h>
-
-#include "../op_common.h"
+#include <tvm/relax/expr.h>
 
 namespace tvm {
 namespace relax {
 
-Expr astype(Expr data, DataType dtype);
+/*! \brief Attributes for matmul operator */
+struct MatmulAttrs : public tvm::AttrsNode<MatmulAttrs> {
+  DataType out_dtype;
 
-Expr WrapParam(Expr data, DataType dtype);
+  TVM_DECLARE_ATTRS(MatmulAttrs, "relax.attrs.MatmulAttrs") {
+    TVM_ATTR_FIELD(out_dtype).describe("The data type of the output tensor");
+  }
+};  // struct MatmulAttrs
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_OP_TENSOR_DATATYPE_H_
+#endif  // TVM_RELAX_ATTRS_LINEAR_ALGEBRA_H_

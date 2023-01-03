@@ -46,8 +46,6 @@ Expr BatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_v
 Expr LayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double epsilon, bool center,
                bool scale);
 
-Expr Matmul(Expr a, Expr b, DataType out_dtype);
-
 Expr Dropout(Expr data, double rate);
 
 Expr CrossEntropy(Expr predictions, Expr targets);

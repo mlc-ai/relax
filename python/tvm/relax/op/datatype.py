@@ -23,7 +23,7 @@ from . import _ffi_api
 from ..expr import Constant, Expr
 
 
-def cast(data: Expr, dtype: Union[str, DataType]) -> Expr:
+def astype(data: Expr, dtype: Union[str, DataType]) -> Expr:
     """Cast input tensor to data type.
 
     Parameters
@@ -39,7 +39,7 @@ def cast(data: Expr, dtype: Union[str, DataType]) -> Expr:
     result : relax.Expr
         The casted result.
     """
-    return _ffi_api.cast(data, dtype)  # type: ignore
+    return _ffi_api.astype(data, dtype)  # type: ignore
 
 
 def wrap_param(data: Expr, dtype: Union[str, DataType] = "float32") -> Expr:

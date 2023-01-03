@@ -109,9 +109,9 @@ class StatisticalAttrs(Attrs):
     """Attributes used in statistical operator"""
 
 
-@tvm._ffi.register_object("relax.attrs.CastAttrs")
-class CastAttrs(Attrs):
-    """Attributes used in cast operator"""
+@tvm._ffi.register_object("relax.attrs.AstypeAttrs")
+class AstypeAttrs(Attrs):
+    """Attributes used in astype operator"""
 
 
 @tvm._ffi.register_object("relax.attrs.WrapParamAttrs")

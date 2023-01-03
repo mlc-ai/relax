@@ -34,16 +34,16 @@ def _check(
         tvm.ir.assert_structural_equal(parsed, expect)
 
 
-def test_cast():
+def test_astype():
     @R.function
     def expected(x: R.Tensor((2, 3, 4), "float32")) -> R.Tensor((2, 3, 4), "float16"):
-        gv: R.Tensor((2, 3, 4), "float16") = R.cast(x, "float16")
+        gv: R.Tensor((2, 3, 4), "float16") = R.astype(x, "float16")
         return gv
 
     x = relax.Var("x", R.Tensor((2, 3, 4), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("main", [x]):
-        gv = bb.emit(relax.op.cast(x, "float16"))
+        gv = bb.emit(relax.op.astype(x, "float16"))
         bb.emit_func_output(gv)
 
     _check(expected, bb.get()["main"])
