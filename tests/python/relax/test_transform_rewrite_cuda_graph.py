@@ -44,6 +44,7 @@ def apply_passes(mod: IRModule, target):
     mod = relax.transform.CallTIRRewrite()(mod)
     mod = relax.transform.CanonicalizeBindings()(mod)
     mod = relax.transform.RewriteCUDAGraph()(mod)
+    print(mod.script())
     # mod = relax.transform.VMGraphMemoryPlan()(mod)
     mod = relax.transform.VMMemoryLower()(mod)
     mod = relax.transform.VMShapeLower()(mod)
@@ -65,6 +66,7 @@ def minimal_vm_build(mod, target, params=None):
 def test_minimum_example():
     x = relax.Var("x", relax.TensorStructInfo((2, 4)))
     const_one = relax.const(1, "float32")
+    const_ones = relax.const(np.ones((8,)).astype("float32"))
 
     bb = relax.BlockBuilder()
     with bb.function("main", [x]):
@@ -72,9 +74,10 @@ def test_minimum_example():
         v1 = bb.emit_te(topi.reshape, v0, (8,))
         v2 = bb.emit_te(topi.nn.relu, v1)
         v3 = bb.emit_te(topi.add, v2, const_one)
-        v4 = bb.emit_te(topi.nn.pad, v3, pad_before=[1], pad_after=[1], pad_value=1)
-        v5 = bb.emit_te(topi.log, v4)
-        bb.emit_func_output(v5)
+        v4 = bb.emit_te(topi.add, v3, const_ones)
+        v5 = bb.emit_te(topi.nn.pad, v4, pad_before=[1], pad_after=[1], pad_value=1)
+        v6 = bb.emit_te(topi.log, v5)
+        bb.emit_func_output(v6)
 
     mod = bb.get()
     target = tvm.target.Target("nvidia/geforce-rtx-3070")
@@ -88,6 +91,7 @@ def test_minimum_example():
     y_np = np.exp(x_np)
     y_np = np.reshape(y_np, (8,))
     y_np = np.maximum(y_np, 0.0)
+    y_np = np.add(y_np, 1)
     y_np = np.add(y_np, 1)
     pad_value = np.ones((1,)).astype("float32")
     y_np = np.concatenate([pad_value, y_np, pad_value], axis=0)

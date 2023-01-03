@@ -145,8 +145,11 @@ class StaticRegionExtractor : public ExprVisitor {
             std::all_of(call->args.begin(), call->args.end(), [&](const Expr& arg) -> bool {
               if (const auto* var = arg.as<VarNode>()) {
                 return scope_.graph.bindings.count(var);
+              } else if (arg->IsInstance<IntImmNode>() || arg->IsInstance<FloatImmNode>() ||
+                         arg->IsInstance<ConstantNode>()) {
+                return true;
               }
-              return true;
+              return false;
             });
         if (is_all_args_static) {
           scope_.graph.AddBinding(binding, false);
