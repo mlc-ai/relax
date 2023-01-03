@@ -242,5 +242,5 @@ def test_softmax_cross_entropy():
     _check(foo, bb.get()["foo"])
 
 
-if __name__ == "__foo__":
+if __name__ == "__main__":
     tvm.testing.main()

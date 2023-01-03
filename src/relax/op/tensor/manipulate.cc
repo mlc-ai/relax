@@ -421,5 +421,292 @@ TVM_REGISTER_OP("relax.flatten")
     .add_argument("data", "Tensor", "The input tensor")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoFlatten);
 
+/* relax.concat */
+TVM_REGISTER_NODE_TYPE(ConcatAttrs);
+
+Expr MakeConcat(Expr data, Optional<Integer> axis) {
+  ObjectPtr<ConcatAttrs> attrs = make_object<ConcatAttrs>();
+  attrs->axis = std::move(axis);
+
+  static const Op& op = Op::Get("relax.concat");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.concat").set_body_typed(MakeConcat);
+
+Array<TensorStructInfo> GetTensorSInfoFromTuple(const Call& call, const BlockBuilder& ctx,
+                                                const Expr& expr) {
+  const auto* tuple_sinfo = GetStructInfoAs<TupleStructInfoNode>(expr);
+  if (tuple_sinfo == nullptr) {
+    ctx->ReportFatal(Diagnostic::Error(call)
+                     << call->op
+                     << " expects the input to be a Tuple of Tensors. However, the given input is "
+                     << expr->struct_info_->GetTypeKey());
+  }
+
+  Array<TensorStructInfo> tensor_sinfo;
+  tensor_sinfo.reserve(tuple_sinfo->fields.size());
+  for (StructInfo field_sinfo : tuple_sinfo->fields) {
+    const auto* field_tensor_sinfo = field_sinfo.as<TensorStructInfoNode>();
+    if (field_tensor_sinfo == nullptr) {
+      ctx->ReportFatal(
+          Diagnostic::Error(call)
+          << call->op << " expects the input to be a Tuple of Tensors. However, the given input is "
+          << expr->struct_info_);
+    }
+    tensor_sinfo.push_back(GetRef<TensorStructInfo>(field_tensor_sinfo));
+  }
+  return tensor_sinfo;
+}
+
+Optional<Array<PrimExpr>> CheckConcatOutputShape(const Call& call, const BlockBuilder& ctx,
+                                                 const std::vector<Array<PrimExpr>>& shape_values,
+                                                 int axis) {
+  bool shape_unknown = false;
+  arith::Analyzer* analyzer = ctx->GetAnalyzer();
+  PrimExpr concat_sum = IntImm(DataType::Int(64), 0);
+  for (int d = 0; d < static_cast<int>(shape_values[0].size()); ++d) {
+    // For the specified axis, we compute the sum of shape value over each tensor.
+    if (d == axis) {
+      for (Array<PrimExpr> shape_value : shape_values) {
+        concat_sum += shape_value[d];
+      }
+      continue;
+    }
+
+    // For other axes, we check the equality of all tensors' shape values, to ensure safety.
+    for (int i = 1; i < static_cast<int>(shape_values.size()); ++i) {
+      if (analyzer->CanProve(shape_values[i][d] != shape_values[0][d])) {
+        ctx->ReportFatal(Diagnostic::Error(call)
+                         << "Concat expects the input tensors to have the same shape on every "
+                            "dimension except the one indicated by the input axis. However, the "
+                            "input contains tensors whose shapes on dimension "
+                         << d << " is " << shape_values[0][d] << " and " << shape_values[i][d]);
+      } else if (!analyzer->CanProveEqual(shape_values[i][d], shape_values[0][d])) {
+        shape_unknown = true;
+      }
+    }
+  }
+
+  if (shape_unknown) {
+    return NullOpt;
+  }
+  Array<PrimExpr> output_shape = shape_values[0];
+  output_shape.Set(axis, concat_sum);
+  return output_shape;
+}
+
+StructInfo InferStructInfoConcat(const Call& call, const BlockBuilder& ctx) {
+  if (call->args.size() != 1) {
+    ctx->ReportFatal(Diagnostic::Error(call) << "Concat op should have 1 argument");
+  }
+  Array<TensorStructInfo> tensor_sinfo = GetTensorSInfoFromTuple(call, ctx, call->args[0]);
+  if (tensor_sinfo.empty()) {
+    ctx->ReportFatal(Diagnostic::Error(call)
+                     << "Concat op expects at least one tensor in the input Tuple. However, the "
+                        "given input Tuple is empty.");
+  }
+
+  const auto* attrs = call->attrs.as<ConcatAttrs>();
+  int output_ndim = kUnknownNDim;
+  DataType output_dtype = DataType::Void();
+  bool shape_unknown = false;
+  bool is_void_dtype = false;
+  std::vector<Array<PrimExpr>> shape_values;
+  shape_values.reserve(tensor_sinfo.size());
+
+  for (TensorStructInfo sinfo : tensor_sinfo) {
+    // Update the output dtype.
+    if (sinfo->dtype.is_void()) {
+      is_void_dtype = true;
+    } else if (output_dtype.is_void()) {
+      output_dtype = sinfo->dtype;
+    } else if (sinfo->dtype != output_dtype) {
+      ctx->ReportFatal(Diagnostic::Error(call)
+                       << "Concat expects all input tensors to have the same dtype. However, the "
+                          "input contains tensors with dtype "
+                       << output_dtype << " and " << sinfo->dtype);
+    }
+
+    // Update the output ndim.
+    if (!attrs->axis.defined() && sinfo->ndim != 1) {
+      // To ensure safety, we require all tensors to explicitly have ndim 1 when the concat axis
+      // is not specified.
+      ctx->ReportFatal(
+          Diagnostic::Error(call)
+          << "Concat expects all input tensors to be flattened 1-dimensional tensor when the axis "
+             "is not specified. However, the input contains a tensor with ndim dimension "
+          << (sinfo->ndim == kUnknownNDim ? "unknown" : std::to_string(sinfo->ndim))
+          << ". If the ndim is unknown, please use MatchCast to match it to 1-dimensional tensor "
+             "first.");
+    } else if (output_ndim == kUnknownNDim) {
+      output_ndim = sinfo->ndim;
+    } else if (sinfo->ndim != kUnknownNDim && sinfo->ndim != output_ndim) {
+      ctx->ReportFatal(Diagnostic::Error(call)
+                       << "Concat expects all input tensors to have same ndim. However, the "
+                          "input contains tensors with ndim "
+                       << output_ndim << " and " << sinfo->ndim);
+    }
+
+    // Update the shape values for best effort check.
+    const auto* shape_expr = sinfo->shape.as<ShapeExprNode>();
+    if (shape_expr != nullptr) {
+      shape_values.push_back(shape_expr->values);
+      continue;
+    }
+    shape_unknown = true;
+
+    if (!sinfo->shape.defined()) {
+      continue;
+    }
+    // Keep the shape value for equality check.
+    ShapeStructInfo shape_sinfo = Downcast<ShapeStructInfo>(sinfo->shape.value()->struct_info_);
+    if (shape_sinfo->values.defined()) {
+      shape_values.push_back(shape_sinfo->values.value());
+    }
+  }
+
+  if (is_void_dtype) {
+    output_dtype = DataType::Void();
+  }
+  if (output_ndim == kUnknownNDim) {
+    return tensor_sinfo.size() == 1 ? tensor_sinfo[0] : TensorStructInfo(output_dtype, output_ndim);
+  }
+
+  int axis =
+      attrs->axis.defined() ? NormalizeAxis(call, ctx, output_ndim, attrs->axis.value()->value) : 0;
+  // If there is only one input tensor, no action is needed.
+  if (tensor_sinfo.size() == 1) {
+    return tensor_sinfo[0];
+  }
+  if (shape_values.empty()) {
+    return TensorStructInfo(output_dtype, output_ndim);
+  }
+
+  // As long as the there is known shape value, we will do the best effort check to ensure safety.
+  Optional<Array<PrimExpr>> output_shape = CheckConcatOutputShape(call, ctx, shape_values, axis);
+
+  if (shape_unknown || !output_shape.defined()) {
+    return TensorStructInfo(output_dtype, output_ndim);
+  } else {
+    return TensorStructInfo(ShapeExpr(output_shape.value()), output_dtype);
+  }
+}
+
+TVM_REGISTER_OP("relax.concat")
+    .set_attrs_type<ConcatAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tuple of Tensors", "The input list of tensors.")
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoConcat);
+
+/* relax.split */
+TVM_REGISTER_NODE_TYPE(SplitAttrs);
+
+Expr MakeSplit(Expr data, ObjectRef indices_or_sections, int axis) {
+  ObjectPtr<SplitAttrs> attrs = make_object<SplitAttrs>();
+  if (const auto* indices = indices_or_sections.as<ArrayNode>()) {
+    for (int i = 0; i < static_cast<int>(indices->size()); ++i) {
+      const auto* idx = indices->at(i).as<IntImmNode>();
+      CHECK(idx != nullptr) << "Split op only accepts an array of integers as the indices. "
+                               "However, the given indices "
+                            << indices_or_sections << " contains some non-integer.";
+    }
+  } else if (const auto* n_section = indices_or_sections.as<IntImmNode>()) {
+    CHECK_GT(n_section->value, 0) << "Split op expects the input number of sections to be a "
+                                     "positive integer. However, the given number of sections is "
+                                  << n_section->value;
+  } else {
+    LOG(FATAL) << "Split op expects the input indices_or_sections to be either an Array of "
+                  "PrimExpr or an integer. However, the given one is "
+               << indices_or_sections->GetTypeKey();
+  }
+  attrs->indices_or_sections = indices_or_sections;
+  attrs->axis = axis;
+
+  static const Op& op = Op::Get("relax.split");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.split").set_body_typed(MakeSplit);
+
+StructInfo InferStructInfoSplit(const Call& call, const BlockBuilder& ctx) {
+  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
+  const auto* attrs = call->attrs.as<SplitAttrs>();
+  const auto* data_shape = data_sinfo->shape.as<ShapeExprNode>();
+  int axis =
+      data_sinfo->IsUnknownNdim() ? -1 : NormalizeAxis(call, ctx, data_sinfo->ndim, attrs->axis);
+
+  if (const auto* p_indices = attrs->indices_or_sections.as<ArrayNode>()) {
+    // When there is not index, return the input tensor's struct info.
+    if (p_indices->size() == 0) {
+      return TupleStructInfo({data_sinfo});
+    }
+    // Fall back to unknown shape when the input tensor doesn't have ShapeExpr as shape.
+    if (data_shape == nullptr) {
+      return TupleStructInfo(Array<StructInfo>(
+          p_indices->size() + 1, TensorStructInfo(data_sinfo->dtype, data_sinfo->ndim)));
+    }
+
+    ICHECK_NE(axis, -1);
+    const auto* axis_length = data_shape->values[axis].as<IntImmNode>();
+    // Fall back to unknown shape when the input tensor shape at the given axis is symbolic.
+    if (axis_length == nullptr) {
+      return TupleStructInfo(Array<StructInfo>(
+          p_indices->size() + 1, TensorStructInfo(data_sinfo->dtype, data_sinfo->ndim)));
+    }
+
+    // Only do output shape inference when all the indices and the total length are integers.
+    Array<IntImm> indices = GetRef<Array<IntImm>>(p_indices);
+    IntImm zero(DataType::Int(64), /*value=*/0);
+    indices.insert(indices.begin(), zero);
+    indices.insert(indices.end(), Downcast<IntImm>(data_shape->values[axis]));
+
+    std::vector<StructInfo> output_sinfo;
+    output_sinfo.reserve(indices.size() - 1);
+    for (int i = 0; i + 1 < static_cast<int>(indices.size()); ++i) {
+      PrimExpr l = tvm::max(zero, indices[i]);
+      PrimExpr r = tvm::min(data_shape->values[axis], indices[i + 1]);
+
+      Array<PrimExpr> shape = data_shape->values;
+      shape.Set(axis, tvm::max(zero, r - l));
+      output_sinfo.push_back(TensorStructInfo(ShapeExpr(shape), data_sinfo->dtype));
+    }
+    return TupleStructInfo(output_sinfo);
+  } else if (const auto* p_n_section = attrs->indices_or_sections.as<IntImmNode>()) {
+    ICHECK_GT(p_n_section->value, 0);
+    int n_section = p_n_section->value;
+    // When the number of section is one, return the input tensor's struct info.
+    if (n_section == 1) {
+      return TupleStructInfo({data_sinfo});
+    }
+    // Fall back to unknown shape when the input tensor doesn't have ShapeExpr as shape.
+    if (data_shape == nullptr) {
+      return TupleStructInfo(
+          Array<StructInfo>(n_section, TensorStructInfo(data_sinfo->dtype, data_sinfo->ndim)));
+    }
+    ICHECK_NE(axis, -1);
+    PrimExpr split_len = ceildiv(data_shape->values[axis], n_section);
+
+    // Construct struct info for tensors except the last one.
+    Array<PrimExpr> shape = data_shape->values;
+    shape.Set(axis, split_len);
+    std::vector<StructInfo> output_sinfo(n_section - 1,
+                                         TensorStructInfo(ShapeExpr(shape), data_sinfo->dtype));
+
+    // Construct struct info for the last tensor.
+    shape.Set(axis, data_shape->values[axis] - split_len * (n_section - 1));
+    output_sinfo.push_back(TensorStructInfo(ShapeExpr(shape), data_sinfo->dtype));
+    return TupleStructInfo(output_sinfo);
+  }
+  ICHECK(false) << "Cannot reach here.";
+  throw;
+}
+
+TVM_REGISTER_OP("relax.split")
+    .set_attrs_type<SplitAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoSplit);
+
 }  // namespace relax
 }  // namespace tvm

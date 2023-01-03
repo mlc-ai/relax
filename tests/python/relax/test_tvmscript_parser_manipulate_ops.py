@@ -154,5 +154,111 @@ def test_flatten():
     _check(foo, bb.get()["foo"])
 
 
-if __name__ == "__foo__":
+def test_concat():
+    @R.function
+    def foo(
+        x1: R.Tensor((1, 2, 3), "float32"),
+        x2: R.Tensor((1, 3, 3), "float32"),
+        x3: R.Tensor((1, 4, 3), "float32"),
+    ) -> R.Tensor((1, 9, 3), "float32"):
+        gv: R.Tensor((1, 9, 3), "float32") = R.concat((x1, x2, x3), axis=1)
+        return gv
+
+    x1 = relax.Var("x1", R.Tensor((1, 2, 3), "float32"))
+    x2 = relax.Var("x2", R.Tensor((1, 3, 3), "float32"))
+    x3 = relax.Var("x3", R.Tensor((1, 4, 3), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [x1, x2, x3]):
+        gv = bb.emit(relax.op.concat((x1, x2, x3), axis=1))
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
+def test_concat_without_specified_axis():
+    @R.function
+    def foo(
+        x1: R.Tensor((2,), "float32"), x2: R.Tensor((3,), "float32"), x3: R.Tensor((4,), "float32")
+    ) -> R.Tensor((9,), "float32"):
+        gv: R.Tensor((9,), "float32") = R.concat((x1, x2, x3), axis=None)
+        return gv
+
+    x1 = relax.Var("x1", R.Tensor((2,), "float32"))
+    x2 = relax.Var("x2", R.Tensor((3,), "float32"))
+    x3 = relax.Var("x3", R.Tensor((4,), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [x1, x2, x3]):
+        gv = bb.emit(relax.op.concat((x1, x2, x3), axis=None))
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
+def test_split_by_indices():
+    @R.function
+    def foo(
+        x: R.Tensor((2, 10, 4), dtype="float32")
+    ) -> R.Tuple(
+        R.Tensor((2, 0, 4), dtype="float32"),
+        R.Tensor((2, 2, 4), dtype="float32"),
+        R.Tensor((2, 4, 4), dtype="float32"),
+        R.Tensor((2, 0, 4), dtype="float32"),
+        R.Tensor((2, 4, 4), dtype="float32"),
+        R.Tensor((2, 2, 4), dtype="float32"),
+        R.Tensor((2, 0, 4), dtype="float32"),
+        R.Tensor((2, 1, 4), dtype="float32"),
+    ):
+        gv: R.Tuple(
+            R.Tensor((2, 0, 4), dtype="float32"),
+            R.Tensor((2, 2, 4), dtype="float32"),
+            R.Tensor((2, 4, 4), dtype="float32"),
+            R.Tensor((2, 0, 4), dtype="float32"),
+            R.Tensor((2, 4, 4), dtype="float32"),
+            R.Tensor((2, 2, 4), dtype="float32"),
+            R.Tensor((2, 0, 4), dtype="float32"),
+            R.Tensor((2, 1, 4), dtype="float32"),
+        ) = R.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1)
+        return gv
+
+    x = relax.Var("x", R.Tensor((2, 10, 4), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [x]):
+        gv = bb.emit(relax.op.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1))
+        bb.emit_func_output(gv)
+
+    print(bb.get().script())
+    _check(foo, bb.get()["foo"])
+
+
+def test_split_by_n_section():
+    @R.function
+    def foo(
+        x: R.Tensor((2, 10, 4), dtype="float32")
+    ) -> R.Tuple(
+        R.Tensor((2, 2, 4), dtype="float32"),
+        R.Tensor((2, 2, 4), dtype="float32"),
+        R.Tensor((2, 2, 4), dtype="float32"),
+        R.Tensor((2, 2, 4), dtype="float32"),
+        R.Tensor((2, 2, 4), dtype="float32"),
+    ):
+        gv: R.Tuple(
+            R.Tensor((2, 2, 4), dtype="float32"),
+            R.Tensor((2, 2, 4), dtype="float32"),
+            R.Tensor((2, 2, 4), dtype="float32"),
+            R.Tensor((2, 2, 4), dtype="float32"),
+            R.Tensor((2, 2, 4), dtype="float32"),
+        ) = R.split(x, indices_or_sections=5, axis=1)
+        return gv
+
+    x = relax.Var("x", R.Tensor((2, 10, 4), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [x]):
+        gv = bb.emit(relax.op.split(x, indices_or_sections=5, axis=1))
+        bb.emit_func_output(gv)
+
+    print(bb.get().script())
+    _check(foo, bb.get()["foo"])
+
+
+if __name__ == "__main__":
     tvm.testing.main()
