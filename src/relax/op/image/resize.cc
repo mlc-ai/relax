@@ -22,6 +22,8 @@
  * \brief Image resize operators.
  */
 
+#include <tvm/relax/attrs/image.h>
+
 #include "../op_common.h"
 
 namespace tvm {

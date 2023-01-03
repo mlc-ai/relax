@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Transform operators."""
+"""Datatype operators."""
 from typing import Union
 
 from tvm import DataType

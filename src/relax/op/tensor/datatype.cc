@@ -18,9 +18,11 @@
  */
 
 /*!
- * \file transform.cc
- * \brief Transform operators.
+ * \file datatype.cc
+ * \brief Datatype operators.
  */
+
+#include <tvm/relax/attrs/datatype.h>
 
 #include "../op_common.h"
 

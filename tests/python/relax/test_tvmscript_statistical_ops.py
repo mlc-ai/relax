@@ -43,7 +43,7 @@ def test_sum():
     x = relax.Var("x", R.Tensor((1, 2, 3, 4), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("foo", [x]):
-        gv = bb.emit(relax.op.reduce.sum(x, axis=[1, 3]))
+        gv = bb.emit(relax.op.sum(x, axis=[1, 3]))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])
@@ -58,7 +58,7 @@ def test_sum_without_specified_axis():
     x = relax.Var("x", R.Tensor((1, 2, 3, 4), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("foo", [x]):
-        gv = bb.emit(relax.op.reduce.sum(x))
+        gv = bb.emit(relax.op.sum(x))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])
@@ -73,7 +73,7 @@ def test_sum_keep_dims():
     x = relax.Var("x", R.Tensor((1, 2, 3, 4), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("foo", [x]):
-        gv = bb.emit(relax.op.reduce.sum(x, axis=[1, 3], keepdims=True))
+        gv = bb.emit(relax.op.sum(x, axis=[1, 3], keepdims=True))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])
@@ -88,7 +88,7 @@ def test_mean():
     x = relax.Var("x", R.Tensor((1, 2, 3, 4), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("foo", [x]):
-        gv = bb.emit(relax.op.reduce.mean(x, axis=[1, 3]))
+        gv = bb.emit(relax.op.mean(x, axis=[1, 3]))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])
@@ -103,7 +103,7 @@ def test_variance():
     x = relax.Var("x", R.Tensor((1, 2, 3, 4), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("foo", [x]):
-        gv = bb.emit(relax.op.reduce.variance(x, axis=[-1, -2, -3]))
+        gv = bb.emit(relax.op.variance(x, axis=[-1, -2, -3]))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])
@@ -118,7 +118,7 @@ def test_max():
     x = relax.Var("x", R.Tensor((1, 2, 3, 4), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("foo", [x]):
-        gv = bb.emit(relax.op.reduce.variance(x, axis=[-1, -2, -3], keepdims=True))
+        gv = bb.emit(relax.op.variance(x, axis=[-1, -2, -3], keepdims=True))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])
@@ -133,7 +133,7 @@ def test_min():
     x = relax.Var("x", R.Tensor((1, 2, 3, 4), "float32"))
     bb = relax.BlockBuilder()
     with bb.function("foo", [x]):
-        gv = bb.emit(relax.op.reduce.min(x, axis=1))
+        gv = bb.emit(relax.op.min(x, axis=1))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])

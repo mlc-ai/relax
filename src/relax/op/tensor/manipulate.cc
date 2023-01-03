@@ -22,6 +22,8 @@
  * \brief Manipulation operators.
  */
 
+#include <tvm/relax/attrs/manipulate.h>
+
 #include <numeric>
 
 #include "../op_common.h"
