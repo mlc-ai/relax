@@ -23,7 +23,8 @@
 #include <tvm/relax/type.h>
 #include <tvm/tir/op.h>
 
-#include "../../../printer/text_printer.h"
+#include "../../op/vm.h"
+
 namespace tvm {
 namespace relax {
 
@@ -338,11 +339,10 @@ class CUDAGraphRewriter : public ExprMutator {
   std::unordered_map<const BindingBlockNode*, std::vector<StaticRegion>> binding_block_to_regions_;
 };
 
-IRModule RewriteCUDAGraph(IRModule module) {
-  CUDAGraphRewriter rewriter(module);
-  module = rewriter.Rewrite();
-  LOG(INFO) << "Result:\n" << AsRelaxScript(module, false);
-  return module;
+IRModule RewriteCUDAGraph(IRModule mod) {
+  CUDAGraphRewriter rewriter(mod);
+  mod = rewriter.Rewrite();
+  return mod;
 }
 
 namespace transform {

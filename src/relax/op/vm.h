@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -18,27 +19,34 @@
  */
 
 /*!
- * \file tvm/relax/attrs/create.h
- * \brief Attributes for tensor creation operators.
+ * \file vm.h
+ * \brief VM related operators.
  */
-#ifndef TVM_RELAX_ATTRS_CREATE_H_
-#define TVM_RELAX_ATTRS_CREATE_H_
+#ifndef TVM_RELAX_OP_VM_H_
+#define TVM_RELAX_OP_VM_H_
 
-#include <tvm/relax/expr.h>
+#include <tvm/arith/analyzer.h>
+#include <tvm/relax/op_attr_types.h>
+#include <tvm/relay/expr.h>
+#include <tvm/relay/op.h>
+#include <tvm/tir/data_layout.h>
+
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace tvm {
 namespace relax {
 
-/*! \brief Attributes used in full, ones, and zeros operators */
-struct InitAttrs : public tvm::AttrsNode<InitAttrs> {
-  DataType dtype;
+Expr MakeVMCUDAGraphBeginCapture();
 
-  TVM_DECLARE_ATTRS(InitAttrs, "relax.attrs.InitAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("The data type of the created tensor.");
-  }
-};  // struct InitAttrs
+Expr MakeVMCUDAGraphEndCapture();
+
+Expr MakeVMGetCapturedCUDAGraph(GlobalVar func);
+
+Expr MakeVMCUDAGraphLaunch(Expr graph);
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_ATTRS_CREATE_H_
+#endif  // TVM_RELAX_OP_VM_H_
