@@ -1,3 +1,20 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 import tvm
 from tvm import relax
 from tvm.script import tir as T, relax as R
@@ -8,6 +25,7 @@ import tvm.testing
 import tempfile
 import tvm.relax.transform.tuning_api.default_functions
 from tvm.relax.transform.tuning_api import Trace
+
 
 def apply_passes(mod: IRModule, target):
     with tempfile.TemporaryDirectory() as work_dir:
@@ -32,6 +50,7 @@ def apply_passes(mod: IRModule, target):
     mod = relax.transform.AttachGlobalSymbol()(mod)
     return mod
 
+
 def minimal_vm_build(mod, target, params=None):
     # Split primfunc and relax function
     rx_mod, tir_mod = relax.vm._split_tir_relax(mod)
@@ -41,6 +60,7 @@ def minimal_vm_build(mod, target, params=None):
         params = {}
 
     return relax.vm.Executable(relax._ffi_api.VMCodeGen(rx_mod, lib, [], target, params))
+
 
 def test_minimum_example():
     x = relax.Var("x", relax.TensorStructInfo((2, 4)))
@@ -60,7 +80,6 @@ def test_minimum_example():
     target = tvm.target.Target("nvidia/geforce-rtx-3070")
     mod = apply_passes(mod, target)
 
-
     dev = tvm.cuda(0)
     exec = minimal_vm_build(mod, target)
     vm = relax.VirtualMachine(exec, dev)
@@ -78,7 +97,7 @@ def test_minimum_example():
     y_relax = vm["main"](x_relax)
 
     tvm.testing.assert_allclose(y_relax.numpy(), y_np, rtol=1e-5, atol=1e-5)
-    print('OK')
+    print("OK")
 
 
 if __name__ == "__main__":
