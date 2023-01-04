@@ -18,36 +18,27 @@
  */
 
 /*!
- * \file tvm/relax/attrs/datatype.h
- * \brief Attributes for datatype operators.
+ * \file tvm/relax/attrs/linear_algebra.h
+ * \brief Attributes for linear algebra operators.
  */
-#ifndef TVM_RELAX_ATTRS_DATATYPE_H_
-#define TVM_RELAX_ATTRS_DATATYPE_H_
+#ifndef TVM_RELAX_ATTRS_LINEAR_ALGEBRA_H_
+#define TVM_RELAX_ATTRS_LINEAR_ALGEBRA_H_
 
 #include <tvm/relax/expr.h>
 
 namespace tvm {
 namespace relax {
 
-/*! \brief Attributes used in astype operator */
-struct AstypeAttrs : public tvm::AttrsNode<AstypeAttrs> {
-  DataType dtype;
+/*! \brief Attributes for matmul operator */
+struct MatmulAttrs : public tvm::AttrsNode<MatmulAttrs> {
+  DataType out_dtype;
 
-  TVM_DECLARE_ATTRS(AstypeAttrs, "relax.attrs.AstypeAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
+  TVM_DECLARE_ATTRS(MatmulAttrs, "relax.attrs.MatmulAttrs") {
+    TVM_ATTR_FIELD(out_dtype).describe("The data type of the output tensor");
   }
-};  // struct AstypeAttrs.
-
-/*! \brief Attributes used in wrap_param operator */
-struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
-  DataType dtype;
-
-  TVM_DECLARE_ATTRS(WrapParamAttrs, "relax.attrs.WrapParamAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct WrapParamAttrs.
+};  // struct MatmulAttrs
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_ATTRS_DATATYPE_H_
+#endif  // TVM_RELAX_ATTRS_LINEAR_ALGEBRA_H_

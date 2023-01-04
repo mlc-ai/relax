@@ -18,36 +18,28 @@
  */
 
 /*!
- * \file tvm/relax/attrs/datatype.h
- * \brief Attributes for datatype operators.
+ * \file ternary.h
+ * \brief The functions to make Relax ternary operator calls.
  */
-#ifndef TVM_RELAX_ATTRS_DATATYPE_H_
-#define TVM_RELAX_ATTRS_DATATYPE_H_
+#ifndef TVM_RELAX_OP_TENSOR_TERNARY_H_
+#define TVM_RELAX_OP_TENSOR_TERNARY_H_
 
-#include <tvm/relax/expr.h>
+#include "../op_common.h"
 
 namespace tvm {
 namespace relax {
 
-/*! \brief Attributes used in astype operator */
-struct AstypeAttrs : public tvm::AttrsNode<AstypeAttrs> {
-  DataType dtype;
-
-  TVM_DECLARE_ATTRS(AstypeAttrs, "relax.attrs.AstypeAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct AstypeAttrs.
-
-/*! \brief Attributes used in wrap_param operator */
-struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
-  DataType dtype;
-
-  TVM_DECLARE_ATTRS(WrapParamAttrs, "relax.attrs.WrapParamAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct WrapParamAttrs.
+/*!
+ * \brief Elementwise fused multiply-add operator
+ * Returns elementwise result of `expr0 * expr1 + expr2`
+ * \param expr0 The left hand operand of the multiplication
+ * \param expr1 The right hand operand of the multiplication
+ * \param expr2 The operand of the addition
+ * \return The computed result.
+ */
+Expr ewise_fma(Expr expr0, Expr expr1, Expr expr2);
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_ATTRS_DATATYPE_H_
+#endif  // TVM_RELAX_OP_TENSOR_TERNARY_H_

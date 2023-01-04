@@ -31,7 +31,6 @@
 #include <tvm/relay/op.h>
 #include <tvm/tir/data_layout.h>
 
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -65,23 +64,40 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
 /************ Op registration macro ************/
 
 /*!
- * \brief Quick helper macro
- * - Expose a make function to construct the node.
- * - Register op to the registry.
- * \param OpName The name of operator to register. The name passed in will
- *  1. be prepended with a prefix "relax.op." as the FFI key string for the make function,
- *  2. be prepended with a prefix "relax." as the key string in the operator registry.
+ * \brief Quick helper macro to register the operator to registry
+ * \param OpRegName The name of operator to register. The name passed in will
+ * be prepended with a prefix "relax." as the identifier string in the operator registry.
  * \param RequireFloatDtype A boolean indicating if the input is required to have float dtype.
  */
-#define RELAX_REGISTER_UNARY_OP(OpName, RequireFloatDtype)            \
-  TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr e) { \
-    static const Op& op = Op::Get("relax." OpName);                   \
-    return Call(op, {e}, Attrs(), {});                                \
-  });                                                                 \
-  TVM_REGISTER_OP("relax." OpName)                                    \
-      .set_num_inputs(1)                                              \
-      .add_argument("e", "Tensor", "The input tensor.")               \
+#define RELAX_REGISTER_UNARY_OP(OpRegName, RequireFloatDtype) \
+  TVM_REGISTER_OP("relax." OpRegName)                         \
+      .set_num_inputs(1)                                      \
+      .add_argument("e", "Tensor", "The input tensor.")       \
       .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary<RequireFloatDtype>)
+
+/*!
+ * \brief Quick helper macro to expose a make-function to construct the operator.
+ * \param OpName The name of the operator as well as the make-function name, which will
+ * be prepended with a prefix "relax.op." as the FFI identifier string for the make function,
+ * \param OpRegName The identifier of the operator in the registry
+ */
+#define RELAX_UNARY_OP_IMPL(OpName, OpRegName)         \
+  Expr OpName(Expr e) {                                \
+    static const Op& op = Op::Get("relax." OpRegName); \
+    return Call(op, {e}, Attrs(), {});                 \
+  }                                                    \
+  TVM_REGISTER_GLOBAL("relax.op." OpRegName).set_body_typed(OpName)
+
+/*!
+ * \brief Quick helper macro to
+ * - expose a make function to construct the node.
+ * - register op to the registry.
+ * \param OpName The name of operator to register.
+ * \param RequireFloatDtype A boolean indicating if the input is required to have float dtype.
+ */
+#define RELAX_REGISTER_UNARY_OP_AND_IMPL(OpName, RequireFloatDtype) \
+  RELAX_UNARY_OP_IMPL(OpName, #OpName);                             \
+  RELAX_REGISTER_UNARY_OP(#OpName, RequireFloatDtype)
 
 template <bool require_float_dtype>
 inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx) {

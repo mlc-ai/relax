@@ -37,7 +37,7 @@ def _check_inference(bb: relax.BlockBuilder, call: relax.Call, expected_sinfo: r
     tvm.ir.assert_structural_equal(ret.struct_info, expected_sinfo)
 
 
-def test_reduction_infer_struct_info():
+def test_statistical_infer_struct_info():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
     x1 = relax.Var("x", R.Tensor("float32", ndim=4))
@@ -100,7 +100,7 @@ def test_reduction_infer_struct_info():
     _check_inference(bb, relax.op.sum(x0, axis=[]), relax.TensorStructInfo((2, 3, 4, 5), "float32"))
 
 
-def test_reduction_infer_struct_info_shape_symbolic():
+def test_statistical_infer_struct_info_shape_symbolic():
     bb = relax.BlockBuilder()
     a = tir.Var("a", "int64")
     b = tir.Var("b", "int64")
@@ -122,7 +122,7 @@ def test_reduction_infer_struct_info_shape_symbolic():
     )
 
 
-def test_reduction_infer_struct_info_shape_var():
+def test_statistical_infer_struct_info_shape_var():
     bb = relax.BlockBuilder()
     s0 = relax.Var("s", relax.ShapeStructInfo(ndim=4))
     s1 = relax.Var("s", relax.ShapeStructInfo())
@@ -149,7 +149,7 @@ def test_reduction_infer_struct_info_shape_var():
     )
 
 
-def test_reduction_infer_struct_info_more_input_dtype():
+def test_statistical_infer_struct_info_more_input_dtype():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((2, 3, 4, 5), "float16"))
     x1 = relax.Var("x", R.Tensor((2, 3, 4, 5), "int8"))
@@ -158,7 +158,7 @@ def test_reduction_infer_struct_info_more_input_dtype():
     _check_inference(bb, relax.op.sum(x1), relax.TensorStructInfo((), "int8"))
 
 
-def test_reduction_infer_struct_info_axis_out_of_range_repetitive():
+def test_statistical_infer_struct_info_axis_out_of_range_repetitive():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
     x1 = relax.Var("x", R.Tensor("float32", ndim=4))

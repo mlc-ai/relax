@@ -166,15 +166,6 @@ struct LayerNormAttrs : public tvm::AttrsNode<LayerNormAttrs> {
   }
 };  // struct LayerNormAttrs
 
-/*! \brief Attributes for matmul operator */
-struct MatmulAttrs : public tvm::AttrsNode<MatmulAttrs> {
-  DataType out_dtype;
-
-  TVM_DECLARE_ATTRS(MatmulAttrs, "relax.attrs.MatmulAttrs") {
-    TVM_ATTR_FIELD(out_dtype).describe("The data type of the output tensor");
-  }
-};  // struct MatmulAttrs
-
 /*! \brief Attributes used in dropout operator */
 struct DropoutAttrs : public tvm::AttrsNode<DropoutAttrs> {
   double rate;

@@ -492,49 +492,8 @@ def layer_norm(
     return _ffi_api.layer_norm(data, gamma, beta, axes, epsilon, center, scale)  # type: ignore
 
 
-def matmul(a: Expr, b: Expr, out_dtype: Optional[Union[str, DataType]] = None) -> Expr:
-    """General matrix multiplication of two tensors.
-
-    (The below is copied from torch.matmul)
-    The behavior depends on the dimensionality of the tensors as follows:
-    * If both tensors are 1-dimensional, the dot product (scalar) is returned.
-    * If both arguments are 2-dimensional, the matrix-matrix product is returned.
-    * If the first argument is 1-dimensional and the second argument is 2-dimensional,
-      a 1 is prepended to its dimension for the purpose of the matrix multiply. After the
-      matrix multiply, the prepended dimension is removed.
-    * If the first argument is 2-dimensional and the second argument is 1-dimensional,
-      the matrix-vector product is returned.
-    * If both arguments are at least 1-dimensional and at least one argument is N-dimensional
-      (where N > 2), then a batched matrix multiply is returned. If the first argument is
-      1-dimensional, a 1 is prepended to its dimension for the purpose of the batched
-      matrix multiply and removed after. If the second argument is 1-dimensional, a 1 is
-      appended to its dimension for the purpose of the batched matrix multiple and remove
-      after. The non-matrix (i.e. batch) dimensions are broadcasted (and thus must be
-      broadcastable). For example, if `a` is a `(j, 1, n, n)` tensor and `b` is a `(k, n, n)`
-      tensor, the result will be a `(j, k, n, n)` tensor.
-
-    Parameters
-    ----------
-    a : relax.Expr
-        The left operand of the matmul.
-
-    b : relax.Expr
-        The right operand of the matmul.
-
-    out_dtype: Optional[Union[str, DataType]]
-        The data type of the matmul result.
-        When it is not specified, the output dtype will be the the same as input dtype.
-
-    Returns
-    -------
-    result : relax.Expr
-        The computed result.
-    """
-    return _ffi_api.matmul(a, b, out_dtype)  # type: ignore
-
-
 def dropout(data: Expr, rate: float = 0.5) -> Expr:
-    """Applies the dropout operation to the input array.
+    """Applies the dropout operation to the input tensor.
 
     During training, each element of the input is set to zero with
     probability ``p``. The whole array is scaled by ``1/(1-p)``

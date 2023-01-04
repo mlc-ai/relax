@@ -18,36 +18,34 @@
  */
 
 /*!
- * \file tvm/relax/attrs/datatype.h
- * \brief Attributes for datatype operators.
+ * \file datatype.h
+ * \brief The functions to make Relax datatype operator calls.
  */
-#ifndef TVM_RELAX_ATTRS_DATATYPE_H_
-#define TVM_RELAX_ATTRS_DATATYPE_H_
+#ifndef TVM_RELAX_OP_TENSOR_DATATYPE_H_
+#define TVM_RELAX_OP_TENSOR_DATATYPE_H_
 
-#include <tvm/relax/expr.h>
+#include <tvm/relax/attrs/datatype.h>
+
+#include "../op_common.h"
 
 namespace tvm {
 namespace relax {
 
-/*! \brief Attributes used in astype operator */
-struct AstypeAttrs : public tvm::AttrsNode<AstypeAttrs> {
-  DataType dtype;
+/*!
+ * \brief Cast input tensor to the given data type.
+ * \param data The input data to the operator.
+ * \param dtype The target data type
+ * \return The casted result.
+ */
+Expr astype(Expr data, DataType dtype);
 
-  TVM_DECLARE_ATTRS(AstypeAttrs, "relax.attrs.AstypeAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct AstypeAttrs.
-
-/*! \brief Attributes used in wrap_param operator */
-struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
-  DataType dtype;
-
-  TVM_DECLARE_ATTRS(WrapParamAttrs, "relax.attrs.WrapParamAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct WrapParamAttrs.
+/*!
+ * \brief Cast input tensor which is model param to data type if the
+ * dtype of the input data is not the same as the given dtype.
+ */
+Expr wrap_param(Expr data, DataType dtype);
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_ATTRS_DATATYPE_H_
+#endif  // TVM_RELAX_OP_TENSOR_DATATYPE_H_

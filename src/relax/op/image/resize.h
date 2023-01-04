@@ -18,36 +18,26 @@
  */
 
 /*!
- * \file tvm/relax/attrs/datatype.h
- * \brief Attributes for datatype operators.
+ * \file resize.h
+ * \brief The functions to make Relax image resize operator calls.
  */
-#ifndef TVM_RELAX_ATTRS_DATATYPE_H_
-#define TVM_RELAX_ATTRS_DATATYPE_H_
 
-#include <tvm/relax/expr.h>
+#ifndef TVM_RELAX_OP_IMAGE_RESIZE_H_
+#define TVM_RELAX_OP_IMAGE_RESIZE_H_
+
+#include <tvm/relax/attrs/image.h>
+
+#include "../op_common.h"
 
 namespace tvm {
 namespace relax {
 
-/*! \brief Attributes used in astype operator */
-struct AstypeAttrs : public tvm::AttrsNode<AstypeAttrs> {
-  DataType dtype;
-
-  TVM_DECLARE_ATTRS(AstypeAttrs, "relax.attrs.AstypeAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct AstypeAttrs.
-
-/*! \brief Attributes used in wrap_param operator */
-struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
-  DataType dtype;
-
-  TVM_DECLARE_ATTRS(WrapParamAttrs, "relax.attrs.WrapParamAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct WrapParamAttrs.
+/*! \brief Image resize2d operator. */
+Expr resize2d(Expr data, Array<PrimExpr> size, Array<FloatImm> roi, String layout, String method,
+              String coordinate_transformation_mode, String rounding_method, double cubic_alpha,
+              int cubic_exclude, double extrapolation_value, DataType out_dtype);
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_ATTRS_DATATYPE_H_
+#endif  // TVM_RELAX_OP_IMAGE_RESIZE_H_

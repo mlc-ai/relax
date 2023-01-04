@@ -22,31 +22,31 @@
  * \brief unary operators.
  */
 
-#include "../op_common.h"
+#include "unary.h"
 
 namespace tvm {
 namespace relax {
 
 /* relax.negative */
-RELAX_REGISTER_UNARY_OP("negative", /*require_float_dtype=*/false);
+RELAX_REGISTER_UNARY_OP_AND_IMPL(negative, /*require_float_dtype=*/false);
 
 /* relax.sin */
-RELAX_REGISTER_UNARY_OP("sin", /*require_float_dtype=*/true);
+RELAX_REGISTER_UNARY_OP_AND_IMPL(sin, /*require_float_dtype=*/true);
 
 /* relax.cos */
-RELAX_REGISTER_UNARY_OP("cos", /*require_float_dtype=*/true);
+RELAX_REGISTER_UNARY_OP_AND_IMPL(cos, /*require_float_dtype=*/true);
 
 /* relax.tanh */
-RELAX_REGISTER_UNARY_OP("tanh", /*require_float_dtype=*/true);
+RELAX_REGISTER_UNARY_OP_AND_IMPL(tanh, /*require_float_dtype=*/true);
 
 /* relax.sqrt */
-RELAX_REGISTER_UNARY_OP("sqrt", /*require_float_dtype=*/true);
+RELAX_REGISTER_UNARY_OP_AND_IMPL(sqrt, /*require_float_dtype=*/true);
 
 /* relax.log */
-RELAX_REGISTER_UNARY_OP("log", /*require_float_dtype=*/true);
+RELAX_REGISTER_UNARY_OP_AND_IMPL(log, /*require_float_dtype=*/true);
 
 /* relax.sigmoid */
-RELAX_REGISTER_UNARY_OP("sigmoid", /*require_float_dtype=*/true);
+RELAX_REGISTER_UNARY_OP_AND_IMPL(sigmoid, /*require_float_dtype=*/true);
 
 /* relax.unique */
 TVM_REGISTER_NODE_TYPE(UniqueAttrs);

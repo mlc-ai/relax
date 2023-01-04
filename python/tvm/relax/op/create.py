@@ -133,7 +133,7 @@ def zeros(shape: Union[Tuple[PrimExprLike], Expr], dtype: Union[str, DataType]) 
 
 
 def zeros_like(data: Expr) -> Expr:
-    """Construct a tensor with all ones, with shape and dtype of the input tensor shape.
+    """Construct a tensor with all zeros, with shape and dtype of the input tensor shape.
 
     Parameters
     ----------

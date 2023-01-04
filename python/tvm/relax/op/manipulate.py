@@ -153,7 +153,7 @@ def concat(data: Union[Expr, List[Expr]], axis: Optional[int] = 0) -> Expr:
 
     axis : Optional[int]
         The axis along which the tensors are concatenated.
-        If `axis` is `None`, arrays must be flattened before concatenation.
+        If `axis` is `None`, the input tensor is required to be flattened before concatenation.
 
     Returns
     -------

@@ -22,9 +22,9 @@
  * \brief Statistical operators.
  */
 
-#include <tvm/relax/attrs/statistical.h>
+#include "statistical.h"
 
-#include "../op_common.h"
+#include <vector>
 
 namespace tvm {
 namespace relax {
@@ -82,44 +82,22 @@ StructInfo InferStructInfoStatistical(const Call& call, const BlockBuilder& ctx)
   return TensorStructInfo(ShapeExpr(out_shape), data_sinfo->dtype);
 }
 
-/*!
- * \brief Quick helper macro
- * - Expose a make function to construct the node.
- * - Register op to the registry.
- * \param OpName The name of operator to register. The name passed in will
- *  1. be prepended with a prefix "relax.op." as the FFI key string for the make function,
- *  2. be prepended with a prefix "relax." as the key string in the operator registry.
- */
-#define RELAX_REGISTER_STATISTICAL_OP(OpName)                                       \
-  TVM_REGISTER_GLOBAL("relax.op." OpName)                                           \
-      .set_body_typed([](Expr data, Optional<Array<Integer>> axis, bool keepdims) { \
-        ObjectPtr<StatisticalAttrs> attrs = make_object<StatisticalAttrs>();        \
-        attrs->axis = std::move(axis);                                              \
-        attrs->keepdims = keepdims;                                                 \
-        static const Op& op = Op::Get("relax." OpName);                             \
-        return Call(op, {std::move(data)}, Attrs{attrs}, {});                       \
-      });                                                                           \
-  TVM_REGISTER_OP("relax." OpName)                                                  \
-      .set_num_inputs(1)                                                            \
-      .add_argument("expr", "Tensor", "The input tensor")                           \
-      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoStatistical)
-
 TVM_REGISTER_NODE_TYPE(StatisticalAttrs);
 
 /* relax.sum */
-RELAX_REGISTER_STATISTICAL_OP("sum");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(sum);
 
 /* relax.mean */
-RELAX_REGISTER_STATISTICAL_OP("mean");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(mean);
 
 /* relax.variance */
-RELAX_REGISTER_STATISTICAL_OP("variance");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(variance);
 
 /* relax.max */
-RELAX_REGISTER_STATISTICAL_OP("max");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(max);
 
 /* relax.min */
-RELAX_REGISTER_STATISTICAL_OP("min");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(min);
 
 }  // namespace relax
 }  // namespace tvm

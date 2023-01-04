@@ -18,36 +18,43 @@
  */
 
 /*!
- * \file tvm/relax/attrs/datatype.h
- * \brief Attributes for datatype operators.
+ * \file unary.h
+ * \brief The functions to make Relax unary operator calls.
  */
-#ifndef TVM_RELAX_ATTRS_DATATYPE_H_
-#define TVM_RELAX_ATTRS_DATATYPE_H_
+#ifndef TVM_RELAX_OP_TENSOR_UNARY_H_
+#define TVM_RELAX_OP_TENSOR_UNARY_H_
 
-#include <tvm/relax/expr.h>
+#include "../op_common.h"
 
 namespace tvm {
 namespace relax {
 
-/*! \brief Attributes used in astype operator */
-struct AstypeAttrs : public tvm::AttrsNode<AstypeAttrs> {
-  DataType dtype;
+/*!
+ * \brief Compute element-wise negative value of data.
+ * \param e The input data.
+ * \return The computed result.
+ */
+Expr negative(Expr e);
 
-  TVM_DECLARE_ATTRS(AstypeAttrs, "relax.attrs.AstypeAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct AstypeAttrs.
+/*! \brief Compute elementwise sin of data. */
+Expr sin(Expr e);
 
-/*! \brief Attributes used in wrap_param operator */
-struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
-  DataType dtype;
+/*! \brief Compute elementwise cos of data. */
+Expr cos(Expr e);
 
-  TVM_DECLARE_ATTRS(WrapParamAttrs, "relax.attrs.WrapParamAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct WrapParamAttrs.
+/*! \brief Compute elementwise tanh of data. */
+Expr tanh(Expr e);
+
+/*! \brief Compute elementwise square root of data. */
+Expr sqrt(Expr e);
+
+/*! \brief Compute elementwise natural logarithm of data. */
+Expr log(Expr e);
+
+/*! \brief Compute elementwise sigmoid of data. */
+Expr sigmoid(Expr e);
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_ATTRS_DATATYPE_H_
+#endif  // TVM_RELAX_OP_TENSOR_UNARY_H_

@@ -17,12 +17,12 @@
  * under the License.
  */
 
-#include "../op_common.h"
-
 /*!
  * \file ternary.cc
  * \brief ternary operators.
  */
+
+#include "ternary.h"
 
 namespace tvm {
 namespace relax {
@@ -97,12 +97,12 @@ TVM_REGISTER_OP("relax.ewise_fma")
     .add_argument("e2", "Tensor", "The operand of the addition")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoEwiseFMA);
 
-Expr MakeEwiseFma(Expr expr0, Expr expr1, Expr expr2) {
+Expr ewise_fma(Expr expr0, Expr expr1, Expr expr2) {
   static const Op& op = Op::Get("relax.ewise_fma");
   return Call(op, {expr0, expr1, expr2}, Attrs(), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.ewise_fma").set_body_typed(MakeEwiseFma);
+TVM_REGISTER_GLOBAL("relax.op.ewise_fma").set_body_typed(ewise_fma);
 
 }  // namespace relax
 }  // namespace tvm

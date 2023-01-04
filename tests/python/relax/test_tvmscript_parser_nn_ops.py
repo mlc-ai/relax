@@ -169,24 +169,6 @@ def test_layer_norm():
     _check(foo, bb.get()["foo"])
 
 
-def test_matmul():
-    @R.function
-    def foo(
-        x: R.Tensor((2, 3, 4, 5), "float32"), y: R.Tensor((6, 2, 3, 5, 7), "float32")
-    ) -> R.Tensor((6, 2, 3, 4, 7), "float32"):
-        gv: R.Tensor((6, 2, 3, 4, 7), "float32") = R.nn.matmul(x, y)
-        return gv
-
-    x = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
-    y = relax.Var("y", R.Tensor((6, 2, 3, 5, 7), "float32"))
-    bb = relax.BlockBuilder()
-    with bb.function("foo", [x, y]):
-        gv = bb.emit(relax.op.nn.matmul(x, y))
-        bb.emit_func_output(gv)
-
-    _check(foo, bb.get()["foo"])
-
-
 def test_dropout():
     @R.function
     def foo(

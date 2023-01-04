@@ -17,33 +17,37 @@
  * under the License.
  */
 
-#include <tvm/relax/attrs/nn.h>
+#include "nn.h"
 
-#include "../op_common.h"
+#include <utility>
+#include <vector>
 
 namespace tvm {
 namespace relax {
 
 /* relax.nn.relu */
 RELAX_REGISTER_UNARY_OP("nn.relu", /*require_float_dtype=*/false);
+RELAX_UNARY_OP_IMPL(relu, "nn.relu");
 
 /* relax.nn.gelu */
 RELAX_REGISTER_UNARY_OP("nn.gelu", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(gelu, "nn.gelu");
 
 /* relax.nn.silu */
 RELAX_REGISTER_UNARY_OP("nn.silu", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(silu, "nn.silu");
 
 /* relax.nn.softmax */
 TVM_REGISTER_NODE_TYPE(SoftmaxAttrs);
 
-Expr MakeSoftmax(Expr data, int axis) {
+Expr softmax(Expr data, int axis) {
   auto attrs = make_object<SoftmaxAttrs>();
   attrs->axis = axis;
   static const Op& op = Op::Get("relax.nn.softmax");
   return Call(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.softmax").set_body_typed(MakeSoftmax);
+TVM_REGISTER_GLOBAL("relax.op.nn.softmax").set_body_typed(softmax);
 
 StructInfo InferStructInfoSoftmax(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
@@ -138,8 +142,8 @@ bool NormCheckDtypeAndShape(const Call& call, const BlockBuilder& ctx,
 /* relax.nn.batch_norm */
 TVM_REGISTER_NODE_TYPE(BatchNormAttrs);
 
-Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,  //
-                   int axis, double epsilon, bool center, bool scale) {
+Expr batch_norm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,  //
+                int axis, double epsilon, bool center, bool scale) {
   ObjectPtr<BatchNormAttrs> attrs = make_object<BatchNormAttrs>();
   attrs->axis = axis;
   attrs->epsilon = epsilon;
@@ -153,7 +157,7 @@ Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr movi
               Attrs{attrs}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.batch_norm").set_body_typed(MakeBatchNorm);
+TVM_REGISTER_GLOBAL("relax.op.nn.batch_norm").set_body_typed(batch_norm);
 
 StructInfo InferStructInfoBatchNorm(const Call& call, const BlockBuilder& ctx) {
   Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
@@ -184,8 +188,8 @@ TVM_REGISTER_OP("relax.nn.batch_norm")
 /* relax.nn.layer_norm */
 TVM_REGISTER_NODE_TYPE(LayerNormAttrs);
 
-Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double epsilon,
-                   bool center, bool scale) {
+Expr layer_norm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double epsilon, bool center,
+                bool scale) {
   ObjectPtr<LayerNormAttrs> attrs = make_object<LayerNormAttrs>();
   attrs->axes = std::move(axes);
   attrs->epsilon = epsilon;
@@ -196,7 +200,7 @@ Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double
   return Call(op, {std::move(data), std::move(gamma), std::move(beta)}, Attrs{attrs}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.layer_norm").set_body_typed(MakeLayerNorm);
+TVM_REGISTER_GLOBAL("relax.op.nn.layer_norm").set_body_typed(layer_norm);
 
 StructInfo InferStructInfoLayerNorm(const Call& call, const BlockBuilder& ctx) {
   Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
@@ -216,100 +220,10 @@ TVM_REGISTER_OP("relax.nn.layer_norm")
     .add_argument("beta", "Tensor", "The beta offset factor.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoLayerNorm);
 
-/* relax.nn.matmul */
-TVM_REGISTER_NODE_TYPE(MatmulAttrs);
-
-Expr MakeMatmul(Expr a, Expr b, DataType out_dtype) {
-  ObjectPtr<MatmulAttrs> attrs = make_object<MatmulAttrs>();
-  attrs->out_dtype = out_dtype;
-
-  static const Op& op = Op::Get("relax.nn.matmul");
-  return Call(op, {std::move(a), std::move(b)}, Attrs(attrs), {});
-}
-
-TVM_REGISTER_GLOBAL("relax.op.nn.matmul").set_body_typed(MakeMatmul);
-
-StructInfo InferStructInfoMatmul(const Call& call, const BlockBuilder& ctx) {
-  Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
-  TensorStructInfo lhs_sinfo = input_sinfo[0];
-  TensorStructInfo rhs_sinfo = input_sinfo[1];
-
-  const auto* attrs = call->attrs.as<MatmulAttrs>();
-  DataType out_dtype = attrs->out_dtype.is_void()
-                           ? InferBinaryArithOpOutDtype(call, ctx, lhs_sinfo, rhs_sinfo)
-                           : attrs->out_dtype;
-
-  if (lhs_sinfo->IsUnknownNdim() || rhs_sinfo->IsUnknownNdim()) {
-    return TensorStructInfo(out_dtype, kUnknownNDim);
-  }
-  int lhs_ndim = lhs_sinfo->ndim;
-  int rhs_ndim = rhs_sinfo->ndim;
-  if (lhs_ndim == 0 || rhs_ndim == 0) {
-    ctx->ReportFatal(Diagnostic::Error(call)
-                     << "Matmul requires both inputs to have at least 1 dimension. However, "
-                     << (lhs_ndim == 0 ? "lhs" : "rhs") << " is a 0-rank tensor.");
-  }
-
-  int lhs_prepended = 0;
-  int rhs_appended = 0;
-  if (lhs_ndim == 1) {
-    lhs_ndim = 2;
-    lhs_prepended = 1;
-  }
-  if (rhs_ndim == 1) {
-    rhs_ndim = 2;
-    rhs_appended = 1;
-  }
-  int output_ndim = std::max(lhs_ndim, rhs_ndim) - lhs_prepended - rhs_appended;
-
-  const auto* lhs_shape = lhs_sinfo->shape.as<ShapeExprNode>();
-  const auto* rhs_shape = rhs_sinfo->shape.as<ShapeExprNode>();
-  if (lhs_shape == nullptr || rhs_shape == nullptr) {
-    return TensorStructInfo(out_dtype, output_ndim);
-  }
-
-  Array<PrimExpr> lhs_shape_prefix{lhs_shape->values.begin(),
-                                   lhs_shape->values.end() - 2 + lhs_prepended};
-  Array<PrimExpr> rhs_shape_prefix{rhs_shape->values.begin(),
-                                   rhs_shape->values.end() - 2 + rhs_appended};
-  Optional<Array<PrimExpr>> output_shape_prefix =
-      InferBinaryBroadcastShape(call, ctx, lhs_shape_prefix, rhs_shape_prefix);
-  if (!output_shape_prefix.defined()) {
-    return TensorStructInfo(out_dtype, output_ndim);
-  }
-
-  arith::Analyzer* analyzer = ctx->GetAnalyzer();
-  PrimExpr lhs_reduction_length = lhs_shape->values[lhs_sinfo->ndim - 1];
-  PrimExpr rhs_reduction_length = rhs_shape->values[rhs_ndim - 2];
-  if (analyzer->CanProve(lhs_reduction_length != rhs_reduction_length)) {
-    ctx->ReportFatal(Diagnostic::Error(call)
-                     << "Matmul requires the reduction length of lhs and rhs to be equal. However, "
-                        "the reduction lengths of lhs and rhs are "
-                     << lhs_reduction_length << " and " << rhs_reduction_length
-                     << " respectively.");
-  }
-
-  Array<PrimExpr> output_shape = output_shape_prefix.value();
-  if (!lhs_prepended) {
-    output_shape.push_back(lhs_shape->values[lhs_ndim - 2]);
-  }
-  if (!rhs_appended) {
-    output_shape.push_back(rhs_shape->values[rhs_ndim - 1]);
-  }
-  ICHECK_EQ(static_cast<int>(output_shape.size()), output_ndim);
-  return TensorStructInfo(ShapeExpr(output_shape), out_dtype);
-}
-
-TVM_REGISTER_OP("relax.nn.matmul")
-    .set_num_inputs(2)
-    .add_argument("a", "Tensor", "The left operand of the matmul.")
-    .add_argument("b", "Tensor", "The right operand of the matmul.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoMatmul);
-
 /* relax.nn.dropout */
 TVM_REGISTER_NODE_TYPE(DropoutAttrs);
 
-Expr MakeDropout(Expr data, double rate) {
+Expr dropout(Expr data, double rate) {
   ObjectPtr<DropoutAttrs> attrs = make_object<DropoutAttrs>();
   attrs->rate = rate;
 
@@ -317,7 +231,7 @@ Expr MakeDropout(Expr data, double rate) {
   return Call(op, {std::move(data)}, Attrs{attrs}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.dropout").set_body_typed(MakeDropout);
+TVM_REGISTER_GLOBAL("relax.op.nn.dropout").set_body_typed(dropout);
 
 StructInfo InferStructInfoDropout(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
@@ -369,12 +283,12 @@ StructInfo InferStructInfoCrossEntropy(const Call& call, const BlockBuilder& ctx
 }
 
 /* relax.nn.cross_entropy */
-Expr MakeCrossEntropy(Expr predictions, Expr targets) {
+Expr cross_entropy(Expr predictions, Expr targets) {
   static const Op& op = Op::Get("relax.nn.cross_entropy");
   return Call(op, {std::move(predictions), std::move(targets)}, {}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.cross_entropy").set_body_typed(MakeCrossEntropy);
+TVM_REGISTER_GLOBAL("relax.op.nn.cross_entropy").set_body_typed(cross_entropy);
 
 TVM_REGISTER_OP("relax.nn.cross_entropy")
     .set_num_inputs(2)
@@ -383,12 +297,12 @@ TVM_REGISTER_OP("relax.nn.cross_entropy")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoCrossEntropy);
 
 /* relax.nn.softmax_cross_entropy */
-Expr MakeSoftmaxCrossEntropy(Expr predictions, Expr targets) {
+Expr softmax_cross_entropy(Expr predictions, Expr targets) {
   static const Op& op = Op::Get("relax.nn.softmax_cross_entropy");
   return Call(op, {std::move(predictions), std::move(targets)}, {}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.softmax_cross_entropy").set_body_typed(MakeSoftmaxCrossEntropy);
+TVM_REGISTER_GLOBAL("relax.op.nn.softmax_cross_entropy").set_body_typed(softmax_cross_entropy);
 
 TVM_REGISTER_OP("relax.nn.softmax_cross_entropy")
     .set_num_inputs(2)

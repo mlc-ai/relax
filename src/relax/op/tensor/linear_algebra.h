@@ -18,36 +18,32 @@
  */
 
 /*!
- * \file tvm/relax/attrs/datatype.h
- * \brief Attributes for datatype operators.
+ * \file linear_algebra.h
+ * \brief The functions to make Relax linear algebra operator calls.
  */
-#ifndef TVM_RELAX_ATTRS_DATATYPE_H_
-#define TVM_RELAX_ATTRS_DATATYPE_H_
+#ifndef TVM_RELAX_OP_TENSOR_LINEAR_ALGEBRA_H_
+#define TVM_RELAX_OP_TENSOR_LINEAR_ALGEBRA_H_
 
-#include <tvm/relax/expr.h>
+#include <tvm/relax/attrs/linear_algebra.h>
+
+#include "../op_common.h"
 
 namespace tvm {
 namespace relax {
 
-/*! \brief Attributes used in astype operator */
-struct AstypeAttrs : public tvm::AttrsNode<AstypeAttrs> {
-  DataType dtype;
-
-  TVM_DECLARE_ATTRS(AstypeAttrs, "relax.attrs.AstypeAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct AstypeAttrs.
-
-/*! \brief Attributes used in wrap_param operator */
-struct WrapParamAttrs : public tvm::AttrsNode<WrapParamAttrs> {
-  DataType dtype;
-
-  TVM_DECLARE_ATTRS(WrapParamAttrs, "relax.attrs.WrapParamAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("Target data type");
-  }
-};  // struct WrapParamAttrs.
+/*!
+ * \brief General matrix multiplication of two tensors.
+ * The semantics and output shape deduction rule is specified as
+ * https://data-apis.org/array-api/latest/API_specification/generated/array_api.matmul.html.
+ * \param a The left operand of the matmul.
+ * \param b The right operand of the matmul.
+ * \param out_dtype The data type of the matmul result.
+ * When it is not specified, the output dtype will be the the same as input dtype.
+ * \return The computed result.
+ */
+Expr matmul(Expr a, Expr b, DataType out_dtype);
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_ATTRS_DATATYPE_H_
+#endif  // TVM_RELAX_OP_TENSOR_LINEAR_ALGEBRA_H_
