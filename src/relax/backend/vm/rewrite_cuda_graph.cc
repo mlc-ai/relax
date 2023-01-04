@@ -303,8 +303,8 @@ class CUDAGraphRewriter : public ExprMutator {
         auto gv = builder_->AddFunction(region.func, "cuda_graph_capture_func");
         auto graph_tensors = builder_->Emit(MakeVMGetCapturedCUDAGraph(gv));
 
-        for (const auto& [var, _] : region.bindings) {
-          bindings_to_remove_.insert(var);
+        for (const auto& binding : region.bindings) {
+          bindings_to_remove_.insert(binding.first);
         }
         auto tensors = builder_->Emit(TupleGetItem(graph_tensors, 1));
         for (const auto& [var, index] : region.alloc_tensor_to_index) {
