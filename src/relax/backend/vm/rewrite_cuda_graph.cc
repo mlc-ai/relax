@@ -261,8 +261,8 @@ class StaticRegionExtractor : public ExprVisitor {
 
     auto output = static_region_builder->Emit(Tuple(alloc_tensors));
     auto new_block = static_region_builder->EndBlock();
-    auto new_func = Function(Array<Var>(), SeqExpr(Array<BindingBlock>{new_block}, output),
-                             TupleStructInfo(alloc_tensors_struct_info));
+    auto seq = static_region_builder->Normalize(SeqExpr(Array<BindingBlock>{new_block}, output));
+    auto new_func = Function(Array<Var>(), seq, TupleStructInfo(alloc_tensors_struct_info));
     region.func = std::move(new_func);
     region.bindings = std::move(scope_.graph.bindings);
 
