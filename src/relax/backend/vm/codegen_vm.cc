@@ -530,9 +530,9 @@ class CodeGenVM : public ExprFunctor<Instruction::Arg(const Expr&)> {
     auto func_name_index = builder_->EmitConstant(func_name_constant);
     size_t dst_register = NewRegister();
 
-    builder_->EmitCall("vm.builtin.get_captured_cuda_graph", {
-      Instruction::Arg(Instruction::kRegister, Instruction::kVMRegister),
-      Instruction::Arg(Instruction::kConstIdx, func_name_index)},
+    builder_->EmitCall("vm.builtin.get_captured_cuda_graph",
+                       {Instruction::Arg(Instruction::kRegister, Instruction::kVMRegister),
+                        Instruction::Arg(Instruction::kConstIdx, func_name_index)},
                        dst_register);
     return Instruction::Arg(Instruction::kRegister, dst_register);
   }
@@ -551,7 +551,8 @@ class CodeGenVM : public ExprFunctor<Instruction::Arg(const Expr&)> {
 
   Instruction::Arg EmitCUDAGraphLaunch(const CallNode* call) {
     size_t dst_register = NewRegister();
-    builder_->EmitCall("vm.builtin.cuda_graph_launch", ConvertArgs(GetRef<Call>(call)), dst_register);
+    builder_->EmitCall("vm.builtin.cuda_graph_launch", ConvertArgs(GetRef<Call>(call)),
+                       dst_register);
     return Instruction::Arg(Instruction::kRegister, dst_register);
   }
   /*! \brief A counter for naming local functions. */

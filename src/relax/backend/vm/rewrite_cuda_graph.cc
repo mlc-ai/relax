@@ -64,12 +64,13 @@ struct StaticRegion {
 class StaticRegionExtractor : public ExprVisitor {
  public:
   static std::unordered_map<const BindingBlockNode*, std::vector<StaticRegion>> Extract(
+    const IRModule& mod,
       const Function& func) {
-    StaticRegionExtractor extractor(OutputCollector::Collect(func));
+    StaticRegionExtractor extractor(mod, OutputCollector::Collect(func));
     extractor.VisitExpr(func->body);
     return extractor.block_to_static_regions_;
   }
-  StaticRegionExtractor(const std::unordered_set<const VarNode*>& outputs) : outputs_(outputs) {}
+  StaticRegionExtractor(const IRModule& mod, const std::unordered_set<const VarNode*>& outputs) : mod_(mod), outputs_(outputs) {}
 
   struct DependencyGraph {
     void AddBinding(const VarBindingNode* binding, bool is_alloc_tensor) {
@@ -139,8 +140,10 @@ class StaticRegionExtractor : public ExprVisitor {
         scope_.graph.AddBinding(binding, true);
         return;
       } else if (const auto* gv = call->op.as<GlobalVarNode>()) {
-        // op must be global var, var -> global var re-binding is not supported
-        // TODO: check this is prim func
+        auto func = mod_->Lookup(GetRef<GlobalVar>(gv));
+        if (!func->IsInstance<tir::PrimFuncNode>()) {
+          return;
+        }
         bool is_all_args_static =
             std::all_of(call->args.begin(), call->args.end(), [&](const Expr& arg) -> bool {
               if (const auto* var = arg.as<VarNode>()) {
@@ -219,7 +222,6 @@ class StaticRegionExtractor : public ExprVisitor {
     if (scope_.graph.bindings.empty()) return;
     BlockBuilder static_region_builder = BlockBuilder::Create(NullOpt);
 
-    static const auto& alloc_tensor_op = Op::Get("relax.builtin.alloc_tensor");
     static_region_builder->BeginBindingBlock();
     StaticRegion region;
     Array<Expr> alloc_tensors;
@@ -268,6 +270,7 @@ class StaticRegionExtractor : public ExprVisitor {
     scope_.graph = DependencyGraph();
   }
 
+  IRModule mod_;
   std::unordered_set<const VarNode*> outputs_;
   ScopeInfo scope_;
   std::unordered_map<const BindingBlockNode*, std::vector<StaticRegion>> block_to_static_regions_;
@@ -275,13 +278,13 @@ class StaticRegionExtractor : public ExprVisitor {
 
 class CUDAGraphRewriter : public ExprMutator {
  public:
-  CUDAGraphRewriter(IRModule mod) : ExprMutator(mod) {}
+  explicit CUDAGraphRewriter(IRModule mod) : ExprMutator(mod) {}
 
   IRModule Rewrite() {
     auto mod = builder_->GetContextIRModule();
     for (const auto& [gv, func] : mod->functions) {
       if (const auto* func_node = func.as<FunctionNode>()) {
-        binding_block_to_regions_ = StaticRegionExtractor::Extract(GetRef<Function>(func_node));
+        binding_block_to_regions_ = StaticRegionExtractor::Extract(mod, GetRef<Function>(func_node));
         Function new_func = Downcast<Function>(func);
         auto fptr = new_func.CopyOnWrite();
         fptr->body = VisitExpr(std::move(fptr->body));
