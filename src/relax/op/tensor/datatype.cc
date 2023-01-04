@@ -22,9 +22,9 @@
  * \brief Datatype operators.
  */
 
-#include <tvm/relax/attrs/datatype.h>
+#include "datatype.h"
 
-#include "../op_common.h"
+#include <utility>
 
 namespace tvm {
 namespace relax {
@@ -32,7 +32,7 @@ namespace relax {
 /* relax.cast */
 TVM_REGISTER_NODE_TYPE(CastAttrs);
 
-Expr MakeCast(Expr data, DataType dtype) {
+Expr Cast(Expr data, DataType dtype) {
   ObjectPtr<CastAttrs> attrs = make_object<CastAttrs>();
   attrs->dtype = dtype;
 
@@ -40,7 +40,7 @@ Expr MakeCast(Expr data, DataType dtype) {
   return Call(op, {std::move(data)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.cast").set_body_typed(MakeCast);
+TVM_REGISTER_GLOBAL("relax.op.cast").set_body_typed(Cast);
 
 StructInfo InferStructInfoCast(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo sinfo = GetUnaryInputTensorStructInfo(call, ctx);
@@ -59,7 +59,7 @@ TVM_REGISTER_OP("relax.cast")
 /* relax.wrap_param */
 TVM_REGISTER_NODE_TYPE(WrapParamAttrs);
 
-Expr MakeWrapParam(Expr data, DataType dtype) {
+Expr WrapParam(Expr data, DataType dtype) {
   ObjectPtr<WrapParamAttrs> attrs = make_object<WrapParamAttrs>();
   attrs->dtype = dtype;
 
@@ -67,7 +67,7 @@ Expr MakeWrapParam(Expr data, DataType dtype) {
   return Call(op, {std::move(data)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.wrap_param").set_body_typed(MakeWrapParam);
+TVM_REGISTER_GLOBAL("relax.op.wrap_param").set_body_typed(WrapParam);
 
 StructInfo InferStructInfoWrapParam(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo sinfo = GetUnaryInputTensorStructInfo(call, ctx);

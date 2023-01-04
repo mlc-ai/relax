@@ -17,8 +17,15 @@
  * under the License.
  */
 
+/*!
+ * \file convolution.h
+ * \brief The functions to make Relax neural network convolution operator calls.
+ */
+
 #ifndef TVM_RELAX_OP_NN_CONVOLUTION_H_
 #define TVM_RELAX_OP_NN_CONVOLUTION_H_
+
+#include <tvm/relax/attrs/nn.h>
 
 #include <string>
 #include <utility>
@@ -43,6 +50,10 @@ inline Expr MakeConv(Expr data, Expr weight, Array<PrimExpr> strides, Array<Prim
   const Op& op = Op::Get(op_name);
   return Call(op, {data, weight}, Attrs(attrs), {});
 }
+
+Expr Conv2D(Expr data, Expr weight, Array<PrimExpr> strides, Array<PrimExpr> padding,
+            Array<PrimExpr> dilation, String data_layout, String kernel_layout,
+            Optional<String> out_layout, DataType out_dtype);
 
 }  // namespace relax
 }  // namespace tvm

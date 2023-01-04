@@ -17,33 +17,37 @@
  * under the License.
  */
 
-#include <tvm/relax/attrs/nn.h>
+#include "nn.h"
 
-#include "../op_common.h"
+#include <utility>
+#include <vector>
 
 namespace tvm {
 namespace relax {
 
 /* relax.nn.relu */
 RELAX_REGISTER_UNARY_OP("nn.relu", /*require_float_dtype=*/false);
+RELAX_UNARY_OP_IMPL(ReLU, "nn.relu");
 
 /* relax.nn.gelu */
 RELAX_REGISTER_UNARY_OP("nn.gelu", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(GeLU, "nn.gelu");
 
 /* relax.nn.silu */
 RELAX_REGISTER_UNARY_OP("nn.silu", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(SiLU, "nn.silu");
 
 /* relax.nn.softmax */
 TVM_REGISTER_NODE_TYPE(SoftmaxAttrs);
 
-Expr MakeSoftmax(Expr data, int axis) {
+Expr Softmax(Expr data, int axis) {
   auto attrs = make_object<SoftmaxAttrs>();
   attrs->axis = axis;
   static const Op& op = Op::Get("relax.nn.softmax");
   return Call(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.softmax").set_body_typed(MakeSoftmax);
+TVM_REGISTER_GLOBAL("relax.op.nn.softmax").set_body_typed(Softmax);
 
 StructInfo InferStructInfoSoftmax(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
@@ -138,8 +142,8 @@ bool NormCheckDtypeAndShape(const Call& call, const BlockBuilder& ctx,
 /* relax.nn.batch_norm */
 TVM_REGISTER_NODE_TYPE(BatchNormAttrs);
 
-Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,  //
-                   int axis, double epsilon, bool center, bool scale) {
+Expr BatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,  //
+               int axis, double epsilon, bool center, bool scale) {
   ObjectPtr<BatchNormAttrs> attrs = make_object<BatchNormAttrs>();
   attrs->axis = axis;
   attrs->epsilon = epsilon;
@@ -153,7 +157,7 @@ Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr movi
               Attrs{attrs}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.batch_norm").set_body_typed(MakeBatchNorm);
+TVM_REGISTER_GLOBAL("relax.op.nn.batch_norm").set_body_typed(BatchNorm);
 
 StructInfo InferStructInfoBatchNorm(const Call& call, const BlockBuilder& ctx) {
   Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
@@ -184,8 +188,8 @@ TVM_REGISTER_OP("relax.nn.batch_norm")
 /* relax.nn.layer_norm */
 TVM_REGISTER_NODE_TYPE(LayerNormAttrs);
 
-Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double epsilon,
-                   bool center, bool scale) {
+Expr LayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double epsilon, bool center,
+               bool scale) {
   ObjectPtr<LayerNormAttrs> attrs = make_object<LayerNormAttrs>();
   attrs->axes = std::move(axes);
   attrs->epsilon = epsilon;
@@ -196,7 +200,7 @@ Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double
   return Call(op, {std::move(data), std::move(gamma), std::move(beta)}, Attrs{attrs}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.layer_norm").set_body_typed(MakeLayerNorm);
+TVM_REGISTER_GLOBAL("relax.op.nn.layer_norm").set_body_typed(LayerNorm);
 
 StructInfo InferStructInfoLayerNorm(const Call& call, const BlockBuilder& ctx) {
   Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
@@ -219,7 +223,7 @@ TVM_REGISTER_OP("relax.nn.layer_norm")
 /* relax.nn.matmul */
 TVM_REGISTER_NODE_TYPE(MatmulAttrs);
 
-Expr MakeMatmul(Expr a, Expr b, DataType out_dtype) {
+Expr Matmul(Expr a, Expr b, DataType out_dtype) {
   ObjectPtr<MatmulAttrs> attrs = make_object<MatmulAttrs>();
   attrs->out_dtype = out_dtype;
 
@@ -227,7 +231,7 @@ Expr MakeMatmul(Expr a, Expr b, DataType out_dtype) {
   return Call(op, {std::move(a), std::move(b)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.matmul").set_body_typed(MakeMatmul);
+TVM_REGISTER_GLOBAL("relax.op.nn.matmul").set_body_typed(Matmul);
 
 StructInfo InferStructInfoMatmul(const Call& call, const BlockBuilder& ctx) {
   Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
@@ -309,7 +313,7 @@ TVM_REGISTER_OP("relax.nn.matmul")
 /* relax.nn.dropout */
 TVM_REGISTER_NODE_TYPE(DropoutAttrs);
 
-Expr MakeDropout(Expr data, double rate) {
+Expr Dropout(Expr data, double rate) {
   ObjectPtr<DropoutAttrs> attrs = make_object<DropoutAttrs>();
   attrs->rate = rate;
 
@@ -317,7 +321,7 @@ Expr MakeDropout(Expr data, double rate) {
   return Call(op, {std::move(data)}, Attrs{attrs}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.dropout").set_body_typed(MakeDropout);
+TVM_REGISTER_GLOBAL("relax.op.nn.dropout").set_body_typed(Dropout);
 
 StructInfo InferStructInfoDropout(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
@@ -369,12 +373,12 @@ StructInfo InferStructInfoCrossEntropy(const Call& call, const BlockBuilder& ctx
 }
 
 /* relax.nn.cross_entropy */
-Expr MakeCrossEntropy(Expr predictions, Expr targets) {
+Expr CrossEntropy(Expr predictions, Expr targets) {
   static const Op& op = Op::Get("relax.nn.cross_entropy");
   return Call(op, {std::move(predictions), std::move(targets)}, {}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.cross_entropy").set_body_typed(MakeCrossEntropy);
+TVM_REGISTER_GLOBAL("relax.op.nn.cross_entropy").set_body_typed(CrossEntropy);
 
 TVM_REGISTER_OP("relax.nn.cross_entropy")
     .set_num_inputs(2)
@@ -383,12 +387,12 @@ TVM_REGISTER_OP("relax.nn.cross_entropy")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoCrossEntropy);
 
 /* relax.nn.softmax_cross_entropy */
-Expr MakeSoftmaxCrossEntropy(Expr predictions, Expr targets) {
+Expr SoftmaxCrossEntropy(Expr predictions, Expr targets) {
   static const Op& op = Op::Get("relax.nn.softmax_cross_entropy");
   return Call(op, {std::move(predictions), std::move(targets)}, {}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.softmax_cross_entropy").set_body_typed(MakeSoftmaxCrossEntropy);
+TVM_REGISTER_GLOBAL("relax.op.nn.softmax_cross_entropy").set_body_typed(SoftmaxCrossEntropy);
 
 TVM_REGISTER_OP("relax.nn.softmax_cross_entropy")
     .set_num_inputs(2)

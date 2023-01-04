@@ -22,36 +22,12 @@
  * \brief binary broadcast operators.
  */
 
-#include "../op_common.h"
+#include "binary.h"
+
+#include <algorithm>
 
 namespace tvm {
 namespace relax {
-
-/*!
- * \brief Quick helper macro
- * - Expose a make function to construct the node.
- * - Register op to the registry.
- * \param OpName The name of operator to register. The name passed in will
- *  1. be prepended with a prefix "relax.op." as the FFI key string for the make function,
- *  2. be prepended with a prefix "relax." as the key string in the operator registry.
- */
-#define RELAX_REGISTER_BINARY_OP(OpName)                                          \
-  TVM_REGISTER_GLOBAL("relax.op." OpName).set_body_typed([](Expr lhs, Expr rhs) { \
-    static const Op& op = Op::Get("relax." OpName);                               \
-    return Call(op, {lhs, rhs}, Attrs(), {});                                     \
-  });                                                                             \
-  TVM_REGISTER_OP("relax." OpName)                                                \
-      .set_num_inputs(2)                                                          \
-      .add_argument("lhs", "Tensor", "The left hand side tensor.")                \
-      .add_argument("rhs", "Tensor", "The right hand side tensor.")
-
-#define RELAX_REGISTER_BINARY_BROADCAST_OP(OpName)                                \
-  RELAX_REGISTER_BINARY_OP(OpName).set_attr<FInferStructInfo>("FInferStructInfo", \
-                                                              InferStructInfoBroadcastArith)
-
-#define RELAX_REGISTER_CMP_OP(OpName)                                             \
-  RELAX_REGISTER_BINARY_OP(OpName).set_attr<FInferStructInfo>("FInferStructInfo", \
-                                                              InferStructInfoBroadcastCMP)
 
 template <typename FType>
 StructInfo InferStructInfoBroadcast(const Call& call, const BlockBuilder& ctx,
@@ -103,19 +79,25 @@ StructInfo InferStructInfoBroadcastCMP(const Call& call, const BlockBuilder& ctx
 }
 
 RELAX_REGISTER_BINARY_BROADCAST_OP("add").describe("Elementwise addition with broadcasting");
+RELAX_BINARY_OP_IMPL(Add, "add");
 
 RELAX_REGISTER_BINARY_BROADCAST_OP("subtract")
     .describe("Elementwise subtraction with broadcasting");
+RELAX_BINARY_OP_IMPL(Subtract, "subtract");
 
 RELAX_REGISTER_BINARY_BROADCAST_OP("multiply")
     .describe("Elementwise multiplication with broadcasting");
+RELAX_BINARY_OP_IMPL(Multiply, "multiply");
 
 RELAX_REGISTER_BINARY_BROADCAST_OP("divide").describe("Elementwise division with broadcasting");
+RELAX_BINARY_OP_IMPL(Divide, "divide");
 
 RELAX_REGISTER_BINARY_BROADCAST_OP("floor_divide")
     .describe("Elementwise floor-division with broadcasting");
+RELAX_BINARY_OP_IMPL(FloorDivide, "floor_divide");
 
 RELAX_REGISTER_CMP_OP("less");
+RELAX_BINARY_OP_IMPL(Less, "less");
 
 }  // namespace relax
 }  // namespace tvm

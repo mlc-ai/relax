@@ -22,31 +22,38 @@
  * \brief unary operators.
  */
 
-#include "../op_common.h"
+#include "unary.h"
 
 namespace tvm {
 namespace relax {
 
 /* relax.negative */
 RELAX_REGISTER_UNARY_OP("negative", /*require_float_dtype=*/false);
+RELAX_UNARY_OP_IMPL(Negative, "negative");
 
 /* relax.sin */
 RELAX_REGISTER_UNARY_OP("sin", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(Sin, "sin");
 
 /* relax.cos */
 RELAX_REGISTER_UNARY_OP("cos", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(Cos, "cos");
 
 /* relax.tanh */
 RELAX_REGISTER_UNARY_OP("tanh", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(Tanh, "tanh");
 
 /* relax.sqrt */
 RELAX_REGISTER_UNARY_OP("sqrt", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(Sqrt, "sqrt");
 
 /* relax.log */
 RELAX_REGISTER_UNARY_OP("log", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(Log, "log");
 
 /* relax.sigmoid */
 RELAX_REGISTER_UNARY_OP("sigmoid", /*require_float_dtype=*/true);
+RELAX_UNARY_OP_IMPL(Sigmoid, "sigmoid");
 
 /* relax.unique */
 TVM_REGISTER_NODE_TYPE(UniqueAttrs);

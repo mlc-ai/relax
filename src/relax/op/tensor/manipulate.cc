@@ -22,11 +22,12 @@
  * \brief Manipulation operators.
  */
 
-#include <tvm/relax/attrs/manipulate.h>
+#include "manipulate.h"
 
+#include <algorithm>
 #include <numeric>
-
-#include "../op_common.h"
+#include <utility>
+#include <vector>
 
 namespace tvm {
 namespace relax {
@@ -103,13 +104,13 @@ Expr ConvertNewShapeToExpr(const Expr& data, const ObjectRef& shape) {
   return ShapeExpr(array_ref);
 }
 
-Expr MakeReshape(Expr data, ObjectRef shape) {
+Expr Reshape(Expr data, ObjectRef shape) {
   Expr shape_in_expr = ConvertNewShapeToExpr(data, shape);
   static const Op& op = Op::Get("relax.reshape");
   return Call(op, {std::move(data), std::move(shape_in_expr)}, Attrs(), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.reshape").set_body_typed(MakeReshape);
+TVM_REGISTER_GLOBAL("relax.op.reshape").set_body_typed(Reshape);
 
 StructInfo InferStructInfoReshape(const Call& call, const BlockBuilder& ctx) {
   if (call->args.size() != 2) {
@@ -160,7 +161,7 @@ TVM_REGISTER_OP("relax.reshape")
 /* relax.permute_dims */
 TVM_REGISTER_NODE_TYPE(PermuteDimsAttrs);
 
-Expr MakePermuteDims(Expr data, Optional<Array<Integer>> axes) {
+Expr PermuteDims(Expr data, Optional<Array<Integer>> axes) {
   ObjectPtr<PermuteDimsAttrs> attrs = make_object<PermuteDimsAttrs>();
   attrs->axes = std::move(axes);
 
@@ -168,7 +169,7 @@ Expr MakePermuteDims(Expr data, Optional<Array<Integer>> axes) {
   return Call(op, {std::move(data)}, Attrs{attrs}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.permute_dims").set_body_typed(MakePermuteDims);
+TVM_REGISTER_GLOBAL("relax.op.permute_dims").set_body_typed(PermuteDims);
 
 bool IsIdentityPermutation(const std::vector<int>& permutation) {
   for (int i = 0; i < static_cast<int>(permutation.size()); ++i) {
@@ -237,7 +238,7 @@ TVM_REGISTER_OP("relax.permute_dims")
 /* relax.expand_dims */
 TVM_REGISTER_NODE_TYPE(ExpandDimsAttrs);
 
-Expr MakeExpandDims(Expr data, Array<Integer> axis) {
+Expr ExpandDims(Expr data, Array<Integer> axis) {
   ObjectPtr<ExpandDimsAttrs> attrs = make_object<ExpandDimsAttrs>();
   attrs->axis = std::move(axis);
 
@@ -245,7 +246,7 @@ Expr MakeExpandDims(Expr data, Array<Integer> axis) {
   return Call(op, {std::move(data)}, Attrs{attrs}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.expand_dims").set_body_typed(MakeExpandDims);
+TVM_REGISTER_GLOBAL("relax.op.expand_dims").set_body_typed(ExpandDims);
 
 StructInfo InferStructInfoExpandDims(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
@@ -295,7 +296,7 @@ TVM_REGISTER_OP("relax.expand_dims")
 /* relax.squeeze */
 TVM_REGISTER_NODE_TYPE(SqueezeAttrs);
 
-Expr MakeSqueeze(Expr data, Optional<Array<Integer>> axis) {
+Expr Squeeze(Expr data, Optional<Array<Integer>> axis) {
   ObjectPtr<SqueezeAttrs> attrs = make_object<SqueezeAttrs>();
   attrs->axis = std::move(axis);
 
@@ -303,7 +304,7 @@ Expr MakeSqueeze(Expr data, Optional<Array<Integer>> axis) {
   return Call(op, {std::move(data)}, Attrs{attrs}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.squeeze").set_body_typed(MakeSqueeze);
+TVM_REGISTER_GLOBAL("relax.op.squeeze").set_body_typed(Squeeze);
 
 StructInfo InferStructInfoSqueeze(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
@@ -393,12 +394,12 @@ TVM_REGISTER_OP("relax.squeeze")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoSqueeze);
 
 /* relax.flatten */
-Expr MakeFlatten(Expr data) {
+Expr Flatten(Expr data) {
   static const Op& op = Op::Get("relax.flatten");
   return Call(op, {std::move(data)}, {}, {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.flatten").set_body_typed(MakeFlatten);
+TVM_REGISTER_GLOBAL("relax.op.flatten").set_body_typed(Flatten);
 
 StructInfo InferStructInfoFlatten(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
@@ -426,7 +427,7 @@ TVM_REGISTER_OP("relax.flatten")
 /* relax.concat */
 TVM_REGISTER_NODE_TYPE(ConcatAttrs);
 
-Expr MakeConcat(Expr data, Optional<Integer> axis) {
+Expr Concat(Expr data, Optional<Integer> axis) {
   ObjectPtr<ConcatAttrs> attrs = make_object<ConcatAttrs>();
   attrs->axis = std::move(axis);
 
@@ -434,7 +435,7 @@ Expr MakeConcat(Expr data, Optional<Integer> axis) {
   return Call(op, {std::move(data)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.concat").set_body_typed(MakeConcat);
+TVM_REGISTER_GLOBAL("relax.op.concat").set_body_typed(Concat);
 
 Array<TensorStructInfo> GetTensorSInfoFromTuple(const Call& call, const BlockBuilder& ctx,
                                                 const Expr& expr) {
@@ -604,7 +605,7 @@ TVM_REGISTER_OP("relax.concat")
 /* relax.split */
 TVM_REGISTER_NODE_TYPE(SplitAttrs);
 
-Expr MakeSplit(Expr data, ObjectRef indices_or_sections, int axis) {
+Expr Split(Expr data, ObjectRef indices_or_sections, int axis) {
   ObjectPtr<SplitAttrs> attrs = make_object<SplitAttrs>();
   if (const auto* indices = indices_or_sections.as<ArrayNode>()) {
     for (int i = 0; i < static_cast<int>(indices->size()); ++i) {
@@ -629,7 +630,7 @@ Expr MakeSplit(Expr data, ObjectRef indices_or_sections, int axis) {
   return Call(op, {std::move(data)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.split").set_body_typed(MakeSplit);
+TVM_REGISTER_GLOBAL("relax.op.split").set_body_typed(Split);
 
 StructInfo InferStructInfoSplit(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);

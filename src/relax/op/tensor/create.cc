@@ -22,9 +22,9 @@
  * \brief Creation operators.
  */
 
-#include <tvm/relax/attrs/create.h>
+#include "create.h"
 
-#include "../op_common.h"
+#include <utility>
 
 namespace tvm {
 namespace relax {
@@ -33,7 +33,7 @@ namespace relax {
 TVM_REGISTER_NODE_TYPE(InitAttrs);
 
 /* relax.full */
-Expr MakeFull(ObjectRef shape, Expr fill_value, DataType dtype) {
+Expr Full(ObjectRef shape, Expr fill_value, DataType dtype) {
   Expr shape_in_expr{nullptr};
   if (const auto* expr = shape.as<ExprNode>()) {
     shape_in_expr = GetRef<Expr>(expr);
@@ -52,7 +52,7 @@ Expr MakeFull(ObjectRef shape, Expr fill_value, DataType dtype) {
   return Call(op, {std::move(shape_in_expr), std::move(fill_value)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.full").set_body_typed(MakeFull);
+TVM_REGISTER_GLOBAL("relax.op.full").set_body_typed(Full);
 
 StructInfo InferStructInfoFull(const Call& call, const BlockBuilder& ctx) {
   if (call->args.size() != 2) {
@@ -85,12 +85,12 @@ TVM_REGISTER_OP("relax.full")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoFull);
 
 /* relax.full_like */
-Expr MakeFullLike(Expr data, Expr fill_value) {
+Expr FullLike(Expr data, Expr fill_value) {
   static const Op& op = Op::Get("relax.full_like");
   return Call(op, {std::move(data), std::move(fill_value)}, Attrs(), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.full_like").set_body_typed(MakeFullLike);
+TVM_REGISTER_GLOBAL("relax.op.full_like").set_body_typed(FullLike);
 
 StructInfo InferStructInfoFullLike(const Call& call, const BlockBuilder& ctx) {
   Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);
@@ -129,7 +129,7 @@ StructInfo InferStructInfoOnesZeros(const Call& call, const BlockBuilder& ctx) {
 }
 
 /* relax.ones & relax.ones_like */
-Expr MakeOnes(Expr shape, DataType dtype) {
+Expr Ones(Expr shape, DataType dtype) {
   CHECK(!dtype.is_void()) << "Ones op expects the input dtype not to be void";
   ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
   attrs->dtype = dtype;
@@ -138,7 +138,7 @@ Expr MakeOnes(Expr shape, DataType dtype) {
   return Call(op, {std::move(shape)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.ones").set_body_typed(MakeOnes);
+TVM_REGISTER_GLOBAL("relax.op.ones").set_body_typed(Ones);
 
 TVM_REGISTER_OP("relax.ones")
     .set_attrs_type<InitAttrs>()
@@ -147,9 +147,10 @@ TVM_REGISTER_OP("relax.ones")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoOnesZeros);
 
 RELAX_REGISTER_UNARY_OP("ones_like", /*require_float_dtype=*/false);
+RELAX_UNARY_OP_IMPL(OnesLike, "ones_like");
 
 /* relax.zeros & relax.zeros_like */
-Expr MakeZeros(Expr shape, DataType dtype) {
+Expr Zeros(Expr shape, DataType dtype) {
   CHECK(!dtype.is_void()) << "Zeros op expects the input dtype not to be void";
   ObjectPtr<InitAttrs> attrs = make_object<InitAttrs>();
   attrs->dtype = dtype;
@@ -158,7 +159,7 @@ Expr MakeZeros(Expr shape, DataType dtype) {
   return Call(op, {std::move(shape)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.zeros").set_body_typed(MakeZeros);
+TVM_REGISTER_GLOBAL("relax.op.zeros").set_body_typed(Zeros);
 
 TVM_REGISTER_OP("relax.zeros")
     .set_attrs_type<InitAttrs>()
@@ -167,6 +168,7 @@ TVM_REGISTER_OP("relax.zeros")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoOnesZeros);
 
 RELAX_REGISTER_UNARY_OP("zeros_like", /*require_float_dtype=*/false);
+RELAX_UNARY_OP_IMPL(ZerosLike, "zeros_like");
 
 }  // namespace relax
 }  // namespace tvm
