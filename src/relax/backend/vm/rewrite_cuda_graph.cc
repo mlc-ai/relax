@@ -64,13 +64,13 @@ struct StaticRegion {
 class StaticRegionExtractor : public ExprVisitor {
  public:
   static std::unordered_map<const BindingBlockNode*, std::vector<StaticRegion>> Extract(
-    const IRModule& mod,
-      const Function& func) {
+      const IRModule& mod, const Function& func) {
     StaticRegionExtractor extractor(mod, OutputCollector::Collect(func));
     extractor.VisitExpr(func->body);
     return extractor.block_to_static_regions_;
   }
-  StaticRegionExtractor(const IRModule& mod, const std::unordered_set<const VarNode*>& outputs) : mod_(mod), outputs_(outputs) {}
+  StaticRegionExtractor(const IRModule& mod, const std::unordered_set<const VarNode*>& outputs)
+      : mod_(mod), outputs_(outputs) {}
 
   struct DependencyGraph {
     void AddBinding(const VarBindingNode* binding, bool is_alloc_tensor) {
@@ -131,7 +131,7 @@ class StaticRegionExtractor : public ExprVisitor {
 
     const Expr& value = binding->value;
     static const auto& alloc_tensor_op = Op::Get("relax.builtin.alloc_tensor");
-    if (const auto* var = value.as<VarNode>()) {
+    if (value->IsInstance<VarNode>()) {
       // var -> var re-binding is not needed as we expect the binding is canonicalized
       return;
     }
@@ -284,7 +284,8 @@ class CUDAGraphRewriter : public ExprMutator {
     auto mod = builder_->GetContextIRModule();
     for (const auto& [gv, func] : mod->functions) {
       if (const auto* func_node = func.as<FunctionNode>()) {
-        binding_block_to_regions_ = StaticRegionExtractor::Extract(mod, GetRef<Function>(func_node));
+        binding_block_to_regions_ =
+            StaticRegionExtractor::Extract(mod, GetRef<Function>(func_node));
         Function new_func = Downcast<Function>(func);
         auto fptr = new_func.CopyOnWrite();
         fptr->body = VisitExpr(std::move(fptr->body));
@@ -302,13 +303,15 @@ class CUDAGraphRewriter : public ExprMutator {
         auto gv = builder_->AddFunction(region.func, "cuda_graph_capture_func");
         auto graph_tensors = builder_->Emit(MakeVMGetCapturedCUDAGraph(gv));
 
-        for (const auto& [var, binding] : region.bindings) {
+        for (const auto& [var, _] : region.bindings) {
           bindings_to_remove_.insert(var);
         }
         auto tensors = builder_->Emit(TupleGetItem(graph_tensors, 1));
         for (const auto& [var, index] : region.alloc_tensor_to_index) {
-          auto tensor = builder_->Emit(TupleGetItem(tensors, index));
-          var_remap_[var] = tensor.get();
+          // TupleGetItem is emitted lazily because not all the tensors are needed by the rest of
+          // the program
+          auto tensor = TupleGetItem(tensors, index);
+          var_remap_[var] = {nullptr, std::move(tensor)};
         }
         auto graph = builder_->Emit(TupleGetItem(graph_tensors, 0));
         graph_launch_point_[region.launch_point->var.get()] = graph.get();
@@ -333,14 +336,18 @@ class CUDAGraphRewriter : public ExprMutator {
 
   Expr VisitExpr_(const VarNode* var) final {
     if (auto it = var_remap_.find(var); it != var_remap_.end()) {
-      return GetRef<Var>(it->second);
+      auto& [var, expr] = it->second;
+      if (var == nullptr) {
+        var = builder_->Emit(expr).get();
+      }
+      return GetRef<Var>(var);
     }
     return GetRef<Expr>(var);
   }
 
  private:
   std::unordered_set<const VarNode*> bindings_to_remove_;
-  std::unordered_map<const VarNode*, const VarNode*> var_remap_;
+  std::unordered_map<const VarNode*, std::pair<const VarNode*, Expr>> var_remap_;
   std::unordered_map<const VarNode*, const VarNode*> graph_launch_point_;
   std::unordered_map<const BindingBlockNode*, std::vector<StaticRegion>> binding_block_to_regions_;
 };
