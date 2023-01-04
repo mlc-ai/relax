@@ -238,31 +238,10 @@ class ToMixedPrecisionRewriter : public ExprMutator {
       : var_dtype_map_(var_dtype_map), output_dtype_(output_dtype) {}
 
  private:
-  using VarMap = std::unordered_map<Id, Var, ObjectPtrHash, ObjectPtrEqual>;
-
   Var GetRealized(const Var& var) {
     auto it = var_remap_.find(var->vid);
     return it == var_remap_.end() ? var : it->second;
   }
-
-  // TODO(@bohan): implements some postorder function accepts a visitor closure
-  class VarReplacer : public ExprMutator {
-   public:
-    explicit VarReplacer(const ToMixedPrecisionRewriter::VarMap& var_map) : var_map_(var_map) {}
-
-    static Expr Replace(const Expr& expr, const ToMixedPrecisionRewriter::VarMap& var_map) {
-      VarReplacer replacer(var_map);
-      return replacer(expr);
-    }
-
-   private:
-    Expr VisitExpr_(const VarNode* op) final {
-      auto it = var_map_.find(op->vid);
-      return it == var_map_.end() ? GetRef<Var>(op) : it->second;
-    }
-
-    const ToMixedPrecisionRewriter::VarMap& var_map_;
-  };
 
   // Util function to rewrite the expr to the given dtype
   // we first replace the vars with the realized vars
@@ -455,7 +434,7 @@ Expr ToMixedPrecision(const Function& f, const DataType& out_dtype) {
 
 namespace transform {
 
-Pass ToMixedPrecisionPass(const DataType& out_dtype) {
+Pass ToMixedPrecision(const DataType& out_dtype) {
   runtime::TypedPackedFunc<Function(Function, IRModule, PassContext)> pass_func =
       [=](Function f, IRModule m, PassContext pc) {
         return Downcast<Function>(ToMixedPrecision(f, out_dtype));
@@ -463,7 +442,7 @@ Pass ToMixedPrecisionPass(const DataType& out_dtype) {
   return CreateFunctionPass(pass_func, 0, "ToMixedPrecision", {});
 }
 
-TVM_REGISTER_GLOBAL("relax.transform.ToMixedPrecision").set_body_typed(ToMixedPrecisionPass);
+TVM_REGISTER_GLOBAL("relax.transform.ToMixedPrecision").set_body_typed(ToMixedPrecision);
 
 }  // namespace transform
 

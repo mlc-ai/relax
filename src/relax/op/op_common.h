@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "../transform/infer_amp_utils.h"
+#include "../transform/infer_layout_utils.h"
 
 namespace tvm {
 namespace relax {
@@ -71,12 +72,13 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
  * be prepended with a prefix "relax." as the identifier string in the operator registry.
  * \param RequireFloatDtype A boolean indicating if the input is required to have float dtype.
  */
-#define RELAX_REGISTER_UNARY_OP(OpRegName, RequireFloatDtype)                                  \
-  TVM_REGISTER_OP("relax." OpRegName)                                                          \
-      .set_num_inputs(1)                                                                       \
-      .add_argument("x", "Tensor", "The input tensor.")                                        \
-      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary<RequireFloatDtype>) \
-      .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
+#define RELAX_REGISTER_UNARY_OP(OpRegName, RequireFloatDtype)                                      \
+  TVM_REGISTER_OP("relax." OpRegName)                                                              \
+      .set_num_inputs(1)                                                                           \
+      .add_argument("x", "Tensor", "The input tensor.")                                            \
+      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary<RequireFloatDtype>)     \
+      .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow) \
+      .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutUnaryEwise)
 
 /*!
  * \brief Quick helper macro to expose a make-function to construct the operator.
@@ -114,6 +116,17 @@ inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx
   }
   return input_sinfo;
 }
+
+/*!
+ * \brief Layout infer util for unary elementwise ops. It will simply take the layout of the input.
+ * \param call The context Call to the operator.
+ * \param desired_layouts The desired layouts of certain ops.
+ * \param var_layout_map The layout of vars.
+ * \return The inferred layout result.
+ */
+InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
+                                        const Map<String, Array<String>>& desired_layouts,
+                                        const VarLayoutMap& var_layout_map);
 
 /************ Utilities ************/
 
