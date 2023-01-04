@@ -147,3 +147,13 @@ class SplitAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.InitAttrs")
 class InitAttrs(Attrs):
     """Attributes used in full operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.TakeAttrs")
+class TakeAttrs(Attrs):
+    """Attributes used in take operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.StridedSliceAttrs")
+class StridedSliceAttrs(Attrs):
+    """Attributes used in strided_slice operator"""
