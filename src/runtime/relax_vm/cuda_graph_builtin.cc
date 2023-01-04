@@ -86,10 +86,6 @@ TVM_REGISTER_GLOBAL("vm.builtin.get_captured_cuda_graph")
       CUDAGraphCache* cache = CUDAGraphCache::Get();
       if (auto it = cache->entries.find(func_name); it == cache->entries.end()) {
         CaptureContext ctx;
-
-        const auto& device = vm->devices[0];  // FIXME: can't assume it's devices[0]
-        auto* device_api = DeviceAPI::Get(device);
-
         CUDA_CALL(cudaStreamCreate(&ctx.stream));
         // ctx.stream = static_cast<cudaStream_t>(device_api->CreateStream(device));
         ctx.is_warm_up = true;
@@ -119,7 +115,7 @@ TVM_REGISTER_GLOBAL("vm.builtin.get_captured_cuda_graph")
         CUDA_CALL(cudaStreamDestroy(ctx.stream));
       }
       const auto& cached = cache->entries[func_name];
-      *rv = ADT::Tuple(ObjectRef(cached.graph), ObjectRef(ADT::Tuple(cached.states)));
+      *rv = ADT::Tuple(std::vector<ObjectRef>{cached.graph, ADT::Tuple(cached.states)});
     });
 
 TVM_REGISTER_GLOBAL("vm.builtin.cuda_graph_begin_capture").set_body_typed([]() {

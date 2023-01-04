@@ -136,7 +136,7 @@ class ADT : public ObjectRef {
    */
   template <typename... Args>
   static ADT Tuple(Args&&... args) {
-    return ADT(0, {std::forward<Args>(args)...});
+    return ADT(0, std::forward<Args>(args)...);
   }
 
   TVM_DEFINE_OBJECT_REF_METHODS(ADT, ObjectRef, ADTObj);
