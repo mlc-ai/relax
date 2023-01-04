@@ -63,6 +63,7 @@ def minimal_vm_build(mod, target, params=None):
     return relax.vm.Executable(relax._ffi_api.VMCodeGen(rx_mod, lib, [], target, params))
 
 
+@tvm.testing.requires_cuda
 def test_minimum_example():
     x = relax.Var("x", relax.TensorStructInfo((2, 4)))
     const_one = relax.const(1, "float32")
@@ -80,7 +81,7 @@ def test_minimum_example():
         bb.emit_func_output(v6)
 
     mod = bb.get()
-    target = tvm.target.Target("nvidia/geforce-rtx-3070")
+    target = tvm.target.Target("nvidia/nvidia-t4")
     mod = apply_passes(mod, target)
 
     dev = tvm.cuda(0)
