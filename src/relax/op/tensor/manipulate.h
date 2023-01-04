@@ -31,19 +31,72 @@
 namespace tvm {
 namespace relax {
 
-Expr Reshape(Expr data, ObjectRef shape);
+/*!
+ * \brief Reshape the input array, supporting `-1` inference in the new
+ * shape when the new shape is given as an Array of PrimExpr.
+ * \param data The input data to the operator.
+ * \param shape The new shape. Should be compatible with the original shape.
+ * It is required to be either an Array of PrimExpr, or a Shape in Relax
+ * \return The reshaped result.
+ */
+Expr reshape(Expr data, ObjectRef shape);
 
-Expr PermuteDims(Expr data, Optional<Array<Integer>> axes);
+/*!
+ * \brief Permutes the dimensions of an array.
+ * \param data The input data to the operator.
+ * \param axes The target axes order, reverse order if not specified.
+ * \return The transposed result.
+ */
+Expr permute_dims(Expr data, Optional<Array<Integer>> axes);
 
-Expr ExpandDims(Expr data, Array<Integer> axis);
+/*!
+ * \brief Insert new axes at the positions given by `axis`.
+ * \param data The input data to the operator.
+ * \param axis The axes at which the input array are expanded.
+ * \return The transformed result.
+ */
+Expr expand_dims(Expr data, Array<Integer> axis);
 
-Expr Squeeze(Expr data, Optional<Array<Integer>> axis);
+/*!
+ * \brief Squeeze axes in the array.
+ * \param data The input data to the operator.
+ * \param axis The set of axes to remove.
+ * If it is `NullOpt`, remove all axis of dimensions 1.
+ * If any specified axis has dimension that does not equal 1, it is an error.
+ * \return The squeezed result.
+ */
+Expr squeeze(Expr data, Optional<Array<Integer>> axis);
 
-Expr Flatten(Expr data);
+/*!
+ * \brief Flatten all the tensor dimensions into one.
+ * \param data The input data to the operator.
+ * \return The flattened result.
+ */
+Expr flatten(Expr data);
 
-Expr Concat(Expr data, Optional<Integer> axis);
+/*!
+ * \brief Concatenate the input tensors along the given axis.
+ * \param data An Expr in Tuple type, containing the tensors to be concatenated.
+ * \param axis The axis along which the tensors are concatenated.
+ * If it is `NullOpt`, the input tensor is required to be flattened before concatenation.
+ * \return The concatenated tensor.
+ */
+Expr concat(Expr data, Optional<Integer> axis);
 
-Expr Split(Expr data, ObjectRef indices_or_sections, int axis);
+/*!
+ * \brief Split input tensor along axis by sections or indices.
+ * - If indices_or_sections is an integer, the input will be divided equally
+ * along given axis (if possible). Last section will be smaller if the tensor
+ * size along the given dimension is not divisible by the integer.
+ * - If indices_or_sections is a tuple of mixture of int or PrimExpr,
+ * the entries indicate the indices where along axis the array is split.
+ * \param data The tensor to be split.
+ * \param indices_or_sections Indices or sections to split into.
+ * It is required to be an Array of PrimExpr or an integer.
+ * \param axis The axis over which to split.
+ * \return The computed result.
+ */
+Expr split(Expr data, ObjectRef indices_or_sections, int axis);
 
 }  // namespace relax
 }  // namespace tvm

@@ -24,25 +24,10 @@ from ..expr import Expr
 
 
 def matmul(a: Expr, b: Expr, out_dtype: Optional[Union[str, DataType]] = None) -> Expr:
-    """General matrix multiplication of two tensors.
+    """General matrix multiplication of two tensors, with broadcasting on batched dimensions.
 
-    (The below is copied from torch.matmul)
-    The behavior depends on the dimensionality of the tensors as follows:
-    * If both tensors are 1-dimensional, the dot product (scalar) is returned.
-    * If both arguments are 2-dimensional, the matrix-matrix product is returned.
-    * If the first argument is 1-dimensional and the second argument is 2-dimensional,
-      a 1 is prepended to its dimension for the purpose of the matrix multiply. After the
-      matrix multiply, the prepended dimension is removed.
-    * If the first argument is 2-dimensional and the second argument is 1-dimensional,
-      the matrix-vector product is returned.
-    * If both arguments are at least 1-dimensional and at least one argument is N-dimensional
-      (where N > 2), then a batched matrix multiply is returned. If the first argument is
-      1-dimensional, a 1 is prepended to its dimension for the purpose of the batched
-      matrix multiply and removed after. If the second argument is 1-dimensional, a 1 is
-      appended to its dimension for the purpose of the batched matrix multiple and remove
-      after. The non-matrix (i.e. batch) dimensions are broadcasted (and thus must be
-      broadcastable). For example, if `a` is a `(j, 1, n, n)` tensor and `b` is a `(k, n, n)`
-      tensor, the result will be a `(j, k, n, n)` tensor.
+    The semantics and output shape deduction rule is specified as
+    https://data-apis.org/array-api/latest/API_specification/generated/array_api.matmul.html.
 
     Parameters
     ----------

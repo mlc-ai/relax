@@ -28,9 +28,9 @@ namespace relax {
 /* relax.nn.max_pool2d */
 TVM_REGISTER_NODE_TYPE(MaxPool2DAttrs);
 
-Expr MaxPool2D(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides,
-               Array<PrimExpr> padding, Array<PrimExpr> dilation, String layout,
-               Optional<String> out_layout) {
+Expr max_pool2d(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides,
+                Array<PrimExpr> padding, Array<PrimExpr> dilation, String layout,
+                Optional<String> out_layout) {
   padding = GetCompletePadding2D(std::move(padding));
   if (pool_size.size() == 1) {
     pool_size.push_back(pool_size[0]);
@@ -62,7 +62,7 @@ Expr MaxPool2D(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides,
   return Call(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.max_pool2d").set_body_typed(MaxPool2D);
+TVM_REGISTER_GLOBAL("relax.op.nn.max_pool2d").set_body_typed(max_pool2d);
 
 StructInfo InferStructInfoMaxPool2D(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
@@ -113,8 +113,8 @@ TVM_REGISTER_OP("relax.nn.max_pool2d")
 /* relax.nn.adaptive_avg_pool2d */
 TVM_REGISTER_NODE_TYPE(AdaptivePool2DAttrs);
 
-Expr AdaptiveAvgPool2D(Expr data, Optional<Array<PrimExpr>> output_size, String layout,
-                       Optional<String> out_layout) {
+Expr adaptive_avg_pool2d(Expr data, Optional<Array<PrimExpr>> output_size, String layout,
+                         Optional<String> out_layout) {
   ObjectPtr<AdaptivePool2DAttrs> attrs = make_object<AdaptivePool2DAttrs>();
   attrs->layout = layout;
   attrs->out_layout = out_layout.value_or(layout);
@@ -133,7 +133,7 @@ Expr AdaptiveAvgPool2D(Expr data, Optional<Array<PrimExpr>> output_size, String 
   return Call(op, {std::move(data)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.adaptive_avg_pool2d").set_body_typed(AdaptiveAvgPool2D);
+TVM_REGISTER_GLOBAL("relax.op.nn.adaptive_avg_pool2d").set_body_typed(adaptive_avg_pool2d);
 
 StructInfo InferStructInfoAdaptiveAvgPool2D(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);

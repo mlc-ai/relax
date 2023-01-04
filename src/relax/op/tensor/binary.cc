@@ -78,26 +78,21 @@ StructInfo InferStructInfoBroadcastCMP(const Call& call, const BlockBuilder& ctx
          const TensorStructInfo& rhs_sinfo) { return DataType::Bool(); });
 }
 
-RELAX_REGISTER_BINARY_BROADCAST_OP("add").describe("Elementwise addition with broadcasting");
-RELAX_BINARY_OP_IMPL(Add, "add");
+RELAX_REGISTER_BINARY_BROADCAST_OP_AND_IMPL(add).describe("Elementwise addition with broadcasting");
 
-RELAX_REGISTER_BINARY_BROADCAST_OP("subtract")
-    .describe("Elementwise subtraction with broadcasting");
-RELAX_BINARY_OP_IMPL(Subtract, "subtract");
+RELAX_REGISTER_BINARY_BROADCAST_OP_AND_IMPL(subtract).describe(
+    "Elementwise subtraction with broadcasting");
 
-RELAX_REGISTER_BINARY_BROADCAST_OP("multiply")
-    .describe("Elementwise multiplication with broadcasting");
-RELAX_BINARY_OP_IMPL(Multiply, "multiply");
+RELAX_REGISTER_BINARY_BROADCAST_OP_AND_IMPL(multiply).describe(
+    "Elementwise multiplication with broadcasting");
 
-RELAX_REGISTER_BINARY_BROADCAST_OP("divide").describe("Elementwise division with broadcasting");
-RELAX_BINARY_OP_IMPL(Divide, "divide");
+RELAX_REGISTER_BINARY_BROADCAST_OP_AND_IMPL(divide).describe(
+    "Elementwise division with broadcasting");
 
-RELAX_REGISTER_BINARY_BROADCAST_OP("floor_divide")
+RELAX_REGISTER_BINARY_BROADCAST_OP_AND_IMPL(floor_divide)
     .describe("Elementwise floor-division with broadcasting");
-RELAX_BINARY_OP_IMPL(FloorDivide, "floor_divide");
 
-RELAX_REGISTER_CMP_OP("less");
-RELAX_BINARY_OP_IMPL(Less, "less");
+RELAX_REGISTER_CMP_OP_AND_IMPL(less);
 
 }  // namespace relax
 }  // namespace tvm

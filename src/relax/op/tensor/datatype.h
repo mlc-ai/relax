@@ -31,9 +31,19 @@
 namespace tvm {
 namespace relax {
 
+/*!
+ * \brief Cast input tensor to the given data type.
+ * \param data The input data to the operator.
+ * \param dtype The target data type
+ * \return The casted result.
+ */
 Expr astype(Expr data, DataType dtype);
 
-Expr WrapParam(Expr data, DataType dtype);
+/*!
+ * \brief Cast input tensor which is model param to data type if the
+ * dtype of the input data is not the same as the given dtype.
+ */
+Expr wrap_param(Expr data, DataType dtype);
 
 }  // namespace relax
 }  // namespace tvm

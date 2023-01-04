@@ -29,7 +29,15 @@
 namespace tvm {
 namespace relax {
 
-Expr EwiseFma(Expr expr0, Expr expr1, Expr expr2);
+/*!
+ * \brief Elementwise fused multiply-add operator
+ * Returns elementwise result of `expr0 * expr1 + expr2`
+ * \param expr0 The left hand operand of the multiplication
+ * \param expr1 The right hand operand of the multiplication
+ * \param expr2 The operand of the addition
+ * \return The computed result.
+ */
+Expr ewise_fma(Expr expr0, Expr expr1, Expr expr2);
 
 }  // namespace relax
 }  // namespace tvm

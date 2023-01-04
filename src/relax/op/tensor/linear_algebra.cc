@@ -33,7 +33,7 @@ namespace relax {
 /* relax.matmul */
 TVM_REGISTER_NODE_TYPE(MatmulAttrs);
 
-Expr Matmul(Expr a, Expr b, DataType out_dtype) {
+Expr matmul(Expr a, Expr b, DataType out_dtype) {
   ObjectPtr<MatmulAttrs> attrs = make_object<MatmulAttrs>();
   attrs->out_dtype = out_dtype;
 
@@ -41,7 +41,7 @@ Expr Matmul(Expr a, Expr b, DataType out_dtype) {
   return Call(op, {std::move(a), std::move(b)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.matmul").set_body_typed(Matmul);
+TVM_REGISTER_GLOBAL("relax.op.matmul").set_body_typed(matmul);
 
 StructInfo InferStructInfoMatmul(const Call& call, const BlockBuilder& ctx) {
   Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);

@@ -59,7 +59,7 @@ TVM_REGISTER_OP("relax.astype")
 /* relax.wrap_param */
 TVM_REGISTER_NODE_TYPE(WrapParamAttrs);
 
-Expr WrapParam(Expr data, DataType dtype) {
+Expr wrap_param(Expr data, DataType dtype) {
   ObjectPtr<WrapParamAttrs> attrs = make_object<WrapParamAttrs>();
   attrs->dtype = dtype;
 
@@ -67,7 +67,7 @@ Expr WrapParam(Expr data, DataType dtype) {
   return Call(op, {std::move(data)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.wrap_param").set_body_typed(WrapParam);
+TVM_REGISTER_GLOBAL("relax.op.wrap_param").set_body_typed(wrap_param);
 
 StructInfo InferStructInfoWrapParam(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo sinfo = GetUnaryInputTensorStructInfo(call, ctx);

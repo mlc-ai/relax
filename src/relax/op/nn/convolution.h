@@ -51,7 +51,8 @@ inline Expr MakeConv(Expr data, Expr weight, Array<PrimExpr> strides, Array<Prim
   return Call(op, {data, weight}, Attrs(attrs), {});
 }
 
-Expr Conv2D(Expr data, Expr weight, Array<PrimExpr> strides, Array<PrimExpr> padding,
+/*! \brief 2D convolution */
+Expr conv2d(Expr data, Expr weight, Array<PrimExpr> strides, Array<PrimExpr> padding,
             Array<PrimExpr> dilation, String data_layout, String kernel_layout,
             Optional<String> out_layout, DataType out_dtype);
 

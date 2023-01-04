@@ -31,7 +31,17 @@
 namespace tvm {
 namespace relax {
 
-Expr Matmul(Expr a, Expr b, DataType out_dtype);
+/*!
+ * \brief General matrix multiplication of two tensors.
+ * The semantics and output shape deduction rule is specified as
+ * https://data-apis.org/array-api/latest/API_specification/generated/array_api.matmul.html.
+ * \param a The left operand of the matmul.
+ * \param b The right operand of the matmul.
+ * \param out_dtype The data type of the matmul result.
+ * When it is not specified, the output dtype will be the the same as input dtype.
+ * \return The computed result.
+ */
+Expr matmul(Expr a, Expr b, DataType out_dtype);
 
 }  // namespace relax
 }  // namespace tvm

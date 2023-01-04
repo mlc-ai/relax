@@ -85,24 +85,19 @@ StructInfo InferStructInfoStatistical(const Call& call, const BlockBuilder& ctx)
 TVM_REGISTER_NODE_TYPE(StatisticalAttrs);
 
 /* relax.sum */
-RELAX_REGISTER_STATISTICAL_OP("sum");
-RELAX_STATISTICAL_OP_IMPL(Sum, "sum");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(sum);
 
 /* relax.mean */
-RELAX_REGISTER_STATISTICAL_OP("mean");
-RELAX_STATISTICAL_OP_IMPL(Mean, "mean");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(mean);
 
 /* relax.variance */
-RELAX_REGISTER_STATISTICAL_OP("variance");
-RELAX_STATISTICAL_OP_IMPL(Variance, "variance");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(variance);
 
 /* relax.max */
-RELAX_REGISTER_STATISTICAL_OP("max");
-RELAX_STATISTICAL_OP_IMPL(Max, "max");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(max);
 
 /* relax.min */
-RELAX_REGISTER_STATISTICAL_OP("min");
-RELAX_STATISTICAL_OP_IMPL(Min, "min");
+RELAX_REGISTER_STATISTICAL_OP_AND_IMPL(min);
 
 }  // namespace relax
 }  // namespace tvm

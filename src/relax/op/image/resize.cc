@@ -32,7 +32,7 @@ namespace relax {
 /* relax.resize2d */
 TVM_REGISTER_NODE_TYPE(Resize2DAttrs);
 
-Expr Resize2D(Expr data, Array<PrimExpr> size, Array<FloatImm> roi, String layout, String method,
+Expr resize2d(Expr data, Array<PrimExpr> size, Array<FloatImm> roi, String layout, String method,
               String coordinate_transformation_mode, String rounding_method, double cubic_alpha,
               int cubic_exclude, double extrapolation_value, DataType out_dtype) {
   if (size.size() == 1) {
@@ -58,7 +58,7 @@ Expr Resize2D(Expr data, Array<PrimExpr> size, Array<FloatImm> roi, String layou
   return Call(op, {std::move(data)}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relax.op.image.resize2d").set_body_typed(Resize2D);
+TVM_REGISTER_GLOBAL("relax.op.image.resize2d").set_body_typed(resize2d);
 
 StructInfo InferStructInfoResize2D(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);

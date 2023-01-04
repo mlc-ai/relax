@@ -24,7 +24,7 @@ from ..expr import Constant, Expr
 
 
 def astype(data: Expr, dtype: Union[str, DataType]) -> Expr:
-    """Cast input tensor to data type.
+    """Cast input tensor to the given data type.
 
     Parameters
     ----------

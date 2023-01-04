@@ -32,7 +32,7 @@ namespace relax {
 /* relax.nn.conv2d */
 TVM_REGISTER_NODE_TYPE(Conv2DAttrs);
 
-Expr Conv2D(Expr data, Expr weight, Array<PrimExpr> strides, Array<PrimExpr> padding,
+Expr conv2d(Expr data, Expr weight, Array<PrimExpr> strides, Array<PrimExpr> padding,
             Array<PrimExpr> dilation, String data_layout, String kernel_layout,
             Optional<String> out_layout, DataType out_dtype) {
   padding = GetCompletePadding2D(std::move(padding));
@@ -54,7 +54,7 @@ Expr Conv2D(Expr data, Expr weight, Array<PrimExpr> strides, Array<PrimExpr> pad
                                out_dtype, /*op_name=*/"relax.nn.conv2d");
 }
 
-TVM_REGISTER_GLOBAL("relax.op.nn.conv2d").set_body_typed(Conv2D);
+TVM_REGISTER_GLOBAL("relax.op.nn.conv2d").set_body_typed(conv2d);
 
 StructInfo InferStructInfoConv2d(const Call& call, const BlockBuilder& ctx) {
   Array<TensorStructInfo> input_sinfo = GetInputTensorStructInfo(call, ctx);

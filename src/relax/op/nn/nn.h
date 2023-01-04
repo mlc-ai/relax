@@ -32,25 +32,41 @@
 namespace tvm {
 namespace relax {
 
-Expr ReLU(Expr e);
+/*! \brief Rectified linear unit. */
+Expr relu(Expr e);
 
-Expr GeLU(Expr e);
+/*! \brief Gaussian Error Linear Units function. */
+Expr gelu(Expr e);
 
-Expr SiLU(Expr e);
+/*! \brief Sigmoid Linear Unit function. */
+Expr silu(Expr e);
 
-Expr Softmax(Expr data, int axis);
+/*! \brief Softmax function. */
+Expr softmax(Expr data, int axis);
 
-Expr BatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,  //
-               int axis, double epsilon, bool center, bool scale);
+/*! \brief Compute batch normalization. */
+Expr batch_norm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,  //
+                int axis, double epsilon, bool center, bool scale);
 
-Expr LayerNorm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double epsilon, bool center,
-               bool scale);
+/*! \brief Compute layer normalization. */
+Expr layer_norm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double epsilon, bool center,
+                bool scale);
 
-Expr Dropout(Expr data, double rate);
+/*!
+ * \brief Applies the dropout operation to the input tensor.
+ * \param data The input data to the operator.
+ * \param rate The probability for an element to be reset to 0.
+ * \return A Tuple of two tensors.
+ * The first one is the original tensor and the second one is a
+ * mask tensor (1.0 where element not dropped, 0.0 where dropped)
+ */
+Expr dropout(Expr data, double rate);
 
-Expr CrossEntropy(Expr predictions, Expr targets);
+/*! \brief CrossEntropy without logits. */
+Expr cross_entropy(Expr predictions, Expr targets);
 
-Expr SoftmaxCrossEntropy(Expr predictions, Expr targets);
+/*! \brief Computes the softmax cross entropy between predictions and targets. */
+Expr softmax_cross_entropy(Expr predictions, Expr targets);
 
 }  // namespace relax
 }  // namespace tvm

@@ -29,19 +29,30 @@
 namespace tvm {
 namespace relax {
 
-Expr Negative(Expr e);
+/*!
+ * \brief Compute element-wise negative value of data.
+ * \param e The input data.
+ * \return The computed result.
+ */
+Expr negative(Expr e);
 
-Expr Sin(Expr e);
+/*! \brief Compute elementwise sin of data. */
+Expr sin(Expr e);
 
-Expr Cos(Expr e);
+/*! \brief Compute elementwise cos of data. */
+Expr cos(Expr e);
 
-Expr Tanh(Expr e);
+/*! \brief Compute elementwise tanh of data. */
+Expr tanh(Expr e);
 
-Expr Sqrt(Expr e);
+/*! \brief Compute elementwise square root of data. */
+Expr sqrt(Expr e);
 
-Expr Log(Expr e);
+/*! \brief Compute elementwise natural logarithm of data. */
+Expr log(Expr e);
 
-Expr Sigmoid(Expr e);
+/*! \brief Compute elementwise sigmoid of data. */
+Expr sigmoid(Expr e);
 
 }  // namespace relax
 }  // namespace tvm

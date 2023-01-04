@@ -493,7 +493,7 @@ def layer_norm(
 
 
 def dropout(data: Expr, rate: float = 0.5) -> Expr:
-    """Applies the dropout operation to the input array.
+    """Applies the dropout operation to the input tensor.
 
     During training, each element of the input is set to zero with
     probability ``p``. The whole array is scaled by ``1/(1-p)``

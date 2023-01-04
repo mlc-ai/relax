@@ -23,7 +23,7 @@ from ..expr import Expr
 
 
 def sum(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool = False) -> Expr:
-    """Computes the sum of array elements over given axes.
+    """Computes the sum of tensor elements over given axes.
 
     Parameters
     ----------
@@ -32,13 +32,13 @@ def sum(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool
 
     axis : Optional[Union[int, List[int]]]
         Axis or axes along which a sum is performed.
-        The default, axis=None, will sum all of the elements of the input array.
+        The default, axis=None, will sum all of the elements of the input tensor.
         Negative indexing is supported.
 
     keepdims : bool
         If this is set to True, the axes which are reduced are left in the result as
         dimensions with size one.
-        With this option, the result will broadcast correctly against the input array.
+        With this option, the result will broadcast correctly against the input tensor.
 
     Returns
     -------
@@ -51,7 +51,7 @@ def sum(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool
 
 
 def mean(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool = False) -> Expr:
-    """Computes the mean of array elements over given axes.
+    """Computes the mean of tensor elements over given axes.
 
     Parameters
     ----------
@@ -60,13 +60,13 @@ def mean(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: boo
 
     axis : Optional[Union[int, List[int]]]
         Axis or axes along which a mean operation is performed.
-        The default, axis=None, will compute the mean of all elements in the input array.
+        The default, axis=None, will compute the mean of all elements in the input tensor.
         Negative indexing is supported.
 
     keepdims : bool
         If this is set to True, the axes which are reduced are left in the result as dimensions
         with size one.
-        With this option, the result will broadcast correctly against the input array.
+        With this option, the result will broadcast correctly against the input tensor.
 
     Returns
     -------
@@ -81,7 +81,7 @@ def mean(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: boo
 def variance(
     data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool = False
 ) -> Expr:
-    """Computes the variance of array elements over given axes.
+    """Computes the variance of tensor elements over given axes.
 
     Parameters
     ----------
@@ -90,13 +90,13 @@ def variance(
 
     axis : Optional[Union[int, List[int]]]
         Axis or axes along which a mean operation is performed.
-        The default, axis=None, will compute the mean of all elements in the input array.
+        The default, axis=None, will compute the mean of all elements in the input tensor.
         Negative indexing is supported.
 
     keepdims : bool
         If this is set to True, the axes which are reduced are left in the result as dimensions
         with size one.
-        With this option, the result will broadcast correctly against the input array.
+        With this option, the result will broadcast correctly against the input tensor.
 
     Returns
     -------
@@ -109,7 +109,7 @@ def variance(
 
 
 def max(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool = False) -> Expr:
-    """Computes the max of array elements over given axes.
+    """Computes the max of tensor elements over given axes.
 
     Parameters
     ----------
@@ -118,13 +118,13 @@ def max(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool
 
     axis : Optional[Union[int, List[int]]]
         Axis or axes along which a mean operation is performed.
-        The default, axis=None, will compute the mean of all elements in the input array.
+        The default, axis=None, will compute the mean of all elements in the input tensor.
         Negative indexing is supported.
 
     keepdims : bool
         If this is set to True, the axes which are reduced are left in the result as dimensions
         with size one.
-        With this option, the result will broadcast correctly against the input array.
+        With this option, the result will broadcast correctly against the input tensor.
 
     Returns
     -------
@@ -137,7 +137,7 @@ def max(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool
 
 
 def min(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool = False) -> Expr:
-    """Computes the min of array elements over given axes.
+    """Computes the min of tensor elements over given axes.
 
     Parameters
     ----------
@@ -146,13 +146,13 @@ def min(data: Expr, axis: Optional[Union[int, List[int]]] = None, keepdims: bool
 
     axis : Optional[Union[int, List[int]]]
         Axis or axes along which a mean operation is performed.
-        The default, axis=None, will compute the mean of all elements in the input array.
+        The default, axis=None, will compute the mean of all elements in the input tensor.
         Negative indexing is supported.
 
     keepdims : bool
         If this is set to True, the axes which are reduced are left in the result as dimensions
         with size one.
-        With this option, the result will broadcast correctly against the input array.
+        With this option, the result will broadcast correctly against the input tensor.
 
     Returns
     -------

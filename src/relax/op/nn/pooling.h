@@ -32,12 +32,14 @@
 namespace tvm {
 namespace relax {
 
-Expr MaxPool2D(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides,
-               Array<PrimExpr> padding, Array<PrimExpr> dilation, String layout,
-               Optional<String> out_layout);
+/*! \brief 2D maximum pooling operator. */
+Expr max_pool2d(Expr data, Array<PrimExpr> pool_size, Array<PrimExpr> strides,
+                Array<PrimExpr> padding, Array<PrimExpr> dilation, String layout,
+                Optional<String> out_layout);
 
-Expr AdaptiveAvgPool2D(Expr data, Optional<Array<PrimExpr>> output_size, String layout,
-                       Optional<String> out_layout);
+/*! \brief 2D adaptive average pooling operator. */
+Expr adaptive_avg_pool2d(Expr data, Optional<Array<PrimExpr>> output_size, String layout,
+                         Optional<String> out_layout);
 
 }  // namespace relax
 }  // namespace tvm

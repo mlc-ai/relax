@@ -34,41 +34,45 @@ namespace relax {
  * - Expose a make function to construct the node.
  * - Register op to the registry.
  * \param OpName The name of operator to register. The name passed in will
- *  1. be prepended with a prefix "relax.op." as the FFI key string for the make function,
- *  2. be prepended with a prefix "relax." as the key string in the operator registry.
+ *  1. be prepended with a prefix "relax.op." as the FFI identifier string for the make function,
+ *  2. be prepended with a prefix "relax." as the identifier string in the operator registry.
  */
-#define RELAX_REGISTER_BINARY_OP(OpRegName)                        \
-  TVM_REGISTER_OP("relax." OpRegName)                              \
+#define RELAX_REGISTER_BINARY_OP_AND_IMPL(OpName)                  \
+  Expr OpName(Expr lhs, Expr rhs) {                                \
+    static const Op& op = Op::Get("relax." #OpName);               \
+    return Call(op, {lhs, rhs}, Attrs(), {});                      \
+  }                                                                \
+  TVM_REGISTER_GLOBAL("relax.op." #OpName).set_body_typed(OpName); \
+  TVM_REGISTER_OP("relax." #OpName)                                \
       .set_num_inputs(2)                                           \
       .add_argument("lhs", "Tensor", "The left hand side tensor.") \
       .add_argument("rhs", "Tensor", "The right hand side tensor.")
 
-#define RELAX_BINARY_OP_IMPL(OpName, OpRegName)        \
-  Expr OpName(Expr lhs, Expr rhs) {                    \
-    static const Op& op = Op::Get("relax." OpRegName); \
-    return Call(op, {lhs, rhs}, Attrs(), {});          \
-  }                                                    \
-  TVM_REGISTER_GLOBAL("relax.op." OpRegName).set_body_typed(OpName)
+#define RELAX_REGISTER_BINARY_BROADCAST_OP_AND_IMPL(OpName)             \
+  RELAX_REGISTER_BINARY_OP_AND_IMPL(OpName).set_attr<FInferStructInfo>( \
+      "FInferStructInfo", InferStructInfoBroadcastArith)
 
-#define RELAX_REGISTER_BINARY_BROADCAST_OP(OpRegName)                                \
-  RELAX_REGISTER_BINARY_OP(OpRegName).set_attr<FInferStructInfo>("FInferStructInfo", \
-                                                                 InferStructInfoBroadcastArith)
+#define RELAX_REGISTER_CMP_OP_AND_IMPL(OpName)                          \
+  RELAX_REGISTER_BINARY_OP_AND_IMPL(OpName).set_attr<FInferStructInfo>( \
+      "FInferStructInfo", InferStructInfoBroadcastCMP)
 
-#define RELAX_REGISTER_CMP_OP(OpRegName)                                             \
-  RELAX_REGISTER_BINARY_OP(OpRegName).set_attr<FInferStructInfo>("FInferStructInfo", \
-                                                                 InferStructInfoBroadcastCMP)
+/*! \brief Addition with numpy-style broadcasting. */
+Expr add(Expr lhs, Expr rhs);
 
-Expr Add(Expr lhs, Expr rhs);
+/*! \brief Subtraction with numpy-style broadcasting. */
+Expr subtract(Expr lhs, Expr rhs);
 
-Expr Subtract(Expr lhs, Expr rhs);
+/*! \brief Multiplication with numpy-style broadcasting. */
+Expr multiply(Expr lhs, Expr rhs);
 
-Expr Multiply(Expr lhs, Expr rhs);
+/*! \brief Division with numpy-style broadcasting. */
+Expr divide(Expr lhs, Expr rhs);
 
-Expr Divide(Expr lhs, Expr rhs);
+/*! \brief Floor division with numpy-style broadcasting. */
+Expr floor_divide(Expr lhs, Expr rhs);
 
-Expr FloorDivide(Expr lhs, Expr rhs);
-
-Expr Less(Expr lhs, Expr rhs);
+/*! \brief Broadcasted elementwise test for (lhs < rhs). */
+Expr less(Expr lhs, Expr rhs);
 
 }  // namespace relax
 }  // namespace tvm

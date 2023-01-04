@@ -31,17 +31,46 @@
 namespace tvm {
 namespace relax {
 
-Expr Full(ObjectRef shape, Expr fill_value, DataType dtype);
+/*!
+ * \brief Fill array with scalar value.
+ * \param shape The shape of the created tensor.
+ * \param fill_value The value to fill. Must be a scalar tensor.
+ * \param dtype The data type of the created tensor.
+ * If dtype is not given, it will by default use the dtype of fill_value.
+ * \return The result tensor.
+ */
+Expr full(ObjectRef shape, Expr fill_value, DataType dtype);
 
-Expr FullLike(Expr data, Expr fill_value);
+/*!
+ * \brief Construct a tensor such that
+ * - its shape and dtype is the same as the input data tensor's,
+ * - its value is filled with the input scalar fill value.
+ * \param data The input tensor, which provides the shape and dtype.
+ * \param fill_value The value to fill. Must be a scalar tensor.
+ * \return The result tensor.
+ */
+Expr full_like(Expr data, Expr fill_value);
 
-Expr Ones(Expr shape, DataType dtype);
+/*!
+ * \brief Construct a tensor of all ones, with the input shape and dtype.
+ * \param shape The shape of the created tensor.
+ * \param dtype The data type of the created tensor.
+ * \return The result tensor.
+ */
+Expr ones(Expr shape, DataType dtype);
 
-Expr OnesLike(Expr e);
+/*!
+ * \brief Construct a tensor with all ones, with shape and dtype of the input tensor shape.
+ * \param e The input tensor, which provides the shape and dtype.
+ * \return The result tensor.
+ */
+Expr ones_like(Expr e);
 
-Expr Zeros(Expr shape, DataType dtype);
+/*! \brief Construct a tensor of all zeros, with the input shape and dtype. */
+Expr zeros(Expr shape, DataType dtype);
 
-Expr ZerosLike(Expr e);
+/*! \brief Construct a tensor with all zeros, with shape and dtype of the input tensor shape. */
+Expr zeros_like(Expr e);
 
 }  // namespace relax
 }  // namespace tvm
