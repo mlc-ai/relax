@@ -34,7 +34,7 @@
 #include <tvm/runtime/relax_vm/memory_manager.h>
 #include <tvm/runtime/relax_vm/vm.h>
 
-#include "../cuda/cuda_common.h"
+#include "../../cuda/cuda_common.h"
 namespace tvm {
 namespace runtime {
 namespace relax_vm {
