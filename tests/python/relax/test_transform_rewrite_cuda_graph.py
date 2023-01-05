@@ -26,8 +26,7 @@ import tempfile
 import tvm.relax.transform.tuning_api.default_functions
 from tvm.relax.transform.tuning_api import Trace
 
-
-def apply_passes(mod: IRModule, target):
+def apply_tuning_passes(mod, target):
     with tempfile.TemporaryDirectory() as work_dir:
         with target, tvm.transform.PassContext(trace=Trace(mod)):
             seq = tvm.transform.Sequential(
@@ -39,28 +38,7 @@ def apply_passes(mod: IRModule, target):
                 ]
             )
             mod = seq(mod)
-
-    mod = relax.transform.ToNonDataflow()(mod)
-    mod = relax.transform.CallTIRRewrite()(mod)
-    mod = relax.transform.CanonicalizeBindings()(mod)
-    mod = relax.transform.RewriteCUDAGraph()(mod)
-    print(mod.script())
-    # mod = relax.transform.VMGraphMemoryPlan()(mod)
-    mod = relax.transform.VMMemoryLower()(mod)
-    mod = relax.transform.VMShapeLower()(mod)
-    mod = relax.transform.AttachGlobalSymbol()(mod)
     return mod
-
-
-def minimal_vm_build(mod, target, params=None):
-    # Split primfunc and relax function
-    rx_mod, tir_mod = relax.vm._split_tir_relax(mod)
-    lib = tvm.build(tir_mod, target=target)
-
-    if params is None:
-        params = {}
-
-    return relax.vm.Executable(relax._ffi_api.VMCodeGen(rx_mod, lib, [], target, params))
 
 
 @tvm.testing.requires_cuda
@@ -82,10 +60,10 @@ def test_minimum_example():
 
     mod = bb.get()
     target = tvm.target.Target("nvidia/nvidia-t4")
-    mod = apply_passes(mod, target)
+    mod = apply_tuning_passes(mod, target)
 
     dev = tvm.cuda(0)
-    exec = minimal_vm_build(mod, target)
+    exec = relax.vm.build(mod, target)
     vm = relax.VirtualMachine(exec, dev)
 
     x_np = np.random.rand(2, 4).astype("float32")

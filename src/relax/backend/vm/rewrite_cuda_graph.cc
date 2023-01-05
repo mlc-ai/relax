@@ -55,12 +55,14 @@ class OutputCollector : public ExprVisitor {
   std::unordered_set<const VarNode*> outputs_;
   bool is_visiting_output_ = true;
 };
+
 struct StaticRegion {
   Function func;
   std::vector<std::pair<const VarNode*, int>> alloc_tensor_to_index;
   const VarBindingNode* launch_point;
   std::unordered_map<const VarNode*, const VarBindingNode*> bindings;
 };
+
 class StaticRegionExtractor : public ExprVisitor {
  public:
   static std::unordered_map<const BindingBlockNode*, std::vector<StaticRegion>> Extract(
