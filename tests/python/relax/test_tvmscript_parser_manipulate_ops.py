@@ -226,7 +226,6 @@ def test_split_by_indices():
         gv = bb.emit(relax.op.split(x, indices_or_sections=[-2, 2, 6, 4, 8, 12, 9], axis=1))
         bb.emit_func_output(gv)
 
-    print(bb.get().script())
     _check(foo, bb.get()["foo"])
 
 
@@ -256,7 +255,21 @@ def test_split_by_n_section():
         gv = bb.emit(relax.op.split(x, indices_or_sections=5, axis=1))
         bb.emit_func_output(gv)
 
-    print(bb.get().script())
+    _check(foo, bb.get()["foo"])
+
+
+def test_broadcast_to():
+    @R.function
+    def foo(x: R.Tensor((2, 1, 3), "float32")) -> R.Tensor((4, 2, 5, 3), "float32"):
+        gv: R.Tensor((4, 2, 5, 3), "float32") = R.broadcast_to(x, (4, 2, 5, 3))
+        return gv
+
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((2, 1, 3), "float32"))
+    with bb.function("foo", [x]):
+        gv = bb.emit(relax.op.broadcast_to(x, (4, 2, 5, 3)))
+        bb.emit_func_output(gv)
+
     _check(foo, bb.get()["foo"])
 
 

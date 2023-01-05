@@ -32,6 +32,7 @@ def test_op_correctness():
     assert relax.op.flatten(x).op == Op.get("relax.flatten")
     assert relax.op.concat([x]).op == Op.get("relax.concat")
     assert relax.op.split(x, indices_or_sections=1).op == Op.get("relax.split")
+    assert relax.op.broadcast_to(x, (3, 3, 4, 5)).op == Op.get("relax.broadcast_to")
 
 
 def _check_inference(bb: relax.BlockBuilder, call: relax.Call, expected_sinfo: relax.StructInfo):
@@ -1958,6 +1959,235 @@ def test_split_infer_struct_info_wrong_input_type():
         bb.normalize(relax.op.split(x0, 1, axis=1))
     with pytest.raises(TVMError):
         bb.normalize(relax.op.split(x1, 1, axis=1))
+
+
+def test_broadcast_to_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 1, 3), "float32"))
+    x1 = relax.Var("x", R.Tensor("float32", ndim=3))
+    x2 = relax.Var("x", R.Tensor("float32"))
+    x3 = relax.Var("x", R.Tensor((2, 1, 3)))
+    x4 = relax.Var("x", R.Tensor(ndim=3))
+    x5 = relax.Var("x", R.Tensor())
+
+    _check_inference(
+        bb, relax.op.broadcast_to(x0, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), "float32")
+    )
+    _check_inference(
+        bb, relax.op.broadcast_to(x1, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), "float32")
+    )
+    _check_inference(
+        bb, relax.op.broadcast_to(x2, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), "float32")
+    )
+    _check_inference(
+        bb, relax.op.broadcast_to(x3, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), dtype="")
+    )
+    _check_inference(
+        bb, relax.op.broadcast_to(x4, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), dtype="")
+    )
+    _check_inference(
+        bb, relax.op.broadcast_to(x5, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), dtype="")
+    )
+
+
+def test_broadcast_to_infer_struct_info_shape_symbolic():
+    bb = relax.BlockBuilder()
+    a = tir.Var("a", "int64")
+    b = tir.Var("b", "int64")
+    c = tir.Var("c", "int64")
+    d = tir.Var("d", "int64")
+    x0 = relax.Var("x", R.Tensor((b, 1, 1, d), "float32"))
+    x1 = relax.Var("x", R.Tensor((b, 1, 1, d)))
+
+    _check_inference(
+        bb,
+        relax.op.broadcast_to(x0, (a, b, 1, c, d)),
+        relax.TensorStructInfo((a, b, 1, c, d), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.broadcast_to(x1, (a, b, 1, c, d)),
+        relax.TensorStructInfo((a, b, 1, c, d), dtype=""),
+    )
+
+
+def test_broadcast_to_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo((2, 1, 3)))
+    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=3))
+    s2 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    x2 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
+
+    _check_inference(
+        bb, relax.op.broadcast_to(x0, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), "float32")
+    )
+    _check_inference(
+        bb, relax.op.broadcast_to(x1, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), "float32")
+    )
+    _check_inference(
+        bb, relax.op.broadcast_to(x2, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), "float32")
+    )
+
+
+def test_broadcast_to_infer_struct_info_tgt_shape_var():
+    bb = relax.BlockBuilder()
+    a = tir.Var("a", "int64")
+    b = tir.Var("b", "int64")
+    c = tir.Var("c", "int64")
+    d = tir.Var("d", "int64")
+    s0 = relax.Var("s", relax.ShapeStructInfo((b, 1, 1, d)))
+    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=4))
+    s2 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", R.Tensor((b, 1, 1, d), "float32"))
+    x1 = relax.Var("x", R.Tensor("float32", ndim=4))
+    x2 = relax.Var("x", R.Tensor("float32"))
+    x3 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x4 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    x5 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
+    stgt0 = relax.Var("stgt", relax.ShapeStructInfo((a, b, 1, c, d)))
+    stgt1 = relax.Var("stgt", relax.ShapeStructInfo(ndim=5))
+    stgt2 = relax.Var("stgt", relax.ShapeStructInfo())
+
+    _check_inference(bb, relax.op.broadcast_to(x0, stgt0), relax.TensorStructInfo(stgt0, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x1, stgt0), relax.TensorStructInfo(stgt0, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x2, stgt0), relax.TensorStructInfo(stgt0, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x3, stgt0), relax.TensorStructInfo(stgt0, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x4, stgt0), relax.TensorStructInfo(stgt0, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x5, stgt0), relax.TensorStructInfo(stgt0, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x0, stgt1), relax.TensorStructInfo(stgt1, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x1, stgt1), relax.TensorStructInfo(stgt1, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x2, stgt1), relax.TensorStructInfo(stgt1, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x3, stgt1), relax.TensorStructInfo(stgt1, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x4, stgt1), relax.TensorStructInfo(stgt1, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x5, stgt1), relax.TensorStructInfo(stgt1, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x0, stgt2), relax.TensorStructInfo(stgt2, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x1, stgt2), relax.TensorStructInfo(stgt2, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x2, stgt2), relax.TensorStructInfo(stgt2, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x3, stgt2), relax.TensorStructInfo(stgt2, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x4, stgt2), relax.TensorStructInfo(stgt2, "float32"))
+    _check_inference(bb, relax.op.broadcast_to(x5, stgt2), relax.TensorStructInfo(stgt2, "float32"))
+
+
+def test_broadcast_to_infer_struct_info_more_input_dtype():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 1, 3), "float16"))
+    x1 = relax.Var("x", R.Tensor((2, 1, 3), "int8"))
+    x2 = relax.Var("x", R.Tensor((2, 1, 3), "int32"))
+
+    _check_inference(
+        bb, relax.op.broadcast_to(x0, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), "float16")
+    )
+    _check_inference(
+        bb, relax.op.broadcast_to(x1, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), "int8")
+    )
+    _check_inference(
+        bb, relax.op.broadcast_to(x2, (4, 2, 5, 3)), relax.TensorStructInfo((4, 2, 5, 3), "int32")
+    )
+
+
+def test_broadcast_to_infer_struct_info_tgt_ndim_less_than_old_ndim():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo((2, 1)))
+    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
+    x0 = relax.Var("x", R.Tensor((2, 1), "float32"))
+    x1 = relax.Var("x", R.Tensor("float32", ndim=2))
+    x2 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x3 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    stgt0 = relax.Var("stgt", relax.ShapeStructInfo((2,)))
+    stgt1 = relax.Var("stgt", relax.ShapeStructInfo(ndim=1))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, (2,)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, stgt0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, stgt1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, (2,)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, stgt0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, stgt1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x2, (2,)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x2, stgt0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x2, stgt1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x3, (2,)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x3, stgt0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x3, stgt1))
+
+
+def test_broadcast_to_infer_struct_info_not_broadcastable_static():
+    bb = relax.BlockBuilder()
+    s = relax.Var("s", relax.ShapeStructInfo((2, 1, 3)))
+    x0 = relax.Var("x", R.Tensor((2, 1, 3), "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s, "float32"))
+    stgt = relax.Var("stgt", relax.ShapeStructInfo((2, 1, 6)))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, (2, 1, 6)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, stgt))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, (2, 1, 6)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, stgt))
+
+
+def test_broadcast_to_infer_struct_info_not_broadcastable_symbolic():
+    bb = relax.BlockBuilder()
+    a = tir.Var("a", "int64")
+    b = tir.Var("b", "int64")
+    s = relax.Var("s", relax.ShapeStructInfo((2, a)))
+    x0 = relax.Var("x", R.Tensor((2, a), "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s, "float32"))
+    stgt0 = relax.Var("stgt", relax.ShapeStructInfo((2, b)))
+    stgt1 = relax.Var("stgt", relax.ShapeStructInfo((2, 1)))
+    stgt2 = relax.Var("stgt", relax.ShapeStructInfo((b, a)))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, (2, b)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, (2, 1)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, (b, a)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, stgt0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, stgt1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, stgt2))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, (2, b)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, (2, 1)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, (b, a)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, stgt0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, stgt1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, stgt2))
+
+
+def test_broadcast_to_infer_struct_info_wrong_input_type():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", relax.ShapeStructInfo((2, 1, 3)))
+    x1 = relax.Var("x", R.Tensor((2, 1, 3), "float32"))
+    stgt = relax.Var("stgt", relax.TensorStructInfo((4, 2, 5, 3), dtype=""))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x0, (4, 2, 5, 3)))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.broadcast_to(x1, stgt))
 
 
 if __name__ == "__main__":

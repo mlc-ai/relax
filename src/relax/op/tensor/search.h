@@ -18,37 +18,24 @@
  */
 
 /*!
- * \file tvm/relax/attrs/create.h
- * \brief Attributes for tensor creation operators.
+ * \file search.h
+ * \brief The functions to make Relax searching operator calls.
  */
-#ifndef TVM_RELAX_ATTRS_CREATE_H_
-#define TVM_RELAX_ATTRS_CREATE_H_
+#ifndef TVM_RELAX_OP_TENSOR_SEARCH_H_
+#define TVM_RELAX_OP_TENSOR_SEARCH_H_
 
-#include <tvm/relax/expr.h>
+#include "../op_common.h"
 
 namespace tvm {
 namespace relax {
 
-/*! \brief Attributes used in full, ones, and zeros operators */
-struct InitAttrs : public tvm::AttrsNode<InitAttrs> {
-  DataType dtype;
-
-  TVM_DECLARE_ATTRS(InitAttrs, "relax.attrs.InitAttrs") {
-    TVM_ATTR_FIELD(dtype).describe("The data type of the created tensor.");
-  }
-};  // struct InitAttrs
-
-/*! \brief Attributes used in tril and triu operator */
-struct TriluAttrs : public tvm::AttrsNode<TriluAttrs> {
-  int k;
-
-  TVM_DECLARE_ATTRS(TriluAttrs, "relax.attrs.TriluAttrs") {
-    TVM_ATTR_FIELD(k).describe(
-        "The number of diagonals above or below the main diagonal to exclude or include.");
-  }
-};  // struct TriluAttrs
+/*!
+ * \brief Selecting elements from either the input tensors depending on the value of the
+ * condition.
+ */
+Expr where(Expr condition, Expr x1, Expr x2);
 
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_ATTRS_CREATE_H_
+#endif  // TVM_RELAX_OP_TENSOR_SEARCH_H_

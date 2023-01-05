@@ -98,6 +98,9 @@ Expr concat(Expr data, Optional<Integer> axis);
  */
 Expr split(Expr data, ObjectRef indices_or_sections, int axis);
 
+/*! \brief Broadcasts a tensor to a specified shape. */
+Expr broadcast_to(Expr data, Expr shape);
+
 }  // namespace relax
 }  // namespace tvm
 
