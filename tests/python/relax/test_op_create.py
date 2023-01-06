@@ -32,6 +32,8 @@ def test_op_correctness():
     assert relax.op.ones_like(x).op == Op.get("relax.ones_like")
     assert relax.op.zeros((2, 3), "float32").op == Op.get("relax.zeros")
     assert relax.op.zeros_like(x).op == Op.get("relax.zeros_like")
+    assert relax.op.tril(x).op == Op.get("relax.tril")
+    assert relax.op.triu(x).op == Op.get("relax.triu")
 
 
 def _check_inference(bb: relax.BlockBuilder, call: relax.Call, expected_sinfo: relax.StructInfo):
@@ -512,6 +514,106 @@ def test_ones_like_zeros_like_infer_struct_info_wrong_input_type():
         bb.normalize(relax.op.ones_like(x0))
     with pytest.raises(TVMError):
         bb.normalize(relax.op.zeros_like(x1))
+
+
+def test_tril_triu_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 4), "float32"))
+    x1 = relax.Var("x", R.Tensor("float32", ndim=3))
+    x2 = relax.Var("x", R.Tensor("float32"))
+    x3 = relax.Var("x", R.Tensor((2, 3, 4)))
+    x4 = relax.Var("x", R.Tensor(ndim=3))
+    x5 = relax.Var("x", R.Tensor())
+
+    _check_inference(bb, relax.op.tril(x0, k=1), relax.TensorStructInfo((2, 3, 4), "float32"))
+    _check_inference(bb, relax.op.triu(x0, k=0), relax.TensorStructInfo((2, 3, 4), "float32"))
+    _check_inference(bb, relax.op.tril(x0), relax.TensorStructInfo((2, 3, 4), "float32"))
+    _check_inference(bb, relax.op.triu(x1), relax.TensorStructInfo(dtype="float32", ndim=3))
+    _check_inference(bb, relax.op.tril(x2), relax.TensorStructInfo(dtype="float32"))
+    _check_inference(bb, relax.op.triu(x3), relax.TensorStructInfo((2, 3, 4), dtype=""))
+    _check_inference(bb, relax.op.tril(x4), relax.TensorStructInfo(dtype="", ndim=3))
+    _check_inference(bb, relax.op.triu(x5), relax.TensorStructInfo(dtype=""))
+
+
+def test_tril_triu_infer_struct_info_shape_symbolic():
+    bb = relax.BlockBuilder()
+    a = tir.Var("a", "int64")
+    b = tir.Var("b", "int64")
+    c = tir.Var("c", "int64")
+    x0 = relax.Var("x", R.Tensor((a, b, c), "float32"))
+    x1 = relax.Var("x", R.Tensor((a, b, c)))
+
+    _check_inference(bb, relax.op.tril(x0), relax.TensorStructInfo((a, b, c), "float32"))
+    _check_inference(bb, relax.op.triu(x1), relax.TensorStructInfo((a, b, c), dtype=""))
+
+
+def test_tril_triu_infer_struct_info_shape_var():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo((2, 3, 4)))
+    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=3))
+    s2 = relax.Var("s", relax.ShapeStructInfo())
+    x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    x2 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
+
+    _check_inference(bb, relax.op.tril(x0), relax.TensorStructInfo(s0, "float32"))
+    _check_inference(bb, relax.op.triu(x1), relax.TensorStructInfo(s1, "float32"))
+    _check_inference(bb, relax.op.tril(x2), relax.TensorStructInfo(s2, "float32"))
+
+
+def test_tril_triu_infer_struct_info_more_input_dtype():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 4), "float16"))
+    x1 = relax.Var("x", R.Tensor((2, 3, 4), "int8"))
+    x2 = relax.Var("x", R.Tensor((2, 3, 4), "int32"))
+
+    _check_inference(bb, relax.op.triu(x0), relax.TensorStructInfo((2, 3, 4), "float16"))
+    _check_inference(bb, relax.op.tril(x1), relax.TensorStructInfo((2, 3, 4), "int8"))
+    _check_inference(bb, relax.op.triu(x2), relax.TensorStructInfo((2, 3, 4), "int32"))
+
+
+def test_tril_triu_infer_struct_info_less_than_two_ndim():
+    bb = relax.BlockBuilder()
+    s0 = relax.Var("s", relax.ShapeStructInfo((2,)))
+    s1 = relax.Var("s", relax.ShapeStructInfo(()))
+    s2 = relax.Var("s", relax.ShapeStructInfo(ndim=1))
+    s3 = relax.Var("s", relax.ShapeStructInfo(ndim=0))
+    x0 = relax.Var("x", R.Tensor((2,), "float32"))
+    x1 = relax.Var("x", R.Tensor((), "float32"))
+    x2 = relax.Var("x", R.Tensor("float32", ndim=1))
+    x3 = relax.Var("x", R.Tensor("float32", ndim=0))
+    x4 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    x5 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
+    x6 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
+    x7 = relax.Var("x", relax.TensorStructInfo(s3, "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.tril(x0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.triu(x1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.tril(x2))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.triu(x3))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.tril(x4))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.triu(x5))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.tril(x6))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.triu(x7))
+
+
+def test_tril_triu_infer_struct_info_wrong_input_type():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", relax.ShapeStructInfo((2, 3, 4)))
+    x1 = relax.Var("x", relax.FuncStructInfo([], R.Tensor((2, 3, 4), "float32")))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.tril(x0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.triu(x1))
 
 
 if __name__ == "__main__":

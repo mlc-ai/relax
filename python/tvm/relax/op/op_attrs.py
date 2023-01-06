@@ -157,3 +157,8 @@ class TakeAttrs(Attrs):
 @tvm._ffi.register_object("relax.attrs.StridedSliceAttrs")
 class StridedSliceAttrs(Attrs):
     """Attributes used in strided_slice operator"""
+
+
+@tvm._ffi.register_object("relax.attrs.TriluAttrs")
+class TriluAttrs(Attrs):
+    """Attributes used in trilu operator"""

@@ -168,5 +168,50 @@ TVM_REGISTER_OP("relax.zeros")
 
 RELAX_REGISTER_UNARY_OP_AND_IMPL(zeros_like, /*require_float_dtype=*/false);
 
+/* relax.tril & relax.triu */
+TVM_REGISTER_NODE_TYPE(TriluAttrs);
+
+Expr tril(Expr data, int k) {
+  ObjectPtr<TriluAttrs> attrs = make_object<TriluAttrs>();
+  attrs->k = k;
+
+  static const Op& op = Op::Get("relax.tril");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+Expr triu(Expr data, int k) {
+  ObjectPtr<TriluAttrs> attrs = make_object<TriluAttrs>();
+  attrs->k = k;
+
+  static const Op& op = Op::Get("relax.triu");
+  return Call(op, {std::move(data)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.tril").set_body_typed(tril);
+TVM_REGISTER_GLOBAL("relax.op.triu").set_body_typed(triu);
+
+StructInfo InferStructInfoTrilu(const Call& call, const BlockBuilder& ctx) {
+  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
+  if (!data_sinfo->IsUnknownNdim() && data_sinfo->ndim < 2) {
+    ctx->ReportFatal(Diagnostic::Error(call) << call->op
+                                             << " requires the input tensor to have at least two "
+                                                "dimensions. However, the given input has "
+                                             << data_sinfo->ndim << " dimension(s).");
+  }
+  return data_sinfo;
+}
+
+TVM_REGISTER_OP("relax.tril")
+    .set_attrs_type<TriluAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoTrilu);
+
+TVM_REGISTER_OP("relax.triu")
+    .set_attrs_type<TriluAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoTrilu);
+
 }  // namespace relax
 }  // namespace tvm

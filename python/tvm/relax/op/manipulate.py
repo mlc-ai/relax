@@ -21,7 +21,7 @@ from tvm.ir.expr import PrimExpr
 from tvm.tir import IntImm
 
 from . import _ffi_api
-from ..expr import Expr, Tuple as RxTuple
+from ..expr import Expr, ShapeExpr, Tuple as RxTuple
 
 
 PrimExprLike = Union[int, PrimExpr]
@@ -198,3 +198,24 @@ def split(
     if isinstance(indices_or_sections, int):
         indices_or_sections = IntImm("int64", indices_or_sections)
     return _ffi_api.split(data, indices_or_sections, axis)  # type: ignore
+
+
+def broadcast_to(data: Expr, shape: Union[Tuple[PrimExprLike], Expr]) -> Expr:
+    """Broadcasts a tensor to a specified shape.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input tensor.
+
+    shape : Union[Tuple[PrimExprLike], Expr]
+        The target shape.
+
+    Returns
+    -------
+    result : relax.Expr
+        The broadcasted tensor.
+    """
+    if isinstance(shape, (tuple, list)):
+        shape = ShapeExpr(shape)
+    return _ffi_api.broadcast_to(data, shape)  # type: ignore

@@ -146,3 +146,49 @@ def zeros_like(data: Expr) -> Expr:
         The result tensor.
     """
     return _ffi_api.zeros_like(data)  # type: ignore
+
+
+def tril(data: Expr, k: int = 0) -> Expr:
+    """Return the lower triangular part of a matrix or a batch of matrices.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The tensor that tril will be applied to.
+        It is required to have at least two dimensions.
+
+    k : int
+        The index indicating the diagonal above which to zero elements.
+        If k = 0, the diagonal is the main diagonal.
+        If k < 0, the diagonal is below the main diagonal.
+        If k > 0, the diagonal is above the main diagonal.
+
+    Returns
+    -------
+    ret : relax.Expr
+        The result tensor.
+    """
+    return _ffi_api.tril(data, k)  # type: ignore
+
+
+def triu(data: Expr, k: int = 0) -> Expr:
+    """Return the upper triangular part of a matrix or a batch of matrices.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The tensor that triu will be applied to.
+        It is required to have at least two dimensions.
+
+    k : int
+        The index indicating the diagonal below which to zero elements.
+        If k = 0, the diagonal is the main diagonal.
+        If k < 0, the diagonal is below the main diagonal.
+        If k > 0, the diagonal is above the main diagonal.
+
+    Returns
+    -------
+    ret : relax.Expr
+        The result tensor.
+    """
+    return _ffi_api.triu(data, k)  # type: ignore

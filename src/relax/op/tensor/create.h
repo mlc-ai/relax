@@ -72,6 +72,12 @@ Expr zeros(Expr shape, DataType dtype);
 /*! \brief Construct a tensor with all zeros, with shape and dtype of the input tensor shape. */
 Expr zeros_like(Expr e);
 
+/*! \brief Return the lower triangular part of a matrix or a batch of matrices. */
+Expr tril(Expr data, int k);
+
+/*! \brief Return the upper triangular part of a matrix or a batch of matrices. */
+Expr triu(Expr data, int k);
+
 }  // namespace relax
 }  // namespace tvm
 
