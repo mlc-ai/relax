@@ -22,6 +22,7 @@ from tvm.tir import IntImm
 
 from . import _ffi_api
 from ..expr import Expr, ShapeExpr, Tuple as RxTuple
+from ..expr import Expr, ShapeExpr, Tuple as RxTuple
 
 
 PrimExprLike = Union[int, PrimExpr]
@@ -165,11 +166,7 @@ def concat(data: Union[Expr, List[Expr]], axis: Optional[int] = 0) -> Expr:
     return _ffi_api.concat(data, axis)  # type: ignore
 
 
-def split(
-    data: Expr,
-    indices_or_sections: Union[int, List[PrimExprLike]],
-    axis: int = 0,
-) -> Expr:
+def split(data: Expr, indices_or_sections: Union[int, List[PrimExprLike]], axis: int = 0,) -> Expr:
     """Split input tensor along axis by sections or indices.
 
     If indices_or_sections is an integer, the input will be divided equally
@@ -219,3 +216,60 @@ def broadcast_to(data: Expr, shape: Union[Tuple[PrimExprLike], Expr]) -> Expr:
     if isinstance(shape, (tuple, list)):
         shape = ShapeExpr(shape)
     return _ffi_api.broadcast_to(data, shape)  # type: ignore
+
+
+def collapse_sum_like(data: Expr, collapse_target: Expr) -> Expr:
+    """Return a summation of data to the shape of collapse_target.
+
+    For details, please see relax.op.collapse_sum_to.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input tensor.
+
+    collapse_target : relax.Expr
+        The tensor whose shape is the shape to collapse to.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result tensor after summation.
+    """
+    return _ffi_api.collapse_sum_like(data, collapse_target)
+
+
+def collapse_sum_to(
+    data: Expr, shape: Union[List[PrimExprLike], Tuple[PrimExprLike], Expr]
+) -> Expr:
+    """Return a summation of data to the given shape.
+
+    collapse_sum_to is intended as the backward operator of tvm.relax.op.broadcast_to and
+    other broadcast operators in the automatic differentiation process.
+
+    We expect that data is the result of broadcasting some tensor of the given shape in some
+    broadcast operation. Thus the given shape and data.shape must follow broadcast rules.
+
+    During computation, the axes of data.shape and shape are checked from right to left. For every
+    axis, if it either:
+    - exist in data but not in collapse_target, or
+    - is larger than 1 in data and equals to 1 in collapse_target,
+
+    data will be summed over this axis.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input tensor.
+
+    shape : Union[List[PrimExprLike], Tuple[PrimExprLike], relax.Expr]
+        The shape to collapse to.
+
+    Returns
+    -------
+    result : relax.Expr
+        The result tensor of the given shape after summation.
+    """
+    if isinstance(shape, (tuple, list)):
+        shape = ShapeExpr(shape)
+    return _ffi_api.collapse_sum_to(data, shape)

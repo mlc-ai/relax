@@ -131,9 +131,7 @@ def test_reshape_infer_struct_info_shape_symbolic():
         relax.TensorStructInfo((c, tir.floordiv(a * b * c * d, c * d * b), d, b), "float32"),
     )
     _check_inference(
-        bb,
-        relax.op.reshape(x, (c, a * d, b)),
-        relax.TensorStructInfo((c, a * d, b), "float32"),
+        bb, relax.op.reshape(x, (c, a * d, b)), relax.TensorStructInfo((c, a * d, b), "float32"),
     )
     _check_inference(
         bb,
@@ -2188,6 +2186,123 @@ def test_broadcast_to_infer_struct_info_wrong_input_type():
         bb.normalize(relax.op.broadcast_to(x0, (4, 2, 5, 3)))
     with pytest.raises(TVMError):
         bb.normalize(relax.op.broadcast_to(x1, stgt))
+
+
+def test_collapse_sum_like_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 4), "float32"))
+    x1 = relax.Var("x", R.Tensor("float32", ndim=3))
+    x2 = relax.Var("x", R.Tensor("float32"))
+    x3 = relax.Var("x", R.Tensor((2, 3, 4)))
+    x4 = relax.Var("x", R.Tensor(ndim=3))
+    x5 = relax.Var("x", R.Tensor())
+    y0 = relax.Var("x", R.Tensor((3, 4), "float32"))
+    y1 = relax.Var("x", R.Tensor("float32", ndim=2))
+    y2 = relax.Var("x", R.Tensor("float32"))
+    y3 = relax.Var("x", R.Tensor((3, 4)))
+    y4 = relax.Var("x", R.Tensor(ndim=2))
+    y5 = relax.Var("x", R.Tensor((1, 4)))
+
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x0, y0), relax.TensorStructInfo((3, 4), "float32")
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x1, y1), relax.TensorStructInfo(dtype="float32", ndim=2)
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x0, y1), relax.TensorStructInfo(dtype="float32", ndim=2)
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x0, y2), relax.TensorStructInfo(dtype="float32", ndim=-1)
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x0, y3), relax.TensorStructInfo((3, 4), "float32")
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x2, y0), relax.TensorStructInfo((3, 4), "float32")
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x2, y4), relax.TensorStructInfo(dtype="float32", ndim=2)
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x4, y1), relax.TensorStructInfo(dtype="", ndim=2)
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x5, y3), relax.TensorStructInfo((3, 4), dtype="")
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x0, y5), relax.TensorStructInfo((1, 4), "float32")
+    )
+
+
+def test_collapse_sum_to_wrong_input_type():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+    x1 = relax.Var("x", relax.ShapeStructInfo((4, 5)))
+    x2 = relax.Var("x", relax.FuncStructInfo([], R.Tensor((2, 3, 4), "float32")))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_to(x0, x1))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_to(x2, x0))
+
+
+def test_collapse_sum_like_wrong_shape():
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+    y = relax.Var("y", R.Tensor((3, 6, 5), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_like(x, y))
+
+
+def test_collapse_sum_to_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 4), "float32"))
+    x1 = relax.Var("x", R.Tensor("float32", ndim=3))
+    x2 = relax.Var("x", R.Tensor("float32"))
+    x3 = relax.Var("x", R.Tensor((2, 3, 4)))
+    x4 = relax.Var("x", R.Tensor(ndim=3))
+    x5 = relax.Var("x", R.Tensor())
+    y0 = (3, 4)
+
+    _check_inference(
+        bb, relax.op.collapse_sum_to(x0, y0), relax.TensorStructInfo((3, 4), "float32")
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_to(x1, y0), relax.TensorStructInfo((3, 4), "float32")
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_to(x2, y0), relax.TensorStructInfo((3, 4), "float32")
+    )
+    _check_inference(bb, relax.op.collapse_sum_to(x3, y0), relax.TensorStructInfo((3, 4), ""))
+    _check_inference(bb, relax.op.collapse_sum_to(x4, y0), relax.TensorStructInfo((3, 4), ""))
+    _check_inference(bb, relax.op.collapse_sum_to(x5, y0), relax.TensorStructInfo((3, 4), ""))
+
+
+def test_collapse_sum_to_wrong_input_type():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+    x1 = relax.Var("x", relax.ShapeStructInfo((4, 5)))
+    x2 = relax.Var("x", relax.FuncStructInfo([], R.Tensor((2, 3, 4), "float32")))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_to(x0, x0))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_to(x0, x2))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_to(x1, x1))
+
+
+def test_collapse_sum_to_wrong_shape():
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_to(x, (4, 4, 5)))
 
 
 if __name__ == "__main__":

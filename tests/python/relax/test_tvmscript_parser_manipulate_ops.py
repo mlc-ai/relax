@@ -24,8 +24,7 @@ from tvm.script.parser import relax as R
 
 
 def _check(
-    parsed: Union[relax.Function, IRModule],
-    expect: Optional[Union[relax.Function, IRModule]],
+    parsed: Union[relax.Function, IRModule], expect: Optional[Union[relax.Function, IRModule]],
 ):
     test = parsed.script(show_meta=True)
     roundtrip_mod = tvm.script.parse(test)
@@ -268,6 +267,39 @@ def test_broadcast_to():
     x = relax.Var("x", R.Tensor((2, 1, 3), "float32"))
     with bb.function("foo", [x]):
         gv = bb.emit(relax.op.broadcast_to(x, (4, 2, 5, 3)))
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
+def test_collapse_sum_like():
+    @R.function
+    def foo(
+        x: R.Tensor((3, 4, 5), "float32"), y: R.Tensor((4, 5), "float32")
+    ) -> R.Tensor((4, 5), "float32"):
+        gv: R.Tensor((4, 5), "float32") = R.collapse_sum_like(x, y)
+        return gv
+
+    x = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+    y = relax.Var("y", R.Tensor((4, 5), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [x, y]):
+        gv = bb.emit(relax.op.collapse_sum_like(x, y))
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
+def test_collapse_sum_to():
+    @R.function
+    def foo(x: R.Tensor((3, 4, 5), "float32")) -> R.Tensor((4, 5), "float32"):
+        gv: R.Tensor((4, 5), "float32") = R.collapse_sum_to(x, (4, 5))
+        return gv
+
+    x = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [x]):
+        gv = bb.emit(relax.op.collapse_sum_to(x, (4, 5)))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])
