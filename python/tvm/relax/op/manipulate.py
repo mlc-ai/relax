@@ -165,7 +165,7 @@ def concat(data: Union[Expr, List[Expr]], axis: Optional[int] = 0) -> Expr:
     return _ffi_api.concat(data, axis)  # type: ignore
 
 
-def split(data: Expr, indices_or_sections: Union[int, List[PrimExprLike]], axis: int = 0,) -> Expr:
+def split(data: Expr, indices_or_sections: Union[int, List[PrimExprLike]], axis: int = 0) -> Expr:
     """Split input tensor along axis by sections or indices.
 
     If indices_or_sections is an integer, the input will be divided equally
@@ -238,9 +238,7 @@ def collapse_sum_like(data: Expr, collapse_target: Expr) -> Expr:
     return _ffi_api.collapse_sum_like(data, collapse_target)
 
 
-def collapse_sum_to(
-    data: Expr, shape: Union[Tuple[PrimExprLike], Expr]
-) -> Expr:
+def collapse_sum_to(data: Expr, shape: Union[Tuple[PrimExprLike], Expr]) -> Expr:
     """Return a summation of data to the given shape.
 
     collapse_sum_to is intended as the backward operator of tvm.relax.op.broadcast_to and
