@@ -2235,7 +2235,7 @@ def test_collapse_sum_like_infer_struct_info():
     )
 
 
-def test_collapse_sum_to_wrong_input_type():
+def test_collapse_sum_like_wrong_input_type():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
     x1 = relax.Var("x", relax.ShapeStructInfo((4, 5)))

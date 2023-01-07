@@ -103,7 +103,7 @@ Expr broadcast_to(Expr data, Expr shape);
 
 /*!
  * \brief Return a summation of data to the shape of collapse_target.
- * For details, please see collapse_sum_to.
+ * For details, please see the operator `relax.collapse_sum_to`.
  * \param data The input tensor.
  * \param collapse_target The tensor whose shape is the shape to collapse to.
  * \return The result tensor after summation.

@@ -22,7 +22,6 @@ from tvm.tir import IntImm
 
 from . import _ffi_api
 from ..expr import Expr, ShapeExpr, Tuple as RxTuple
-from ..expr import Expr, ShapeExpr, Tuple as RxTuple
 
 
 PrimExprLike = Union[int, PrimExpr]
@@ -240,7 +239,7 @@ def collapse_sum_like(data: Expr, collapse_target: Expr) -> Expr:
 
 
 def collapse_sum_to(
-    data: Expr, shape: Union[List[PrimExprLike], Tuple[PrimExprLike], Expr]
+    data: Expr, shape: Union[Tuple[PrimExprLike], Expr]
 ) -> Expr:
     """Return a summation of data to the given shape.
 
@@ -248,21 +247,19 @@ def collapse_sum_to(
     other broadcast operators in the automatic differentiation process.
 
     We expect that data is the result of broadcasting some tensor of the given shape in some
-    broadcast operation. Thus the given shape and data.shape must follow broadcast rules.
+    broadcast operation. Thus the given `shape` and `data.shape` must follow broadcast rules.
 
-    During computation, the axes of data.shape and shape are checked from right to left. For every
-    axis, if it either:
-    - exist in data but not in collapse_target, or
-    - is larger than 1 in data and equals to 1 in collapse_target,
-
-    data will be summed over this axis.
+    During computation, all axes of `data.shape` and `shape` are checked from right to left.
+    For an axis, if it follows these rules, `data` will be summed over this axis:
+    - the axis exists in `data.shape` but not in `shape`, or
+    - the axis exists in `data.shape` and equals to 1 in `shape`.
 
     Parameters
     ----------
     data : relax.Expr
         The input tensor.
 
-    shape : Union[List[PrimExprLike], Tuple[PrimExprLike], relax.Expr]
+    shape : Union[Tuple[PrimExprLike], relax.Expr]
         The shape to collapse to.
 
     Returns

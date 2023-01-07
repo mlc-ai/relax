@@ -805,7 +805,8 @@ void CheckCollapseShape(const Call& call, const BlockBuilder& ctx,
   int data_ndim = data_shape.size();
   int target_ndim = target_shape.size();
 
-  int data_ax = data_ndim - 1, target_ax = target_ndim - 1;
+  int data_ax = data_ndim - 1;
+  int target_ax = target_ndim - 1;
   for (; data_ax >= 0; --data_ax) {
     if (target_ax < 0) {
       continue;
@@ -823,9 +824,14 @@ void CheckCollapseShape(const Call& call, const BlockBuilder& ctx,
                        << dim0 << " and the target shape at dim " << target_ax << " is " << dim1
                        << ", which do not match the rule of collapse sum.");
     } else {
-      // We are providing best effort check. In this case where we are
-      // not sure about it, just continue and check next.
-      --target_ax;
+      // Todo(relax-team): At this moment, enforcing MatchCast is fine. But we may need to revisit
+      // this requirement to reduce the workload of importers and better support dynamic shapes.
+      ctx->ReportFatal(Diagnostic::Error(call)
+                       << call->op
+                       << " fails to match the axes because of unknown dim or symbolic"
+                          "shape. In this position the dim of data shape is "
+                       << dim0 << "while the dim of target shape is " << dim1
+                       << ". If it is symbolic, consider use MatchCast first.");
     }
   }
 }
@@ -855,13 +861,7 @@ StructInfo InferStructInfoCollapseSumLike(const Call& call, const BlockBuilder& 
   if (collapse_target_sinfo->shape.defined()) {
     return TensorStructInfo(collapse_target_sinfo->shape.value(), output_dtype);
   } else {
-    int output_ndim;
-    if (collapse_target_sinfo->IsUnknownNdim()) {
-      output_ndim = kUnknownNDim;
-    } else {
-      output_ndim = collapse_target_sinfo->ndim;
-    }
-    return TensorStructInfo(output_dtype, /*ndim=*/output_ndim);
+    return TensorStructInfo(output_dtype, collapse_target_sinfo->ndim);
   }
 }
 
@@ -898,7 +898,7 @@ StructInfo InferStructInfoCollapseSumTo(const Call& call, const BlockBuilder& ct
     ctx->ReportFatal(
         Diagnostic::Error(call)
         << "CollapseSumTo requires the input shape to be a Shape. However, the given one is "
-        << call->args[0]->struct_info_->GetTypeKey());
+        << call->args[1]->struct_info_->GetTypeKey());
   }
 
   DataType output_dtype = data_sinfo->dtype;
