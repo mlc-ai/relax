@@ -40,7 +40,7 @@ def _check_inference(bb: relax.BlockBuilder, call: relax.Call, expected_sinfo: r
     tvm.ir.assert_structural_equal(ret.struct_info, expected_sinfo)
 
 
-def test_reshape_infer_struct_into():
+def test_reshape_infer_struct_info():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((2, 3, 4, 5), "float32"))
     x1 = relax.Var("x", R.Tensor("float32", ndim=4))
@@ -175,7 +175,7 @@ def test_reshape_infer_struct_info_shape_var():
     _check_inference(bb, relax.op.reshape(x2, ns1), relax.TensorStructInfo(ns1, "float32"))
 
 
-def test_reshape_infer_struct_into_more_input_dtype():
+def test_reshape_infer_struct_info_more_input_dtype():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((2, 3, 4, 5), "float16"))
     x1 = relax.Var("x", R.Tensor((2, 3, 4, 5), "int8"))
@@ -2330,20 +2330,19 @@ def test_collapse_sum_to_infer_struct_info():
     x3 = relax.Var("x", R.Tensor((2, 3, 4)))
     x4 = relax.Var("x", R.Tensor(ndim=3))
     x5 = relax.Var("x", R.Tensor())
-    s0 = (3, 4)
 
     _check_inference(
-        bb, relax.op.collapse_sum_to(x0, s0), relax.TensorStructInfo((3, 4), "float32")
+        bb, relax.op.collapse_sum_to(x0, (3, 4)), relax.TensorStructInfo((3, 4), "float32")
     )
     _check_inference(
-        bb, relax.op.collapse_sum_to(x1, s0), relax.TensorStructInfo((3, 4), "float32")
+        bb, relax.op.collapse_sum_to(x1, (3, 4)), relax.TensorStructInfo((3, 4), "float32")
     )
     _check_inference(
-        bb, relax.op.collapse_sum_to(x2, s0), relax.TensorStructInfo((3, 4), "float32")
+        bb, relax.op.collapse_sum_to(x2, (3, 4)), relax.TensorStructInfo((3, 4), "float32")
     )
-    _check_inference(bb, relax.op.collapse_sum_to(x3, s0), relax.TensorStructInfo((3, 4), ""))
-    _check_inference(bb, relax.op.collapse_sum_to(x4, s0), relax.TensorStructInfo((3, 4), ""))
-    _check_inference(bb, relax.op.collapse_sum_to(x5, s0), relax.TensorStructInfo((3, 4), ""))
+    _check_inference(bb, relax.op.collapse_sum_to(x3, (3, 4)), relax.TensorStructInfo((3, 4), ""))
+    _check_inference(bb, relax.op.collapse_sum_to(x4, (3, 4)), relax.TensorStructInfo((3, 4), ""))
+    _check_inference(bb, relax.op.collapse_sum_to(x5, (3, 4)), relax.TensorStructInfo((3, 4), ""))
 
 
 def test_collapse_sum_to_infer_struct_info_shape_symbolic():
@@ -2351,15 +2350,13 @@ def test_collapse_sum_to_infer_struct_info_shape_symbolic():
     a = tir.Var("a", "int64")
     b = tir.Var("b", "int64")
     x0 = relax.Var("x", R.Tensor((3, 4, a), "float32"))
-    s0 = (4, a)
     x1 = relax.Var("x", R.Tensor((3, 4, b + a), "float32"))
-    s1 = (1, a + b)
 
     _check_inference(
-        bb, relax.op.collapse_sum_to(x0, s0), relax.TensorStructInfo((4, a), "float32")
+        bb, relax.op.collapse_sum_to(x0, (4, a)), relax.TensorStructInfo((4, a), "float32")
     )
     _check_inference(
-        bb, relax.op.collapse_sum_to(x1, s1), relax.TensorStructInfo((1, a + b), "float32")
+        bb, relax.op.collapse_sum_to(x1, (1, a + b)), relax.TensorStructInfo((1, a + b), "float32")
     )
 
 
