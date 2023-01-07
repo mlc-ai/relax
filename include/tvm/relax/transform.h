@@ -188,10 +188,11 @@ TVM_DLL Pass RunCodegen(Optional<Array<runtime::String>> target_codegens,
                         Array<runtime::String> entry_functions);
 
 /*!
- * \brief Copy the specified function in the given IRModule, with the given name. The parameters of the original function would be copied to satisfy the restriction in the well-formed check: any two functions cannot share the same parameter variable.
- * \param global_var The global var of the specified function.
- * \param new_name The name of the copied function. If it is not specified, the new name would be `[original_name] + "_new"`
- * \return The Pass.
+ * \brief Copy the specified function in the given IRModule, with the given name. The parameters of
+ * the original function would be copied to satisfy the restriction in the well-formed check: any
+ * two functions cannot share the same parameter variable. \param global_var The global var of the
+ * specified function. \param new_name The name of the copied function. If it is not specified, the
+ * new name would be `[original_name] + "_new"` \return The Pass.
  */
 TVM_DLL Pass CopyFunc(GlobalVar global_var, Optional<String> new_name);
 

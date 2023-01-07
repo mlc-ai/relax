@@ -353,13 +353,18 @@ def MetaScheduleTuneIRMod(
 
 
 def CopyFunc(global_var: GlobalVar, new_name: Optional[str] = None) -> tvm.ir.transform.Pass:
-    """Copy the specified function in the given IRModule, with the given name. The parameters of the original function would be copied to satisfy the restriction in the well-formed check: any two functions cannot share the same parameter variable.
+    """Copy the specified function in the given IRModule, with the given name. The parameters of
+    the original function would be copied to satisfy the restriction in the well-formed check: any
+    two functions cannot share the same parameter variable.
+
     Parameters
     ----------
     global_var: GlobalVar
        The global var of the specified function.
     new_name: Optional[str]
-       The name of the copied function. If it is not specified, the new name would be `[original_name] + "_new"`
+       The name of the copied function. If it is not specified, the new name would be
+       `[original_name] + "_new"`
+
     Returns
     -------
     ret: tvm.ir.transform.Pass
