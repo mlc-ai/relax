@@ -829,8 +829,8 @@ void CheckCollapseShape(const Call& call, const BlockBuilder& ctx,
       ctx->ReportFatal(Diagnostic::Error(call)
                        << call->op
                        << " fails to match the axes because of unknown dim or symbolic"
-                          "shape. In this position the dim of data shape is "
-                       << dim0 << "while the dim of target shape is " << dim1
+                          " shape. In this position the dim of data shape is "
+                       << dim0 << " while the dim of target shape is " << dim1
                        << ". If it is symbolic, consider use MatchCast first.");
     }
   }
