@@ -23,6 +23,7 @@ from typing import Callable, Dict, Union, Optional, List
 import numpy as np  # type: ignore
 
 import tvm.ir
+from tvm.relax.expr import GlobalVar
 from tvm.runtime import NDArray
 from . import _ffi_api
 
@@ -349,6 +350,21 @@ def MetaScheduleTuneIRMod(
     ret: tvm.ir.transform.Pass
     """
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
+
+
+def CopyFunc(global_var: GlobalVar, new_name: Optional[str] = None) -> tvm.ir.transform.Pass:
+    """Copy the specified function in the given IRModule, with the given name. The parameters of the original function would be copied to satisfy the restriction in the well-formed check: any two functions cannot share the same parameter variable.
+    Parameters
+    ----------
+    global_var: GlobalVar
+       The global var of the specified function.
+    new_name: Optional[str]
+       The name of the copied function. If it is not specified, the new name would be `[original_name] + "_new"`
+    Returns
+    -------
+    ret: tvm.ir.transform.Pass
+    """
+    return _ffi_api.CopyFunc(global_var, new_name)  # type: ignore
 
 
 def _wrap_class_function_pass(pass_cls, pass_info):
