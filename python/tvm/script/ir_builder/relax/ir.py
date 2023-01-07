@@ -94,7 +94,9 @@ from . import _ffi_api, frame
 
 
 def tensor(
-    shape: Optional[List[Union[PrimExpr, str]]] = None, dtype: Optional[str] = None, ndim: int = -1
+    shape: Optional[List[Union[PrimExpr, str]]] = None,
+    dtype: Optional[str] = None,
+    ndim: int = -1,
 ) -> TensorStructInfo:
     """Helper function for `R.Tensor` in parser
     Parameters
@@ -399,7 +401,8 @@ def Else() -> frame.ElseFrame:  # pylint: disable=invalid-name
 
 
 def RewriteSymbolicShape(
-    struct_info: StructInfo, var_table: Dict[str, tvm.tir.Var]
+    struct_info: StructInfo,
+    var_table: Dict[str, tvm.tir.Var],
 ) -> Tuple[StructInfo, List[tvm.tir.Var]]:
     """Helper function to rewrite symbolic shape
 

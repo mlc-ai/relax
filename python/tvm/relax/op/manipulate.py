@@ -165,7 +165,11 @@ def concat(data: Union[Expr, List[Expr]], axis: Optional[int] = 0) -> Expr:
     return _ffi_api.concat(data, axis)  # type: ignore
 
 
-def split(data: Expr, indices_or_sections: Union[int, List[PrimExprLike]], axis: int = 0) -> Expr:
+def split(
+    data: Expr,
+    indices_or_sections: Union[int, List[PrimExprLike]],
+    axis: int = 0,
+) -> Expr:
     """Split input tensor along axis by sections or indices.
 
     If indices_or_sections is an integer, the input will be divided equally
