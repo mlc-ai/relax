@@ -84,5 +84,31 @@ bool IsLeafExpr(const Expr& expr) {
          expr.as<TupleNode>();
 }
 
+class FunctionCopier : public ExprMutator {
+ public:
+  explicit FunctionCopier() {}
+
+  Expr VisitExpr_(const FunctionNode* func) override {
+    // the parameters would be copied and substituted to satisfy the restriction in the well-formed
+    // check: any two functions cannot share the same parameter variable.
+    Array<Var> new_params;
+    for (Var param : func->params) {
+      Var new_param = Var(param->vid, GetStructInfo(param), param->span);
+      this->var_remap_[param->vid] = new_param;
+      new_params.push_back(new_param);
+    }
+
+    Expr body = this->VisitWithNewScope(func->body, new_params);
+
+    return Function(new_params, body, func->ret_struct_info, func->attrs);
+  }
+};
+
+Function CopyRelaxFunction(Function func) {
+  return Downcast<Function>(FunctionCopier().VisitExpr(func));
+}
+
+TVM_REGISTER_GLOBAL("relax.CopyRelaxFunction").set_body_typed(CopyRelaxFunction);
+
 }  // namespace relax
 }  // namespace tvm
