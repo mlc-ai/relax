@@ -2302,18 +2302,34 @@ def test_collapse_sum_like_wrong_input_type():
 
 def test_collapse_sum_like_check_shape_failure():
     bb = relax.BlockBuilder()
-    x = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
-    y = relax.Var("y", R.Tensor((3, 6, 5), "float32"))
+    x0 = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+    y0 = relax.Var("y", R.Tensor((3, 6, 5), "float32"))
     a = tir.Var("a", "int64")
     b = tir.Var("b", "int64")
-    z = relax.Var("z", R.Tensor([a], "float32"))
-    w = relax.Var("w", R.Tensor([b], "float32"))
+    x1 = relax.Var("z", R.Tensor((3, a, 5), "float32"))
+    y1 = relax.Var("w", R.Tensor((3, b, 5), "float32"))
+
+    s0 = relax.Var("s", relax.ShapeStructInfo((3, 4, 5)))
+    s1 = relax.Var("s", relax.ShapeStructInfo((3, 6, 5)))
+    x2 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+    y2 = relax.Var("y", relax.TensorStructInfo(s1, "float32"))
+
+    s2 = relax.Var("s", relax.ShapeStructInfo((3, a, 5)))
+    s3 = relax.Var("s", relax.ShapeStructInfo((3, b, 5)))
+    x3 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
+    y3 = relax.Var("y", relax.TensorStructInfo(s3, "float32"))
 
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.collapse_sum_like(x, y))
+        bb.normalize(relax.op.collapse_sum_like(x0, y0))
 
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.collapse_sum_like(z, w))
+        bb.normalize(relax.op.collapse_sum_like(x1, y1))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_like(x2, y2))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_like(x3, y3))
 
 
 def test_collapse_sum_to_infer_struct_info():
@@ -2404,15 +2420,28 @@ def test_collapse_sum_to_wrong_input_type():
 
 def test_collapse_sum_to_check_shape_failure():
     bb = relax.BlockBuilder()
-    x = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+    x0 = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
     a = tir.Var("a", "int64")
-    y = relax.Var("y", R.Tensor([a], "float32"))
+    b = tir.Var("b", "int64")
+    x1 = relax.Var("x", R.Tensor((3, a, 5), "float32"))
+
+    s0 = relax.Var("s", relax.ShapeStructInfo((3, 4, 5)))
+    x2 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
+
+    s1 = relax.Var("s", relax.ShapeStructInfo((3, a, 5)))
+    x3 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
 
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.collapse_sum_to(x, (4, 4, 5)))
+        bb.normalize(relax.op.collapse_sum_to(x0, (4, 4, 5)))
 
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.collapse_sum_to(y, (4,)))
+        bb.normalize(relax.op.collapse_sum_to(x1, (3, b, 5)))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_to(x2, (4, 4, 5)))
+
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.collapse_sum_to(x3, (3, b, 5)))
 
 
 def test_collapse_sum_to_struct_info_tgt_shape_var():

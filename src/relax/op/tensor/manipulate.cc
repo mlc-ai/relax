@@ -851,11 +851,18 @@ StructInfo InferStructInfoCollapseSumLike(const Call& call, const BlockBuilder& 
 
   DataType output_dtype = data_sinfo->dtype;
 
-  auto* data_shape = data_sinfo->shape.as<ShapeExprNode>();
-  auto* collapse_target_shape = collapse_target_sinfo->shape.as<ShapeExprNode>();
+  Optional<Array<PrimExpr>> data_shape_value;
+  if (data_sinfo->shape.defined()) {
+    data_shape_value = GetStructInfoAs<ShapeStructInfoNode>(data_sinfo->shape.value())->values;
+  }
+  Optional<Array<PrimExpr>> collapse_target_shape_value;
+  if (collapse_target_sinfo->shape.defined()) {
+    collapse_target_shape_value =
+        GetStructInfoAs<ShapeStructInfoNode>(collapse_target_sinfo->shape.value())->values;
+  }
 
-  if (data_shape && collapse_target_shape) {
-    CheckCollapseShape(call, ctx, data_shape->values, collapse_target_shape->values);
+  if (data_shape_value.defined() && collapse_target_shape_value.defined()) {
+    CheckCollapseShape(call, ctx, data_shape_value.value(), collapse_target_shape_value.value());
   }
 
   if (collapse_target_sinfo->shape.defined()) {
@@ -903,10 +910,13 @@ StructInfo InferStructInfoCollapseSumTo(const Call& call, const BlockBuilder& ct
 
   DataType output_dtype = data_sinfo->dtype;
 
-  auto* data_shape = data_sinfo->shape.as<ShapeExprNode>();
+  Optional<Array<PrimExpr>> data_shape_value;
+  if (data_sinfo->shape.defined()) {
+    data_shape_value = GetStructInfoAs<ShapeStructInfoNode>(data_sinfo->shape.value())->values;
+  }
 
-  if (data_shape && shape_sinfo->values.defined()) {
-    CheckCollapseShape(call, ctx, data_shape->values, shape_sinfo->values.value());
+  if (data_shape_value.defined() && shape_sinfo->values.defined()) {
+    CheckCollapseShape(call, ctx, data_shape_value.value(), shape_sinfo->values.value());
   }
 
   return TensorStructInfo(/*shape=*/call->args[1], output_dtype);
