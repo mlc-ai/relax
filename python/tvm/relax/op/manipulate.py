@@ -239,7 +239,7 @@ def collapse_sum_like(data: Expr, collapse_target: Expr) -> Expr:
     result : relax.Expr
         The result tensor after summation.
     """
-    return _ffi_api.collapse_sum_like(data, collapse_target)
+    return _ffi_api.collapse_sum_like(data, collapse_target)  # type: ignore
 
 
 def collapse_sum_to(data: Expr, shape: Union[Tuple[PrimExprLike], Expr]) -> Expr:
@@ -271,4 +271,4 @@ def collapse_sum_to(data: Expr, shape: Union[Tuple[PrimExprLike], Expr]) -> Expr
     """
     if isinstance(shape, (tuple, list)):
         shape = ShapeExpr(shape)
-    return _ffi_api.collapse_sum_to(data, shape)
+    return _ffi_api.collapse_sum_to(data, shape)  # type: ignore
