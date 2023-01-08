@@ -24,7 +24,8 @@ from tvm.script.parser import relax as R
 
 
 def _check(
-    parsed: Union[relax.Function, IRModule], expect: Optional[Union[relax.Function, IRModule]],
+    parsed: Union[relax.Function, IRModule],
+    expect: Optional[Union[relax.Function, IRModule]],
 ):
     test = parsed.script(show_meta=True)
     roundtrip_mod = tvm.script.parse(test)
