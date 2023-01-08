@@ -17,10 +17,11 @@
 """Utility functions for Relax"""
 from typing import List, Tuple, Union
 
-from tvm.relax.expr import Expr, ShapeExpr
+from tvm.relax.expr import Expr, Function, ShapeExpr
 from tvm.relax.expr import Tuple as rx_Tuple
 from ..runtime import convert_to_object
 from ..tir import PrimExpr
+from . import _ffi_api
 
 
 def metadata_partitioner(rx_txt: str) -> List[str]:
@@ -78,3 +79,21 @@ def convert_to_expr(value: Union[PrimExpr, Expr, Tuple[PrimExpr, Expr]]) -> Expr
         return rx_Tuple(value)
     else:
         raise TypeError("Return types, with mixed PrimExpr and Relax Expr, is not supported.")
+
+
+def copy_relax_function(func: Function) -> Function:
+    """Copy the given function. The parameters of the original function would be copied to
+    satisfy the restriction in the well-formed check: any two functions cannot share the same
+    parameter variable.
+
+    Parameters
+    ----------
+    func : Function
+        The relax function to copy.
+
+    Returns
+    -------
+    ret : Function
+        The copied function.
+    """
+    return _ffi_api.CopyRelaxFunction(func)  # type: ignore
