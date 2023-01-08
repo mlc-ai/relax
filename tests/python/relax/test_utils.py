@@ -24,7 +24,7 @@ from tvm.script.parser import ir as I, relax as R, tir as T
 
 def test_copy_relax_function():
     @R.function
-    def before(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")):
+    def before(x: R.Tensor((3,), "float32"), y: R.Tensor((3,), "float32")):
         gv = R.add(x, y)
         return gv
 
