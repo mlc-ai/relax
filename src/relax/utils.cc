@@ -86,8 +86,6 @@ bool IsLeafExpr(const Expr& expr) {
 
 class FunctionCopier : public ExprMutator {
  public:
-  explicit FunctionCopier() {}
-
   Expr VisitExpr_(const FunctionNode* func) override {
     // the parameters would be copied and substituted to satisfy the restriction in the well-formed
     // check: any two functions cannot share the same parameter variable.
