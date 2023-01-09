@@ -104,11 +104,11 @@ class FunctionCopier : public ExprMutator {
   }
 };
 
-Function CopyRelaxFunction(Function func) {
+Function CopyWithNewParams(Function func) {
   return Downcast<Function>(FunctionCopier().VisitExpr(func));
 }
 
-TVM_REGISTER_GLOBAL("relax.CopyRelaxFunction").set_body_typed(CopyRelaxFunction);
+TVM_REGISTER_GLOBAL("relax.CopyWithNewParams").set_body_typed(CopyWithNewParams);
 
 }  // namespace relax
 }  // namespace tvm

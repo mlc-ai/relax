@@ -81,7 +81,7 @@ def convert_to_expr(value: Union[PrimExpr, Expr, Tuple[PrimExpr, Expr]]) -> Expr
         raise TypeError("Return types, with mixed PrimExpr and Relax Expr, is not supported.")
 
 
-def copy_relax_function(func: Function) -> Function:
+def copy_with_new_params(func: Function) -> Function:
     """Copy the given function. The parameters of the original function would be copied to
     satisfy the restriction in the well-formed check: any two functions cannot share the same
     parameter variable.
@@ -96,4 +96,4 @@ def copy_relax_function(func: Function) -> Function:
     ret : Function
         The copied function.
     """
-    return _ffi_api.CopyRelaxFunction(func)  # type: ignore
+    return _ffi_api.CopyWithNewParams(func)  # type: ignore

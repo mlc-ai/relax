@@ -144,7 +144,7 @@ TVM_DLL bool IsLeafExpr(const Expr& expr);
  * \param func The relax function to copy.
  * \return The copied function.
  */
-TVM_DLL Function CopyRelaxFunction(Function func);
+TVM_DLL Function CopyWithNewParams(Function func);
 
 }  // namespace relax
 }  // namespace tvm

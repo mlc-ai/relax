@@ -22,13 +22,13 @@ from tvm.ir.base import assert_structural_equal
 from tvm.script.parser import ir as I, relax as R, tir as T
 
 
-def test_copy_relax_function():
+def test_copy_with_new_params():
     @R.function
     def before(x: R.Tensor((3,), "float32"), y: R.Tensor((3,), "float32")):
         gv = R.add(x, y)
         return gv
 
-    after = relax.utils.copy_relax_function(before)
+    after = relax.utils.copy_with_new_params(before)
     assert_structural_equal(after, before)
 
     assert len(after.params) == len(before.params)
