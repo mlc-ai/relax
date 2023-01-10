@@ -102,9 +102,7 @@ class FunctionCopier : public ExprMutator {
   }
 };
 
-Function CopyWithNewParams(Function func) {
-  return FunctionCopier().Transform(func);
-}
+Function CopyWithNewParams(Function func) { return FunctionCopier().Transform(func); }
 
 TVM_REGISTER_GLOBAL("relax.CopyWithNewParams").set_body_typed(CopyWithNewParams);
 
