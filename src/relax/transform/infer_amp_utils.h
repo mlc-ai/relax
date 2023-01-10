@@ -81,10 +81,6 @@ using VarDTypeMap = std::unordered_map<Var, NType, ObjectPtrHash, ObjectPtrEqual
 using FMixedPrecision =
     runtime::TypedPackedFunc<Array<ObjectRef>(const Call& call_node, const DataType& out_dtype)>;
 
-Array<ObjectRef> InferMixedPrecisionMatmul(const Call& call, const DataType& out_dtype);
-
-Array<ObjectRef> InferMixedPrecisionConv2D(const Call& call, const DataType& out_dtype);
-
 Array<ObjectRef> InferMixedPrecisionFollow(const Call& call, const DataType& out_dtype);
 
 Array<ObjectRef> InferMixedPrecisionNever(const Call& call, const DataType& out_dtype);
