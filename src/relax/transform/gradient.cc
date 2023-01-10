@@ -36,14 +36,16 @@
 namespace tvm {
 namespace relax {
 
-
 class GradientMutator : public ExprMutator {
  public:
   explicit GradientMutator(const IRModule& mod, const GlobalVar& gvar,
                            const Array<Var>& require_grads)
-      : ExprMutator(mod), mod_(mod), gvar_(std::move(gvar)), require_grads_(std::move(require_grads)) {
-        CheckRequireGrads(require_grads_);
-      }
+      : ExprMutator(mod),
+        mod_(mod),
+        gvar_(std::move(gvar)),
+        require_grads_(std::move(require_grads)) {
+    CheckRequireGrads(require_grads_);
+  }
 
   IRModule Transform() {
     IRModule new_module = GetRef<IRModule>(mod_.CopyOnWrite());
@@ -179,8 +181,8 @@ class GradientMutator : public ExprMutator {
     ICHECK(adjoint_expr_map_[tuple_var].as<TupleNode>())
         << "Adjoint of " << tuple_var << " is expected to be a tuple";
     adjoint_expr_map_.Set(
-        tuple_var, AddElementInTuple(Downcast<Tuple>(adjoint_expr_map_[tuple_var]), tuple_get_item->index,
-                              adjoint_expr_map_[binding->var]));
+        tuple_var, AddElementInTuple(Downcast<Tuple>(adjoint_expr_map_[tuple_var]),
+                                     tuple_get_item->index, adjoint_expr_map_[binding->var]));
   }
 
   // for assign nodes, we add the adjoint of output to the adjoint of input
@@ -349,19 +351,24 @@ class GradientMutator : public ExprMutator {
 
   // check that the target should be a VarNode, not DataflowVarNode
   // and a scalar of type "DynTensorType"
-  static void CheckTarget(const Expr &e) {
+  static void CheckTarget(const Expr& e) {
     CHECK(e->IsInstance<VarNode>()) << "The differentiation target must be a Var";
     CHECK(!e->IsInstance<DataflowVarNode>()) << "The differentiation target is not an output node";
-    CHECK(e->checked_type().as<DynTensorTypeNode>()) << "The type of the differentiation target must be DynTensorType";
-    CHECK(e->shape().as<ShapeExprNode>()) << "Error when getting the shape of the differentiation target";
-    CHECK(e->shape().as<ShapeExprNode>()->values.size() == 0) << "The differentiation target must be scalar";
+    CHECK(e->checked_type().as<DynTensorTypeNode>())
+        << "The type of the differentiation target must be DynTensorType";
+    CHECK(e->shape().as<ShapeExprNode>())
+        << "Error when getting the shape of the differentiation target";
+    CHECK(e->shape().as<ShapeExprNode>()->values.size() == 0)
+        << "The differentiation target must be scalar";
   }
 
   static void CheckRequireGrads(const Array<Var> require_grads) {
     for (auto var : require_grads) {
-      auto *type = var->checked_type().as<DynTensorTypeNode>();
+      auto* type = var->checked_type().as<DynTensorTypeNode>();
       CHECK(type) << "The type of the input Var " << var->name_hint() << " is not DynTensorType";
-      CHECK(type->dtype.is_float() || type->dtype.is_float16() || type->dtype.is_bfloat16()) << "Only Tensors of floating point dtype can require gradients, but the dtype of Var " << var->name_hint() << " is " << type->dtype;
+      CHECK(type->dtype.is_float() || type->dtype.is_float16() || type->dtype.is_bfloat16())
+          << "Only Tensors of floating point dtype can require gradients, but the dtype of Var "
+          << var->name_hint() << " is " << type->dtype;
     }
   }
 
