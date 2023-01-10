@@ -34,6 +34,8 @@
 #include <utility>
 #include <vector>
 
+#include "../transform/infer_amp_utils.h"
+
 namespace tvm {
 namespace relax {
 
@@ -69,11 +71,12 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
  * be prepended with a prefix "relax." as the identifier string in the operator registry.
  * \param RequireFloatDtype A boolean indicating if the input is required to have float dtype.
  */
-#define RELAX_REGISTER_UNARY_OP(OpRegName, RequireFloatDtype) \
-  TVM_REGISTER_OP("relax." OpRegName)                         \
-      .set_num_inputs(1)                                      \
-      .add_argument("x", "Tensor", "The input tensor.")       \
-      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary<RequireFloatDtype>)
+#define RELAX_REGISTER_UNARY_OP(OpRegName, RequireFloatDtype)                                  \
+  TVM_REGISTER_OP("relax." OpRegName)                                                          \
+      .set_num_inputs(1)                                                                       \
+      .add_argument("x", "Tensor", "The input tensor.")                                        \
+      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary<RequireFloatDtype>) \
+      .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow)
 
 /*!
  * \brief Quick helper macro to expose a make-function to construct the operator.
