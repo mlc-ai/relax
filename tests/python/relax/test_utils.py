@@ -15,11 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 import pytest
-import tvm
-import tvm.script
 from tvm import relax
 from tvm.ir.base import assert_structural_equal
-from tvm.script.parser import ir as I, relax as R, tir as T
+from tvm.script.parser import relax as R
 
 
 def test_copy_with_new_params():
