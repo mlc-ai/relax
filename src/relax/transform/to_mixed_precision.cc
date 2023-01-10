@@ -33,22 +33,14 @@ namespace relax {
 
 using runtime::String;
 
-Optional<Array<ObjectRef>> GetDTypeConvertInfo(const CallNode* call_node, DataType output_dtype) {
+int GetMixedPrecisionInfo(const CallNode* call_node) {
   const OpNode* op_node = call_node->op.as<OpNode>();
   if (op_node == nullptr) {
-    return NullOpt;
+    return -1;
   }
   Op op = GetRef<Op>(op_node);
-  const auto attr_map = Op::GetAttrMap<FMixedPrecision>("FMixedPrecision");
-  if (attr_map.count(op)) {
-    FMixedPrecision func = attr_map[op];
-    Array<ObjectRef> res = func(GetRef<Call>(call_node), output_dtype);
-    ICHECK(res.size() == 2) << "got the wrong number of return values from FMixedPrecision";
-    return res;
-  } else {
-    // Use MIXED_PRECISION_NEVER as default.
-    return InferMixedPrecisionNever(GetRef<Call>(call_node), output_dtype);
-  }
+  auto attr_map = Op::GetAttrMap<TMixedPrecisionPolicy>("TMixedPrecisionPolicy");
+  return attr_map.count(op) ? attr_map[op] : MixedPrecisionPolicyKind::kNever;
 }
 
 /*!
@@ -65,21 +57,21 @@ Optional<Array<ObjectRef>> GetDTypeConvertInfo(const CallNode* call_node, DataTy
  * be vars, constants, or Tuple of vars and constants.
  * Depending on the properties of the op, we may have 3 different ways to rewrite it:
  *
- * 1. MIXED_PRECISION_ALWAYS: Always cast the args to fp16
+ * 1. kAlways: Always cast the args to fp16
  *    Currently, this is only used for gemm and conv ops (to favor the use of TensorCore)
  *    We always cast the input args to fp16, and the dtype of the accumulator is configured
  *    by the global output_dtype parameter (default to fp32). Finally we will cast the
  *    accumulator back to fp16 (if the output_dtype is fp32).
  *
- * 2. MIXED_PRECISION_FOLLOW: If the output is expected to be fp16 by any of the consumers
+ * 2. kFollow: If the output is expected to be fp16 by any of the consumers
  *    of the op, we will cast the args to fp16. Otherwise, we will cast the args to fp32.
  *
- * 3. MIXED_PRECISION_NEVER: Never cast the args to fp16. Always cast all args to fp32.
+ * 3. kNever: Never cast the args to fp16. Always cast all args to fp32 (the original dtype).
  *    Some ops, such as softmax, have numerical issues when using fp16. We will always use fp32
  *    to ensure the correctness.
  *
  * DTypeDecisionCollector:
- *   We will first use a backward propagation pass (since MIXED_PRECISION_FOLLOW requires the
+ *   We will first use a backward propagation pass (since kFollow requires the
  *   knowledge of the consumer to notify its producers) to know the expected dtype of each var. Note
  *   that multiple dtypes of a var might be expected by different consumers. We keep the lowest
  *   precision required as the dtype to realize the unique copy of the var.
@@ -91,11 +83,12 @@ Optional<Array<ObjectRef>> GetDTypeConvertInfo(const CallNode* call_node, DataTy
  *   times, but we decide not to store and reuse the casted copy due to the storage concern and to
  *   be more friendly to inlining and operator fusion.
  *
- * The information of each op is registered in the Op::GetAttr<FMixedPrecision>("FMixedPrecision").
- * The registered function has signature: FMixedPrecision. We will call the registered function
- * with the original call and the global output_dtype parameter. The registered function will
- * return the policy of the op, whether the op can adjust the dtype of the accumulator, and the
- * new call node with output_dtype set to the global output_dtype parameter.
+ * The information of each op is registered in the
+ * Op::GetAttr<FInferMixedPrecision>("FInferMixedPrecision"). The registered function has signature:
+ * FInferMixedPrecision. We will call the registered function with the original call and the global
+ * output_dtype parameter. The registered function will return the policy of the op, whether the op
+ * can adjust the dtype of the accumulator, and the new call node with output_dtype set to the
+ * global output_dtype parameter.
  *
  * Key design: wrap_param op
  *   We need to use fp16 parameters (which appear as constants in the program), but the type
@@ -170,29 +163,25 @@ class DTypeDecisionCollector : public ExprVisitor {
   void VisitExpr_(const DataflowVarNode* op) final { VisitVars_(op); }
 
   void VisitBinding_(const VarBindingNode* binding, const CallNode* call_node) final {
-    // Only handle the following cases
-    // var: NType = Call(Op, [args], attr)
-    Optional<Array<ObjectRef>> dtype_convert_info = GetDTypeConvertInfo(call_node, output_dtype_);
-    if (!dtype_convert_info.defined()) {
+    auto policy = GetMixedPrecisionInfo(call_node);
+    if (policy == -1) {
       ExprVisitor::VisitBinding_(binding, call_node);
       return;
     }
-    Array<ObjectRef> res = dtype_convert_info.value();
-    MixedTypePolicy policy = static_cast<MixedTypePolicy>(Downcast<Integer>(res[0])->value);
-    if (policy == MIXED_PRECISION_ALWAYS) {
+    if (policy == kAlways) {
       // require inputs to be fp16
       RequireArgsToType(call_node->args, fp16_);
-    } else if (policy == MIXED_PRECISION_FOLLOW) {
+    } else if (policy == kFollow) {
       // require inputs to be fp16 if the output is required to be fp16, otherwise fp32
       auto it = var_dtype_map_.find(binding->var);
       if (it == var_dtype_map_.end()) return;
       NType all_fp32 = NTypeFrom(binding->var, fp32_);
       RequireArgsToType(call_node->args, NTypeEqual()(it->second, all_fp32) ? fp32_ : fp16_);
-    } else if (policy == MIXED_PRECISION_NEVER) {
-      // require inputs to be fp32
+    } else if (policy == kNever) {
+      // require inputs to be fp32 (the original dtype)
       RequireArgsToType(call_node->args, fp32_);
     } else {
-      LOG(FATAL) << "Unsupported MixedTypePolicy: " << policy;
+      LOG(FATAL) << "Unsupported TMixedPrecisionPolicy: " << policy;
     }
   }
 
@@ -396,38 +385,40 @@ class ToMixedPrecisionRewriter : public ExprMutator {
       ExprMutator::VisitBinding_(binding, call_node);
       return;
     }
-    Optional<Array<ObjectRef>> dtype_convert_info = GetDTypeConvertInfo(call_node, output_dtype_);
-    if (!dtype_convert_info.defined()) {
-      const auto* op = call_node->op.as<OpNode>();
-      if (op == nullptr || !wrap_param_op.same_as(GetRef<Op>(op))) {
-        ExprMutator::VisitBinding_(binding, call_node);
-        return;
-      }
+    auto policy = GetMixedPrecisionInfo(call_node);
+    if (policy == -1) {
+      // not an op call
+      ExprMutator::VisitBinding_(binding, call_node);
+      return;
+    }
+    const auto* op_node = call_node->op.as<OpNode>();
+    ICHECK(op_node != nullptr);
+    Op op = GetRef<Op>(op_node);
+    if (wrap_param_op.same_as(op)) {
       // wrap_param
       const auto* constant = call_node->args[0].as<ConstantNode>();
       ICHECK(constant != nullptr) << "Invalid wrap_param: " << GetRef<Call>(call_node);
       ReEmitBinding(binding, GetRef<Expr>(constant));
       return;
     }
-    // var: NType = Call(Op, [args], attr)
-    Array<ObjectRef> res = dtype_convert_info.value();
-    MixedTypePolicy policy = static_cast<MixedTypePolicy>(Downcast<Integer>(res[0])->value);
-    Call adjusted_call = Downcast<Call>(res[1]);
-    ObjectPtr<CallNode> new_call = make_object<CallNode>(*adjusted_call.get());
-    new_call->struct_info_ = NullOpt;
     DataType to;
-    if (policy == MIXED_PRECISION_ALWAYS) {
+    ObjectPtr<CallNode> new_call = make_object<CallNode>(*call_node);
+    if (policy == kAlways) {
       to = fp16_;
-    } else if (policy == MIXED_PRECISION_FOLLOW) {
+      auto attr_map = Op::GetAttrMap<FInferMixedPrecision>("FInferMixedPrecision");
+      ICHECK(attr_map.count(op));
+      auto f = attr_map[op];
+      new_call = make_object<CallNode>(*(f(GetRef<Call>(call_node), output_dtype_).get()));
+    } else if (policy == kFollow) {
       NType all_fp32 = NTypeFrom(binding->var, fp32_);
       to = NTypeEqual()(it->second, all_fp32) ? fp32_ : fp16_;
-    } else if (policy == MIXED_PRECISION_NEVER) {
+    } else if (policy == kNever) {
       to = fp32_;
     } else {
-      LOG(FATAL) << "Unsupported MixedTypePolicy: " << policy;
+      LOG(FATAL) << "Unsupported TMixedPrecisionPolicy: " << policy;
     }
-    Array<Expr> new_args = RewriteArgs(call_node->args, to);
-    new_call->args = std::move(new_args);
+    new_call->args = std::move(RewriteArgs(call_node->args, to));
+    new_call->struct_info_ = NullOpt;
     ReEmitBinding(binding, builder_->Normalize(Call(new_call)));
   }
 
