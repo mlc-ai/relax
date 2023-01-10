@@ -34,6 +34,8 @@
 #include <utility>
 #include <vector>
 
+#include "../transform/infer_amp_utils.h"
+
 namespace tvm {
 namespace relax {
 
@@ -68,10 +70,11 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
  * \param OpRegName The name of operator to register. The name passed in will
  * be prepended with a prefix "relax." as the identifier string in the operator registry.
  */
-#define RELAX_REGISTER_UNARY_OP(OpRegName) \
-  TVM_REGISTER_OP("relax." OpRegName)      \
-      .set_num_inputs(1)                   \
-      .add_argument("x", "Tensor", "The input tensor.")
+#define RELAX_REGISTER_UNARY_OP(OpRegName)              \
+  TVM_REGISTER_OP("relax." OpRegName)                   \
+      .set_num_inputs(1)                                \
+      .add_argument("x", "Tensor", "The input tensor.") \
+      .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow)
 
 /*!
  * \brief Quick helper macro to expose a make-function to construct the operator.
