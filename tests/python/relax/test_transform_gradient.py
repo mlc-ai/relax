@@ -969,6 +969,31 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient(main_gv, require_grads=MultiBlocks["main"].params[0])(NormalModule)
 
+    @I.ir_module
+    class IntDType:
+        @R.function
+        def main(x: R.Tensor((3, 3), "int64")):
+            with R.dataflow():
+                lv1 = R.add(x, x)
+                gv = R.sum(lv1)
+                R.output(gv)
+            return gv
+
+    with pytest.raises(TVMError):
+        relax.transform.Gradient(IntDType.get_global_var("main"))(IntDType)
+
+    # @I.ir_module
+    # class UndefinedGradient:
+    #     @R.function
+    #     def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3,), "int64")):
+    #         with R.dataflow():
+    #             gv = R.nll_loss(x, y)
+    #             R.output(gv)
+    #         return gv
+
+    # with pytest.raises(TVMError):
+    #     relax.transform.Gradient(UndefinedGradient.get_global_var("main"))(UndefinedGradient)
+
 
 def test_mlp_script():
     """

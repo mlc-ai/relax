@@ -36,41 +36,31 @@
 namespace tvm {
 namespace relax {
 
+
 class GradientMutator : public ExprMutator {
  public:
   explicit GradientMutator(const IRModule& mod, const GlobalVar& gvar,
                            const Array<Var>& require_grads)
-      : ExprMutator(mod), mod_(mod), gvar_(gvar), require_grads_(std::move(require_grads)) {}
+      : ExprMutator(mod), mod_(mod), gvar_(std::move(gvar)), require_grads_(std::move(require_grads)) {
+        CheckRequireGrads(require_grads_);
+      }
 
   IRModule Transform() {
-    auto new_module = GetRef<IRModule>(mod_.CopyOnWrite());
+    IRModule new_module = GetRef<IRModule>(mod_.CopyOnWrite());
 
-    auto func_before = Downcast<Function>(mod_->Lookup(gvar_));
-    auto func_after_var = GlobalVar(gvar_->name_hint + "_adjoint");
-    auto func_after = Downcast<Function>(this->VisitExpr(func_before));
-    new_module->Add(func_after_var, func_after);
+    Function new_func = CopyWithNewParams(Downcast<Function>(mod_->Lookup(gvar_)));
+    Function new_func_transformed = Downcast<Function>(this->VisitExpr(new_func));
+
+    new_module->Add(GlobalVar(gvar_->name_hint + "_adjoint"), new_func_transformed);
     return new_module;
   }
 
   Expr VisitExpr_(const FunctionNode* func) override {
-    // copy the parameters and set var_remap_
-    Array<Var> new_params;
-    for (Var param : func->params) {
-      Var new_param = Var(param->vid, param->shape(), param->checked_type(), param->span);
-      this->var_remap_[param->vid] = new_param;
-      new_params.push_back(new_param);
-    }
+    ICHECK(func->body->IsInstance<SeqExprNode>());
 
-    // use VisitExpr of ExprMutator to remap the variables in the input body
-    CHECK(func->body->IsInstance<SeqExprNode>())
-        << "the body of the function is not SeqExprNode. Please use relax.transform.Normalize to "
-           "normalize the function first.";
-    Expr body_with_remapped_var = static_cast<ExprMutator>(*this).VisitExpr(func->body);
+    Expr new_body = this->VisitExpr(func->body);
 
-    // AD transformation
-    Expr new_body = this->VisitExpr(body_with_remapped_var);
-
-    return Function(new_params, new_body, Type(), RuntimeDepShape(), func->attrs);
+    return Function(func->params, new_body, Type(), RuntimeDepShape(), func->attrs);
   }
 
   Expr VisitExpr_(const SeqExprNode* seq_expr) override {
@@ -189,7 +179,7 @@ class GradientMutator : public ExprMutator {
     ICHECK(adjoint_expr_map_[tuple_var].as<TupleNode>())
         << "Adjoint of " << tuple_var << " is expected to be a tuple";
     adjoint_expr_map_.Set(
-        tuple_var, AddInTuple(Downcast<Tuple>(adjoint_expr_map_[tuple_var]), tuple_get_item->index,
+        tuple_var, AddElementInTuple(Downcast<Tuple>(adjoint_expr_map_[tuple_var]), tuple_get_item->index,
                               adjoint_expr_map_[binding->var]));
   }
 
@@ -244,7 +234,7 @@ class GradientMutator : public ExprMutator {
       }
     } else if (const auto* node0 = leaf.as<TupleNode>()) {
       const auto* node1 = partial.as<TupleNode>();
-      ICHECK(node1) << "base and increment should be both tuple";
+      ICHECK(node1) << "Base and increment should be both tuple";
       for (size_t i = 0; i < node0->fields.size(); ++i) {
         UpdateAdjointForLeaf(node0->fields[i], node1->fields[i]);
       }
@@ -267,7 +257,7 @@ class GradientMutator : public ExprMutator {
             MakeZeros(shape->fields[i], Downcast<DynTensorType>(type->fields[i])->dtype);
         ret.push_back(init);
       } else {
-        LOG(FATAL) << "Unsupported emtpy expr: " << shape->fields[i];
+        LOG(FATAL) << "Unsupported empty expr: " << shape->fields[i];
       }
     }
     return Tuple(ret);
@@ -285,7 +275,7 @@ class GradientMutator : public ExprMutator {
       const TupleNode* increment_node = increment.as<TupleNode>();
       ICHECK(increment_node) << "Type not match: base and increment should be both tuple";
       ICHECK(base_node->fields.size() == increment_node->fields.size())
-          << "size of tuple not match";
+          << "Size of tuple not match";
       Array<Expr> result;
       for (size_t i = 0; i < base_node->fields.size(); ++i) {
         result.push_back(TupleAwareAdd(base_node->fields[i], increment_node->fields[i]));
@@ -300,7 +290,7 @@ class GradientMutator : public ExprMutator {
 
   // Perform an addition in a specified position of tuple.
   // e.g. tuple=(a, b, c), index=1, increment=d, then return (a, b+d, c)
-  Tuple AddInTuple(const Tuple& tuple, int index, const Expr& increment) {
+  Tuple AddElementInTuple(const Tuple& tuple, int index, const Expr& increment) {
     Array<Expr> ret;
     for (size_t i = 0; i < tuple->fields.size(); ++i) {
       if ((int)i == index) {
@@ -359,12 +349,20 @@ class GradientMutator : public ExprMutator {
 
   // check that the target should be a VarNode, not DataflowVarNode
   // and a scalar of type "DynTensorType"
-  static void CheckTarget(Expr e) {
-    CHECK(e->IsInstance<VarNode>()) << "target must be a VarNode";
-    CHECK(!e->IsInstance<DataflowVarNode>()) << "target is not an output node";
-    CHECK(e->checked_type().as<DynTensorTypeNode>()) << "the type of target must be DynTensorType";
-    CHECK(e->shape().as<ShapeExprNode>()) << "error when getting target shape";
-    CHECK(e->shape().as<ShapeExprNode>()->values.size() == 0) << "target must be a scalar";
+  static void CheckTarget(const Expr &e) {
+    CHECK(e->IsInstance<VarNode>()) << "The differentiation target must be a Var";
+    CHECK(!e->IsInstance<DataflowVarNode>()) << "The differentiation target is not an output node";
+    CHECK(e->checked_type().as<DynTensorTypeNode>()) << "The type of the differentiation target must be DynTensorType";
+    CHECK(e->shape().as<ShapeExprNode>()) << "Error when getting the shape of the differentiation target";
+    CHECK(e->shape().as<ShapeExprNode>()->values.size() == 0) << "The differentiation target must be scalar";
+  }
+
+  static void CheckRequireGrads(const Array<Var> require_grads) {
+    for (auto var : require_grads) {
+      auto *type = var->checked_type().as<DynTensorTypeNode>();
+      CHECK(type) << "The type of the input Var " << var->name_hint() << " is not DynTensorType";
+      CHECK(type->dtype.is_float() || type->dtype.is_float16() || type->dtype.is_bfloat16()) << "Only Tensors of floating point dtype can require gradients, but the dtype of Var " << var->name_hint() << " is " << type->dtype;
+    }
   }
 
   // inputs
