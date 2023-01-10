@@ -114,7 +114,8 @@ TVM_REGISTER_OP("relax.nn.max_pool2d")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
     .set_attrs_type<MaxPool2DAttrs>()
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoMaxPool2D);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoMaxPool2D)
+    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow);
 
 /* relax.nn.adaptive_avg_pool2d */
 TVM_REGISTER_NODE_TYPE(AdaptivePool2DAttrs);
@@ -178,7 +179,8 @@ TVM_REGISTER_OP("relax.nn.adaptive_avg_pool2d")
     .set_attrs_type<AdaptivePool2DAttrs>()
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoAdaptiveAvgPool2D);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoAdaptiveAvgPool2D)
+    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow);
 
 }  // namespace relax
 }  // namespace tvm

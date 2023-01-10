@@ -227,6 +227,14 @@ TVM_DLL Pass RemoveUnusedFunctions(Array<runtime::String> entry_functions);
 TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_options,
                         Array<runtime::String> entry_functions);
 
+/*!
+ * \brief Automatic mixed precision pass. Currently the pass assumes the input module to be fp32
+ * only, and will automatically cast fp32 to fp16 for certain ops.
+ * \param out_dtype The output data type of gemm/conv, which is the data type of the accumulator.
+ * \return The Pass.
+ */
+TVM_DLL Pass ToMixedPrecision(const DataType& out_dtype);
+
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm
