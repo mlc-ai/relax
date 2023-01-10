@@ -27,6 +27,9 @@
 #include <tvm/ir/module.h>
 #include <tvm/relax/expr.h>
 #include <tvm/relax/expr_functor.h>
+#include <tvm/relax/nested_msg.h>
+#include <tvm/relax/op_attr_types.h>
+#include <tvm/tir/data_layout.h>
 
 #include <string>
 #include <unordered_map>
@@ -115,6 +118,20 @@ IRModule MakeGroupedFunctions(
     IRModule mod,
     const std::unordered_map<const Object*, relay::GraphPartitioner::Group*>& partition,
     bool create_single_binding_function = false);
+
+/*!
+ * \brief Check if the given structinfo is a nested tensor.
+ * \param sinfo The structinfo to be checked.
+ * \return true if the given structinfo is a nested tensor.
+ */
+bool IsNestedTensor(const StructInfo& sinfo);
+
+/*!
+ * \brief Check if the given expr is a nested tensor.
+ * \param expr The expr to be checked.
+ * \return true if the given expr is a nested tensor.
+ */
+bool IsNestedTensor(const Expr& expr);
 
 }  // namespace relax
 }  // namespace tvm

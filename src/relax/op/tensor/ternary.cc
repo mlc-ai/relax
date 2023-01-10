@@ -95,7 +95,8 @@ TVM_REGISTER_OP("relax.ewise_fma")
     .add_argument("x1", "Tensor", "The left hand operand of the multiplication")
     .add_argument("x2", "Tensor", "The right hand operand of the multiplication")
     .add_argument("x3", "Tensor", "The operand of the addition")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoEwiseFMA);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoEwiseFMA)
+    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow);
 
 Expr ewise_fma(Expr x1, Expr x2, Expr x3) {
   static const Op& op = Op::Get("relax.ewise_fma");
