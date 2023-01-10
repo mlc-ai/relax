@@ -86,7 +86,7 @@ bool IsLeafExpr(const Expr& expr) {
 
 class FunctionCopier : public ExprMutator {
  public:
-  Expr VisitExpr_(const FunctionNode* func) override {
+  Function Transform(Function func) {
     // the parameters would be copied and substituted to satisfy the restriction in the well-formed
     // check: any two functions cannot share the same parameter variable.
     Array<Var> new_params;
@@ -103,7 +103,7 @@ class FunctionCopier : public ExprMutator {
 };
 
 Function CopyWithNewParams(Function func) {
-  return Downcast<Function>(FunctionCopier().VisitExpr(func));
+  return FunctionCopier().Transform(func);
 }
 
 TVM_REGISTER_GLOBAL("relax.CopyWithNewParams").set_body_typed(CopyWithNewParams);
