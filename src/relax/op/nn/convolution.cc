@@ -118,6 +118,14 @@ StructInfo InferStructInfoConv2d(const Call& call, const BlockBuilder& ctx) {
   return TensorStructInfo(ShapeExpr(out_shape), out_dtype);
 }
 
+Array<ObjectRef> InferMixedPrecisionConv2D(const Call& call, const DataType& out_dtype) {
+  const auto* conv2d_attrs = call->attrs.as<Conv2DAttrs>();
+  return {Integer(MixedTypePolicy::MIXED_PRECISION_ALWAYS),
+          conv2d(call->args[0], call->args[1], conv2d_attrs->strides, conv2d_attrs->padding,
+                 conv2d_attrs->dilation, conv2d_attrs->data_layout, conv2d_attrs->kernel_layout,
+                 conv2d_attrs->out_layout, out_dtype)};
+}
+
 TVM_REGISTER_OP("relax.nn.conv2d")
     .set_num_inputs(2)
     .add_argument("data", "Tensor", "The input tensor.")

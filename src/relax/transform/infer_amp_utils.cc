@@ -47,19 +47,6 @@ NType NTypeMerge(const NType& a, const NType& b) {
   return CombineNestedMsg<String>(a, b, fcombine);
 }
 
-Array<ObjectRef> InferMixedPrecisionMatmul(const Call& call, const DataType& out_dtype) {
-  return {Integer(MixedTypePolicy::MIXED_PRECISION_ALWAYS),
-          matmul(call->args[0], call->args[1], out_dtype)};
-}
-
-Array<ObjectRef> InferMixedPrecisionConv2D(const Call& call, const DataType& out_dtype) {
-  const auto* conv2d_attrs = call->attrs.as<Conv2DAttrs>();
-  return {Integer(MixedTypePolicy::MIXED_PRECISION_ALWAYS),
-          conv2d(call->args[0], call->args[1], conv2d_attrs->strides, conv2d_attrs->padding,
-                 conv2d_attrs->dilation, conv2d_attrs->data_layout, conv2d_attrs->kernel_layout,
-                 conv2d_attrs->out_layout, out_dtype)};
-}
-
 Array<ObjectRef> InferMixedPrecisionFollow(const Call& call, const DataType& out_dtype) {
   return {Integer(MixedTypePolicy::MIXED_PRECISION_FOLLOW), call};
 }
