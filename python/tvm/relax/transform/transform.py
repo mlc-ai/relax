@@ -395,6 +395,21 @@ def MetaScheduleTuneIRMod(
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
 
 
+def ToMixedPrecision(out_dtype="float32") -> tvm.ir.transform.Pass:
+    """Automatic mixed precision pass. Currently the pass assumes the input module to be fp32
+    only, and will automatically cast fp32 to fp16 for certain ops.
+    Parameters
+    ----------
+    out_dtype : str
+        The output data type of gemm/conv, which is the data type of the accumulator.
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass for mixed precision.
+    """
+    return _ffi_api.ToMixedPrecision(out_dtype)  # type: ignore
+
+
 def _wrap_class_function_pass(pass_cls, pass_info):
     """Wrap a python class as function pass."""
 
