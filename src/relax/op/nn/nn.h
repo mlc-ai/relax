@@ -44,6 +44,9 @@ Expr silu(Expr data);
 /*! \brief Softmax function. */
 Expr softmax(Expr data, int axis);
 
+/*! \brief LogSoftmax function. */
+Expr log_softmax(Expr data, int axis);
+
 /*! \brief Compute batch normalization. */
 Expr batch_norm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,  //
                 int axis, double epsilon, bool center, bool scale);
@@ -61,6 +64,16 @@ Expr layer_norm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double ep
  * mask tensor (1.0 where element not dropped, 0.0 where dropped)
  */
 Expr dropout(Expr data, double rate);
+
+/*! \brief CrossEntropy without logits. */
+Expr cross_entropy(Expr predictions, Expr targets);
+
+/*! \brief Computes the softmax cross entropy between predictions and targets. */
+Expr softmax_cross_entropy(Expr predictions, Expr targets);
+
+/*! \brief Negative log likelihood loss. */
+Expr nll_loss(Expr predictions, Expr targets, Optional<Expr> weights, String reduction,
+              int ignore_index);
 
 }  // namespace relax
 }  // namespace tvm

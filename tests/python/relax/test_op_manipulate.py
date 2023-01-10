@@ -2317,7 +2317,7 @@ def test_collapse_sum_like_infer_struct_info_more_input_dtype():
     _check_inference(bb, relax.op.collapse_sum_like(x1, y1), relax.TensorStructInfo((3, 4), "int8"))
 
 
-def test_collapse_sum_like_wrong_input_type():
+def test_collapse_sum_like_infer_struct_info_wrong_input_type():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
     x1 = relax.Var("x", relax.ShapeStructInfo((4, 5)))
@@ -2330,7 +2330,7 @@ def test_collapse_sum_like_wrong_input_type():
         bb.normalize(relax.op.collapse_sum_like(x2, x0))
 
 
-def test_collapse_sum_like_check_shape_failure():
+def test_collapse_sum_like_infer_struct_info_shape_mismatch():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
     y0 = relax.Var("y", R.Tensor((3, 6, 5), "float32"))
@@ -2432,7 +2432,7 @@ def test_collapse_sum_to_infer_struct_info_more_input_dtype():
     )
 
 
-def test_collapse_sum_to_wrong_input_type():
+def test_collapse_sum_to_infer_struct_info_wrong_input_type():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
     x1 = relax.Var("x", relax.ShapeStructInfo((4, 5)))
@@ -2448,7 +2448,7 @@ def test_collapse_sum_to_wrong_input_type():
         bb.normalize(relax.op.collapse_sum_to(x1, x1))
 
 
-def test_collapse_sum_to_check_shape_failure():
+def test_collapse_sum_to_infer_struct_info_shape_mismatch():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
     a = tir.Var("a", "int64")
@@ -2474,7 +2474,7 @@ def test_collapse_sum_to_check_shape_failure():
         bb.normalize(relax.op.collapse_sum_to(x3, (3, b, 5)))
 
 
-def test_collapse_sum_to_struct_info_tgt_shape_var():
+def test_collapse_sum_to_infer_struct_info_struct_info_tgt_shape_var():
     bb = relax.BlockBuilder()
     a = tir.Var("a", "int64")
     b = tir.Var("b", "int64")
