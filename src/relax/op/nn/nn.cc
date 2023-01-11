@@ -66,8 +66,7 @@ TVM_REGISTER_OP("relax.nn.softmax")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attrs_type<SoftmaxAttrs>()
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoSoftmax)
-    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionNever);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoSoftmax);
 
 bool NormCheckDtypeAndShape(const Call& call, const BlockBuilder& ctx,
                             const Array<TensorStructInfo>& input_sinfo, Array<Integer> axes) {
@@ -182,7 +181,7 @@ TVM_REGISTER_OP("relax.nn.batch_norm")
     .add_argument("moving_mean", "Tensor", "Running mean of input.")
     .add_argument("moving_var", "Tensor", "Running variance of input.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoBatchNorm)
-    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow);
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
 
 /* relax.nn.layer_norm */
 TVM_REGISTER_NODE_TYPE(LayerNormAttrs);
@@ -217,8 +216,7 @@ TVM_REGISTER_OP("relax.nn.layer_norm")
     .add_argument("data", "Tensor", "Input to which batch_norm will be applied.")
     .add_argument("gamma", "Tensor", "The gamma scale factor.")
     .add_argument("beta", "Tensor", "The beta offset factor.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoLayerNorm)
-    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionNever);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoLayerNorm);
 
 /* relax.nn.dropout */
 TVM_REGISTER_NODE_TYPE(DropoutAttrs);
@@ -243,7 +241,7 @@ TVM_REGISTER_OP("relax.nn.dropout")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "Input to which dropout will be applied.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoDropout)
-    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow);
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
 
 }  // namespace relax
 }  // namespace tvm
