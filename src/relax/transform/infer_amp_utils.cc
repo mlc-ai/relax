@@ -48,11 +48,11 @@ NType NTypeMerge(const NType& a, const NType& b) {
 }
 
 Array<ObjectRef> InferMixedPrecisionFollow(const Call& call, const DataType& out_dtype) {
-  return {Integer(MixedTypePolicy::MIXED_PRECISION_FOLLOW), call};
+  return {Integer(MixedPrecisionPolicyKind::kFollow), call};
 }
 
 Array<ObjectRef> InferMixedPrecisionNever(const Call& call, const DataType& out_dtype) {
-  return {Integer(MixedTypePolicy::MIXED_PRECISION_NEVER), call};
+  return {Integer(MixedPrecisionPolicyKind::kNever), call};
 }
 
 }  // namespace relax
