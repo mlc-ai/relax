@@ -36,66 +36,29 @@
 namespace tvm {
 namespace relax {
 
-class GradientMutator : public ExprMutator {
+// a tool class for GradientMutator
+// visit the forward bindings and generate the backward bindings
+class BackwardBindingGenerator : public ExprVisitor {
  public:
-  explicit GradientMutator(const IRModule& mod, const GlobalVar& gvar,
-                           const Array<Var>& require_grads)
-      : ExprMutator(mod),
-        mod_(mod),
-        gvar_(std::move(gvar)),
-        require_grads_(std::move(require_grads)) {
-    CheckRequireGrads(require_grads_);
-  }
+  explicit BackwardBindingGenerator(const BlockBuilder& builder) : builder_(builder) {}
 
-  IRModule Transform() {
-    IRModule new_module = GetRef<IRModule>(mod_.CopyOnWrite());
+  /*!
+   * \brief Generate the backward bindings for the corresponding GradientMutator
+   *
+   * \param forward_block The forward dataflow block
+   * \param require_grads The arguments to dif
+   * \param post The expression with rewritten inputs.
+   */
+  Expr Generate(const DataflowBlock& forward_block, const Array<Var>& require_grads,
+                const Var& target_var) {
+    this->target_var_ = target_var;
 
-    Function new_func = CopyWithNewParams(Downcast<Function>(mod_->Lookup(gvar_)));
-    Function new_func_transformed = Downcast<Function>(this->VisitExpr(new_func));
-
-    new_module->Add(GlobalVar(gvar_->name_hint + "_adjoint"), new_func_transformed);
-    return new_module;
-  }
-
-  Expr VisitExpr_(const FunctionNode* func) override {
-    ICHECK(func->body->IsInstance<SeqExprNode>());
-
-    Expr new_body = this->VisitExpr(func->body);
-
-    return Function(func->params, new_body, Type(), RuntimeDepShape(), func->attrs);
-  }
-
-  Expr VisitExpr_(const SeqExprNode* seq_expr) override {
-    // TODO(chaofan, yixin): multiple blocks AD
-    CHECK(seq_expr->blocks.size() == 1) << "now only support one dataflow block";
-    // TODO(chaofan, yixin): AD in non-dataflow block.
-    CHECK(seq_expr->blocks[0]->IsInstance<DataflowBlockNode>())
-        << "now only support one dataflow block";
-
-    // the return value should be a VarNode, and a scalar
-    CheckTarget(seq_expr->body);
-    this->target_var_ = Downcast<Var>(seq_expr->body);
-
-    BindingBlock new_block = this->VisitBindingBlock(seq_expr->blocks[0]);
-    return SeqExpr({new_block}, this->return_expr_);
-  }
-
-  BindingBlock VisitBindingBlock_(const DataflowBlockNode* block) override {
-    builder_->BeginDataflowBlock();
-    // copy bindings in the original block
-    // to achieve this, we use the original VisitBinding function in ExprMutator
-    // since we have overridden it, a static_cast is necessary
-    for (const auto& binding : block->bindings) {
-      static_cast<ExprMutator>(*this).VisitBinding(binding);
-    }
-
-    // reverse-mode ad
-    for (auto it = block->bindings.rbegin(); it != block->bindings.rend(); ++it) {
+    // we do reverse-mode ad, so visit bindings backwards
+    for (auto it = forward_block->bindings.rbegin(); it != forward_block->bindings.rend(); ++it) {
       this->VisitBinding(*it);
     }
 
-    this->Epilogue();
-    return builder_->EndBlock();
+    return this->Epilogue(require_grads);
   }
 
   void VisitBinding(const Binding& binding) override {
@@ -125,7 +88,7 @@ class GradientMutator : public ExprMutator {
           value->IsInstance<ConstantNode>())
         << "now does not support the type of binding value: " << value;
 
-    ExprMutator::VisitBinding_(var_binding);
+    ExprVisitor::VisitBinding_(var_binding);
   }
 
   // handle the adjoint expr of the inputs of binding
@@ -174,7 +137,6 @@ class GradientMutator : public ExprMutator {
     if (adjoint_expr_map_.count(tuple_var) == 0) {
       const Tuple& init =
           BuildZerosTuple(Downcast<Tuple>(tuple_shape), Downcast<TupleType>(tuple_type));
-      init->checked_type_ = tuple_var->checked_type();
       adjoint_expr_map_.Set(tuple_var, init);
     }
 
@@ -199,9 +161,8 @@ class GradientMutator : public ExprMutator {
 
  private:
   bool IsCallZeros(Expr expr) {
-    static const Op& zeros = Op::Get("relax.zeros");
     if (const auto* node = expr.as<CallNode>()) {
-      return node->op == zeros;
+      return node->op == Op::Get("relax.zeros");
     }
     return false;
   }
@@ -326,29 +287,113 @@ class GradientMutator : public ExprMutator {
   }
 
   // Handle the return value of the AD function.
-  // The return value would be like:
+  // returns the new return value, which would be like:
   // Tuple(original_return_value,
   //       Tuple(adjoint_of_require_grads_1, adjoint_of_require_grads_2, ...))
-  void Epilogue() {
+  Expr Epilogue(const Array<Var>& require_grads) {
     // create adjoint variables for inputs, and then bind adjoints
     Array<Expr> out_adjoints;
-    for (Var x : require_grads_) {
-      Var new_var = this->var_remap_[x->vid];
-      Var adjoint_var = CreateAdjointVar(new_var, /*is_datalfow_var=*/false);
+    for (Var var : require_grads) {
+      Var adjoint_var = CreateAdjointVar(var, /*is_datalfow_var=*/false);
 
-      if (adjoint_expr_map_.count(new_var)) {
-        BindAndEmit(adjoint_var, adjoint_expr_map_[new_var]);
+      if (adjoint_expr_map_.count(var)) {
+        BindAndEmit(adjoint_var, adjoint_expr_map_[var]);
       } else {
-        BindAndEmit(
-            adjoint_var,
-            MakeZeros(new_var->shape(), Downcast<DynTensorType>(new_var->checked_type())->dtype));
+        BindAndEmit(adjoint_var,
+                    MakeZeros(var->shape(), Downcast<DynTensorType>(var->checked_type())->dtype));
       }
       out_adjoints.push_back(adjoint_var);
     }
 
-    this->return_expr_ = Tuple(Array<Expr>{target_var_, Tuple(out_adjoints)});
+    return Tuple(Array<Expr>{target_var_, Tuple(out_adjoints)});
   }
 
+  // the block builder of the corresponding GradientMutator, to emit bindings
+  BlockBuilder builder_;
+
+  // the differentiation target
+  Var target_var_;
+  // the return value of the differentiated function
+  Expr return_expr_;
+
+  // var to its adjoints var
+  Map<Var, Var> adjoint_var_map_;
+  // var to its adjoint expr
+  Map<Var, Expr> adjoint_expr_map_;
+  // trace binding
+  Map<Expr, Var> adjoint_expr_to_var_;
+};
+
+class GradientMutator : public ExprMutator {
+ public:
+  explicit GradientMutator(const IRModule& mod, const GlobalVar& gvar,
+                           const Array<Var>& require_grads)
+      : ExprMutator(mod),
+        mod_(mod),
+        gvar_(std::move(gvar)),
+        require_grads_(std::move(require_grads)),
+        generator(this->builder_) {
+    for (auto var : require_grads_) {
+      CheckFloatTensorType(var->checked_type(), var->name_hint());
+    }
+  }
+
+  IRModule Transform() {
+    IRModule new_module = GetRef<IRModule>(mod_.CopyOnWrite());
+
+    Function old_func = Downcast<Function>(mod_->Lookup(gvar_));
+    Function new_func = CopyWithNewParams(old_func);
+
+    // map the parameter list into new params
+    for (size_t i = 0; i < require_grads_.size(); ++i) {
+      int idx = std::find(old_func->params.begin(), old_func->params.end(), require_grads_[i]) -
+                old_func->params.begin();
+      require_grads_.Set(i, new_func->params[idx]);
+    }
+
+    Function new_func_transformed = Downcast<Function>(this->VisitExpr(new_func));
+    new_module->Add(GlobalVar(gvar_->name_hint + "_adjoint"), new_func_transformed);
+    return new_module;
+  }
+
+  Expr VisitExpr_(const FunctionNode* func) override {
+    ICHECK(func->body->IsInstance<SeqExprNode>());
+
+    Expr new_body = this->VisitExpr(func->body);
+
+    return Function(func->params, new_body, Type(), RuntimeDepShape(), func->attrs);
+  }
+
+  Expr VisitExpr_(const SeqExprNode* seq_expr) override {
+    // TODO(chaofan, yixin): multiple blocks AD
+    CHECK(seq_expr->blocks.size() == 1) << "now only support one dataflow block";
+    // TODO(chaofan, yixin): AD in non-dataflow block.
+    CHECK(seq_expr->blocks[0]->IsInstance<DataflowBlockNode>())
+        << "now only support one dataflow block";
+
+    // the return value should be a VarNode, and a scalar
+    CheckTarget(seq_expr->body);
+    this->target_var_ = Downcast<Var>(seq_expr->body);
+
+    BindingBlock new_block = this->VisitBindingBlock(seq_expr->blocks[0]);
+    return SeqExpr({new_block}, this->return_expr_);
+  }
+
+  BindingBlock VisitBindingBlock_(const DataflowBlockNode* block) override {
+    builder_->BeginDataflowBlock();
+    // accept bindings in the original block
+    for (const auto& binding : block->bindings) {
+      this->VisitBinding(binding);
+    }
+
+    // generate backward bindings and the return value
+    return_expr_ = this->generator.Generate(GetRef<DataflowBlock>(block), this->require_grads_,
+                                            this->target_var_);
+
+    return builder_->EndBlock();
+  }
+
+ private:
   // check that the target should be a VarNode, not DataflowVarNode
   // and a scalar of type "DynTensorType"
   static void CheckTarget(const Expr& e) {
@@ -362,13 +407,19 @@ class GradientMutator : public ExprMutator {
         << "The differentiation target must be scalar";
   }
 
-  static void CheckRequireGrads(const Array<Var> require_grads) {
-    for (auto var : require_grads) {
-      auto* type = var->checked_type().as<DynTensorTypeNode>();
-      CHECK(type) << "The type of the input Var " << var->name_hint() << " is not DynTensorType";
-      CHECK(type->dtype.is_float() || type->dtype.is_float16() || type->dtype.is_bfloat16())
+  // Check the type of the input var should be Tensor of floating point dtype, or Tuple of that
+  static void CheckFloatTensorType(const Type& ty, const String& name_hint) {
+    if (auto* tuple_type = ty.as<TupleTypeNode>()) {
+      for (auto item : tuple_type->fields) {
+        CheckFloatTensorType(item, name_hint);
+      }
+    } else if (auto* tensor_type = ty.as<DynTensorTypeNode>()) {
+      CHECK(tensor_type->dtype.is_float() || tensor_type->dtype.is_float16() ||
+            tensor_type->dtype.is_bfloat16())
           << "Only Tensors of floating point dtype can require gradients, but the dtype of Var "
-          << var->name_hint() << " is " << type->dtype;
+          << name_hint << " is " << tensor_type->dtype;
+    } else {
+      LOG(FATAL) << "The input Var " << name_hint << " is neither a Tensor nor a Tuple of Tensors";
     }
   }
 
@@ -377,17 +428,13 @@ class GradientMutator : public ExprMutator {
   GlobalVar gvar_;
   Array<Var> require_grads_;
 
+  // generate the backward bindings
+  BackwardBindingGenerator generator;
+
   // the differentiation target
   Var target_var_;
   // the return value of the differentiated function
   Expr return_expr_;
-
-  // var to its adjoints var
-  Map<Var, Var> adjoint_var_map_;
-  // var to its adjoint expr
-  Map<Var, Expr> adjoint_expr_map_;
-  // trace binding
-  Map<Expr, Var> adjoint_expr_to_var_;
 };
 
 /*!

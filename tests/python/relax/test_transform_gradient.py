@@ -970,7 +970,7 @@ def test_report_error():
         relax.transform.Gradient(main_gv, require_grads=MultiBlocks["main"].params[0])(NormalModule)
 
     @I.ir_module
-    class IntDType:
+    class IntDtype:
         @R.function
         def main(x: R.Tensor((3, 3), "int64")):
             with R.dataflow():
@@ -980,7 +980,22 @@ def test_report_error():
             return gv
 
     with pytest.raises(TVMError):
-        relax.transform.Gradient(IntDType.get_global_var("main"))(IntDType)
+        relax.transform.Gradient(IntDtype.get_global_var("main"))(IntDtype)
+
+    @I.ir_module
+    class IntDtypeTuple:
+        @R.function
+        def main(x: R.Tuple(R.Tensor((3, 3), "int64"), R.Tensor((3, 3), "int64"))):
+            with R.dataflow():
+                lv1 = x[0]
+                lv2 = x[1]
+                lv3 = R.add(lv1, lv2)
+                gv = R.sum(lv3)
+                R.output(gv)
+            return gv
+
+    with pytest.raises(TVMError):
+        relax.transform.Gradient(IntDtypeTuple.get_global_var("main"))(IntDtypeTuple)
 
     # @I.ir_module
     # class UndefinedGradient:

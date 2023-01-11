@@ -389,8 +389,9 @@ def Gradient(
     global_var: relax.GlobalVar
         The GlobalVar of the specific function.
     require_grads: Optional[Union[relax.Var, List[relax.Var]]]
-        The relax variables whose adjoints is needed. Must be parameters of the given function.
-        If it is not specified, adjoints of all arguments would be computed.
+        The relax variables whose adjoints is needed. Must be parameters of the given function and
+        should not be duplicate. If it is not specified, adjoints of all arguments would be
+        computed.
     Returns
     -------
     ret: tvm.ir.transform.Pass
