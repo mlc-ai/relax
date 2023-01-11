@@ -44,7 +44,7 @@ class BackwardBindingGenerator : public ExprVisitor {
    * \brief Generate the backward bindings for the corresponding GradientMutator
    *
    * \param forward_block The forward dataflow block
-   * \param require_grads The arguments to dif
+   * \param require_grads The relax variables whose adjoints are needed.
    * \param post The expression with rewritten inputs.
    */
   Expr Generate(const BlockBuilder& builder, const DataflowBlock& forward_block,
@@ -459,7 +459,7 @@ class GradientMutator : public ExprMutator {
  */
 IRModule Gradient(const IRModule& mod, const GlobalVar& gvar, Optional<Array<Var>> require_grads) {
   auto* func = mod->Lookup(gvar).as<FunctionNode>();
-  CHECK(func) << "relax function " << gvar->name_hint << " is not found";
+  CHECK(func) << "Relax function " << gvar->name_hint << " is not found";
 
   if (!require_grads.defined()) {
     // when require_grads is not specified, it would be set to all params of the function
