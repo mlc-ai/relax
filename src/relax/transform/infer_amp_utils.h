@@ -46,11 +46,10 @@ using runtime::DLDataType2String;
 using runtime::String;
 using runtime::String2DLDataType;
 
-enum MixedTypePolicy : int {
-  MIXED_PRECISION_ALWAYS = 0,
-  MIXED_PRECISION_FOLLOW = 1,
-  MIXED_PRECISION_NEVER = 2
-};
+enum MixedPrecisionPolicyKind : int { kAlways = 0, kFollow = 1, kNever = 2 };
+
+/*! \brief the operator pattern */
+using TMixedPrecisionPolicy = int;
 
 // NType is the message we want to track for vars with nested tensorstructinfo
 // which represents the realization decision of the var.
@@ -76,10 +75,9 @@ NType NTypeMerge(const NType& a, const NType& b);
 // The map that notes the NType message of each var
 using VarDTypeMap = std::unordered_map<Var, NType, ObjectPtrHash, ObjectPtrEqual>;
 
-// Return array is of type : [MixedTypePolicy (int), Call]
 // Call is a call node, out_dtype is the expected output_dtype
-using FMixedPrecision =
-    runtime::TypedPackedFunc<Array<ObjectRef>(const Call& call_node, const DataType& out_dtype)>;
+using FInferMixedPrecision =
+    runtime::TypedPackedFunc<Call(const Call& call_node, const DataType& out_dtype)>;
 
 Array<ObjectRef> InferMixedPrecisionFollow(const Call& call, const DataType& out_dtype);
 
