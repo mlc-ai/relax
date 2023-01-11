@@ -40,8 +40,6 @@ namespace relax {
 // visit the forward bindings and generate the backward bindings
 class BackwardBindingGenerator : public ExprVisitor {
  public:
-  explicit BackwardBindingGenerator(const BlockBuilder& builder) : builder_(builder) {}
-
   /*!
    * \brief Generate the backward bindings for the corresponding GradientMutator
    *
@@ -49,8 +47,9 @@ class BackwardBindingGenerator : public ExprVisitor {
    * \param require_grads The arguments to dif
    * \param post The expression with rewritten inputs.
    */
-  Expr Generate(const DataflowBlock& forward_block, const Array<Var>& require_grads,
-                const Var& target_var) {
+  Expr Generate(const BlockBuilder& builder, const DataflowBlock& forward_block,
+                const Array<Var>& require_grads, const Var& target_var) {
+    this->builder_ = builder;
     this->target_var_ = target_var;
 
     // we do reverse-mode ad, so visit bindings backwards
@@ -331,19 +330,13 @@ class GradientMutator : public ExprMutator {
       : ExprMutator(mod),
         mod_(mod),
         gvar_(std::move(gvar)),
-        require_grads_(std::move(require_grads)),
-        generator(this->builder_) {
-    for (auto var : require_grads_) {
-      CheckFloatTensorType(var->checked_type(), var->name_hint());
-    }
-  }
+        require_grads_(std::move(require_grads)) {}
 
   IRModule Transform() {
-    IRModule new_module = GetRef<IRModule>(mod_.CopyOnWrite());
-
     Function old_func = Downcast<Function>(mod_->Lookup(gvar_));
-    Function new_func = CopyWithNewParams(old_func);
+    CheckRequireGrads(require_grads_, old_func->params, gvar_->name_hint);
 
+    Function new_func = CopyWithNewParams(old_func);
     // map the parameter list into new params
     for (size_t i = 0; i < require_grads_.size(); ++i) {
       int idx = std::find(old_func->params.begin(), old_func->params.end(), require_grads_[i]) -
@@ -352,6 +345,8 @@ class GradientMutator : public ExprMutator {
     }
 
     Function new_func_transformed = Downcast<Function>(this->VisitExpr(new_func));
+
+    IRModule new_module = GetRef<IRModule>(mod_.CopyOnWrite());
     new_module->Add(GlobalVar(gvar_->name_hint + "_adjoint"), new_func_transformed);
     return new_module;
   }
@@ -387,8 +382,8 @@ class GradientMutator : public ExprMutator {
     }
 
     // generate backward bindings and the return value
-    return_expr_ = this->generator.Generate(GetRef<DataflowBlock>(block), this->require_grads_,
-                                            this->target_var_);
+    return_expr_ = BackwardBindingGenerator().Generate(this->builder_, GetRef<DataflowBlock>(block),
+                                                       this->require_grads_, this->target_var_);
 
     return builder_->EndBlock();
   }
@@ -423,6 +418,24 @@ class GradientMutator : public ExprMutator {
     }
   }
 
+  // Checks every Var in require_grads:
+  // 1. there should be no duplicate var
+  // 2. every var should be a parameter of the function
+  // 3. the type of the input var should be Tensor of floating point dtype, or Tuple of that
+  static void CheckRequireGrads(const Array<Var>& require_grads, const Array<Var>& func_params,
+                                const String& func_name) {
+    std::unordered_set<Var, ObjectPtrHash, ObjectPtrEqual> var_set;
+    for (const auto& var : require_grads) {
+      CHECK(std::find(func_params.begin(), func_params.end(), var) != func_params.end())
+          << "There is no Var named " << var->name_hint() << " in the parameters of the function "
+          << func_name;
+      CHECK(var_set.count(var) == 0) << "Var " << var->name_hint() << " appears more than once";
+      var_set.emplace(var);
+
+      CheckFloatTensorType(var->checked_type(), var->name_hint());
+    }
+  }
+
   // inputs
   IRModule mod_;
   GlobalVar gvar_;
@@ -448,17 +461,7 @@ IRModule Gradient(const IRModule& mod, const GlobalVar& gvar, Optional<Array<Var
   auto* func = mod->Lookup(gvar).as<FunctionNode>();
   CHECK(func) << "relax function " << gvar->name_hint << " is not found";
 
-  if (require_grads.defined()) {
-    // there should be no duplicate var, and every var should be a parameter of the input function
-    std::unordered_set<Var, ObjectPtrHash, ObjectPtrEqual> var_set;
-    for (auto var : require_grads.value()) {
-      CHECK(std::find(func->params.begin(), func->params.end(), var) != func->params.end())
-          << "function " << gvar->name_hint << " has no var named " << var->name_hint();
-      CHECK(var_set.count(var) == 0)
-          << "variable " << var->name_hint() << " appears more than once";
-      var_set.emplace(var);
-    }
-  } else {
+  if (!require_grads.defined()) {
     // when require_grads is not specified, it would be set to all params of the function
     require_grads = func->params;
   }
