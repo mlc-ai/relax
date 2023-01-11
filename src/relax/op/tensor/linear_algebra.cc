@@ -113,9 +113,8 @@ StructInfo InferStructInfoMatmul(const Call& call, const BlockBuilder& ctx) {
   return TensorStructInfo(ShapeExpr(output_shape), out_dtype);
 }
 
-Array<ObjectRef> InferMixedPrecisionMatmul(const Call& call, const DataType& out_dtype) {
-  return {Integer(MixedTypePolicy::MIXED_PRECISION_ALWAYS),
-          matmul(call->args[0], call->args[1], out_dtype)};
+Call InferMixedPrecisionMatmul(const Call& call, const DataType& out_dtype) {
+  return Downcast<Call>(matmul(call->args[0], call->args[1], out_dtype));
 }
 
 TVM_REGISTER_OP("relax.matmul")
@@ -123,7 +122,8 @@ TVM_REGISTER_OP("relax.matmul")
     .add_argument("x1", "Tensor", "The first input tensor.")
     .add_argument("x2", "Tensor", "The second input tensor.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoMatmul)
-    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionMatmul);
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kAlways)
+    .set_attr<FInferMixedPrecision>("FInferMixedPrecision", InferMixedPrecisionMatmul);
 
 }  // namespace relax
 }  // namespace tvm

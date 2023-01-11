@@ -74,7 +74,7 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
   TVM_REGISTER_OP("relax." OpRegName)                   \
       .set_num_inputs(1)                                \
       .add_argument("x", "Tensor", "The input tensor.") \
-      .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow)
+      .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
 
 /*!
  * \brief Quick helper macro to expose a make-function to construct the operator.
