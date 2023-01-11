@@ -401,6 +401,7 @@ StructInfo InferStructInfoNLLLoss(const Call& call, const BlockBuilder& ctx) {
       }
     } else {
       // (N,) or (N, d1, d2, ..., dk)
+      // check N
       const PrimExpr& N_tgt = tgt_shape_value.value()[0];
       if (N.defined() && analyzer->CanProve(N.value() != N_tgt)) {
         ctx->ReportFatal(Diagnostic::Error(call)
@@ -408,6 +409,7 @@ StructInfo InferStructInfoNLLLoss(const Call& call, const BlockBuilder& ctx) {
                             "arguments to be equal. However, N from predictions is "
                          << N << " while N from targets is " << N_tgt);
       }
+      // only C case
       if (!N.defined() && C.defined()) {
         ctx->ReportFatal(Diagnostic::Error(call)
                          << "Shape mismatch for NLLLoss. Predictions shape is "
@@ -477,7 +479,7 @@ StructInfo InferStructInfoNLLLoss(const Call& call, const BlockBuilder& ctx) {
     }
     return TensorStructInfo(/*shape=*/ShapeExpr(Array<PrimExpr>()), output_dtype);
   }
-}  // namespace relax
+}
 
 TVM_REGISTER_OP("relax.nn.nll_loss")
     .set_attrs_type<NLLLossAttrs>()

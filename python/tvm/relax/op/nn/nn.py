@@ -327,7 +327,9 @@ def silu(data: Expr) -> Expr:
 def softmax(data: Expr, axis: int = -1) -> Expr:
     r"""Computes softmax.
 
-    .. math:: text{softmax}(x)_i = frac{exp(x_i)}{\sum_j exp(x_j)}
+    .. math::
+
+        \text{softmax}(x_i) = \frac{\exp(x_i)}{\sum_j \exp(x_j)}
 
     Parameters
     ----------
@@ -356,7 +358,7 @@ def log_softmax(data: Expr, axis: int = -1) -> Expr:
 
     .. math::
 
-        \text{log_softmax}(x)_i = \log \frac{exp(x_i)}{\sum_j exp(x_j)}
+        \text{log\_softmax}(x_i) = \log\left( \frac{\exp(x_i)}{\sum_j \exp(x_j)}\right)
 
     .. note::
         This operator can be optimized away for inference.
@@ -602,10 +604,10 @@ def nll_loss(
 ) -> Expr:
     """Negative log likelihood loss.
 
-    output{n, i_1, i_2, ..., i_k} = -p * w
-      where t = target{n, i_1, i_2, ..., i_k}
-            p = predictions{n, t, i_1, i_2, i_k}
-            w = weights{n, i_1, i_2, ..., i_k} if t != ignore_index else 0
+    `output[n, i_1, i_2, ..., i_k] = -p * w`, where
+    - `p = predictions[n, t, i_1, i_2, i_k]`,
+    - `t = targets[n, i_1, i_2, ..., i_k]`,
+    - `w = weights[n, i_1, i_2, ..., i_k] if t != ignore_index else 0`
 
     result = reduction(output)
 
