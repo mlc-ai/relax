@@ -29,6 +29,7 @@ def test_op_correctness():
     assert relax.op.nn.gelu(x).op == Op.get("relax.nn.gelu")
     assert relax.op.nn.silu(x).op == Op.get("relax.nn.silu")
     assert relax.op.nn.softmax(x).op == Op.get("relax.nn.softmax")
+    assert relax.op.nn.log_softmax(x).op == Op.get("relax.nn.log_softmax")
     assert relax.op.nn.dropout(x).op == Op.get("relax.nn.dropout")
 
     x = relax.Var("x", R.Tensor((2, 3, 32, 32), "float32"))
@@ -40,6 +41,11 @@ def test_op_correctness():
         "relax.nn.batch_norm"
     )
     assert relax.op.nn.layer_norm(x, gamma, beta, axes=1).op == Op.get("relax.nn.layer_norm")
+
+    x = relax.Var("x", R.Tensor((3, 5, 10, 10), "float32"))
+    y = relax.Var("y", R.Tensor((3, 10, 10), "int64"))
+    w = relax.Var("w", R.Tensor((5,), "float32"))
+    assert relax.op.nn.nll_loss(x, y, w).op == Op.get("relax.nn.nll_loss")
 
 
 def _check_inference(bb: relax.BlockBuilder, call: relax.Call, expected_sinfo: relax.StructInfo):

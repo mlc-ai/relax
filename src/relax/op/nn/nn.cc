@@ -268,6 +268,12 @@ TVM_REGISTER_NODE_TYPE(NLLLossAttrs);
 Expr nll_loss(Expr predictions, Expr targets, Optional<Expr> weights, String reduction,
               int ignore_index) {
   ObjectPtr<NLLLossAttrs> attrs = make_object<NLLLossAttrs>();
+
+  ICHECK(reduction == "none" || reduction == "sum" || reduction == "mean")
+      << "The argument reduction of NLLLoss should be one of the following "
+         "values: none, mean, sum. However, the given value is "
+      << reduction;
+
   attrs->reduction = std::move(reduction);
   attrs->ignore_index = ignore_index;
 
@@ -278,7 +284,7 @@ Expr nll_loss(Expr predictions, Expr targets, Optional<Expr> weights, String red
   } else {
     return Call(op, {std::move(predictions), std::move(targets)}, Attrs{attrs}, {});
   }
-}
+}  // namespace relax
 
 TVM_REGISTER_GLOBAL("relax.op.nn.nll_loss").set_body_typed(nll_loss);
 
@@ -296,7 +302,7 @@ StructInfo InferStructInfoNLLLoss(const Call& call, const BlockBuilder& ctx) {
       ctx->ReportFatal(
           Diagnostic::Error(call)
           << "NLLLoss requires the argument weights to be Tensor. However, the given one is "
-          << call->args[0]->struct_info_->GetTypeKey());
+          << call->args[1]->struct_info_->GetTypeKey());
     }
   }
 
@@ -310,7 +316,7 @@ StructInfo InferStructInfoNLLLoss(const Call& call, const BlockBuilder& ctx) {
     ctx->ReportFatal(
         Diagnostic::Error(call)
         << "NLLLoss requires the argument targets to be Tensor. However, the given one is "
-        << call->args[0]->struct_info_->GetTypeKey());
+        << call->args[2]->struct_info_->GetTypeKey());
   }
 
   // infer dtype
@@ -368,13 +374,12 @@ StructInfo InferStructInfoNLLLoss(const Call& call, const BlockBuilder& ctx) {
   if (pred_shape_value.defined()) {
     if (pred_shape_value.value().size() == 1) {
       // (C,)
-      ICHECK(pred_sinfo->IsUnknownNdim() || pred_sinfo->ndim == 1);
+      ICHECK(pred_sinfo->ndim == 1);
       C = pred_shape_value.value()[0];
     } else {
       // (N, C, d1, d2, ..., dk)
       ICHECK(pred_shape_value.value().size() >= 2);
-      ICHECK(pred_sinfo->IsUnknownNdim() ||
-             pred_sinfo->ndim == static_cast<int>(pred_shape_value.value().size()));
+      ICHECK(pred_sinfo->ndim == static_cast<int>(pred_shape_value.value().size()));
       N = pred_shape_value.value()[0];
       C = pred_shape_value.value()[1];
       output_shape = Array<PrimExpr>();
@@ -390,10 +395,9 @@ StructInfo InferStructInfoNLLLoss(const Call& call, const BlockBuilder& ctx) {
     tgt_shape_value = GetStructInfoAs<ShapeStructInfoNode>(tgt_sinfo->shape.value())->values;
   }
   if (tgt_shape_value.defined()) {
-    if (tgt_shape_value.value().size() == 0) {
+    if (tgt_shape_value.value().empty()) {
       // ()
-      ICHECK(tgt_sinfo->IsUnknownNdim() || tgt_sinfo->ndim == 0);
-      ICHECK(tgt_shape_value.value().size() == 0);
+      ICHECK(tgt_sinfo->ndim == 0);
       if (N.defined()) {
         ctx->ReportFatal(Diagnostic::Error(call)
                          << "Shape mismatch for NLLLoss. Predictions shape is "
@@ -470,13 +474,7 @@ StructInfo InferStructInfoNLLLoss(const Call& call, const BlockBuilder& ctx) {
       return TensorStructInfo(output_dtype, /*ndim=*/output_ndim);
     }
   } else {
-    if (reduction != "sum" && reduction != "mean") {
-      // scalar
-      ctx->ReportFatal(Diagnostic::Error(call)
-                       << "The argument reduction of NLLLoss should be one of the following "
-                          "values: none, mean, sum. However, the given value is "
-                       << reduction);
-    }
+    // sum or mean. output is scalar
     return TensorStructInfo(/*shape=*/ShapeExpr(Array<PrimExpr>()), output_dtype);
   }
 }

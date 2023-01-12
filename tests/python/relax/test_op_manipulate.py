@@ -32,7 +32,11 @@ def test_op_correctness():
     assert relax.op.permute_dims(x).op == Op.get("relax.permute_dims")
     assert relax.op.reshape(x, (4, 5, 3)).op == Op.get("relax.reshape")
     assert relax.op.split(x, indices_or_sections=1).op == Op.get("relax.split")
-    assert relax.op.squeeze(x).op == Op.get("relax.squeeze")
+    assert relax.op.broadcast_to(x, (3, 3, 4, 5)).op == Op.get("relax.broadcast_to")
+    assert relax.op.collapse_sum_to(x, (4, 5)).op == Op.get("relax.collapse_sum_to")
+
+    y = relax.Var("x", R.Tensor((4, 5), "float32"))
+    assert relax.op.collapse_sum_like(x, y).op == Op.get("relax.collapse_sum_like")
 
 
 def _check_inference(bb: relax.BlockBuilder, call: relax.Call, expected_sinfo: relax.StructInfo):
