@@ -335,8 +335,6 @@ TVM_REGISTER_OP("relax.nn.cross_entropy_with_logits")
     .add_argument("predictions", "Tensor", "The predictions.")
     .add_argument("labels", "Tensor", "The labels.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoCrossEntropy);
-.set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoDropout)
-    .set_attr<FMixedPrecision>("FMixedPrecision", InferMixedPrecisionFollow);
 
 /* relax.nn.nll_loss */
 TVM_REGISTER_NODE_TYPE(NLLLossAttrs);
@@ -360,7 +358,7 @@ Expr nll_loss(Expr predictions, Expr targets, Optional<Expr> weights, String red
   } else {
     return Call(op, {std::move(predictions), std::move(targets)}, Attrs{attrs}, {});
   }
-}  // namespace relax
+}
 
 TVM_REGISTER_GLOBAL("relax.op.nn.nll_loss").set_body_typed(nll_loss);
 
