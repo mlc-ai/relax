@@ -445,9 +445,10 @@ def _mean(bb: BlockBuilder, call: Call):
         else range(0, len(call.args[0].struct_info.shape))
     )
     for dim in axis:
-        shape_prod = (
-            shape_prod * call.args[0].struct_info.shape[dim if isinstance(dim, int) else dim.value]
-        )
+        dim_value = dim if isinstance(dim, int) else dim.value
+        if dim_value < 0:
+            dim_value += len(call.args[0].struct_info.shape)
+        shape_prod = shape_prod * call.args[0].struct_info.shape[dim_value]
     sum_var = bb.emit_te(topi.sum, call.args[0], axis, call.attrs.keepdims)
     return bb.call_te(topi.divide, sum_var, shape_prod)
 
