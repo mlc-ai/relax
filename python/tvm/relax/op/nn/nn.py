@@ -649,4 +649,4 @@ def nll_loss(
     result : relax.Expr
       The computed result.
     """
-    return _ffi_api.nll_loss(predictions, targets, weights, reduction, ignore_index)
+    return _ffi_api.nll_loss(predictions, targets, weights, reduction, ignore_index)  # type: ignore
