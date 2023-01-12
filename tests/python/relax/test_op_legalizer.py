@@ -1556,7 +1556,6 @@ def test_zeros():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
-@pytest.mark.skip("TOPI has no collapse_sum. Waiting a fixing patch.")
 def test_collapse_sum_like():
     @I.ir_module
     class CollapseSumLike:
@@ -1597,7 +1596,6 @@ def test_collapse_sum_like():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
-@pytest.mark.skip("TOPI has no collapse_sum. Waiting a fixing patch.")
 def test_collapse_sum_to():
     @I.ir_module
     class CollapseSumTo:
