@@ -44,7 +44,12 @@ def test_op_correctness():
 
     x = relax.Var("x", R.Tensor((2, 3), "float32"))
     y = relax.Var("y", R.Tensor((2, 3), "float32"))
-    assert relax.op.nn.cross_entropy(x, y).op == Op.get("relax.nn.cross_entropy")
+    assert relax.op.nn.cross_entropy_without_logits(x, y).op == Op.get(
+        "relax.nn.cross_entropy_without_logits"
+    )
+    assert relax.op.nn.cross_entropy_with_logits(x, y).op == Op.get(
+        "relax.nn.cross_entropy_with_logits"
+    )
 
     x = relax.Var("x", R.Tensor((3, 5, 10, 10), "float32"))
     y = relax.Var("y", R.Tensor((3, 10, 10), "int64"))
@@ -984,12 +989,34 @@ def test_cross_entropy_infer_struct_info():
     y2 = relax.Var("y", R.Tensor((2, 3)))
     y3 = relax.Var("y", R.Tensor(ndim=2))
 
-    _check_inference(bb, relax.op.nn.cross_entropy(x, y0), relax.TensorStructInfo((), "float32"))
     _check_inference(
-        bb, relax.op.nn.cross_entropy(x, y1), relax.TensorStructInfo((), dtype="float32")
+        bb, relax.op.nn.cross_entropy_without_logits(x, y0), relax.TensorStructInfo((), "float32")
     )
-    _check_inference(bb, relax.op.nn.cross_entropy(x, y2), relax.TensorStructInfo((), dtype=""))
-    _check_inference(bb, relax.op.nn.cross_entropy(x, y3), relax.TensorStructInfo((), dtype=""))
+    _check_inference(
+        bb,
+        relax.op.nn.cross_entropy_without_logits(x, y1),
+        relax.TensorStructInfo((), dtype="float32"),
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_without_logits(x, y2), relax.TensorStructInfo((), dtype="")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_without_logits(x, y3), relax.TensorStructInfo((), dtype="")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_with_logits(x, y0), relax.TensorStructInfo((), "float32")
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.cross_entropy_with_logits(x, y1),
+        relax.TensorStructInfo((), dtype="float32"),
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_with_logits(x, y2), relax.TensorStructInfo((), dtype="")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_with_logits(x, y3), relax.TensorStructInfo((), dtype="")
+    )
 
 
 def test_cross_entropy_infer_struct_info_shape_symbolic():
@@ -1001,8 +1028,18 @@ def test_cross_entropy_infer_struct_info_shape_symbolic():
     x1 = relax.Var("x", R.Tensor((m1, n), "float32"))
     y = relax.Var("y", R.Tensor((m0, n), "float32"))
 
-    _check_inference(bb, relax.op.nn.cross_entropy(x0, y), relax.TensorStructInfo((), "float32"))
-    _check_inference(bb, relax.op.nn.cross_entropy(x1, y), relax.TensorStructInfo((), "float32"))
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_without_logits(x0, y), relax.TensorStructInfo((), "float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_without_logits(x1, y), relax.TensorStructInfo((), "float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_with_logits(x0, y), relax.TensorStructInfo((), "float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_with_logits(x1, y), relax.TensorStructInfo((), "float32")
+    )
 
 
 def test_cross_entropy_infer_struct_info_shape_var():
@@ -1013,8 +1050,18 @@ def test_cross_entropy_infer_struct_info_shape_var():
     y0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
     y1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
 
-    _check_inference(bb, relax.op.nn.cross_entropy(x, y0), relax.TensorStructInfo((), "float32"))
-    _check_inference(bb, relax.op.nn.cross_entropy(x, y1), relax.TensorStructInfo((), "float32"))
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_without_logits(x, y0), relax.TensorStructInfo((), "float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_without_logits(x, y1), relax.TensorStructInfo((), "float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_with_logits(x, y0), relax.TensorStructInfo((), "float32")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_with_logits(x, y1), relax.TensorStructInfo((), "float32")
+    )
 
 
 def test_cross_entropy_infer_struct_info_more_input_dtype():
@@ -1026,8 +1073,18 @@ def test_cross_entropy_infer_struct_info_more_input_dtype():
     x2 = relax.Var("x", R.Tensor((2, 3), "int32"))
     y2 = relax.Var("y", R.Tensor((2, 3), "int32"))
 
-    _check_inference(bb, relax.op.nn.cross_entropy(x0, y0), relax.TensorStructInfo((), "float16"))
-    _check_inference(bb, relax.op.nn.cross_entropy(x1, y1), relax.TensorStructInfo((), "int8"))
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_without_logits(x0, y0), relax.TensorStructInfo((), "float16")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_without_logits(x1, y1), relax.TensorStructInfo((), "int8")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_with_logits(x0, y0), relax.TensorStructInfo((), "float16")
+    )
+    _check_inference(
+        bb, relax.op.nn.cross_entropy_with_logits(x1, y1), relax.TensorStructInfo((), "int8")
+    )
 
 
 def test_cross_entropy_infer_struct_info_wrong_ndim():
@@ -1040,9 +1097,13 @@ def test_cross_entropy_infer_struct_info_wrong_ndim():
     y2 = relax.Var("y", R.Tensor("float32", ndim=-1))
 
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.cross_entropy(x1, y0))
+        bb.normalize(relax.op.nn.cross_entropy_without_logits(x1, y0))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.cross_entropy(x0, y1))
+        bb.normalize(relax.op.nn.cross_entropy_without_logits(x0, y1))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy_with_logits(x1, y0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy_with_logits(x0, y1))
 
 
 def test_cross_entropy_infer_struct_info_shape_mismatch():
@@ -1054,7 +1115,9 @@ def test_cross_entropy_infer_struct_info_shape_mismatch():
     y1 = relax.Var("y", R.Tensor((m + 2, 3), "float32"))
 
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.cross_entropy(x0, y0))
+        bb.normalize(relax.op.nn.cross_entropy_without_logits(x0, y0))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy_with_logits(x0, y0))
 
 
 def test_cross_entropy_infer_struct_info_wrong_input_type():
@@ -1064,9 +1127,13 @@ def test_cross_entropy_infer_struct_info_wrong_input_type():
     y = relax.Var("y", R.Tensor((2, 3), "float32"))
 
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.cross_entropy(x0, y))
+        bb.normalize(relax.op.nn.cross_entropy_without_logits(x0, y))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.cross_entropy(x1, y))
+        bb.normalize(relax.op.nn.cross_entropy_without_logits(x1, y))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy_with_logits(x0, y))
+    with pytest.raises(TVMError):
+        bb.normalize(relax.op.nn.cross_entropy_with_logits(x1, y))
 
 
 def test_nll_loss_infer_struct_info():

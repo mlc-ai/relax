@@ -557,7 +557,7 @@ def dropout(data: Expr, rate: float = 0.5) -> Expr:
     return _ffi_api.dropout(data, rate)  # type: ignore
 
 
-def cross_entropy(predictions: Expr, labels: Expr) -> Expr:
+def cross_entropy_without_logits(predictions: Expr, labels: Expr) -> Expr:
     """CrossEntropy without logits between the predictions and labels.
 
     The shape of predictions and labels must be the same. And when ndim >= 2,
@@ -566,7 +566,7 @@ def cross_entropy(predictions: Expr, labels: Expr) -> Expr:
 
     .. math::
 
-        \text{cross\_entropy}(x_i, y_i) = \frac{\sum_i -y_i \log x_i}{N}
+        \text{cross\_entropy\_without\_logits}(x_i, y_i) = \frac{\sum_i -y_i \log x_i}{N}
 
     Parameters
     ----------
@@ -581,7 +581,32 @@ def cross_entropy(predictions: Expr, labels: Expr) -> Expr:
     result : relax.Expr
       The computed result.
     """
-    return _ffi_api.cross_entropy(predictions, labels)  # type: ignore
+    return _ffi_api.cross_entropy_without_logits(predictions, labels)  # type: ignore
+
+
+def cross_entropy_with_logits(predictions: Expr, labels: Expr) -> Expr:
+    """CrossEntropy with logits between the predictions and labels.
+
+    The shape issue is the same with cross_entropy_without_logits.
+
+    .. math::
+
+        \text{cross\_entropy\_with\_logits}(x_i, y_i) = \frac{\sum_i -x_i \cdot y_i}{N}
+
+    Parameters
+    ----------
+    predictions : relax.Expr
+      The predictions.
+
+    labels : relax.Expr
+      The labels (the ground truth values).
+
+    Returns
+    -------
+    result : relax.Expr
+      The computed result.
+    """
+    return _ffi_api.cross_entropy_with_logits(predictions, labels)  # type: ignore
 
 
 def nll_loss(
