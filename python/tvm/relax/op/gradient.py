@@ -15,25 +15,19 @@
 # specific language governing permissions and limitations
 # under the License.
 """Gradient definitions for Relax operators"""
-from tvm.relax import const, Tuple
-from tvm.relay.op import register_gradient
-import tvm.relax.op.nn as nn
+from tvm.relax.op import register_gradient
+from tvm.relax.op import sum as _sum
 from tvm.relax.op import (
-    sum,
     mean,
     less,
     where,
     collapse_sum_to,
     broadcast_to,
-    log,
     multiply,
-    divide,
     negative,
     subtract,
     permute_dims,
     matmul,
-    sigmoid,
-    tanh,
     ones,
     zeros,
     expand_dims,
@@ -102,7 +96,6 @@ def matmul_grad(orig: Call, grad: Var):
 
     a_dim = len(tensor_a.struct_info.shape)
     b_dim = len(tensor_b.struct_info.shape)
-    grad_dim = len(grad.struct_info.shape)
 
     def _transpose_last_two_dim(tensor, ndim):
         """Helper function for reversing the last two dimensions."""
@@ -154,7 +147,7 @@ def sum_grad(orig: Call, grad: Var):
 @register_gradient("relax.nn.softmax")
 def softmax_grad(orig: Call, grad: Var):
     """Gradient of softmax."""
-    return [multiply(subtract(grad, sum(multiply(grad, orig), orig.attrs.axis, True)), orig)]
+    return [multiply(subtract(grad, _sum(multiply(grad, orig), orig.attrs.axis, True)), orig)]
 
 
 @register_gradient("relax.sigmoid")
