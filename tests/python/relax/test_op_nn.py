@@ -42,6 +42,10 @@ def test_op_correctness():
     )
     assert relax.op.nn.layer_norm(x, gamma, beta, axes=1).op == Op.get("relax.nn.layer_norm")
 
+    x = relax.Var("x", R.Tensor((2, 3), "float32"))
+    y = relax.Var("y", R.Tensor((2, 3), "float32"))
+    assert relax.op.nn.cross_entropy(x, y).op == Op.get("relax.nn.cross_entropy")
+
     x = relax.Var("x", R.Tensor((3, 5, 10, 10), "float32"))
     y = relax.Var("y", R.Tensor((3, 10, 10), "int64"))
     w = relax.Var("w", R.Tensor((5,), "float32"))
@@ -982,14 +986,9 @@ def test_cross_entropy_infer_struct_info():
 
     _check_inference(bb, relax.op.nn.cross_entropy(x, y0), relax.TensorStructInfo((), "float32"))
     _check_inference(
-        bb, relax.op.nn.softmax_cross_entropy(x, y0), relax.TensorStructInfo((), "float32")
-    )
-    _check_inference(
         bb, relax.op.nn.cross_entropy(x, y1), relax.TensorStructInfo((), dtype="float32")
     )
-    _check_inference(
-        bb, relax.op.nn.softmax_cross_entropy(x, y2), relax.TensorStructInfo((), dtype="")
-    )
+    _check_inference(bb, relax.op.nn.cross_entropy(x, y2), relax.TensorStructInfo((), dtype=""))
     _check_inference(bb, relax.op.nn.cross_entropy(x, y3), relax.TensorStructInfo((), dtype=""))
 
 
@@ -1003,9 +1002,6 @@ def test_cross_entropy_infer_struct_info_shape_symbolic():
     y = relax.Var("y", R.Tensor((m0, n), "float32"))
 
     _check_inference(bb, relax.op.nn.cross_entropy(x0, y), relax.TensorStructInfo((), "float32"))
-    _check_inference(
-        bb, relax.op.nn.softmax_cross_entropy(x0, y), relax.TensorStructInfo((), "float32")
-    )
     _check_inference(bb, relax.op.nn.cross_entropy(x1, y), relax.TensorStructInfo((), "float32"))
 
 
@@ -1032,9 +1028,6 @@ def test_cross_entropy_infer_struct_info_more_input_dtype():
 
     _check_inference(bb, relax.op.nn.cross_entropy(x0, y0), relax.TensorStructInfo((), "float16"))
     _check_inference(bb, relax.op.nn.cross_entropy(x1, y1), relax.TensorStructInfo((), "int8"))
-    _check_inference(
-        bb, relax.op.nn.softmax_cross_entropy(x2, y2), relax.TensorStructInfo((), "int32")
-    )
 
 
 def test_cross_entropy_infer_struct_info_wrong_ndim():
@@ -1049,11 +1042,7 @@ def test_cross_entropy_infer_struct_info_wrong_ndim():
     with pytest.raises(TVMError):
         bb.normalize(relax.op.nn.cross_entropy(x1, y0))
     with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.softmax_cross_entropy(x2, y0))
-    with pytest.raises(TVMError):
         bb.normalize(relax.op.nn.cross_entropy(x0, y1))
-    with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.softmax_cross_entropy(x0, y2))
 
 
 def test_cross_entropy_infer_struct_info_shape_mismatch():
@@ -1066,8 +1055,6 @@ def test_cross_entropy_infer_struct_info_shape_mismatch():
 
     with pytest.raises(TVMError):
         bb.normalize(relax.op.nn.cross_entropy(x0, y0))
-    with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.softmax_cross_entropy(x1, y1))
 
 
 def test_cross_entropy_infer_struct_info_wrong_input_type():
@@ -1080,10 +1067,6 @@ def test_cross_entropy_infer_struct_info_wrong_input_type():
         bb.normalize(relax.op.nn.cross_entropy(x0, y))
     with pytest.raises(TVMError):
         bb.normalize(relax.op.nn.cross_entropy(x1, y))
-    with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.softmax_cross_entropy(x0, y))
-    with pytest.raises(TVMError):
-        bb.normalize(relax.op.nn.softmax_cross_entropy(x1, y))
 
 
 def test_nll_loss_infer_struct_info():

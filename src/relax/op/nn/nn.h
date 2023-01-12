@@ -66,10 +66,7 @@ Expr layer_norm(Expr data, Expr gamma, Expr beta, Array<Integer> axes, double ep
 Expr dropout(Expr data, double rate);
 
 /*! \brief CrossEntropy without logits. */
-Expr cross_entropy(Expr predictions, Expr targets);
-
-/*! \brief Computes the softmax cross entropy between predictions and targets. */
-Expr softmax_cross_entropy(Expr predictions, Expr targets);
+Expr cross_entropy(Expr predictions, Expr labels);
 
 /*! \brief Negative log likelihood loss. */
 Expr nll_loss(Expr predictions, Expr targets, Optional<Expr> weights, String reduction,

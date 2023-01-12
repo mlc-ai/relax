@@ -557,42 +557,31 @@ def dropout(data: Expr, rate: float = 0.5) -> Expr:
     return _ffi_api.dropout(data, rate)  # type: ignore
 
 
-def cross_entropy(predictions: Expr, targets: Expr) -> Expr:
-    """CrossEntropy without logits.
+def cross_entropy(predictions: Expr, labels: Expr) -> Expr:
+    """CrossEntropy without logits between the predictions and labels.
+
+    The shape of predictions and labels must be the same. And when ndim >= 2,
+    the first dimension is regarded as the batch_size N. In this case the
+    computed result will divide by N to perform a mean reduction.
+
+    .. math::
+
+        \text{cross\_entropy}(x_i, y_i) = \frac{\sum_i -y_i \log x_i}{N}
 
     Parameters
     ----------
     predictions : relax.Expr
       The predictions.
 
-    targets : relax.Expr
-      The targets.
+    labels : relax.Expr
+      The labels (the ground truth values).
 
     Returns
     -------
     result : relax.Expr
       The computed result.
     """
-    return _ffi_api.cross_entropy(predictions, targets)  # type: ignore
-
-
-def softmax_cross_entropy(predictions: Expr, targets: Expr) -> Expr:
-    """Computes the softmax cross entropy between predictions and targets.
-
-    Parameters
-    ----------
-    predictions : relax.Expr
-      The predictions.
-
-    targets : relax.Expr
-      The targets.
-
-    Returns
-    -------
-    result : relax.Expr
-      The computed result.
-    """
-    return _ffi_api.softmax_cross_entropy(predictions, targets)  # type: ignore
+    return _ffi_api.cross_entropy(predictions, labels)  # type: ignore
 
 
 def nll_loss(
