@@ -49,6 +49,17 @@ using FInferStructInfo =
  */
 using FCallPacked = String;
 
+/*!
+ * \brief Gradient for a specific op.
+ *        This definition is the same as tvm::relay::FPrimalGradient.
+ *
+ * \param orig_call the original Expr.
+ * \param output_grad the gradient of the Expr.
+ * \return the gradient for each parameter.
+ */
+using FPrimalGradient =
+    runtime::TypedPackedFunc<tvm::Array<Expr>(const Expr& orig_call, const Expr& output_grad)>;
+
 struct PrintAttrs : public tvm::AttrsNode<PrintAttrs> {
   std::string format;
   TVM_DECLARE_ATTRS(PrintAttrs, "relax.attrs.PrintAttrs") {
