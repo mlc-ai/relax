@@ -558,7 +558,7 @@ def dropout(data: Expr, rate: float = 0.5) -> Expr:
 
 
 def cross_entropy_without_logits(predictions: Expr, labels: Expr) -> Expr:
-    """CrossEntropy without logits between the predictions and labels.
+    r"""CrossEntropy without logits between the predictions and labels.
 
     The shape of predictions and labels must be the same. And when ndim >= 2,
     the first dimension is regarded as the batch_size N. In this case the
@@ -585,7 +585,7 @@ def cross_entropy_without_logits(predictions: Expr, labels: Expr) -> Expr:
 
 
 def cross_entropy_with_logits(predictions: Expr, labels: Expr) -> Expr:
-    """CrossEntropy with logits between the predictions and labels.
+    r"""CrossEntropy with logits between the predictions and labels.
 
     The shape issue is the same with cross_entropy_without_logits.
 
