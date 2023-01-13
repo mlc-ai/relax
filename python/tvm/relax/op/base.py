@@ -122,6 +122,8 @@ def call_tir(
     else:
         raise TypeError("Not supported dtype for call_tir: " + str(type(dtype)))
 
+    if isinstance(tir_vars, (list, tuple)):
+        tir_vars = ShapeExpr(tir_vars)
     return _ffi_api.call_tir(func, args, shape, output_type, tir_vars)  # type: ignore
 
 
