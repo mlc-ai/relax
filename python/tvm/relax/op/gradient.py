@@ -188,7 +188,7 @@ def sigmoid_grad(orig: Call, grad: Var):
 
         y = relax.sigmoid(x)
 
-    Returns [y_grad * sigmoid(x) * (1 - sigmoid(x))].
+    Returns [y_grad * y * (1 - y)].
     """
     return [
         multiply(
@@ -209,7 +209,7 @@ def tanh_grad(orig: Call, grad: Var):
 
         y = relax.tanh(x)
 
-    Returns [y_grad * (1 - tanh(x) * tanh(x))].
+    Returns [y_grad * (1 - y * y)].
     """
     return [
         multiply(
