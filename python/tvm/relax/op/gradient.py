@@ -68,7 +68,11 @@ def permute_dims_grad(orig: Call, grad: Var):
     """Returns grad transposed over the complement of original permute_dims axes."""
     axes = orig.attrs["axes"]
     if axes:
-        return [permute_dims(grad, axes=axes)]
+        dims = len(axes)
+        new_axes = [0] * dims
+        for i in range(dims):
+            new_axes[int(axes[i])] = i
+        return [permute_dims(grad, axes=new_axes)]
     else:
         return [permute_dims(grad)]
 

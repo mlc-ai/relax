@@ -67,9 +67,11 @@ def relax_check_gradients(
     ex_0 = relax.vm.build(lower_mod, target)
     vm_0 = relax.VirtualMachine(ex_0, dev)
 
+    weights = np.random.uniform(size=output_shape).astype(np.float32)
+
     def forward(*inputs):
         result = vm_0[func_name](*[tvm.nd.array(i) for i in inputs])
-        return np.sum(result.numpy())
+        return np.sum(weights * result.numpy())
 
     bb1 = relax.BlockBuilder()
     with bb1.function(func_name, param_vars + [grad_var]):
@@ -83,7 +85,7 @@ def relax_check_gradients(
     vm_1 = relax.VirtualMachine(ex_1, dev)
     result = vm_1[func_name](
         *[tvm.nd.array(i) for i in input_numpy],
-        tvm.nd.array(np.ones(output_shape).astype(np.float32)),
+        tvm.nd.array(weights),
     )
 
     check_numerical_grads(forward, input_numpy, [i.numpy() for i in result])
@@ -118,23 +120,23 @@ def test_multiply(target, dev):
 
 @tvm.testing.parametrize_targets("llvm")
 def test_permute_dims(target, dev):
-    data1_numpy = np.random.randint(0, 16, (2, 3, 4)).astype(np.float32)
+    data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
     relax_check_gradients(
-        relax.op.permute_dims, "relax.permute_dims", [data1_numpy], target, dev, (4, 3, 2)
+        relax.op.permute_dims, "relax.permute_dims", [data1_numpy], target, dev, (5, 4, 3, 2)
     )
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_permute_dims_with_axes(target, dev):
-    data1_numpy = np.random.randint(0, 16, (2, 3, 4)).astype(np.float32)
+    data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
     relax_check_gradients(
         relax.op.permute_dims,
         "relax.permute_dims",
         [data1_numpy],
         target,
         dev,
-        (2, 4, 3),
-        axes=(0, 2, 1),
+        (2, 5, 3, 4),
+        axes=(0, 3, 1, 2),
     )
 
 
