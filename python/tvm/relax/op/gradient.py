@@ -31,6 +31,8 @@ from tvm.relax.op import (
     ones,
     zeros,
     expand_dims,
+    concat,
+    split,
 )
 from tvm.relax.expr import Call, Var
 
@@ -192,3 +194,38 @@ def tanh_grad(orig: Call, grad: Var):
             ),
         )
     ]
+
+
+@register_gradient("relax.concat")
+def concat_grad(orig: Call, grad: Var):
+    """Gradient of concat.
+
+        y = concat((x1, x2, x3), axis)
+
+    Returns [split(grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis], ...], axis)].
+    """
+    axis = orig.attrs["axis"]
+    assert axis is not None
+    axis = int(axis)
+    split_indices = []
+    for i in range(len(orig.args[0]) - 1):
+        sinfo = orig.args[0].struct_info.fields[i]
+        index = sinfo.shape[axis]
+        if i > 0:
+            index += split_indices[i - 1]
+        split_indices.append(index)
+    return [split(grad, split_indices, axis)]
+
+
+@register_gradient("relax.split")
+def split_grad(orig: Call, grad: Var):
+    """Gradient of split.
+
+        y = split(x, indices, axis)
+
+    Returns [concat(grad, axis)].
+    """
+    axis = orig.attrs["axis"]
+    assert axis is not None
+    axis = int(axis)
+    return [concat(grad, axis)]

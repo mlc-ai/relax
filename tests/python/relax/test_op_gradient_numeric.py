@@ -28,34 +28,62 @@ from typing import Callable, Union, Tuple, List
 def relax_check_gradients(
     op_func: Callable,
     op_name: str,
-    input_numpy: np.array,
+    inputs_numpy: np.array,
     target: Union[str, tvm.target.Target],
     dev: tvm._ffi.runtime_ctypes.Device,
-    output_shape: Union[Tuple, List],
+    output_shape: Union[Tuple, List[Tuple]],
+    tuple_input: bool = False,
     **kwargs,  # attr for operators
 ):
     """Generate module and run it to check numberic gradients."""
 
     func_name = "main"
-    param_vars = []
-    input_ndarray = []
 
     # prepare input
-    for i in range(len(input_numpy)):
-        param_vars.append(
-            relax.Var(
-                "x_" + str(i),
-                relax.TensorStructInfo(input_numpy[i].shape, "float32"),
-            )
-        )
-        input_ndarray.append(tvm.nd.array(input_numpy[i]))
-    grad_var = relax.Var("grad", relax.TensorStructInfo(output_shape, "float32"))
+    def _numpy_to_var(data, var_name):
+        if isinstance(data, list):
+            struct_infos = []
+            for i in range(len(data)):
+                tvm_var = _numpy_to_var(data[i], "")
+                struct_infos.append(tvm_var.struct_info)
+            return relax.Var(var_name, relax.TupleStructInfo(struct_infos))
+        return relax.Var(var_name, relax.TensorStructInfo(data.shape, "float32"))
+
+    def _numpy_to_tvm(data):
+        if isinstance(data, list):
+            ret_data = []
+            for i in range(len(data)):
+                tvm_data = _numpy_to_tvm(data[i])
+                ret_data.append(tvm_data)
+            return tvm.runtime.container.ADT(0, ret_data)
+        return tvm.nd.array(data)
+
+    def _tvm_to_numpy(data):
+        if isinstance(data, tvm.runtime.container.ADT):
+            return [_tvm_to_numpy(i) for i in data]
+        return data.numpy()
+
+    def _gen_weights(shape):
+        if isinstance(shape, list):
+            ret = []
+            for s in shape:
+                ret.append(_gen_weights(s))
+            return ret
+        else:
+            return np.random.uniform(size=shape).astype(np.float32)
+
+    param_vars = [_numpy_to_var(inputs_numpy[i], "x_" + str(i)) for i in range(len(inputs_numpy))]
+    weights = _gen_weights(output_shape)
+    grad_var = _numpy_to_var(weights, "grad")
 
     # get gradient
     op = Op.get(op_name)
     op_grad_func = op.get_attr("FPrimalGradient")
-    call = op_func(*param_vars, **kwargs)
-    grad_call = relax.Tuple(op_grad_func(call, grad_var))
+    if tuple_input:
+        t = relax.Tuple(param_vars)
+        call = op_func(t, **kwargs)
+    else:
+        call = op_func(*param_vars, **kwargs)
 
     bb = relax.BlockBuilder()
     with bb.function(func_name, param_vars):
@@ -67,28 +95,40 @@ def relax_check_gradients(
     ex_0 = relax.vm.build(lower_mod, target)
     vm_0 = relax.VirtualMachine(ex_0, dev)
 
-    weights = np.random.uniform(size=output_shape).astype(np.float32)
-
     def forward(*inputs):
-        result = vm_0[func_name](*[tvm.nd.array(i) for i in inputs])
-        return np.sum(weights * result.numpy())
+        inputs_tvm = [_numpy_to_tvm(i) for i in inputs]
+        result = vm_0[func_name](*inputs_tvm)
+        result_numpy = _tvm_to_numpy(result)
+        if isinstance(result_numpy, list):
+            assert isinstance(weights, list)
+            assert len(weights) == len(result_numpy)
+            ret = 0
+            for i in range(len(weights)):
+                ret += np.sum(weights[i] * result_numpy[i])
+            return ret
+        return np.sum(weights * result_numpy)
+
+    grad_call = relax.Tuple(op_grad_func(call, grad_var))
 
     bb1 = relax.BlockBuilder()
     with bb1.function(func_name, param_vars + [grad_var]):
         with bb1.dataflow():
-            out = bb1.emit_output(grad_call)
+            if tuple_input:
+                adjoints = bb1.emit(grad_call)
+                out = bb1.emit_output(relax.TupleGetItem(adjoints, 0))
+            else:
+                out = bb1.emit_output(grad_call)
         bb1.emit_func_output(out)
     grad_mod = bb1.get()
     lower_grad_mod = OperatorLegalizer(grad_mod).transform()
 
     ex_1 = relax.vm.build(lower_grad_mod, target)
     vm_1 = relax.VirtualMachine(ex_1, dev)
-    result = vm_1[func_name](
-        *[tvm.nd.array(i) for i in input_numpy],
-        tvm.nd.array(weights),
-    )
+    inputs_tvm = [_numpy_to_tvm(i) for i in inputs_numpy]
+    weights_tvm = _numpy_to_tvm(weights)
+    result = vm_1[func_name](*inputs_tvm, weights_tvm)
 
-    check_numerical_grads(forward, input_numpy, [i.numpy() for i in result])
+    check_numerical_grads(forward, inputs_numpy, _tvm_to_numpy(result))
 
 
 @tvm.testing.parametrize_targets("llvm")
@@ -244,6 +284,38 @@ def test_sigmoid(target, dev):
 def test_tanh(target, dev):
     data_numpy = np.random.randint(1, 16, (3, 3)).astype(np.float32)
     relax_check_gradients(relax.op.tanh, "relax.tanh", [data_numpy], target, dev, (3, 3))
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_concat(target, dev):
+    data_numpy1 = np.random.randint(1, 16, (3, 3)).astype(np.float32)
+    data_numpy2 = np.random.randint(1, 16, (3, 4)).astype(np.float32)
+    data_numpy3 = np.random.randint(1, 16, (3, 5)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.concat,
+        "relax.concat",
+        [data_numpy1, data_numpy2, data_numpy3],
+        target,
+        dev,
+        (3, 12),
+        tuple_input=True,
+        axis=1,
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_split(target, dev):
+    data_numpy = np.random.randint(1, 16, (3, 12)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.split,
+        "relax.split",
+        [data_numpy],
+        target,
+        dev,
+        [(3, 3), (3, 4), (3, 5)],
+        indices_or_sections=[3, 7],
+        axis=1,
+    )
 
 
 if __name__ == "__main__":
