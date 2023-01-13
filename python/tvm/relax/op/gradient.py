@@ -39,7 +39,12 @@ from tvm.relax.expr import Call, Var
 
 @register_gradient("relax.add")
 def add_grad(orig: Call, grad: Var):
-    """Returns [grad, grad]."""
+    """Gradients for add.
+
+        z = relax.add(x, y)
+
+    Returns [z_grad, z_grad].
+    """
     return [
         collapse_sum_to(grad, orig.args[0].struct_info.shape),
         collapse_sum_to(grad, orig.args[1].struct_info.shape),
@@ -48,7 +53,12 @@ def add_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.subtract")
 def subtract_grad(orig: Call, grad: Var):
-    """Returns [grad, -grad]."""
+    """Gradients for subtract.
+
+        z = relax.subtract(x, y)
+
+    Returns [z_grad, -z_grad].
+    """
     return [
         collapse_sum_to(grad, orig.args[0].struct_info.shape),
         collapse_sum_to(negative(grad), orig.args[1].struct_info.shape),
@@ -57,7 +67,12 @@ def subtract_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.multiply")
 def multiply_grad(orig: Call, grad: Var):
-    """Returns [grad * y, grad * x]."""
+    """Gradients for multiply.
+
+        z = relax.multiply(x, y)
+
+    Returns [z_grad * y, z_grad * x].
+    """
     x, y = orig.args
     return [
         collapse_sum_to(multiply(grad, y), x.struct_info.shape),
@@ -81,7 +96,12 @@ def permute_dims_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.nn.relu")
 def relu_grad(orig: Call, grad: Var):
-    """Returns grad * (select(x < 0, 0, 1))."""
+    """Gradients for relu.
+
+        y = relax.relu(x)
+
+    Returns [y_grad * (where(x < 0, 0, 1))].
+    """
     x = orig.args[0]
     x_zeros = zeros(x.struct_info.shape, x.struct_info.dtype)
     x_ones = ones(x.struct_info.shape, x.struct_info.dtype)
@@ -94,8 +114,9 @@ def matmul_grad(orig: Call, grad: Var):
 
         c = relax.matmul(a, b)
 
-    Generally, returns [grad @ b^T, a^T @ grad]. Here we only transpose the last two dimensions
-    because of the definition of batch matmul. Note that ndim=1 should be treaded specially.
+    Generally, returns [c_grad @ b^T, a^T @ c_grad].
+    Here we only transpose the last two dimensions because of the definition
+    of batch matmul. Note that ndim=1 should be treaded specially.
     """
 
     tensor_a, tensor_b = orig.args
@@ -152,7 +173,12 @@ def sum_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.nn.softmax")
 def softmax_grad(orig: Call, grad: Var):
-    """Gradient of softmax."""
+    """Gradient of softmax.
+
+        y = relax.softmax(x, axis)
+
+    Returns [(y_grad - sum(y_grad * y, axis, keepdims=True)) * y]
+    """
     return [multiply(subtract(grad, _sum(multiply(grad, orig), orig.attrs.axis, True)), orig)]
 
 
@@ -162,7 +188,7 @@ def sigmoid_grad(orig: Call, grad: Var):
 
         y = relax.sigmoid(x)
 
-    Returns [grad * sigmoid(x) * (1 - sigmoid(x))].
+    Returns [y_grad * sigmoid(x) * (1 - sigmoid(x))].
     """
     return [
         multiply(
@@ -183,7 +209,7 @@ def tanh_grad(orig: Call, grad: Var):
 
         y = relax.tanh(x)
 
-    Returns [grad * (1 - tanh(x) * tanh(x))].
+    Returns [y_grad * (1 - tanh(x) * tanh(x))].
     """
     return [
         multiply(
@@ -202,7 +228,7 @@ def concat_grad(orig: Call, grad: Var):
 
         y = concat((x1, x2, x3), axis)
 
-    Returns [split(grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis], ...], axis)].
+    Returns [split(y_grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis]], axis)].
     """
     axis = orig.attrs["axis"]
     assert axis is not None
@@ -223,7 +249,7 @@ def split_grad(orig: Call, grad: Var):
 
         y = split(x, indices, axis)
 
-    Returns [concat(grad, axis)].
+    Returns [concat(y_grad, axis)].
     """
     axis = orig.attrs["axis"]
     assert axis is not None
