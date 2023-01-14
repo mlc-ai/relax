@@ -2291,12 +2291,12 @@ def test_collapse_sum_like_infer_struct_info_shape_symbolic():
 
 def test_collapse_sum_like_infer_struct_info_shape_var():
     bb = relax.BlockBuilder()
-    s0 = relax.Var("s", relax.ShapeStructInfo((2, 3, 4)))
-    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=3))
-    s2 = relax.Var("s", relax.ShapeStructInfo())
-    s3 = relax.Var("s", relax.ShapeStructInfo((3, 4)))
-    s4 = relax.Var("s", relax.ShapeStructInfo(ndim=2))
-    s5 = relax.Var("s", relax.ShapeStructInfo())
+    s0 = relax.Var("s0", relax.ShapeStructInfo((2, 3, 4)))
+    s1 = relax.Var("s1", relax.ShapeStructInfo(ndim=3))
+    s2 = relax.Var("s2", relax.ShapeStructInfo())
+    s3 = relax.Var("s3", relax.ShapeStructInfo((3, 4)))
+    s4 = relax.Var("s4", relax.ShapeStructInfo(ndim=2))
+    s5 = relax.Var("s5", relax.ShapeStructInfo())
     x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
     x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
     x2 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
@@ -2304,9 +2304,15 @@ def test_collapse_sum_like_infer_struct_info_shape_var():
     y1 = relax.Var("y", relax.TensorStructInfo(s4, "float32"))
     y2 = relax.Var("y", relax.TensorStructInfo(s5, "float32"))
 
-    _check_inference(bb, relax.op.collapse_sum_like(x0, y0), relax.TensorStructInfo(s3, "float32"))
-    _check_inference(bb, relax.op.collapse_sum_like(x1, y1), relax.TensorStructInfo(s4, "float32"))
-    _check_inference(bb, relax.op.collapse_sum_like(x2, y2), relax.TensorStructInfo(s5, "float32"))
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x0, y0), relax.TensorStructInfo(dtype="float32", ndim=2)
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x1, y1), relax.TensorStructInfo(dtype="float32", ndim=2)
+    )
+    _check_inference(
+        bb, relax.op.collapse_sum_like(x2, y2), relax.TensorStructInfo(dtype="float32", ndim=-1)
+    )
 
 
 def test_collapse_sum_like_infer_struct_info_more_input_dtype():
@@ -2344,13 +2350,13 @@ def test_collapse_sum_like_infer_struct_info_shape_mismatch():
     x1 = relax.Var("z", R.Tensor((3, a, 5), "float32"))
     y1 = relax.Var("w", R.Tensor((3, b, 5), "float32"))
 
-    s0 = relax.Var("s", relax.ShapeStructInfo((3, 4, 5)))
-    s1 = relax.Var("s", relax.ShapeStructInfo((3, 6, 5)))
+    s0 = relax.Var("s0", relax.ShapeStructInfo((3, 4, 5)))
+    s1 = relax.Var("s1", relax.ShapeStructInfo((3, 6, 5)))
     x2 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
     y2 = relax.Var("y", relax.TensorStructInfo(s1, "float32"))
 
-    s2 = relax.Var("s", relax.ShapeStructInfo((3, a, 5)))
-    s3 = relax.Var("s", relax.ShapeStructInfo((3, b, 5)))
+    s2 = relax.Var("s2", relax.ShapeStructInfo((3, a, 5)))
+    s3 = relax.Var("s3", relax.ShapeStructInfo((3, b, 5)))
     x3 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
     y3 = relax.Var("y", relax.TensorStructInfo(s3, "float32"))
 
@@ -2407,9 +2413,9 @@ def test_collapse_sum_to_infer_struct_info_shape_symbolic():
 
 def test_collapse_sum_to_infer_struct_info_shape_var():
     bb = relax.BlockBuilder()
-    s0 = relax.Var("s", relax.ShapeStructInfo((2, 3, 4)))
-    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=3))
-    s2 = relax.Var("s", relax.ShapeStructInfo())
+    s0 = relax.Var("s0", relax.ShapeStructInfo((2, 3, 4)))
+    s1 = relax.Var("s1", relax.ShapeStructInfo(ndim=3))
+    s2 = relax.Var("s2", relax.ShapeStructInfo())
     x0 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
     x1 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
     x2 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
@@ -2460,10 +2466,10 @@ def test_collapse_sum_to_infer_struct_info_shape_mismatch():
     b = tir.Var("b", "int64")
     x1 = relax.Var("x", R.Tensor((3, a, 5), "float32"))
 
-    s0 = relax.Var("s", relax.ShapeStructInfo((3, 4, 5)))
+    s0 = relax.Var("s0", relax.ShapeStructInfo((3, 4, 5)))
     x2 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
 
-    s1 = relax.Var("s", relax.ShapeStructInfo((3, a, 5)))
+    s1 = relax.Var("s1", relax.ShapeStructInfo((3, a, 5)))
     x3 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
 
     with pytest.raises(TVMError):
@@ -2485,18 +2491,18 @@ def test_collapse_sum_to_infer_struct_info_struct_info_tgt_shape_var():
     b = tir.Var("b", "int64")
     c = tir.Var("c", "int64")
     d = tir.Var("d", "int64")
-    s0 = relax.Var("s", relax.ShapeStructInfo((3, a, b)))
-    s1 = relax.Var("s", relax.ShapeStructInfo(ndim=3))
-    s2 = relax.Var("s", relax.ShapeStructInfo())
+    s0 = relax.Var("s0", relax.ShapeStructInfo((3, a, b)))
+    s1 = relax.Var("s1", relax.ShapeStructInfo(ndim=3))
+    s2 = relax.Var("s2", relax.ShapeStructInfo())
     x0 = relax.Var("x", R.Tensor((3, a, b), "float32"))
     x1 = relax.Var("x", R.Tensor("float32", ndim=3))
     x2 = relax.Var("x", R.Tensor(""))
     x3 = relax.Var("x", relax.TensorStructInfo(s0, "float32"))
     x4 = relax.Var("x", relax.TensorStructInfo(s1, "float32"))
     x5 = relax.Var("x", relax.TensorStructInfo(s2, "float32"))
-    stgt0 = relax.Var("stgt", relax.ShapeStructInfo((a, b)))
-    stgt1 = relax.Var("stgt", relax.ShapeStructInfo(ndim=2))
-    stgt2 = relax.Var("stgt", relax.ShapeStructInfo())
+    stgt0 = relax.Var("stgt0", relax.ShapeStructInfo((a, b)))
+    stgt1 = relax.Var("stgt1", relax.ShapeStructInfo(ndim=2))
+    stgt2 = relax.Var("stgt2", relax.ShapeStructInfo())
 
     _check_inference(
         bb, relax.op.collapse_sum_to(x0, stgt0), relax.TensorStructInfo(stgt0, "float32")

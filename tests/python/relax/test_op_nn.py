@@ -1364,7 +1364,7 @@ def test_nll_loss_infer_struct_info_shape_var():
     _check_inference(
         bb,
         relax.op.nn.nll_loss(x0, y0, w0, reduction="none"),
-        relax.TensorStructInfo((3, 10, 10), "float32"),
+        relax.TensorStructInfo(dtype="float32", ndim=3),
     )
     _check_inference(
         bb,
@@ -1379,12 +1379,12 @@ def test_nll_loss_infer_struct_info_shape_var():
     _check_inference(
         bb,
         relax.op.nn.nll_loss(x0, y1, w0, reduction="none"),
-        relax.TensorStructInfo((3, 10, 10), "float32"),
+        relax.TensorStructInfo(dtype="float32", ndim=3),
     )
     _check_inference(
         bb,
         relax.op.nn.nll_loss(x0, y0, w1, reduction="none"),
-        relax.TensorStructInfo((3, 10, 10), "float32"),
+        relax.TensorStructInfo(dtype="float32", ndim=3),
     )
 
 

@@ -541,7 +541,7 @@ StructInfo InferStructInfoNLLLoss(const Call& call, const BlockBuilder& ctx) {
 
   if (reduction == "none") {
     // () or (N,) or (N, d1, d2, ..., dk)
-    if (pred_shape_value.defined()) {
+    if (pred_sinfo->shape.as<ShapeExprNode>()) {
       return TensorStructInfo(ShapeExpr(output_shape), output_dtype);
     } else {
       int output_ndim = pred_sinfo->ndim == kUnknownNDim ? kUnknownNDim : pred_sinfo->ndim - 1;
