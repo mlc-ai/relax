@@ -35,6 +35,7 @@ from tvm.relax.op import (
     split,
 )
 from tvm.relax.expr import Call, Var
+from typing import List
 
 
 @register_gradient("relax.add")
@@ -233,7 +234,7 @@ def concat_grad(orig: Call, grad: Var):
     axis = orig.attrs["axis"]
     assert axis is not None
     axis = int(axis)
-    split_indices = []
+    split_indices: List[int] = []
     for i in range(len(orig.args[0]) - 1):
         sinfo = orig.args[0].struct_info.fields[i]
         index = sinfo.shape[axis]
