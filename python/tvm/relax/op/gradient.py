@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """Gradient definitions for Relax operators"""
+from typing import List
 from tvm.relax.op import register_gradient
 from tvm.relax.op import sum as _sum
 from tvm.relax.op import (
@@ -35,7 +36,7 @@ from tvm.relax.op import (
     split,
 )
 from tvm.relax.expr import Call, Var
-from typing import List
+from ...tir import PrimExpr
 
 
 @register_gradient("relax.add")
@@ -234,7 +235,7 @@ def concat_grad(orig: Call, grad: Var):
     axis = orig.attrs["axis"]
     assert axis is not None
     axis = int(axis)
-    split_indices: List[int] = []
+    split_indices: List[PrimExpr] = []
     for i in range(len(orig.args[0]) - 1):
         sinfo = orig.args[0].struct_info.fields[i]
         index = sinfo.shape[axis]
