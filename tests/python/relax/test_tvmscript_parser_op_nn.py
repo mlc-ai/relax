@@ -114,6 +114,21 @@ def test_softmax():
     _check(foo, bb.get()["foo"])
 
 
+def test_log_softmax():
+    @R.function
+    def foo(x: R.Tensor((2, 3), "float32")) -> R.Tensor((2, 3), "float32"):
+        gv: R.Tensor((2, 3), "float32") = R.nn.log_softmax(x)
+        return gv
+
+    x = relax.Var("x", R.Tensor((2, 3), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [x]):
+        gv = bb.emit(relax.op.nn.log_softmax(x))
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
 def test_batch_norm():
     @R.function
     def foo(
@@ -183,6 +198,86 @@ def test_dropout():
     bb = relax.BlockBuilder()
     with bb.function("foo", [x]):
         gv = bb.emit(relax.op.nn.dropout(x))
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
+def test_cross_entropy_without_logits():
+    @R.function
+    def foo(
+        predictions: R.Tensor((2, 3), "float32"), labels: R.Tensor((2, 3), "float32")
+    ) -> R.Tensor((), "float32"):
+        gv: R.Tensor((), "float32") = R.nn.cross_entropy_without_logits(predictions, labels)
+        return gv
+
+    predictions = relax.Var("predictions", R.Tensor((2, 3), "float32"))
+    labels = relax.Var("labels", R.Tensor((2, 3), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [predictions, labels]):
+        gv = bb.emit(relax.op.nn.cross_entropy_without_logits(predictions, labels))
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
+def test_cross_entropy_with_logits():
+    @R.function
+    def foo(
+        predictions: R.Tensor((2, 3), "float32"), labels: R.Tensor((2, 3), "float32")
+    ) -> R.Tensor((), "float32"):
+        gv: R.Tensor((), "float32") = R.nn.cross_entropy_with_logits(predictions, labels)
+        return gv
+
+    predictions = relax.Var("predictions", R.Tensor((2, 3), "float32"))
+    labels = relax.Var("labels", R.Tensor((2, 3), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [predictions, labels]):
+        gv = bb.emit(relax.op.nn.cross_entropy_with_logits(predictions, labels))
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
+def test_nll_loss():
+    @R.function
+    def foo(
+        predictions: R.Tensor((3, 5, 10, 10), dtype="float32"),
+        targets: R.Tensor((3, 10, 10), dtype="int64"),
+        weights: R.Tensor((5,), dtype="float32"),
+    ) -> R.Tensor((), dtype="float32"):
+        gv: R.Tensor((), dtype="float32") = R.nn.nll_loss(predictions, targets, weights, "mean", -1)
+        return gv
+
+    predictions = relax.Var("predictions", R.Tensor((3, 5, 10, 10), "float32"))
+    targets = relax.Var("targets", R.Tensor((3, 10, 10), "int64"))
+    weights = relax.Var("weights", R.Tensor((5,), "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [predictions, targets, weights]):
+        gv = bb.emit(
+            relax.op.nn.nll_loss(predictions, targets, weights, reduction="mean", ignore_index=-1)
+        )
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
+def test_nll_loss_no_weights():
+    @R.function
+    def foo(
+        predictions: R.Tensor((3, 5, 10, 10), dtype="float32"),
+        targets: R.Tensor((3, 10, 10), dtype="int64"),
+    ) -> R.Tensor((), dtype="float32"):
+        gv: R.Tensor((), dtype="float32") = R.nn.nll_loss(
+            predictions, targets, reduction="mean", ignore_index=-1
+        )
+        return gv
+
+    predictions = relax.Var("predictions", R.Tensor((3, 5, 10, 10), "float32"))
+    targets = relax.Var("targets", R.Tensor((3, 10, 10), "int64"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [predictions, targets]):
+        gv = bb.emit(relax.op.nn.nll_loss(predictions, targets, reduction="mean", ignore_index=-1))
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])
