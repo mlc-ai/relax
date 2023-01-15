@@ -23,7 +23,6 @@ from ...tir import PrimExpr
 from .base import register_gradient
 
 from .unary import (
-    exp,
     log,
     negative,
 )
@@ -48,6 +47,9 @@ from .manipulate import (
     expand_dims,
     concat,
     split,
+)
+from .nn import (
+    softmax,
 )
 
 
@@ -319,10 +321,10 @@ def log_softmax_grad(orig: Call, grad: Var):
         y = relax.log_softmax(x, axis)
 
     Backward:
-        Returns [y_grad - sum(y_grad, axis, keepdims=True) * exp(y)]
+        Returns [y_grad - sum(y_grad, axis, keepdims=True) * softmax(x)]
     """
-    softmax = exp(orig)
-    return [subtract(grad, multiply(_sum(grad, orig.attrs.axis, True), softmax))]
+    x_softmax = softmax(orig.args[0], orig.attrs.axis)
+    return [subtract(grad, multiply(_sum(grad, orig.attrs.axis, True), x_softmax))]
 
 
 def _divide_batch(x: Expr, expr: Expr):
