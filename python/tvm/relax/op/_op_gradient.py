@@ -48,9 +48,10 @@ from .manipulate import (
 )
 
 
+# Arith
 @register_gradient("relax.add")
 def add_grad(orig: Call, grad: Var):
-    """Gradients for add.
+    """Gradient of add.
 
     Forward Form:
         z = relax.add(x, y)
@@ -66,7 +67,7 @@ def add_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.subtract")
 def subtract_grad(orig: Call, grad: Var):
-    """Gradients for subtract.
+    """Gradient of subtract.
 
     Forward Form:
         z = relax.subtract(x, y)
@@ -82,7 +83,7 @@ def subtract_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.multiply")
 def multiply_grad(orig: Call, grad: Var):
-    """Gradients for multiply.
+    """Gradient of multiply.
 
     Forward Form:
         z = relax.multiply(x, y)
@@ -97,9 +98,73 @@ def multiply_grad(orig: Call, grad: Var):
     ]
 
 
+@register_gradient("relax.sigmoid")
+def sigmoid_grad(orig: Call, grad: Var):
+    """Gradient of sigmoid.
+
+    Forward Form:
+        y = relax.sigmoid(x)
+
+    Backward:
+        Returns [y_grad * y * (1 - y)].
+    """
+    return [
+        multiply(
+            grad,
+            multiply(
+                orig,
+                subtract(
+                    ones(orig.args[0].struct_info.shape, orig.args[0].struct_info.dtype), orig
+                ),
+            ),
+        )
+    ]
+
+
+@register_gradient("relax.tanh")
+def tanh_grad(orig: Call, grad: Var):
+    """Gradient of tanh.
+
+    Forward Form:
+        y = relax.tanh(x)
+
+    Backward:
+        Returns [y_grad * (1 - y * y)].
+    """
+    return [
+        multiply(
+            grad,
+            subtract(
+                ones(orig.args[0].struct_info.shape, orig.args[0].struct_info.dtype),
+                multiply(orig, orig),
+            ),
+        )
+    ]
+
+
+# Statistical
+@register_gradient("relax.sum")
+def sum_grad(orig: Call, grad: Var):
+    """Gradient of sum.
+
+    Forward Form:
+        y = relax.sum(x, axis, keepdims)
+
+    Backward:
+        Returns [broadcast_to(y_grad, x.shape)].
+        If `keepdims=False`, the summed axis will be added back.
+    """
+    axis = orig.attrs["axis"]
+    keepdims = orig.attrs["keepdims"]
+    if not keepdims and axis:
+        grad = expand_dims(grad, [int(ax) for ax in axis])
+    return [broadcast_to(grad, orig.args[0].struct_info.shape)]
+
+
+# Manipulate
 @register_gradient("relax.permute_dims")
 def permute_dims_grad(orig: Call, grad: Var):
-    """Gradients for permute_dims.
+    """Gradient of permute_dims.
 
     Forward Form:
         y = relax.permute_dims(x, axes)
@@ -118,25 +183,49 @@ def permute_dims_grad(orig: Call, grad: Var):
         return [permute_dims(grad)]
 
 
-@register_gradient("relax.nn.relu")
-def relu_grad(orig: Call, grad: Var):
-    """Gradients for relu.
+@register_gradient("relax.concat")
+def concat_grad(orig: Call, grad: Var):
+    """Gradient of concat.
 
     Forward Form:
-        y = relax.relu(x)
+        y = concat((x1, x2, x3), axis)
 
     Backward:
-        Returns [y_grad * (where(x < 0, 0, 1))].
+        Returns [split(y_grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis]], axis)].
     """
-    x = orig.args[0]
-    x_zeros = zeros(x.struct_info.shape, x.struct_info.dtype)
-    x_ones = ones(x.struct_info.shape, x.struct_info.dtype)
-    return [where(less(x, x_zeros), x_zeros, multiply(x_ones, grad))]
+    axis = orig.attrs["axis"]
+    assert axis is not None
+    axis = int(axis)
+    split_indices: List[PrimExpr] = []
+    for i in range(len(orig.args[0]) - 1):
+        sinfo = orig.args[0].struct_info.fields[i]
+        index = sinfo.shape[axis]
+        if i > 0:
+            index += split_indices[i - 1]
+        split_indices.append(index)
+    return [split(grad, split_indices, axis)]
 
 
+@register_gradient("relax.split")
+def split_grad(orig: Call, grad: Var):
+    """Gradient of split.
+
+    Forward Form:
+        y = split(x, indices, axis)
+
+    Backward:
+        Returns [concat(y_grad, axis)].
+    """
+    axis = orig.attrs["axis"]
+    assert axis is not None
+    axis = int(axis)
+    return [concat(grad, axis)]
+
+
+# Linear Algebra
 @register_gradient("relax.matmul")
 def matmul_grad(orig: Call, grad: Var):
-    """Gradients for matmul.
+    """Gradient of matmul.
 
     Forward Form:
         c = relax.matmul(a, b)
@@ -189,27 +278,26 @@ def matmul_grad(orig: Call, grad: Var):
     ]
 
 
-@register_gradient("relax.sum")
-def sum_grad(orig: Call, grad: Var):
-    """Gradients of sum.
+# NN
+@register_gradient("relax.nn.relu")
+def relu_grad(orig: Call, grad: Var):
+    """Gradient of relu.
 
     Forward Form:
-        y = relax.sum(x, axis, keepdims)
+        y = relax.relu(x)
 
     Backward:
-        Returns [broadcast_to(y_grad, x.shape)].
-        If `keepdims=False`, the summed axis will be added back.
+        Returns [y_grad * (where(x < 0, 0, 1))].
     """
-    axis = orig.attrs["axis"]
-    keepdims = orig.attrs["keepdims"]
-    if not keepdims and axis:
-        grad = expand_dims(grad, [int(ax) for ax in axis])
-    return [broadcast_to(grad, orig.args[0].struct_info.shape)]
+    x = orig.args[0]
+    x_zeros = zeros(x.struct_info.shape, x.struct_info.dtype)
+    x_ones = ones(x.struct_info.shape, x.struct_info.dtype)
+    return [where(less(x, x_zeros), x_zeros, multiply(x_ones, grad))]
 
 
 @register_gradient("relax.nn.softmax")
 def softmax_grad(orig: Call, grad: Var):
-    """Gradients of softmax.
+    """Gradient of softmax.
 
     Forward Form:
         y = relax.softmax(x, axis)
@@ -222,7 +310,7 @@ def softmax_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.nn.log_softmax")
 def log_softmax_grad(orig: Call, grad: Var):
-    """Gradients of log_softmax.
+    """Gradient of log_softmax.
 
     Forward Form:
         y = relax.log_softmax(x, axis)
@@ -234,76 +322,9 @@ def log_softmax_grad(orig: Call, grad: Var):
     return [subtract(grad, multiply(_sum(grad, orig.attrs.axis, True), softmax))]
 
 
-@register_gradient("relax.sigmoid")
-def sigmoid_grad(orig: Call, grad: Var):
-    """Gradients of sigmoid.
-
-    Forward Form:
-        y = relax.sigmoid(x)
-
-    Backward:
-        Returns [y_grad * y * (1 - y)].
-    """
-    return [
-        multiply(
-            grad,
-            multiply(
-                orig,
-                subtract(
-                    ones(orig.args[0].struct_info.shape, orig.args[0].struct_info.dtype), orig
-                ),
-            ),
-        )
-    ]
-
-
-@register_gradient("relax.tanh")
-def tanh_grad(orig: Call, grad: Var):
-    """Gradients of tanh.
-
-    Forward Form:
-        y = relax.tanh(x)
-
-    Backward:
-        Returns [y_grad * (1 - y * y)].
-    """
-    return [
-        multiply(
-            grad,
-            subtract(
-                ones(orig.args[0].struct_info.shape, orig.args[0].struct_info.dtype),
-                multiply(orig, orig),
-            ),
-        )
-    ]
-
-
-@register_gradient("relax.concat")
-def concat_grad(orig: Call, grad: Var):
-    """Gradients of concat.
-
-    Forward Form:
-        y = concat((x1, x2, x3), axis)
-
-    Backward:
-        Returns [split(y_grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis]], axis)].
-    """
-    axis = orig.attrs["axis"]
-    assert axis is not None
-    axis = int(axis)
-    split_indices: List[PrimExpr] = []
-    for i in range(len(orig.args[0]) - 1):
-        sinfo = orig.args[0].struct_info.fields[i]
-        index = sinfo.shape[axis]
-        if i > 0:
-            index += split_indices[i - 1]
-        split_indices.append(index)
-    return [split(grad, split_indices, axis)]
-
-
-@register_gradient("relax.split")
+@register_gradient("relax.nn.nll_loss")
 def split_grad(orig: Call, grad: Var):
-    """Gradients of split.
+    """Gradient of nll_loss.
 
     Forward Form:
         y = split(x, indices, axis)
