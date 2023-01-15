@@ -31,7 +31,8 @@
 
 #include <unordered_set>
 
-#include "../op/make_op.h"
+#include "../op/tensor/binary.h"
+#include "../op/tensor/create.h"
 
 namespace tvm {
 namespace relax {
@@ -51,13 +52,16 @@ class BackwardBindingGenerator : public ExprVisitor {
                 const Array<Var>& require_grads, const Var& target_var) {
     this->builder_ = builder;
     this->target_var_ = target_var;
+    this->return_struct_info_.push_back(GetStructInfo(target_var_));
 
     // we do reverse-mode ad, so visit bindings backwards
     for (auto it = forward_block->bindings.rbegin(); it != forward_block->bindings.rend(); ++it) {
       this->VisitBinding(*it);
     }
 
-    return this->Epilogue(require_grads);
+    auto ret = std::move(this->Epilogue(require_grads));
+    ret->struct_info_ = TupleStructInfo(this->return_struct_info_);
+    return ret;
   }
 
   void VisitBinding(const Binding& binding) override {
@@ -125,17 +129,13 @@ class BackwardBindingGenerator : public ExprVisitor {
                      const TupleGetItemNode* tuple_get_item) override {
     ICHECK(tuple_get_item->tuple->IsInstance<VarNode>())
         << "The tuple field of a TupleGetItem is not bound to a Var";
-    Type tuple_type = tuple_get_item->tuple->checked_type();
-    ICHECK(tuple_type.as<TupleTypeNode>())
-        << "Shape of the tuple field of a TupleGetItem must be a Tuple";
-    Expr tuple_shape = tuple_get_item->tuple->shape();
-    ICHECK(tuple_shape.as<TupleNode>())
-        << "Type of the tuple field of a TupleGetItem must be TupleType";
+    auto tuple_sinfo = GetStructInfoAs<TupleStructInfoNode>(tuple_get_item->tuple);
+    ICHECK(tuple_sinfo != nullptr)
+        << "The tuple field of a TupleGetItem must has a TupleStructInfo";
 
     const Var& tuple_var = Downcast<Var>(tuple_get_item->tuple);
     if (adjoint_expr_map_.count(tuple_var) == 0) {
-      const Tuple& init =
-          BuildZerosTuple(Downcast<Tuple>(tuple_shape), Downcast<TupleType>(tuple_type));
+      const Tuple& init = BuildZerosTuple(tuple_sinfo);
       adjoint_expr_map_.Set(tuple_var, init);
     }
 
@@ -175,10 +175,11 @@ class BackwardBindingGenerator : public ExprVisitor {
 
   Var CreateAdjointVar(Var v, bool is_dataflow_var) {
     Var adjoint;
+    auto sinfo = GetStructInfo(v);
     if (is_dataflow_var) {
-      adjoint = DataflowVar(v->name_hint() + "_adjoint", v->shape(), v->checked_type());
+      adjoint = DataflowVar(v->name_hint() + "_adjoint", sinfo);
     } else {
-      adjoint = Var(v->name_hint() + "_adjoint", v->shape(), v->checked_type());
+      adjoint = Var(v->name_hint() + "_adjoint", sinfo);
     }
     adjoint_var_map_.Set(v, adjoint);
     return adjoint;
@@ -208,18 +209,18 @@ class BackwardBindingGenerator : public ExprVisitor {
     }
   }
 
-  // Build a "zeros" tuple with specified shape and type
-  Tuple BuildZerosTuple(const Tuple& shape, const TupleType& type) {
+  // Build a "zeros" tuple with specified tuple struct info and type
+  Tuple BuildZerosTuple(const TupleStructInfoNode* sinfo) {
     Array<Expr> ret;
-    for (size_t i = 0; i < shape->fields.size(); ++i) {
-      if (const auto* node = shape->fields[i].as<TupleNode>()) {
-        ret.push_back(BuildZerosTuple(GetRef<Tuple>(node), Downcast<TupleType>(type->fields[i])));
-      } else if (shape->fields[i].as<ShapeExprNode>()) {
-        const Expr& init =
-            MakeZeros(shape->fields[i], Downcast<DynTensorType>(type->fields[i])->dtype);
+    for (const auto& field : sinfo->fields) {
+      if (auto* tuple_sinfo = field.as<TupleStructInfoNode>()) {
+        ret.push_back(BuildZerosTuple(tuple_sinfo));
+      } else if (auto* tensor_sinfo = field.as<TensorStructInfoNode>()) {
+        ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when  building zeros tuple.";
+        const Expr& init = zeros(tensor_sinfo->shape.value(), tensor_sinfo->dtype);
         ret.push_back(init);
       } else {
-        LOG(FATAL) << "Unsupported empty expr: " << shape->fields[i];
+        LOG(FATAL) << "Unsupported struct info when building zeros tuple: " << field;
       }
     }
     return Tuple(ret);
@@ -246,7 +247,7 @@ class BackwardBindingGenerator : public ExprVisitor {
     } else {
       // Here we don't ReplaceExprByVar(base) because base is an adjoint_expr that
       // already bound to a adjoint_var. We wnat to update the adjoint_expr.
-      return MakeAdd(base, ReplaceExprByVar(increment));
+      return add(base, ReplaceExprByVar(increment));
     }
   }
 
@@ -272,17 +273,15 @@ class BackwardBindingGenerator : public ExprVisitor {
         adjoint_expr_to_var_.Set(e, v);
       }
     }
-    if (v->IsInstance<DataflowVarNode>()) {
-      builder_->Emit(VarBinding(v, e));
-    } else {
-      builder_->EmitOutput(VarBinding(v, e));
-    }
+    e = builder_->Normalize(e);
+    builder_->EmitNormalized(VarBinding(v, e));
   }
 
   // Init the gradient of the target_var_ and update it in adjoint_expr_map_.
   void InitGradAsOnes(const Var& var) {
-    Expr ones = MakeOnes(var->shape(), Downcast<DynTensorType>(var->checked_type())->dtype);
-    adjoint_expr_map_.Set(var, ones);
+    auto sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
+    ICHECK(sinfo->shape.defined());
+    adjoint_expr_map_.Set(var, ones(sinfo->shape.value(), sinfo->dtype));
   }
 
   // Handle the return value of the AD function.
@@ -292,19 +291,30 @@ class BackwardBindingGenerator : public ExprVisitor {
   Expr Epilogue(const Array<Var>& require_grads) {
     // create adjoint variables for inputs, and then bind adjoints
     Array<Expr> out_adjoints;
+    Array<StructInfo> out_struct_infos;
+    Array<Type> out_types;
+
     for (Var var : require_grads) {
       Var adjoint_var = CreateAdjointVar(var, /*is_datalfow_var=*/false);
 
       if (adjoint_expr_map_.count(var)) {
         BindAndEmit(adjoint_var, adjoint_expr_map_[var]);
       } else {
-        BindAndEmit(adjoint_var,
-                    MakeZeros(var->shape(), Downcast<DynTensorType>(var->checked_type())->dtype));
+        auto sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
+        ICHECK(sinfo->shape.defined());
+        BindAndEmit(adjoint_var, zeros(sinfo->shape.value(), sinfo->dtype));
       }
+
       out_adjoints.push_back(adjoint_var);
+      out_struct_infos.push_back(GetStructInfo(adjoint_var));
+      out_types.push_back(adjoint_var->checked_type());
     }
 
-    return Tuple(Array<Expr>{target_var_, Tuple(out_adjoints)});
+    this->return_struct_info_.push_back(TupleStructInfo(out_struct_infos));
+
+    Expr ret = Tuple(Array<Expr>{target_var_, Tuple(out_adjoints)});
+    ret->checked_type_ = TupleType(out_types);
+    return ret;
   }
 
   // the block builder of the corresponding GradientMutator, to emit bindings
@@ -314,6 +324,8 @@ class BackwardBindingGenerator : public ExprVisitor {
   Var target_var_;
   // the return value of the differentiated function
   Expr return_expr_;
+  // the return struct info of the AD function
+  Array<StructInfo> return_struct_info_;
 
   // var to its adjoints var
   Map<Var, Var> adjoint_var_map_;
@@ -352,11 +364,14 @@ class GradientMutator : public ExprMutator {
   }
 
   Expr VisitExpr_(const FunctionNode* func) override {
-    ICHECK(func->body->IsInstance<SeqExprNode>());
+    CHECK(func->body->IsInstance<SeqExprNode>())
+        << "Currently the body of the function must be SeqExpr.";
+    auto* func_sinfo = GetStructInfoAs<FuncStructInfoNode>(GetRef<Function>(func));
+    CHECK(func_sinfo->params.defined()) << "Currently don't support opaque function.";
 
     Expr new_body = this->VisitExpr(func->body);
 
-    return Function(func->params, new_body, Type(), RuntimeDepShape(), func->attrs);
+    return Function(func->params, new_body, GetStructInfo(return_expr_), func->attrs);
   }
 
   Expr VisitExpr_(const SeqExprNode* seq_expr) override {
@@ -371,7 +386,9 @@ class GradientMutator : public ExprMutator {
     this->target_var_ = Downcast<Var>(seq_expr->body);
 
     BindingBlock new_block = this->VisitBindingBlock(seq_expr->blocks[0]);
-    return SeqExpr({new_block}, this->return_expr_);
+    auto ret = SeqExpr({new_block}, this->return_expr_);
+    ret->struct_info_ = this->return_expr_->struct_info_;
+    return ret;
   }
 
   BindingBlock VisitBindingBlock_(const DataflowBlockNode* block) override {
@@ -394,25 +411,25 @@ class GradientMutator : public ExprMutator {
   static void CheckTarget(const Expr& e) {
     CHECK(e->IsInstance<VarNode>()) << "The differentiation target must be a Var";
     CHECK(!e->IsInstance<DataflowVarNode>()) << "The differentiation target is not an output node";
-    CHECK(e->checked_type().as<DynTensorTypeNode>())
-        << "The type of the differentiation target must be DynTensorType";
-    CHECK(e->shape().as<ShapeExprNode>())
+    auto sinfo = GetStructInfoAs<TensorStructInfoNode>(e);
+    CHECK(sinfo != nullptr) << "The differentiation target must be a Tensor";
+    CHECK(sinfo->shape.defined() && sinfo->shape.as<ShapeExprNode>())
         << "Error when getting the shape of the differentiation target";
-    CHECK(e->shape().as<ShapeExprNode>()->values.size() == 0)
+    CHECK(sinfo->shape.as<ShapeExprNode>()->values.size() == 0)
         << "The differentiation target must be scalar";
   }
 
   // Check the type of the input var should be Tensor of floating point dtype, or Tuple of that
-  static void CheckFloatTensorType(const Type& ty, const String& name_hint) {
-    if (auto* tuple_type = ty.as<TupleTypeNode>()) {
-      for (auto item : tuple_type->fields) {
+  static void CheckFloatTensorType(const StructInfo& sinfo, const String& name_hint) {
+    if (auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
+      for (auto item : tuple_sinfo->fields) {
         CheckFloatTensorType(item, name_hint);
       }
-    } else if (auto* tensor_type = ty.as<DynTensorTypeNode>()) {
-      CHECK(tensor_type->dtype.is_float() || tensor_type->dtype.is_float16() ||
-            tensor_type->dtype.is_bfloat16())
+    } else if (auto* tensor_sinfo = sinfo.as<TensorStructInfoNode>()) {
+      CHECK(tensor_sinfo->dtype.is_float() || tensor_sinfo->dtype.is_float16() ||
+            tensor_sinfo->dtype.is_bfloat16())
           << "Only Tensors of floating point dtype can require gradients, but the dtype of Var "
-          << name_hint << " is " << tensor_type->dtype;
+          << name_hint << " is " << tensor_sinfo->dtype;
     } else {
       LOG(FATAL) << "The input Var " << name_hint << " is neither a Tensor nor a Tuple of Tensors";
     }
@@ -432,7 +449,7 @@ class GradientMutator : public ExprMutator {
       CHECK(var_set.count(var) == 0) << "Var " << var->name_hint() << " appears more than once";
       var_set.emplace(var);
 
-      CheckFloatTensorType(var->checked_type(), var->name_hint());
+      CheckFloatTensorType(GetStructInfo(var), var->name_hint());
     }
   }
 
