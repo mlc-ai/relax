@@ -333,5 +333,61 @@ def test_split(target, dev):
     )
 
 
+@tvm.testing.parametrize_targets("llvm")
+def test_cross_entropy_without_logits(target, dev):
+    data_numpy1 = np.random.randint(1, 16, (3,)).astype(np.float32)
+    data_numpy2 = np.random.randint(1, 16, (3,)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.nn.cross_entropy_without_logits,
+        "relax.nn.cross_entropy_without_logits",
+        [data_numpy1, data_numpy2],
+        target,
+        dev,
+        (),
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_cross_entropy_without_logits_batch(target, dev):
+    data_numpy1 = np.random.randint(1, 16, (2, 3)).astype(np.float32)
+    data_numpy2 = np.random.randint(1, 16, (2, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.nn.cross_entropy_without_logits,
+        "relax.nn.cross_entropy_without_logits",
+        [data_numpy1, data_numpy2],
+        target,
+        dev,
+        (),
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_cross_entropy_with_logits(target, dev):
+    data_numpy1 = np.random.randint(1, 16, (3,)).astype(np.float32)
+    data_numpy2 = np.random.randint(1, 16, (3,)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.nn.cross_entropy_with_logits,
+        "relax.nn.cross_entropy_with_logits",
+        [data_numpy1, data_numpy2],
+        target,
+        dev,
+        (),
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_cross_entropy_with_logits_batch(target, dev):
+    data_numpy1 = np.random.randint(1, 16, (2, 3)).astype(np.float32)
+    data_numpy2 = np.random.randint(1, 16, (2, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.nn.cross_entropy_with_logits,
+        "relax.nn.cross_entropy_with_logits",
+        [data_numpy1, data_numpy2],
+        target,
+        dev,
+        (),
+    )
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

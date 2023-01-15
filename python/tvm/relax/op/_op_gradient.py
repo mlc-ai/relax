@@ -16,18 +16,21 @@
 # under the License.
 """Gradient definitions for Relax operators"""
 from typing import List
-from tvm.relax.expr import Call, Var
+from tvm import relax
+from tvm.relax.expr import Call, Var, Expr
 from ...tir import PrimExpr
 
 from .base import register_gradient
 
 from .unary import (
     exp,
+    log,
     negative,
 )
 from .binary import (
     subtract,
     multiply,
+    divide,
     less,
 )
 from .statistical import sum as _sum
@@ -322,17 +325,43 @@ def log_softmax_grad(orig: Call, grad: Var):
     return [subtract(grad, multiply(_sum(grad, orig.attrs.axis, True), softmax))]
 
 
-@register_gradient("relax.nn.nll_loss")
-def split_grad(orig: Call, grad: Var):
-    """Gradient of nll_loss.
+def _divide_batch(x: Expr, expr: Expr):
+    if x.struct_info.ndim > 1:
+        # TODO(chaofan, yixin): support symbolic shape
+        batch_size = int(x.struct_info.shape[0])
+        # batch_size = take(shape_of(x), relax.const(0, dtype="int32"), axis=0)
+        # expr = divide(expr, batch_size)
+        expr = divide(expr, relax.const(batch_size, dtype=expr.struct_info.dtype))
+    return expr
+
+
+@register_gradient("relax.nn.cross_entropy_without_logits")
+def cross_entropy_without_logits_grad(orig: Call, grad: Var):
+    """Gradient of cross_entropy_without_logits.
 
     Forward Form:
-        y = split(x, indices, axis)
+        z = cross_entropy_without_logits(x, y)
 
     Backward:
-        Returns [concat(y_grad, axis)].
+        Returns [-z_grad * y / x, -z_grad * log(x)].
+        If it has batch_size N, the results should divide by N.
     """
-    axis = orig.attrs["axis"]
-    assert axis is not None
-    axis = int(axis)
-    return [concat(grad, axis)]
+    x, y = orig.args
+    grad = _divide_batch(x, grad)
+    return [negative(multiply(grad, divide(y, x))), negative(multiply(grad, log(x)))]
+
+
+@register_gradient("relax.nn.cross_entropy_with_logits")
+def cross_entropy_with_logits_grad(orig: Call, grad: Var):
+    """Gradient of cross_entropy_without_logits.
+
+    Forward Form:
+        z = cross_entropy_with_logits(x, y)
+
+    Backward:
+        Returns [-z_grad * y, -z_grad * x].
+        If it has batch_size N, the results should divide by N.
+    """
+    x, y = orig.args
+    grad = _divide_batch(x, grad)
+    return [negative(multiply(grad, y)), negative(multiply(grad, x))]

@@ -432,13 +432,32 @@ def _nn_adaptive_max_pool2d(bb: BlockBuilder, call: Call):
     )
 
 
-# def _nn_softmax_cross_entropy(bb: BlockBuilder, call: Call):
-#     def te_softmax_cross_entropy(x, y):
-#         return _te_cross_entropy(topi.nn.softmax(x), y)
+def _nn_cross_entropy_without_logits(bb: BlockBuilder, call: Call):
+    def te_cross_entropy_without_logits(x, y):
+        if len(x.shape) > 1:
+            return -topi.sum(topi.log(x) * y) / x.shape[0]
+        return -topi.sum(topi.log(x) * y)
 
-#     return bb.call_te(
-#         te_softmax_cross_entropy, args[0], args[1], primfunc_name_hint="softmax_cross_entropy"
-#     )
+    return bb.call_te(
+        te_cross_entropy_without_logits,
+        call.args[0],
+        call.args[1],
+        primfunc_name_hint="cross_entropy_without_logits",
+    )
+
+
+def _nn_cross_entropy_with_logits(bb: BlockBuilder, call: Call):
+    def te_cross_entropy_with_logits(x, y):
+        if len(x.shape) > 1:
+            return -topi.sum(x * y) / x.shape[0]
+        return -topi.sum(x * y)
+
+    return bb.call_te(
+        te_cross_entropy_with_logits,
+        call.args[0],
+        call.args[1],
+        primfunc_name_hint="cross_entropy_with_logits",
+    )
 
 
 def _sum(bb: BlockBuilder, call: Call):
@@ -519,6 +538,8 @@ op_legalization_map = {
     ir.Op.get("relax.matmul"): _matmul,
     ir.Op.get("relax.nn.softmax"): _nn_softmax,
     ir.Op.get("relax.nn.log_softmax"): _nn_log_softmax,
+    ir.Op.get("relax.nn.cross_entropy_without_logits"): _nn_cross_entropy_without_logits,
+    ir.Op.get("relax.nn.cross_entropy_with_logits"): _nn_cross_entropy_with_logits,
     ir.Op.get("relax.flatten"): _flatten,
     ir.Op.get("relax.nn.adaptive_avg_pool2d"): _nn_adaptive_max_pool2d,
     ir.Op.get("relax.sum"): _sum,
