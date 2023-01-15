@@ -2304,15 +2304,9 @@ def test_collapse_sum_like_infer_struct_info_shape_var():
     y1 = relax.Var("y", relax.TensorStructInfo(s4, "float32"))
     y2 = relax.Var("y", relax.TensorStructInfo(s5, "float32"))
 
-    _check_inference(
-        bb, relax.op.collapse_sum_like(x0, y0), relax.TensorStructInfo(dtype="float32", ndim=2)
-    )
-    _check_inference(
-        bb, relax.op.collapse_sum_like(x1, y1), relax.TensorStructInfo(dtype="float32", ndim=2)
-    )
-    _check_inference(
-        bb, relax.op.collapse_sum_like(x2, y2), relax.TensorStructInfo(dtype="float32", ndim=-1)
-    )
+    _check_inference(bb, relax.op.collapse_sum_like(x0, y0), relax.TensorStructInfo(s3, "float32"))
+    _check_inference(bb, relax.op.collapse_sum_like(x1, y1), relax.TensorStructInfo(s4, "float32"))
+    _check_inference(bb, relax.op.collapse_sum_like(x2, y2), relax.TensorStructInfo(s5, "float32"))
 
 
 def test_collapse_sum_like_infer_struct_info_more_input_dtype():

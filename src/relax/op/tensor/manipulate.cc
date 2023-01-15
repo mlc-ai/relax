@@ -868,7 +868,7 @@ StructInfo InferStructInfoCollapseSumLike(const Call& call, const BlockBuilder& 
     CheckCollapseShape(call, ctx, data_shape_value.value(), collapse_target_shape_value.value());
   }
 
-  if (collapse_target_sinfo->shape.as<ShapeExprNode>()) {
+  if (collapse_target_sinfo->shape.defined()) {
     return TensorStructInfo(collapse_target_sinfo->shape.value(), output_dtype);
   } else {
     return TensorStructInfo(output_dtype, collapse_target_sinfo->ndim);
