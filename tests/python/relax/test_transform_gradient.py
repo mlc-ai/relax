@@ -1096,6 +1096,7 @@ def test_report_error():
     #     relax.transform.Gradient(UndefinedGradient.get_global_var("main"))(UndefinedGradient)
 
 
+# @pytest.mark.skip("Strange problems: R.nn.log_softmax(out, axis=-1), axes are different")
 def test_mlp_script():
     """
     An example of single layer multi-layer perceptron. You can add extra layers if you want.
@@ -1132,7 +1133,7 @@ def test_mlp_script():
             with R.dataflow():
                 lv0: R.Tensor((3, 5), dtype="float32") = R.matmul(x, w0, out_dtype="")
                 out: R.Tensor((3, 5), dtype="float32") = R.add(lv0, b0)
-                logits: R.Tensor((3, 5), dtype="float32") = R.nn.log_softmax(out)
+                logits: R.Tensor((3, 5), dtype="float32") = R.nn.log_softmax(out, axis=-1)
                 loss: R.Tensor((), dtype="float32") = R.nn.cross_entropy_with_logits(logits, label)
                 R.output(loss)
             return loss
@@ -1150,7 +1151,7 @@ def test_mlp_script():
             with R.dataflow():
                 lv0: R.Tensor((3, 5), dtype="float32") = R.matmul(x, w0, out_dtype="")
                 out: R.Tensor((3, 5), dtype="float32") = R.add(lv0, b0)
-                logits: R.Tensor((3, 5), dtype="float32") = R.nn.log_softmax(out)
+                logits: R.Tensor((3, 5), dtype="float32") = R.nn.log_softmax(out, axis=-1)
                 loss: R.Tensor((), dtype="float32") = R.nn.cross_entropy_with_logits(logits, label)
                 loss_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
                 lv: R.Tensor((), dtype="float32") = R.divide(loss_adjoint, R.const(3, "float32"))
@@ -1159,16 +1160,15 @@ def test_mlp_script():
                 lv2: R.Tensor((3, 1), dtype="float32") = R.sum(
                     logits_adjoint, axis=[-1], keepdims=True
                 )
-                lv3: R.Tensor((3, 5), dtype="float32") = R.nn.log_softmax(out)
-                lv4: R.Tensor((3, 5), dtype="float32") = R.exp(lv3)
-                lv5: R.Tensor((3, 5), dtype="float32") = R.multiply(lv2, lv4)
-                out_adjoint: R.Tensor((3, 5), dtype="float32") = R.subtract(logits_adjoint, lv5)
+                lv3: R.Tensor((3, 5), dtype="float32") = R.nn.softmax(out, axis=-1)
+                lv4: R.Tensor((3, 5), dtype="float32") = R.multiply(lv2, lv3)
+                out_adjoint: R.Tensor((3, 5), dtype="float32") = R.subtract(logits_adjoint, lv4)
                 lv0_adjoint: R.Tensor((3, 5), dtype="float32") = R.collapse_sum_to(
                     out_adjoint, (3, 5)
                 )
-                lv6: R.Tensor((10, 3), dtype="float32") = R.permute_dims(x, axes=[1, 0])
-                lv7: R.Tensor((10, 5), dtype="float32") = R.matmul(lv6, lv0_adjoint, out_dtype="")
-                w0_adjoint: R.Tensor((10, 5), dtype="float32") = R.collapse_sum_to(lv7, (10, 5))
+                lv5: R.Tensor((10, 3), dtype="float32") = R.permute_dims(x, axes=[1, 0])
+                lv6: R.Tensor((10, 5), dtype="float32") = R.matmul(lv5, lv0_adjoint, out_dtype="")
+                w0_adjoint: R.Tensor((10, 5), dtype="float32") = R.collapse_sum_to(lv6, (10, 5))
                 b0_adjoint: R.Tensor((5,), dtype="float32") = R.collapse_sum_to(out_adjoint, (5,))
                 R.output(loss, w0_adjoint, b0_adjoint)
             return (loss, (w0_adjoint, b0_adjoint))
