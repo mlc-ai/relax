@@ -104,6 +104,10 @@ def _log(bb: BlockBuilder, call: Call):
     return bb.call_te(topi.log, call.args[0])
 
 
+def _exp(bb: BlockBuilder, call: Call):
+    return bb.call_te(topi.exp, call.args[0])
+
+
 def _sqrt(bb: BlockBuilder, call: Call):
     return bb.call_te(topi.sqrt, call.args[0])
 
@@ -398,6 +402,10 @@ def _nn_softmax(bb: BlockBuilder, call: Call):
     return bb.call_te(topi.nn.softmax, call.args[0], call.attrs.axis)
 
 
+def _nn_log_softmax(bb: BlockBuilder, call: Call):
+    return bb.call_te(topi.nn.log_softmax, call.args[0], call.attrs.axis)
+
+
 def _flatten(bb: BlockBuilder, call: Call):
     return bb.call_te(topi.nn.flatten, call.args[0])
 
@@ -510,6 +518,7 @@ op_legalization_map = {
     ir.Op.get("relax.nn.layer_norm"): _nn_layer_norm,
     ir.Op.get("relax.matmul"): _matmul,
     ir.Op.get("relax.nn.softmax"): _nn_softmax,
+    ir.Op.get("relax.nn.log_softmax"): _nn_log_softmax,
     ir.Op.get("relax.flatten"): _flatten,
     ir.Op.get("relax.nn.adaptive_avg_pool2d"): _nn_adaptive_max_pool2d,
     ir.Op.get("relax.sum"): _sum,
@@ -518,6 +527,7 @@ op_legalization_map = {
     ir.Op.get("relax.tanh"): _tanh,
     ir.Op.get("relax.negative"): _negative,
     ir.Op.get("relax.log"): _log,
+    ir.Op.get("relax.exp"): _exp,
 }
 
 

@@ -31,6 +31,7 @@ def test_op_correctness():
     assert relax.op.tanh(x).op == Op.get("relax.tanh")
     assert relax.op.sqrt(x).op == Op.get("relax.sqrt")
     assert relax.op.log(x).op == Op.get("relax.log")
+    assert relax.op.exp(x).op == Op.get("relax.exp")
     assert relax.op.sigmoid(x).op == Op.get("relax.sigmoid")
     assert relax.op.unique(x).op == Op.get("relax.unique")
 

@@ -16,27 +16,36 @@
 # under the License.
 """Gradient definitions for Relax operators"""
 from typing import List
-from tvm.relax.op import register_gradient
-from tvm.relax.op import sum as _sum
-from tvm.relax.op import (
-    mean,
+from tvm.relax.expr import Call, Var
+from ...tir import PrimExpr
+
+from .base import register_gradient
+
+from .unary import (
+    exp,
+    negative,
+)
+from .binary import (
+    subtract,
+    multiply,
     less,
-    where,
+)
+from .statistical import sum as _sum
+from .statistical import mean
+from .create import (
+    zeros,
+    ones,
+)
+from .search import where
+from .linear_algebra import matmul
+from .manipulate import (
     collapse_sum_to,
     broadcast_to,
-    multiply,
-    negative,
-    subtract,
     permute_dims,
-    matmul,
-    ones,
-    zeros,
     expand_dims,
     concat,
     split,
 )
-from tvm.relax.expr import Call, Var
-from ...tir import PrimExpr
 
 
 @register_gradient("relax.add")
@@ -182,7 +191,7 @@ def matmul_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.sum")
 def sum_grad(orig: Call, grad: Var):
-    """Gradient of sum.
+    """Gradients of sum.
 
     Forward Form:
         y = relax.sum(x, axis, keepdims)
@@ -200,7 +209,7 @@ def sum_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.nn.softmax")
 def softmax_grad(orig: Call, grad: Var):
-    """Gradient of softmax.
+    """Gradients of softmax.
 
     Forward Form:
         y = relax.softmax(x, axis)
@@ -211,9 +220,23 @@ def softmax_grad(orig: Call, grad: Var):
     return [multiply(subtract(grad, _sum(multiply(grad, orig), orig.attrs.axis, True)), orig)]
 
 
+@register_gradient("relax.nn.log_softmax")
+def log_softmax_grad(orig: Call, grad: Var):
+    """Gradients of log_softmax.
+
+    Forward Form:
+        y = relax.log_softmax(x, axis)
+
+    Backward:
+        Returns [y_grad - sum(y_grad, axis, keepdims=True) * exp(y)]
+    """
+    softmax = exp(orig)
+    return [subtract(grad, multiply(_sum(grad, orig.attrs.axis, True), softmax))]
+
+
 @register_gradient("relax.sigmoid")
 def sigmoid_grad(orig: Call, grad: Var):
-    """Gradient of sigmoid.
+    """Gradients of sigmoid.
 
     Forward Form:
         y = relax.sigmoid(x)
@@ -236,7 +259,7 @@ def sigmoid_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.tanh")
 def tanh_grad(orig: Call, grad: Var):
-    """Gradient of tanh.
+    """Gradients of tanh.
 
     Forward Form:
         y = relax.tanh(x)
@@ -257,7 +280,7 @@ def tanh_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.concat")
 def concat_grad(orig: Call, grad: Var):
-    """Gradient of concat.
+    """Gradients of concat.
 
     Forward Form:
         y = concat((x1, x2, x3), axis)
@@ -280,7 +303,7 @@ def concat_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.split")
 def split_grad(orig: Call, grad: Var):
-    """Gradient of split.
+    """Gradients of split.
 
     Forward Form:
         y = split(x, indices, axis)

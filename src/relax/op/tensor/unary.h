@@ -39,6 +39,9 @@ Expr cos(Expr x);
 /*! \brief Compute element-wise natural logarithm of data. */
 Expr log(Expr x);
 
+/*! \brief Compute element-wise exp of data. */
+Expr exp(Expr x);
+
 /*! \brief Compute element-wise negative value of data. */
 Expr negative(Expr x);
 

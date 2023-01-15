@@ -244,6 +244,30 @@ def test_softmax(target, dev):
 
 
 @tvm.testing.parametrize_targets("llvm")
+def test_softmax_with_axis(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.nn.softmax, "relax.nn.softmax", [data1_numpy], target, dev, (3, 3), axis=1
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_log_softmax(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.nn.log_softmax, "relax.nn.log_softmax", [data1_numpy], target, dev, (3, 3)
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_log_softmax_with_axis(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.nn.log_softmax, "relax.nn.log_softmax", [data1_numpy], target, dev, (3, 3), axis=1
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
 def test_sum(target, dev):
     data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
     relax_check_gradients(relax.op.sum, "relax.sum", [data1_numpy], target, dev, ())
@@ -262,14 +286,6 @@ def test_sum_keepdims(target, dev):
     data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
     relax_check_gradients(
         relax.op.sum, "relax.sum", [data1_numpy], target, dev, (3, 1), keepdims=True, axis=1
-    )
-
-
-@tvm.testing.parametrize_targets("llvm")
-def test_softmax_with_axis(target, dev):
-    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.nn.softmax, "relax.nn.softmax", [data1_numpy], target, dev, (3, 3), axis=1
     )
 
 
