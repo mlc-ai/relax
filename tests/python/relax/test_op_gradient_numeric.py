@@ -21,7 +21,6 @@ from tvm import relax
 from tvm.relax.transform.op_legalizer import OperatorLegalizer
 from tvm.testing.utils import check_numerical_grads
 from tvm.ir.op import Op
-import tvm.relax.op._op_gradient
 from typing import Callable, Union, Tuple, List
 
 

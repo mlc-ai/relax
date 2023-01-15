@@ -415,7 +415,9 @@ def shape_of(expr: Expr) -> Expr:
     return _ffi_api.shape_of(expr)  # type: ignore # pylint: disable=no-member
 
 
-def register_gradient(op_name: str, fgradient: Callable[[Call, Var], Expr] = None, level: int = 10):
+def register_gradient(
+    op_name: str, fgradient: Callable[[Call, Var], List[Expr]] = None, level: int = 10
+):
     """Register operator gradient function for a relax operator.
 
     Parameters

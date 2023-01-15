@@ -43,9 +43,11 @@ from ...tir import PrimExpr
 def add_grad(orig: Call, grad: Var):
     """Gradients for add.
 
+    Forward Form:
         z = relax.add(x, y)
 
-    Returns [z_grad, z_grad].
+    Backward:
+        Returns [z_grad, z_grad].
     """
     return [
         collapse_sum_to(grad, orig.args[0].struct_info.shape),
@@ -57,9 +59,11 @@ def add_grad(orig: Call, grad: Var):
 def subtract_grad(orig: Call, grad: Var):
     """Gradients for subtract.
 
+    Forward Form:
         z = relax.subtract(x, y)
 
-    Returns [z_grad, -z_grad].
+    Backward:
+        Returns [z_grad, -z_grad].
     """
     return [
         collapse_sum_to(grad, orig.args[0].struct_info.shape),
@@ -71,9 +75,11 @@ def subtract_grad(orig: Call, grad: Var):
 def multiply_grad(orig: Call, grad: Var):
     """Gradients for multiply.
 
+    Forward Form:
         z = relax.multiply(x, y)
 
-    Returns [z_grad * y, z_grad * x].
+    Backward:
+        Returns [z_grad * y, z_grad * x].
     """
     x, y = orig.args
     return [
@@ -84,7 +90,14 @@ def multiply_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.permute_dims")
 def permute_dims_grad(orig: Call, grad: Var):
-    """Returns grad transposed over the complement of original permute_dims axes."""
+    """Gradients for permute_dims.
+
+    Forward Form:
+        y = relax.permute_dims(x, axes)
+
+    Backward:
+        Returns grad transposed over the **inverse permutation** of the original permute_dims axes.
+    """
     axes = orig.attrs["axes"]
     if axes:
         dims = len(axes)
@@ -100,9 +113,11 @@ def permute_dims_grad(orig: Call, grad: Var):
 def relu_grad(orig: Call, grad: Var):
     """Gradients for relu.
 
+    Forward Form:
         y = relax.relu(x)
 
-    Returns [y_grad * (where(x < 0, 0, 1))].
+    Backward:
+        Returns [y_grad * (where(x < 0, 0, 1))].
     """
     x = orig.args[0]
     x_zeros = zeros(x.struct_info.shape, x.struct_info.dtype)
@@ -114,11 +129,13 @@ def relu_grad(orig: Call, grad: Var):
 def matmul_grad(orig: Call, grad: Var):
     """Gradients for matmul.
 
+    Forward Form:
         c = relax.matmul(a, b)
 
-    Generally, returns [c_grad @ b^T, a^T @ c_grad].
-    Here we only transpose the last two dimensions because of the definition
-    of batch matmul. Note that ndim=1 should be treaded specially.
+    Backward:
+        Generally, returns [c_grad @ b^T, a^T @ c_grad].
+        Here we only transpose the last two dimensions because of the definition
+        of batch matmul. Note that ndim=1 should be treaded specially.
     """
 
     tensor_a, tensor_b = orig.args
@@ -165,7 +182,14 @@ def matmul_grad(orig: Call, grad: Var):
 
 @register_gradient("relax.sum")
 def sum_grad(orig: Call, grad: Var):
-    """Gradient of sum."""
+    """Gradient of sum.
+
+    Forward Form:
+        y = relax.sum(x, axis, keepdims)
+
+    Backward:
+        Returns [broadcast_to(y_grad, x.shape)]. If `keepdims=False`, the summed axis will be added back.
+    """
     axis = orig.attrs["axis"]
     keepdims = orig.attrs["keepdims"]
     if not keepdims and axis:
@@ -177,9 +201,11 @@ def sum_grad(orig: Call, grad: Var):
 def softmax_grad(orig: Call, grad: Var):
     """Gradient of softmax.
 
+    Forward Form:
         y = relax.softmax(x, axis)
 
-    Returns [(y_grad - sum(y_grad * y, axis, keepdims=True)) * y]
+    Backward:
+        Returns [(y_grad - sum(y_grad * y, axis, keepdims=True)) * y]
     """
     return [multiply(subtract(grad, _sum(multiply(grad, orig), orig.attrs.axis, True)), orig)]
 
@@ -188,9 +214,11 @@ def softmax_grad(orig: Call, grad: Var):
 def sigmoid_grad(orig: Call, grad: Var):
     """Gradient of sigmoid.
 
+    Forward Form:
         y = relax.sigmoid(x)
 
-    Returns [y_grad * y * (1 - y)].
+    Backward:
+        Returns [y_grad * y * (1 - y)].
     """
     return [
         multiply(
@@ -209,9 +237,11 @@ def sigmoid_grad(orig: Call, grad: Var):
 def tanh_grad(orig: Call, grad: Var):
     """Gradient of tanh.
 
+    Forward Form:
         y = relax.tanh(x)
 
-    Returns [y_grad * (1 - y * y)].
+    Backward:
+        Returns [y_grad * (1 - y * y)].
     """
     return [
         multiply(
@@ -228,9 +258,11 @@ def tanh_grad(orig: Call, grad: Var):
 def concat_grad(orig: Call, grad: Var):
     """Gradient of concat.
 
+    Forward Form:
         y = concat((x1, x2, x3), axis)
 
-    Returns [split(y_grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis]], axis)].
+    Backward:
+        Returns [split(y_grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis]], axis)].
     """
     axis = orig.attrs["axis"]
     assert axis is not None
@@ -249,9 +281,11 @@ def concat_grad(orig: Call, grad: Var):
 def split_grad(orig: Call, grad: Var):
     """Gradient of split.
 
+    Forward Form:
         y = split(x, indices, axis)
 
-    Returns [concat(y_grad, axis)].
+    Backward:
+        Returns [concat(y_grad, axis)].
     """
     axis = orig.attrs["axis"]
     assert axis is not None
