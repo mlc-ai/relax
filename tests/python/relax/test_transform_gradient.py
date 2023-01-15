@@ -1096,7 +1096,6 @@ def test_report_error():
     #     relax.transform.Gradient(UndefinedGradient.get_global_var("main"))(UndefinedGradient)
 
 
-@pytest.mark.skip("Strange problems: R.nn.log_softmax(out, axis=-1), axes are different")
 def test_mlp_script():
     """
     An example of single layer multi-layer perceptron. You can add extra layers if you want.
