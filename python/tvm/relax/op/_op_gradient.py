@@ -188,7 +188,8 @@ def sum_grad(orig: Call, grad: Var):
         y = relax.sum(x, axis, keepdims)
 
     Backward:
-        Returns [broadcast_to(y_grad, x.shape)]. If `keepdims=False`, the summed axis will be added back.
+        Returns [broadcast_to(y_grad, x.shape)].
+        If `keepdims=False`, the summed axis will be added back.
     """
     axis = orig.attrs["axis"]
     keepdims = orig.attrs["keepdims"]
