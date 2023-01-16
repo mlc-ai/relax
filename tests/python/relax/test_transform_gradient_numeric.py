@@ -24,14 +24,14 @@ from tvm.relay.testing import rand
 from tvm.testing import assert_allclose
 from tvm.testing.utils import check_numerical_grads
 from tvm.script.parser import ir as I, relax as R, tir as T
-from tvm.relax.transform import OperatorLegalizer
+from tvm.relax.transform import LegalizeOps
 
 
-def _execute_mod(mod, func_name, *args):
-    lowered_mod = OperatorLegalizer(mod).transform()
+def _legalize_and_build(mod):
+    lowered_mod = LegalizeOps()(mod)
     ex = relax.vm.build(lowered_mod, target="llvm")
     vm = relax.VirtualMachine(ex, tvm.cpu())
-    return vm[func_name](*args)
+    return vm
 
 
 def test_manual_gradient():
@@ -64,7 +64,8 @@ def test_manual_gradient():
     args = [rand("float32", 3, 5), rand("float32", 5), rand("float32", 5), rand("float32", 5)]
     args_np = [x.numpy() for x in args]
 
-    output, grads = _execute_mod(After, "main_adjoint", *args)
+    vm = _legalize_and_build(After)
+    output, grads = vm["main_adjoint"](*args)
     output_np = np.sum((2 * args_np[0] - 2 * args_np[1]) * (args_np[1] + args_np[2]))
     assert_allclose(output.numpy(), output_np, atol=1e-4)
 
@@ -119,12 +120,6 @@ def test_mlp_blockbuilder():
     label = np.random.rand(batch_size, out_size).astype(np.float32)
     label /= label.sum(axis=1, keepdims=True)
     args.append(tvm.nd.array(label))
-
-    def _legalize_and_build(mod):
-        lowered_mod = OperatorLegalizer(mod).transform()
-        ex = relax.vm.build(lowered_mod, target="llvm")
-        vm = relax.VirtualMachine(ex, tvm.cpu())
-        return vm
 
     vm_before = _legalize_and_build(Before)
     vm_after = _legalize_and_build(After)

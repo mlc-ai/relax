@@ -342,7 +342,8 @@ class BackwardBindingGenerator : public ExprVisitor {
 // We only eliminate the bindings generated in the backward process.
 class CollapseSumEliminator : public ExprMutator {
  public:
-  explicit CollapseSumEliminator(const BlockBuilder &builder, int backward_start_index) : builder_(builder), backward_start_index_(backward_start_index) {}
+  explicit CollapseSumEliminator(const BlockBuilder& builder, int backward_start_index)
+      : builder_(builder), backward_start_index_(backward_start_index) {}
 
   BindingBlock VisitBindingBlock_(const DataflowBlockNode* block) override {
     builder_->BeginDataflowBlock();
@@ -357,7 +358,8 @@ class CollapseSumEliminator : public ExprMutator {
 
   void VisitBinding_(const VarBindingNode* binding, const CallNode* value) override {
     Expr new_value = GetRef<Expr>(value);
-    if (will_eliminate_ && value->op == Op::Get("relax.collapse_sum_to") && CheckShape(value->args[0], value->args[1])) {
+    if (will_eliminate_ && value->op == Op::Get("relax.collapse_sum_to") &&
+        CheckShape(value->args[0], value->args[1])) {
       new_value = value->args[0];
     }
     this->ReEmitBinding(binding, new_value);
@@ -365,7 +367,7 @@ class CollapseSumEliminator : public ExprMutator {
 
  private:
   // Check the shape of data is the same as shape
-  bool CheckShape(const Expr &data, const Expr &shape) {
+  bool CheckShape(const Expr& data, const Expr& shape) {
     const auto* data_sinfo = GetStructInfoAs<TensorStructInfoNode>(data);
     const auto* shape_sinfo = GetStructInfoAs<ShapeStructInfoNode>(shape);
     ICHECK(data_sinfo && shape_sinfo);
@@ -473,7 +475,8 @@ class GradientMutator : public ExprMutator {
                                                        this->require_grads_, this->target_var_);
 
     BindingBlock result = builder_->EndBlock();
-    return CollapseSumEliminator(builder_, block->bindings.size()).VisitBindingBlock(result);
+    // return CollapseSumEliminator(builder_, block->bindings.size()).VisitBindingBlock(result);
+    return result;
   }
 
  private:

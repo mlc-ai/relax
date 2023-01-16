@@ -58,9 +58,8 @@ def test_simple():
             return (gv, (x_adjoint,))
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
-    After.show()
-    # assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
-test_simple()
+    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+
 
 def test_assign_binding():
     @I.ir_module
@@ -847,6 +846,7 @@ def test_tuple_ops():
     # After.show()
     # assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
+
 # test_tuple_ops()
 def test_const():
     """const could be used in variable assignment, call argument, and as a part of tuple"""
@@ -1084,7 +1084,6 @@ def test_report_error():
         relax.transform.Gradient(IntDtypeTuple.get_global_var("main"))(IntDtypeTuple)
 
 
-# @pytest.mark.skip("Strange problems: R.nn.log_softmax(out, axis=-1), axes are different")
 def test_mlp_script():
     """
     An example of single layer multi-layer perceptron. You can add extra layers if you want.
@@ -1167,5 +1166,5 @@ def test_mlp_script():
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
-# if __name__ == "__main__":
-#     pytest.main([__file__])
+if __name__ == "__main__":
+    pytest.main([__file__])
