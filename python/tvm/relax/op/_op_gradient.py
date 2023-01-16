@@ -25,6 +25,8 @@ from .base import register_gradient
 from .unary import (
     log,
     negative,
+    sigmoid,
+    tanh,
 )
 from .binary import (
     subtract,
@@ -113,15 +115,12 @@ def sigmoid_grad(orig: Call, grad: Var):
     Backward:
         Returns [y_grad * y * (1 - y)].
     """
+    x_ones = ones(orig.args[0].struct_info.shape, orig.args[0].struct_info.dtype)
+    x_sigmoid = sigmoid(orig.args[0])
     return [
         multiply(
             grad,
-            multiply(
-                orig,
-                subtract(
-                    ones(orig.args[0].struct_info.shape, orig.args[0].struct_info.dtype), orig
-                ),
-            ),
+            multiply(x_sigmoid, subtract(x_ones, x_sigmoid)),
         )
     ]
 
@@ -136,13 +135,12 @@ def tanh_grad(orig: Call, grad: Var):
     Backward:
         Returns [y_grad * (1 - y * y)].
     """
+    x_ones = ones(orig.args[0].struct_info.shape, orig.args[0].struct_info.dtype)
+    x_tanh = tanh(orig.args[0])
     return [
         multiply(
             grad,
-            subtract(
-                ones(orig.args[0].struct_info.shape, orig.args[0].struct_info.dtype),
-                multiply(orig, orig),
-            ),
+            subtract(x_ones, multiply(x_tanh, x_tanh)),
         )
     ]
 
@@ -186,6 +184,7 @@ def permute_dims_grad(orig: Call, grad: Var):
         return [permute_dims(grad, axes=new_axes)]
     else:
         return [permute_dims(grad)]
+
 
 # TODO(yixin, chaofan): handle symbolic shape
 @register_gradient("relax.concat")
@@ -310,7 +309,10 @@ def softmax_grad(orig: Call, grad: Var):
     Backward:
         Returns [(y_grad - sum(y_grad * y, axis, keepdims=True)) * y]
     """
-    return [multiply(subtract(grad, _sum(multiply(grad, orig), orig.attrs.axis, True)), orig)]
+    x_softmax = softmax(orig.args[0], orig.attrs.axis)  # recompute
+    return [
+        multiply(subtract(grad, _sum(multiply(grad, x_softmax), orig.attrs.axis, True)), x_softmax)
+    ]
 
 
 @register_gradient("relax.nn.log_softmax")

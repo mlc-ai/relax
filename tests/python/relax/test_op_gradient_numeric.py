@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 import tvm
 from tvm import relax
-from tvm.relax.transform.op_legalizer import OperatorLegalizer
+from tvm.relax.transform import LegalizeOps
 from tvm.testing.utils import check_numerical_grads
 from tvm.ir.op import Op
 from typing import Callable, Union, Tuple, List
@@ -90,7 +90,7 @@ def relax_check_gradients(
             out = bb.emit_output(call)
         bb.emit_func_output(out)
     mod = bb.get()
-    lower_mod = OperatorLegalizer(mod).transform()
+    lower_mod = LegalizeOps()(mod)
     ex_0 = relax.vm.build(lower_mod, target)
     vm_0 = relax.VirtualMachine(ex_0, dev)
 
@@ -119,7 +119,7 @@ def relax_check_gradients(
                 out = bb1.emit_output(grad_call)
         bb1.emit_func_output(out)
     grad_mod = bb1.get()
-    lower_grad_mod = OperatorLegalizer(grad_mod).transform()
+    lower_grad_mod = LegalizeOps()(grad_mod)
 
     ex_1 = relax.vm.build(lower_grad_mod, target)
     vm_1 = relax.VirtualMachine(ex_1, dev)

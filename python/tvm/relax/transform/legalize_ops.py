@@ -516,6 +516,38 @@ def _nn_softmax(bb: BlockBuilder, call: Call) -> Expr:
     return bb.call_te(topi.nn.softmax, call.args[0], call.attrs.axis)
 
 
+def _nn_log_softmax(bb: BlockBuilder, call: Call):
+    return bb.call_te(topi.nn.log_softmax, call.args[0], call.attrs.axis)
+
+
+def _nn_cross_entropy_without_logits(bb: BlockBuilder, call: Call):
+    def te_cross_entropy_without_logits(x, y):
+        if len(x.shape) > 1:
+            return -topi.sum(topi.log(x) * y) / x.shape[0]
+        return -topi.sum(topi.log(x) * y)
+
+    return bb.call_te(
+        te_cross_entropy_without_logits,
+        call.args[0],
+        call.args[1],
+        primfunc_name_hint="cross_entropy_without_logits",
+    )
+
+
+def _nn_cross_entropy_with_logits(bb: BlockBuilder, call: Call):
+    def te_cross_entropy_with_logits(x, y):
+        if len(x.shape) > 1:
+            return -topi.sum(x * y) / x.shape[0]
+        return -topi.sum(x * y)
+
+    return bb.call_te(
+        te_cross_entropy_with_logits,
+        call.args[0],
+        call.args[1],
+        primfunc_name_hint="cross_entropy_with_logits",
+    )
+
+
 def _nn_batch_norm(bb: BlockBuilder, call: Call) -> Expr:
     return bb.call_te(
         topi.nn.batch_norm,
@@ -621,11 +653,11 @@ DEFAULT_OP_LEGALIZE_MAP: LegalizeMap = {
     "relax.reshape": _reshape(topi.reshape, "reshape"),
     "relax.split": _split,
     "relax.squeeze": _squeeze,
-    # Todo(relax-team): Introduce TOPI collapse_sum for gradient
-    # "relax.collapse_sum_like": _reshape(topi.collapse_sum, "collapse_sum"),
-    # "relax.collapse_sum_to": _reshape(
-    #     topi.collapse_sum, "collapse_sum", is_collapse_sum_like=True
-    # ),
+    ## TODO(relax-team): collapse_sum support symbolic shape
+    "relax.collapse_sum_like": _reshape(
+        topi.collapse_sum, "collapse_sum", is_collapse_sum_like=True
+    ),
+    "relax.collapse_sum_to": _reshape(topi.collapse_sum, "collapse_sum"),
     # Search
     "relax.where": _where,
     # Statistical
@@ -644,6 +676,9 @@ DEFAULT_OP_LEGALIZE_MAP: LegalizeMap = {
     "relax.nn.gelu": _nn_gelu,
     "relax.nn.silu": _nn_silu,
     "relax.nn.softmax": _nn_softmax,
+    "relax.nn.log_softmax": _nn_log_softmax,
+    "relax.nn.cross_entropy_without_logits": _nn_cross_entropy_without_logits,
+    "relax.nn.cross_entropy_with_logits": _nn_cross_entropy_with_logits,
     "relax.nn.batch_norm": _nn_batch_norm,
     "relax.nn.layer_norm": _nn_layer_norm,
     "relax.nn.dropout": _nn_dropout,
