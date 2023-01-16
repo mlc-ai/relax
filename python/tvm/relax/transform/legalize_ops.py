@@ -573,10 +573,8 @@ def _image_resize2d(bb: BlockBuilder, call: Call) -> Expr:
 # def _cumsum(bb: BlockBuilder, call: Call):
 #     return bb.call_te(topi.cumsum, args[0], attrs.axis)
 
-LegalizeMap = Dict[str, LegalizeFunc]
 
-
-DEFAULT_OP_LEGALIZE_MAP: LegalizeMap = {
+DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     # Arithmetic and comparison
     "relax.cos": _unary(topi.cos),
     "relax.log": _unary(topi.log),
@@ -656,11 +654,105 @@ DEFAULT_OP_LEGALIZE_MAP: LegalizeMap = {
 
 @tvm.transform.module_pass(opt_level=3, name="LegalizeOps")
 class LegalizeOps:
-    """Legalize high-level operator calls to CallTIRs with corresponding
-    low-level TIR PrimFuncs.
+    """Legalize high-level operator calls in Relax functions to call_tir
+    with corresponding low-level TIR PrimFuncs.
+
+    For each high-level operator, we register the way of legalizing it as a
+    function, which takes a context BlockBuilder and the Call being legalized
+    as input, and returns the legalized call. Here the input BlockBuilder is
+    mainly used for adding the PrimFunc created by call_te into the context
+    IRModule.
+
+    The legalization function for each operator is registered in a map,
+    where the operator name is the key. The default legalization functions
+    are in the map `DEFAULT_OP_LEGALIZE_MAP`.
+
+    This pass provides customizability for users to use their own legalization
+    function for operators. The pass takes an optional customized map,
+    which has the same key/value type as the default map (see `LegalizeFunc`),
+    from users. When an operator is contained in both the default map and the
+    customized map, the default legalization function will be overridden, and
+    only the customized one will be used.
+
+    Parameters
+    ----------
+    customize_legalize_map : Optional[Dict[str, LegalizeFunc]]
+        The customized operator legalization function map.
+        If not specified, it will be a fresh empty dict.
+        If an op has legalization function in both the default map and the
+        customized map, the customized function will override the default
+        one.
+
+    Examples
+    --------
+    The following code shows how to use this pass:
+
+    .. code-block:: python
+
+        # Define the pass input IRModule
+        @tvm.script.ir_module
+        class Module:
+            @R.function
+            def main(
+                x: R.Tensor((2, 3), "float32"), y: R.Tensor((2, 3), "float32")
+            ) -> R.Tensor((2, 3), "float32"):
+                z: R.Tensor((2, 3), "float32") = R.add(x, y)
+                r: R.Tensor((2, 3), "float32") = R.multiply(y, z)
+                return r
+
+        # Define the customized legalization function for "relax.add"
+        def customize_legalize_add(bb: relax.BlockBuilder, call: relax.Call) -> relax.Expr:
+            from tvm import topi
+            return bb.call_te(topi.add, call.args[1], call.args[0])
+
+        # Apply the pass with the customized function to the module.
+        mod = LegalizeOps({"relax.add": customize_legalize_add})(Module)
+
+    Print out the result by `mod.show()`, we can see the IRModule after
+    legalization becomes
+
+    .. code-block:: python
+
+        @tvm.script.ir_module
+        class Module:
+            @R.function
+            def main(
+                x: R.Tensor((2, 3), "float32"), y: R.Tensor((2, 3), "float32")
+            ) -> R.Tensor((2, 3), "float32"):
+                z = R.call_tir(add, (y, x), (2, 3), dtype="float32")
+                r = R.call_tir(multiply, (y, z), (2, 3), dtype="float32")
+                return r
+
+            @T.prim_func
+            def add(
+                A: T.Buffer[(2, 3), "float32"],
+                B: T.Buffer[(2, 3), "float32"],
+                T_add: T.Buffer[(2, 3), "float32"],
+            ):
+                T.func_attr({"tir.noalias": True})
+                for ax0, ax1 in T.grid(2, 3):
+                    with T.block("T_add"):
+                        v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])
+                        T.reads(A[v_ax0, v_ax1], B[v_ax0, v_ax1])
+                        T.writes(T_add[v_ax0, v_ax1])
+                        T_add[v_ax0, v_ax1] = A[v_ax0, v_ax1] + B[v_ax0, v_ax1]
+
+            @T.prim_func
+            def multiply(
+                A: T.Buffer[(2, 3), "float32"],
+                B: T.Buffer[(2, 3), "float32"],
+                T_multiply: T.Buffer[(2, 3), "float32"],
+            ):
+                T.func_attr({"tir.noalias": True})
+                for ax0, ax1 in T.grid(2, 3):
+                    with T.block("T_multiply"):
+                        v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])
+                        T.reads(A[v_ax0, v_ax1], B[v_ax0, v_ax1])
+                        T.writes(T_multiply[v_ax0, v_ax1])
+                        T_multiply[v_ax0, v_ax1] = A[v_ax0, v_ax1] * B[v_ax0, v_ax1]
     """
 
-    def __init__(self, customize_legalize_map: Optional[LegalizeMap] = None):
+    def __init__(self, customize_legalize_map: Optional[Dict[str, LegalizeFunc]] = None):
         if customize_legalize_map is None:
             self.customize_legalize_map = dict()
         else:
@@ -669,14 +761,14 @@ class LegalizeOps:
     def transform_module(self, mod: IRModule, ctx: tvm.transform.PassContext) -> IRModule:
         @mutator
         class OperatorLegalizer(PyExprMutator):
-            def __init__(self, mod: IRModule, customize_legalize_map: LegalizeMap):
+            def __init__(self, mod: IRModule, customize_legalize_map: Dict[str, LegalizeFunc]):
                 super().__init__(mod)
                 self.mod = mod
                 self.legalize_map = DEFAULT_OP_LEGALIZE_MAP.copy()
                 for name, func in customize_legalize_map.items():
                     self.legalize_map[name] = func
 
-            def _convert_op(self, call: Call) -> Call:
+            def _convert_op(self, call: Call) -> Expr:
                 if call.op.name in self.legalize_map:
                     # We only transform the op calls with known shape values
                     if not all(
