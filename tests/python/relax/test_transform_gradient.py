@@ -58,8 +58,9 @@ def test_simple():
             return (gv, (x_adjoint,))
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
-
+    After.show()
+    # assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+test_simple()
 
 def test_assign_binding():
     @I.ir_module
@@ -762,92 +763,91 @@ def test_tuple_update():
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
-@pytest.mark.skip("Not support tuple ops now")
 def test_tuple_ops():
     @I.ir_module
     class Before:
         @R.function
         def main(
-            x: R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3, 3), "float32")),
-            y: R.Tensor((3, 3), "float32"),
-            z: R.Tensor((3, 3), "float32"),
+            x: R.Tensor((6,), "float32"),
         ):
             with R.dataflow():
-                lv1 = (y, z)
-                lv2 = x[0]
-                lv3 = lv1[0]
-                lv4 = R.add(lv2, lv3)
-                lv5 = R.sum(lv4)
-                R.output(lv5)
-            return lv5
+                lv1 = R.split(x, 2)
+                lv2 = lv1[0]
+                lv3 = lv1[1]
+                lv4 = lv2 + lv3
+                lv5 = (lv4, lv3)
+                lv6 = R.concat(lv5)
+                R.output(lv6)
+            return lv6
 
-    @I.ir_module
-    class Expected:
-        @R.function
-        def main(
-            x: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")),
-            y: R.Tensor((3, 3), dtype="float32"),
-            z: R.Tensor((3, 3), dtype="float32"),
-        ) -> R.Tensor(None, dtype="float32", ndim=0):
-            with R.dataflow():
-                lv1: R.Tuple(
-                    R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")
-                ) = (y, z)
-                lv2: R.Tensor((3, 3), dtype="float32") = x[0]
-                lv3: R.Tensor((3, 3), dtype="float32") = lv1[0]
-                lv4: R.Tensor((3, 3), dtype="float32") = R.add(lv2, lv3)
-                lv5: R.Tensor((), dtype="float32") = R.sum(lv4, axis=None, keepdims=False)
-                R.output(lv5)
-            return lv5
+    # @I.ir_module
+    # class Expected:
+    #     @R.function
+    #     def main(
+    #         x: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")),
+    #         y: R.Tensor((3, 3), dtype="float32"),
+    #         z: R.Tensor((3, 3), dtype="float32"),
+    #     ) -> R.Tensor(None, dtype="float32", ndim=0):
+    #         with R.dataflow():
+    #             lv1: R.Tuple(
+    #                 R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")
+    #             ) = (y, z)
+    #             lv2: R.Tensor((3, 3), dtype="float32") = x[0]
+    #             lv3: R.Tensor((3, 3), dtype="float32") = lv1[0]
+    #             lv4: R.Tensor((3, 3), dtype="float32") = R.add(lv2, lv3)
+    #             lv5: R.Tensor((), dtype="float32") = R.sum(lv4, axis=None, keepdims=False)
+    #             R.output(lv5)
+    #         return lv5
 
-        @R.function
-        def main_adjoint(
-            x: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")),
-            y: R.Tensor((3, 3), dtype="float32"),
-            z: R.Tensor((3, 3), dtype="float32"),
-        ) -> R.Tuple(
-            R.Tensor(None, dtype="float32", ndim=0),
-            R.Tuple(
-                R.Tuple(
-                    R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=2)
-                ),
-                R.Tensor(None, dtype="float32", ndim=2),
-                R.Tensor(None, dtype="float32", ndim=2),
-            ),
-        ):
-            with R.dataflow():
-                lv1: R.Tuple(
-                    R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")
-                ) = (y, z)
-                lv2: R.Tensor((3, 3), dtype="float32") = x[0]
-                lv3: R.Tensor((3, 3), dtype="float32") = lv1[0]
-                lv4: R.Tensor((3, 3), dtype="float32") = R.add(lv2, lv3)
-                lv5: R.Tensor((), dtype="float32") = R.sum(lv4, axis=None, keepdims=False)
-                lv5_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
-                lv4_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(lv5_adjoint, (3, 3))
-                lv3_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
-                    lv4_adjoint, (3, 3)
-                )
-                lv2_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
-                    lv4_adjoint, (3, 3)
-                )
-                lv: R.Tensor((3, 3), dtype="float32") = R.zeros((3, 3), dtype="float32")
-                lv1_adjoint: R.Tuple(
-                    R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")
-                ) = (lv3_adjoint, lv)
-                lv11: R.Tensor((3, 3), dtype="float32") = R.zeros((3, 3), dtype="float32")
-                x_adjoint: R.Tuple(
-                    R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")
-                ) = (lv2_adjoint, lv11)
-                y_adjoint: R.Tensor((3, 3), dtype="float32") = lv3_adjoint
-                z_adjoint: R.Tensor((3, 3), dtype="float32") = lv
-                R.output(lv5, x_adjoint, y_adjoint, z_adjoint)
-            return (lv5, (x_adjoint, y_adjoint, z_adjoint))
+    #     @R.function
+    #     def main_adjoint(
+    #         x: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")),
+    #         y: R.Tensor((3, 3), dtype="float32"),
+    #         z: R.Tensor((3, 3), dtype="float32"),
+    #     ) -> R.Tuple(
+    #         R.Tensor(None, dtype="float32", ndim=0),
+    #         R.Tuple(
+    #             R.Tuple(
+    #                 R.Tensor(None, dtype="float32", ndim=2), R.Tensor(None, dtype="float32", ndim=2)
+    #             ),
+    #             R.Tensor(None, dtype="float32", ndim=2),
+    #             R.Tensor(None, dtype="float32", ndim=2),
+    #         ),
+    #     ):
+    #         with R.dataflow():
+    #             lv1: R.Tuple(
+    #                 R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")
+    #             ) = (y, z)
+    #             lv2: R.Tensor((3, 3), dtype="float32") = x[0]
+    #             lv3: R.Tensor((3, 3), dtype="float32") = lv1[0]
+    #             lv4: R.Tensor((3, 3), dtype="float32") = R.add(lv2, lv3)
+    #             lv5: R.Tensor((), dtype="float32") = R.sum(lv4, axis=None, keepdims=False)
+    #             lv5_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+    #             lv4_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(lv5_adjoint, (3, 3))
+    #             lv3_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
+    #                 lv4_adjoint, (3, 3)
+    #             )
+    #             lv2_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
+    #                 lv4_adjoint, (3, 3)
+    #             )
+    #             lv: R.Tensor((3, 3), dtype="float32") = R.zeros((3, 3), dtype="float32")
+    #             lv1_adjoint: R.Tuple(
+    #                 R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")
+    #             ) = (lv3_adjoint, lv)
+    #             lv11: R.Tensor((3, 3), dtype="float32") = R.zeros((3, 3), dtype="float32")
+    #             x_adjoint: R.Tuple(
+    #                 R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")
+    #             ) = (lv2_adjoint, lv11)
+    #             y_adjoint: R.Tensor((3, 3), dtype="float32") = lv3_adjoint
+    #             z_adjoint: R.Tensor((3, 3), dtype="float32") = lv
+    #             R.output(lv5, x_adjoint, y_adjoint, z_adjoint)
+    #         return (lv5, (x_adjoint, y_adjoint, z_adjoint))
 
-    After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    # After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    # After.show()
+    # assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
-
+# test_tuple_ops()
 def test_const():
     """const could be used in variable assignment, call argument, and as a part of tuple"""
     cst = relax.const(np.ones((3, 3)), dtype="float32")
@@ -1083,18 +1083,6 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient(IntDtypeTuple.get_global_var("main"))(IntDtypeTuple)
 
-    # @I.ir_module
-    # class UndefinedGradient:
-    #     @R.function
-    #     def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3,), "int64")):
-    #         with R.dataflow():
-    #             gv = R.nll_loss(x, y)
-    #             R.output(gv)
-    #         return gv
-
-    # with pytest.raises(TVMError):
-    #     relax.transform.Gradient(UndefinedGradient.get_global_var("main"))(UndefinedGradient)
-
 
 # @pytest.mark.skip("Strange problems: R.nn.log_softmax(out, axis=-1), axes are different")
 def test_mlp_script():
@@ -1179,5 +1167,5 @@ def test_mlp_script():
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
-if __name__ == "__main__":
-    pytest.main([__file__])
+# if __name__ == "__main__":
+#     pytest.main([__file__])

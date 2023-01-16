@@ -37,8 +37,8 @@
 namespace tvm {
 namespace relax {
 
-// a tool class for GradientMutator
-// visit the forward bindings and generate the backward bindings
+// A tool class for GradientMutator
+// Visit the forward bindings and generate the backward bindings
 class BackwardBindingGenerator : public ExprVisitor {
  public:
   /*!
@@ -335,6 +335,76 @@ class BackwardBindingGenerator : public ExprVisitor {
   Map<Expr, Var> adjoint_expr_to_var_;
 };
 
+// For collapse_sum_to(tensor, shape), if the shape of tensor is the same as the input shape,
+// it could be eliminated.
+// This mutator visits the given DataflowBlock, and replace the collapse_sum_to bindings that could
+// be eliminated into var assignment bindings.
+// We only eliminate the bindings generated in the backward process.
+class CollapseSumEliminator : public ExprMutator {
+ public:
+  explicit CollapseSumEliminator(const BlockBuilder &builder, int backward_start_index) : builder_(builder), backward_start_index_(backward_start_index) {}
+
+  BindingBlock VisitBindingBlock_(const DataflowBlockNode* block) override {
+    builder_->BeginDataflowBlock();
+    for (int i = 0; i < static_cast<int>(block->bindings.size()); ++i) {
+      if (i == backward_start_index_) {
+        will_eliminate_ = true;
+      }
+      this->VisitBinding(block->bindings[i]);
+    }
+    return builder_->EndBlock();
+  }
+
+  void VisitBinding_(const VarBindingNode* binding, const CallNode* value) override {
+    Expr new_value = GetRef<Expr>(value);
+    if (will_eliminate_ && value->op == Op::Get("relax.collapse_sum_to") && CheckShape(value->args[0], value->args[1])) {
+      new_value = value->args[0];
+    }
+    this->ReEmitBinding(binding, new_value);
+  }
+
+ private:
+  // Check the shape of data is the same as shape
+  bool CheckShape(const Expr &data, const Expr &shape) {
+    const auto* data_sinfo = GetStructInfoAs<TensorStructInfoNode>(data);
+    const auto* shape_sinfo = GetStructInfoAs<ShapeStructInfoNode>(shape);
+    ICHECK(data_sinfo && shape_sinfo);
+    Optional<Array<PrimExpr>> data_shape_value;
+    if (data_sinfo->shape.defined()) {
+      data_shape_value = GetStructInfoAs<ShapeStructInfoNode>(data_sinfo->shape.value())->values;
+    }
+
+    if (data_shape_value.defined() && shape_sinfo->values.defined()) {
+      return CheckPrimShape(data_shape_value.value(), shape_sinfo->values.value());
+    }
+
+    return false;
+  }
+
+  // We provide best effort check here.
+  // If the shape of every binding value in the input module is specified and static,
+  // the check can always be done.
+  bool CheckPrimShape(const Array<PrimExpr>& data_shape, const Array<PrimExpr>& target_shape) {
+    arith::Analyzer* analyzer = builder_->GetAnalyzer();
+
+    if (data_shape.size() != target_shape.size()) {
+      return false;
+    }
+
+    for (int i = 0; i < static_cast<int>(data_shape.size()); ++i) {
+      if (!analyzer->CanProveEqual(data_shape[i], target_shape[i])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  BlockBuilder builder_;
+  int backward_start_index_;
+  bool will_eliminate_ = false;
+};
+
 class GradientMutator : public ExprMutator {
  public:
   explicit GradientMutator(const IRModule& mod, const GlobalVar& gvar,
@@ -402,7 +472,8 @@ class GradientMutator : public ExprMutator {
     return_expr_ = BackwardBindingGenerator().Generate(this->builder_, GetRef<DataflowBlock>(block),
                                                        this->require_grads_, this->target_var_);
 
-    return builder_->EndBlock();
+    BindingBlock result = builder_->EndBlock();
+    return CollapseSumEliminator(builder_, block->bindings.size()).VisitBindingBlock(result);
   }
 
  private:
