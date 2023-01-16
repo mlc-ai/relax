@@ -319,7 +319,7 @@ def test_concat(target, dev):
 
 
 @tvm.testing.parametrize_targets("llvm")
-def test_split(target, dev):
+def test_split_indices(target, dev):
     data_numpy = np.random.randint(1, 16, (3, 12)).astype(np.float32)
     relax_check_gradients(
         relax.op.split,
@@ -329,6 +329,21 @@ def test_split(target, dev):
         dev,
         [(3, 3), (3, 4), (3, 5)],
         indices_or_sections=[3, 7],
+        axis=1,
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_split_section(target, dev):
+    data_numpy = np.random.randint(1, 16, (3, 12)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.split,
+        "relax.split",
+        [data_numpy],
+        target,
+        dev,
+        [(3, 4), (3, 4), (3, 4)],
+        indices_or_sections=3,
         axis=1,
     )
 

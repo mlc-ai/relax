@@ -187,7 +187,7 @@ def permute_dims_grad(orig: Call, grad: Var):
     else:
         return [permute_dims(grad)]
 
-
+# TODO(yixin, chaofan): handle symbolic shape
 @register_gradient("relax.concat")
 def concat_grad(orig: Call, grad: Var):
     """Gradient of concat.
