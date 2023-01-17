@@ -329,9 +329,7 @@ inline Tensor sum(const Tensor& data, const Array<Integer>& axis, bool keepdims 
 }
 
 inline Tensor collapse_sum(const Tensor& data, Array<PrimExpr> target_shape) {
-  ICHECK_GE(data->shape.size(), target_shape.size())
-      << "Shapes of collapse_sum do not match: data.shape = " << data->shape
-      << ", target_shape = " << target_shape;
+  ICHECK_GE(data->shape.size(), target_shape.size());
   auto ishape = detail::GetConstIntValues(data->shape, "ishape");
   auto oshape = detail::GetConstIntValues(target_shape, "oshape");
 
@@ -347,9 +345,6 @@ inline Tensor collapse_sum(const Tensor& data, Array<PrimExpr> target_shape) {
       squeeze_axes.push_back(i_ax);
     } else if (oshape[o_ax] == 1) {
       --o_ax;
-    } else {
-      LOG(FATAL) << "Shapes of collapse_sum do not match: data.shape = " << data->shape
-                 << ", target_shape = " << target_shape;
     }
   }
 
