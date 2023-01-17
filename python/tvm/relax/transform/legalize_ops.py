@@ -698,6 +698,7 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.nn.batch_norm": _nn_batch_norm,
     "relax.nn.layer_norm": _nn_layer_norm,
     "relax.nn.dropout": _nn_dropout,
+    "relax.nn.nll_loss": _nn_nll_loss,
     # Image
     "relax.image.resize2d": _image_resize2d,
     # Todo(relax-team): Introduce cumsum for GPT-2
