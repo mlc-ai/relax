@@ -665,6 +665,11 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.reshape": _reshape(topi.reshape, "reshape"),
     "relax.split": _split,
     "relax.squeeze": _squeeze,
+    # TODO(relax-team): collapse_sum support symbolic shape
+    "relax.collapse_sum_like": _reshape(
+        topi.collapse_sum, "collapse_sum", is_collapse_sum_like=True
+    ),
+    "relax.collapse_sum_to": _reshape(topi.collapse_sum, "collapse_sum"),
     # Search
     "relax.where": _call_topi_without_attr(topi.where),
     # Statistical
