@@ -670,11 +670,11 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.reshape": _reshape(topi.reshape, "reshape"),
     "relax.split": _split,
     "relax.squeeze": _squeeze,
-    # Todo(relax-team): Introduce TOPI collapse_sum for gradient
-    # "relax.collapse_sum_like": _reshape(topi.collapse_sum, "collapse_sum"),
-    # "relax.collapse_sum_to": _reshape(
-    #     topi.collapse_sum, "collapse_sum", is_collapse_sum_like=True
-    # ),
+    # TODO(relax-team): collapse_sum support symbolic shape
+    "relax.collapse_sum_like": _reshape(
+        topi.collapse_sum, "collapse_sum", is_collapse_sum_like=True
+    ),
+    "relax.collapse_sum_to": _reshape(topi.collapse_sum, "collapse_sum"),
     # Search
     "relax.where": _where,
     # Statistical
