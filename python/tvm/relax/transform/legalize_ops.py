@@ -516,6 +516,38 @@ def _nn_softmax(bb: BlockBuilder, call: Call) -> Expr:
     return bb.call_te(topi.nn.softmax, call.args[0], call.attrs.axis)
 
 
+def _nn_log_softmax(bb: BlockBuilder, call: Call):
+    return bb.call_te(topi.nn.log_softmax, call.args[0], call.attrs.axis)
+
+
+def _nn_cross_entropy_without_logits(bb: BlockBuilder, call: Call):
+    def te_cross_entropy_without_logits(x, y):
+        if len(x.shape) > 1:
+            return -topi.sum(topi.log(x) * y) / x.shape[0]
+        return -topi.sum(topi.log(x) * y)
+
+    return bb.call_te(
+        te_cross_entropy_without_logits,
+        call.args[0],
+        call.args[1],
+        primfunc_name_hint="cross_entropy_without_logits",
+    )
+
+
+def _nn_cross_entropy_with_logits(bb: BlockBuilder, call: Call):
+    def te_cross_entropy_with_logits(x, y):
+        if len(x.shape) > 1:
+            return -topi.sum(x * y) / x.shape[0]
+        return -topi.sum(x * y)
+
+    return bb.call_te(
+        te_cross_entropy_with_logits,
+        call.args[0],
+        call.args[1],
+        primfunc_name_hint="cross_entropy_with_logits",
+    )
+
+
 def _nn_batch_norm(bb: BlockBuilder, call: Call) -> Expr:
     return bb.call_te(
         topi.nn.batch_norm,
@@ -545,6 +577,24 @@ def _nn_layer_norm(bb: BlockBuilder, call: Call) -> Expr:
 def _nn_dropout(bb: BlockBuilder, call: Call) -> Expr:
     logging.info("Dropout is handled by frontend translator at this moment and is not legalized.")
     return call
+
+
+def _nn_nll_loss(bb: BlockBuilder, call: Call) -> Expr:
+    if len(call.args) == 2:
+        # TODO(relax-team): handle optional arugment weight of NLLLoss
+        logging.info(
+            "Can not legalize it now, because don't know how to set "
+            "the default value of the optional argument 'weight' of NLLLoss."
+        )
+        return call
+    return bb.call_te(
+        topi.nn.nll_loss,
+        call.args[0],
+        call.args[1],
+        call.args[2],
+        reduction=call.attrs.reduction,
+        ignore_index=call.attrs.ignore_index,
+    )
 
 
 ##################### Image #####################
@@ -578,6 +628,7 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     # Arithmetic and comparison
     "relax.cos": _unary(topi.cos),
     "relax.log": _unary(topi.log),
+    "relax.exp": _unary(topi.exp),
     "relax.negative": _unary(topi.negative),
     "relax.sigmoid": _unary(topi.sigmoid),
     "relax.sin": _unary(topi.sin),
@@ -642,9 +693,13 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.nn.gelu": _nn_gelu,
     "relax.nn.silu": _nn_silu,
     "relax.nn.softmax": _nn_softmax,
+    "relax.nn.log_softmax": _nn_log_softmax,
+    "relax.nn.cross_entropy_without_logits": _nn_cross_entropy_without_logits,
+    "relax.nn.cross_entropy_with_logits": _nn_cross_entropy_with_logits,
     "relax.nn.batch_norm": _nn_batch_norm,
     "relax.nn.layer_norm": _nn_layer_norm,
     "relax.nn.dropout": _nn_dropout,
+    "relax.nn.nll_loss": _nn_nll_loss,
     # Image
     "relax.image.resize2d": _image_resize2d,
     # Todo(relax-team): Introduce cumsum for GPT-2
