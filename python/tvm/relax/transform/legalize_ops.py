@@ -628,6 +628,7 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     # Arithmetic and comparison
     "relax.cos": _unary(topi.cos),
     "relax.log": _unary(topi.log),
+    "relax.exp": _unary(topi.exp),
     "relax.negative": _unary(topi.negative),
     "relax.sigmoid": _unary(topi.sigmoid),
     "relax.sin": _unary(topi.sin),
