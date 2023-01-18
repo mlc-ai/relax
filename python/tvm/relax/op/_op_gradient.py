@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=unused-argument
+# pylint: disable=unused-argument, redefined-builtin
 """Gradient definitions for Relax operators"""
 from typing import List
 from tvm import relax
@@ -37,8 +37,10 @@ from .binary import (
     divide,
     less,
 )
-from .statistical import sum as _sum
-from .statistical import mean
+from .statistical import (
+    sum,
+    mean,
+)
 from .create import (
     zeros,
     ones,
@@ -56,6 +58,7 @@ from .manipulate import (
 
 
 def _get_shape(expr: Expr) -> ShapeExpr:
+    """Get the shape from a Tensor expr."""
     try:
         shape = expr.struct_info.shape
     except Exception as error:
@@ -67,10 +70,12 @@ def _get_shape(expr: Expr) -> ShapeExpr:
 
 def _fit_shape(expr: Expr, expr_shape: ShapeExpr, target: Expr) -> Expr:
     target_shape = _get_shape(target)
+    expr_sinfo = expr_shape.struct_info
+    target_sinfo = target_shape.struct_info
+    assert isinstance(expr_sinfo, relax.ShapeStructInfo)
+    assert isinstance(target_sinfo, relax.ShapeStructInfo)
 
     def _check_shape_equal():
-        expr_sinfo = expr_shape.struct_info
-        target_sinfo = target_shape.struct_info
         if len(expr_sinfo.values) != len(target_sinfo.values):
             return False
         analyzer = Analyzer()
@@ -406,9 +411,7 @@ def softmax_grad(
     """
     return [
         multiply(
-            subtract(
-                output_grad, _sum(multiply(output_grad, orig_var), orig_call.attrs.axis, True)
-            ),
+            subtract(output_grad, sum(multiply(output_grad, orig_var), orig_call.attrs.axis, True)),
             orig_var,
         )
     ]
@@ -431,7 +434,7 @@ def log_softmax_grad(
     """
     x_softmax = exp(orig_var)
     return [
-        subtract(output_grad, multiply(_sum(output_grad, orig_call.attrs.axis, True), x_softmax))
+        subtract(output_grad, multiply(sum(output_grad, orig_call.attrs.axis, True), x_softmax))
     ]
 
 
