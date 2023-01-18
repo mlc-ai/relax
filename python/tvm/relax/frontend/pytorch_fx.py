@@ -28,7 +28,7 @@ class TorchFXTranslator:
     """A translator from PyTorch FX to Relax."""
 
     import torch  # type: ignore
-    from torch import nn, fx
+    from torch import fx
 
     def __init__(self) -> None:
         import torch  # type: ignore
