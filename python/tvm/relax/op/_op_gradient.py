@@ -65,11 +65,7 @@ def _get_shape(expr: Expr) -> ShapeExpr:
     return shape
 
 
-def _fit_shape(expr: Expr, target: Expr, ctx: BlockBuilder) -> Expr:
-    expr = ctx.normalize(expr)
-    target = ctx.normalize(target)
-
-    expr_shape = _get_shape(expr)
+def _fit_shape(expr: Expr, expr_shape: ShapeExpr, target: Expr) -> Expr:
     target_shape = _get_shape(target)
 
     def _check_shape_equal():
@@ -89,8 +85,8 @@ def _fit_shape(expr: Expr, target: Expr, ctx: BlockBuilder) -> Expr:
 # Arith
 @register_gradient("relax.add")
 def add_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -102,16 +98,17 @@ def add_grad(
     Backward:
         Returns [z_output_grad, z_grad].
     """
+    output_grad_shape = _get_shape(output_grad)
     return [
-        _fit_shape(output_grad, orig_call.args[0], ctx),
-        _fit_shape(output_grad, orig_call.args[1], ctx),
+        _fit_shape(output_grad, output_grad_shape, orig_call.args[0]),
+        _fit_shape(output_grad, output_grad_shape, orig_call.args[1]),
     ]
 
 
 @register_gradient("relax.subtract")
 def subtract_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -123,16 +120,17 @@ def subtract_grad(
     Backward:
         Returns [z_output_grad, -z_grad].
     """
+    output_grad_shape = _get_shape(output_grad)
     return [
-        _fit_shape(output_grad, orig_call.args[0], ctx),
-        _fit_shape(negative(output_grad), orig_call.args[1], ctx),
+        _fit_shape(output_grad, output_grad_shape, orig_call.args[0]),
+        _fit_shape(negative(output_grad), output_grad_shape, orig_call.args[1]),
     ]
 
 
 @register_gradient("relax.multiply")
 def multiply_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -145,16 +143,17 @@ def multiply_grad(
         Returns [z_grad * y, z_grad * x].
     """
     x, y = orig_call.args
+    output_grad_shape = _get_shape(output_grad)
     return [
-        _fit_shape(multiply(output_grad, y), x, ctx),
-        _fit_shape(multiply(output_grad, x), y, ctx),
+        _fit_shape(multiply(output_grad, y), output_grad_shape, x),
+        _fit_shape(multiply(output_grad, x), output_grad_shape, y),
     ]
 
 
 @register_gradient("relax.sigmoid")
 def sigmoid_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -177,8 +176,8 @@ def sigmoid_grad(
 
 @register_gradient("relax.tanh")
 def tanh_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -202,8 +201,8 @@ def tanh_grad(
 # Statistical
 @register_gradient("relax.sum")
 def sum_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -226,8 +225,8 @@ def sum_grad(
 # Manipulate
 @register_gradient("relax.permute_dims")
 def permute_dims_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -253,8 +252,8 @@ def permute_dims_grad(
 # TODO(yixin, chaofan): handle symbolic shape
 @register_gradient("relax.concat")
 def concat_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -285,8 +284,8 @@ def concat_grad(
 
 @register_gradient("relax.split")
 def split_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -307,8 +306,8 @@ def split_grad(
 # Linear Algebra
 @register_gradient("relax.matmul")
 def matmul_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -359,17 +358,19 @@ def matmul_grad(
         a_grad = multiply(output_grad, tensor_b)
         b_grad = multiply(output_grad, tensor_a)
 
+    output_grad_shape = _get_shape(output_grad)
+
     return [
-        _fit_shape(a_grad, tensor_a, ctx),
-        _fit_shape(b_grad, tensor_b, ctx),
+        _fit_shape(a_grad, output_grad_shape, tensor_a),
+        _fit_shape(b_grad, output_grad_shape, tensor_b),
     ]
 
 
 # NN
 @register_gradient("relax.nn.relu")
 def relu_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -390,8 +391,8 @@ def relu_grad(
 
 @register_gradient("relax.nn.softmax")
 def softmax_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -415,8 +416,8 @@ def softmax_grad(
 
 @register_gradient("relax.nn.log_softmax")
 def log_softmax_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -447,8 +448,8 @@ def _divide_batch(x: Expr, expr: Expr):
 
 @register_gradient("relax.nn.cross_entropy_without_logits")
 def cross_entropy_without_logits_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):
@@ -468,8 +469,8 @@ def cross_entropy_without_logits_grad(
 
 @register_gradient("relax.nn.cross_entropy_with_logits")
 def cross_entropy_with_logits_grad(
-    orig_call: Call,
     orig_var: Var,
+    orig_call: Call,
     output_grad: Var,
     ctx: BlockBuilder,
 ):

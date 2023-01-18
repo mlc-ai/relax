@@ -111,7 +111,7 @@ def relax_check_gradients(
     with bb1.function(func_name, param_vars + [grad_var]):
         with bb1.dataflow():
             orig_var = bb1.emit(call)
-            grad_call = relax.Tuple(op_grad_func(call, orig_var, grad_var, bb1))
+            grad_call = relax.Tuple(op_grad_func(orig_var, call, grad_var, bb1))
             if tuple_input:
                 adjoints = bb1.emit(grad_call)
                 out = bb1.emit_output(relax.TupleGetItem(adjoints, 0))

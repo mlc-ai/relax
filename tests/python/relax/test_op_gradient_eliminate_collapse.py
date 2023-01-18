@@ -31,7 +31,7 @@ def _map_to_grad(op_func: Callable, op_name: str, grad_var, *args):
     with bb.function("main", list(args) + [grad_var]):
         with bb.dataflow():
             orig_var = bb.emit_output(call)
-            grad_call = relax.Tuple(op_grad_func(call, orig_var, grad_var, bb))
+            grad_call = relax.Tuple(op_grad_func(orig_var, call, grad_var, bb))
         bb.emit_func_output(orig_var)
 
     return grad_call

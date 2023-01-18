@@ -57,7 +57,7 @@ using FCallPacked = String;
  * \return the gradient for each parameter.
  */
 using FPrimalGradient = runtime::TypedPackedFunc<tvm::Array<Expr>(
-    const Call& orig_call, const Var& orig_var, const Var& output_grad, BlockBuilder ctx)>;
+    const Var& orig_var, const Call& orig_call, const Var& output_grad, BlockBuilder ctx)>;
 
 struct PrintAttrs : public tvm::AttrsNode<PrintAttrs> {
   std::string format;
