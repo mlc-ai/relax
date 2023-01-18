@@ -77,26 +77,6 @@ def log(x: Expr) -> Expr:
     return _ffi_api.log(x)  # type: ignore
 
 
-def exp(x: Expr) -> Expr:
-    """Compute element-wise exp of data.
-
-    Parameters
-    ----------
-    x : relax.Expr
-        The input data
-
-    Returns
-    -------
-    result : relax.Expr
-        The computed result.
-
-    Note
-    ----
-    The input tensor is required to have float dtype
-    """
-    return _ffi_api.exp(x)  # type: ignore
-
-
 def negative(x: Expr) -> Expr:
     """Compute element-wise negative of the input data.
 

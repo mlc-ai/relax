@@ -783,56 +783,6 @@ def test_softmax():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
-def test_log_softmax():
-    # fmt: off
-    @tvm.script.ir_module
-    class LogSoftmax:
-        @R.function
-        def main(x: R.Tensor((2, 3, 16, 32), "float32")) -> R.Tensor(None, "float32", ndim=4):
-            gv: R.Tensor((2, 3, 16, 32), "float32") = R.nn.log_softmax(x, axis=-2)
-            return gv
-
-    @tvm.script.ir_module
-    class Expected:
-        @R.function
-        def main(x: R.Tensor((2, 3, 16, 32), dtype="float32")) -> R.Tensor((2, 3, 16, 32), dtype="float32"):
-            gv = R.call_tir(log_softmax, (x,), (2, 3, 16, 32), dtype="float32")
-            return gv
-
-        @T.prim_func
-        def log_softmax(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3), T.int64(16), T.int64(32)), "float32"], compute: T.Buffer[(T.int64(2), T.int64(3), T.int64(16), T.int64(32)), "float32"],):
-            T.func_attr({"tir.noalias": True})
-            T_softmax_maxelem = T.alloc_buffer([T.int64(2), T.int64(3), T.int64(32)], dtype="float32")
-            compute_1 = T.alloc_buffer([T.int64(2), T.int64(3), T.int64(32)], dtype="float32")
-            for i0, i1, i2, i3 in T.grid(T.int64(2), T.int64(3), T.int64(32), T.int64(16)):
-                with T.block("T_softmax_maxelem"):
-                    i0_1, i1_1, i2_1, k = T.axis.remap("SSSR", [i0, i1, i2, i3])
-                    T.reads(rxplaceholder[i0_1, i1_1, k, i2_1])
-                    T.writes(T_softmax_maxelem[i0_1, i1_1, i2_1])
-                    with T.init():
-                        T_softmax_maxelem[i0_1, i1_1, i2_1] = T.float32(-3.4028234663852886e38)
-                    T_softmax_maxelem[i0_1, i1_1, i2_1] = T.max(T_softmax_maxelem[i0_1, i1_1, i2_1], rxplaceholder[i0_1, i1_1, k, i2_1])
-            for i0, i1, i2, i3 in T.grid(T.int64(2), T.int64(3), T.int64(32), T.int64(16)):
-                with T.block("compute"):
-                    i0_2, i1_2, i2_2, k = T.axis.remap("SSSR", [i0, i1, i2, i3])
-                    T.reads(rxplaceholder[i0_2, i1_2, k, i2_2], T_softmax_maxelem[i0_2, i1_2, i2_2])
-                    T.writes(compute_1[i0_2, i1_2, i2_2])
-                    with T.init():
-                        compute_1[i0_2, i1_2, i2_2] = T.float32(0)
-                    compute_1[i0_2, i1_2, i2_2] = compute_1[i0_2, i1_2, i2_2] + T.exp(rxplaceholder[i0_2, i1_2, k, i2_2] - T_softmax_maxelem[i0_2, i1_2, i2_2], dtype="float32")
-            for i0_3, i1_3, i2_3, i3 in T.grid(T.int64(2), T.int64(3), T.int64(16), T.int64(32)):
-                with T.block("compute_1"):
-                    i0_4, i1_4, i2_4, i3_1 = T.axis.remap("SSSS", [i0_3, i1_3, i2_3, i3])
-                    T.reads(rxplaceholder[i0_4, i1_4, i2_4, i3_1], T_softmax_maxelem[i0_4, i1_4, i3_1], compute_1[i0_4, i1_4, i3_1])
-                    T.writes(compute[i0_4, i1_4, i2_4, i3_1])
-                    T.block_attr({"axis": 2})
-                    compute[i0_4, i1_4, i2_4, i3_1] = (rxplaceholder[i0_4, i1_4, i2_4, i3_1] - T_softmax_maxelem[i0_4, i1_4, i3_1] - T.log(compute_1[i0_4, i1_4, i3_1], dtype="float32"))
-    # fmt: on
-
-    mod = LegalizeOps()(LogSoftmax)
-    tvm.ir.assert_structural_equal(mod, Expected)
-
-
 def test_softmax_symbolic():
     # fmt: off
     @tvm.script.ir_module
