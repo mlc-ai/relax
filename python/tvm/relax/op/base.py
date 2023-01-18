@@ -423,11 +423,12 @@ def register_gradient(
 
     Parameters
     ----------
-    op_name : str
+    op_name: str
         The name of the op.
-    fgradient : function (orig_call : Call, output_grad : Var) -> new_expr : Expr
-        The gradient being used.
-    level : int
+    fgradient: function (orig_var: Var, orig_call: Call, output_grad: Var, ctx: BlockBuilder)
+         -> partials: List[Expr]
+        The gradient function being used.
+    level: int
         The priority level
     """
     return tvm.ir.register_op_attr(op_name, "FPrimalGradient", fgradient, level)

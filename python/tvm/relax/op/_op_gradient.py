@@ -37,10 +37,7 @@ from .binary import (
     divide,
     less,
 )
-from .statistical import (
-    sum,
-    mean,
-)
+from .statistical import sum
 from .create import (
     zeros,
     ones,
@@ -54,6 +51,7 @@ from .manipulate import (
     expand_dims,
     concat,
     split,
+    squeeze,
 )
 
 
@@ -223,7 +221,7 @@ def sum_grad(
     axis = orig_call.attrs["axis"]
     keepdims = orig_call.attrs["keepdims"]
     if not keepdims and axis:
-        output_grad = expand_dims(output_grad, [int(ax) for ax in axis])
+        output_grad = expand_dims(output_grad, axis)
     return [broadcast_to(output_grad, _get_shape(orig_call.args[0]))]
 
 
@@ -351,13 +349,9 @@ def matmul_grad(
         b_expand = expand_dims(tensor_b, 0)
         grad_expand = expand_dims(output_grad, -1)
         a_grad = matmul(grad_expand, b_expand)
-        b_grad = mean(
+        b_grad = squeeze(
             matmul(_transpose_last_two_dim(tensor_a, a_dim), grad_expand), axis=-1
         )  # squeeze last dim
-        # legalizer now not support squeeze
-        # squeeze(
-        #     matmul(_transpose_last_two_dim(tensor_a, a_dim), output_grad_expand), axis=-1
-        # )
     else:
         assert a_dim == 1 and b_dim == 1
         a_grad = multiply(output_grad, tensor_b)

@@ -405,5 +405,4 @@ def test_cross_entropy_with_logits_batch(target, dev):
 
 
 if __name__ == "__main__":
-    # test_permute_dims("llvm", tvm.cpu(0))
-    pytest.main([__file__])
+    tvm.testing.main()
