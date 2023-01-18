@@ -399,8 +399,7 @@ inline const T* GetStructInfoAs(const Expr& expr) {
  */
 inline StructInfo GetStructInfo(const Expr& expr) {
   auto* ptr = expr->struct_info_.as<StructInfoNode>();
-  ICHECK(ptr) << "The struct_info is not populated, check if you have normalized the expr: "
-              << expr;
+  ICHECK(ptr) << "The struct_info is not populated, check if you have normalized the expr";
   return GetRef<StructInfo>(ptr);
 }
 

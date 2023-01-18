@@ -488,7 +488,7 @@ class Normalizer : public BlockBuilderImpl, private ExprFunctor<Expr(const Expr&
     Expr post = ExprFunctor::VisitExpr(arg);
 
     if (!IsLeafExpr(arg)) {
-      ICHECK(!block_stack_.empty()) << "Cannot normalize non-leaf without a scope: Expr is " << arg;
+      ICHECK(!block_stack_.empty()) << "Cannot normalize non-leaf without a scope";
       Var var = this->Emit(post, "");
       // NOTE: current frame addr can change due to underlying vector
       // re-allocation, redo lookup
