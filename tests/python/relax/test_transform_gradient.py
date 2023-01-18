@@ -25,7 +25,7 @@ import numpy as np
 
 
 def test_simple():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), dtype="float32")):
@@ -34,7 +34,7 @@ def test_simple():
                 R.output(gv)
             return gv
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=0):
@@ -62,7 +62,7 @@ def test_simple():
 
 
 def test_assign_binding():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")):
@@ -73,7 +73,7 @@ def test_assign_binding():
                 R.output(lv3)
             return lv3
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=0):
@@ -105,12 +105,11 @@ def test_assign_binding():
             return (lv3, (x_adjoint,))
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
-    After.show()
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
 def test_multiple_uses():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")):
@@ -121,10 +120,11 @@ def test_multiple_uses():
                 R.output(lv3)
             return lv3
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
-        def main(x: R.Tensor((3, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=0):
+        def main(x: R.Tensor((3, 3), dtype="float32")) -> R.Tensor((), dtype="float32"):
+            # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, x)
                 lv2: R.Tensor((3, 3), dtype="float32") = R.add(lv1, x)
@@ -136,32 +136,30 @@ def test_multiple_uses():
         def main_adjoint(
             x: R.Tensor((3, 3), dtype="float32")
         ) -> R.Tuple(
-            R.Tensor(None, dtype="float32", ndim=0),
-            R.Tuple(R.Tensor(None, dtype="float32", ndim=2)),
+            R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((3, 3), dtype="float32"))
         ):
+            # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, x)
                 lv2: R.Tensor((3, 3), dtype="float32") = R.add(lv1, x)
                 lv3: R.Tensor((), dtype="float32") = R.sum(lv2, axis=None, keepdims=False)
                 lv3_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
-                lv2_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(lv3_adjoint, (3, 3))
-                lv1_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
-                    lv2_adjoint, (3, 3)
+                lv2_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(
+                    lv3_adjoint, (3, 3)
                 )
-                lv: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(lv2_adjoint, (3, 3))
-                lv11: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(lv1_adjoint, (3, 3))
-                lv21: R.Tensor((3, 3), dtype="float32") = R.add(lv, lv11)
-                lv31: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(lv1_adjoint, (3, 3))
-                x_adjoint: R.Tensor((3, 3), dtype="float32") = R.add(lv21, lv31)
+                lv1_adjoint: R.Tensor((3, 3), dtype="float32") = lv2_adjoint
+                lv: R.Tensor((3, 3), dtype="float32") = R.add(lv2_adjoint, lv1_adjoint)
+                x_adjoint: R.Tensor((3, 3), dtype="float32") = R.add(lv, lv1_adjoint)
                 R.output(lv3, x_adjoint)
             return (lv3, (x_adjoint,))
+
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
 def test_unused():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")):
@@ -172,10 +170,10 @@ def test_unused():
                 R.output(lv3)
             return lv3
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
-        def main(x: R.Tensor((3, 3), dtype="float32")) -> R.Tensor(None, dtype="float32", ndim=0):
+        def main(x: R.Tensor((3, 3), dtype="float32")) -> R.Tensor((), dtype="float32"):
             # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, x)
@@ -188,8 +186,7 @@ def test_unused():
         def main_adjoint(
             x: R.Tensor((3, 3), dtype="float32")
         ) -> R.Tuple(
-            R.Tensor(None, dtype="float32", ndim=0),
-            R.Tuple(R.Tensor(None, dtype="float32", ndim=2)),
+            R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((3, 3), dtype="float32"))
         ):
             # block 0
             with R.dataflow():
@@ -197,7 +194,9 @@ def test_unused():
                 lv2: R.Tensor((3, 3), dtype="float32") = R.add(lv1, x)
                 lv3: R.Tensor((), dtype="float32") = R.sum(x, axis=None, keepdims=False)
                 lv3_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
-                x_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(lv3_adjoint, (3, 3))
+                x_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(
+                    lv3_adjoint, (3, 3)
+                )
                 R.output(lv3, x_adjoint)
             return (lv3, (x_adjoint,))
 
@@ -206,7 +205,7 @@ def test_unused():
 
 
 def test_default_require_grads():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(
@@ -228,7 +227,7 @@ def test_default_require_grads():
             x: R.Tensor((3, 3), dtype="float32"),
             y: R.Tensor((3, 3), dtype="float32"),
             z: R.Tensor((3, 3), dtype="float32"),
-        ) -> R.Tensor(None, dtype="float32", ndim=0):
+        ) -> R.Tensor((), dtype="float32"):
             # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, y)
@@ -243,11 +242,11 @@ def test_default_require_grads():
             y: R.Tensor((3, 3), dtype="float32"),
             z: R.Tensor((3, 3), dtype="float32"),
         ) -> R.Tuple(
-            R.Tensor(None, dtype="float32", ndim=0),
+            R.Tensor((), dtype="float32"),
             R.Tuple(
-                R.Tensor(None, dtype="float32", ndim=2),
-                R.Tensor(None, dtype="float32", ndim=2),
-                R.Tensor(None, dtype="float32", ndim=2),
+                R.Tensor((3, 3), dtype="float32"),
+                R.Tensor((3, 3), dtype="float32"),
+                R.Tensor((3, 3), dtype="float32"),
             ),
         ):
             # block 0
@@ -256,19 +255,13 @@ def test_default_require_grads():
                 lv2: R.Tensor((3, 3), dtype="float32") = R.add(lv1, z)
                 lv3: R.Tensor((), dtype="float32") = R.sum(lv2, axis=None, keepdims=False)
                 lv3_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
-                lv2_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(lv3_adjoint, (3, 3))
-                lv1_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
-                    lv2_adjoint, (3, 3)
+                lv2_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(
+                    lv3_adjoint, (3, 3)
                 )
-                x_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
-                    lv1_adjoint, (3, 3)
-                )
-                y_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
-                    lv1_adjoint, (3, 3)
-                )
-                z_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
-                    lv2_adjoint, (3, 3)
-                )
+                lv1_adjoint: R.Tensor((3, 3), dtype="float32") = lv2_adjoint
+                x_adjoint: R.Tensor((3, 3), dtype="float32") = lv1_adjoint
+                y_adjoint: R.Tensor((3, 3), dtype="float32") = lv1_adjoint
+                z_adjoint: R.Tensor((3, 3), dtype="float32") = lv2_adjoint
                 R.output(lv3, x_adjoint, y_adjoint, z_adjoint)
             return (lv3, (x_adjoint, y_adjoint, z_adjoint))
 
@@ -282,7 +275,7 @@ def test_default_require_grads():
             x: R.Tensor((3, 3), dtype="float32"),
             y: R.Tensor((3, 3), dtype="float32"),
             z: R.Tensor((3, 3), dtype="float32"),
-        ) -> R.Tensor(None, dtype="float32", ndim=0):
+        ) -> R.Tensor((), dtype="float32"):
             # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, y)
@@ -297,8 +290,7 @@ def test_default_require_grads():
             y: R.Tensor((3, 3), dtype="float32"),
             z: R.Tensor((3, 3), dtype="float32"),
         ) -> R.Tuple(
-            R.Tensor(None, dtype="float32", ndim=0),
-            R.Tuple(R.Tensor(None, dtype="float32", ndim=2)),
+            R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((3, 3), dtype="float32"))
         ):
             # block 0
             with R.dataflow():
@@ -306,13 +298,11 @@ def test_default_require_grads():
                 lv2: R.Tensor((3, 3), dtype="float32") = R.add(lv1, z)
                 lv3: R.Tensor((), dtype="float32") = R.sum(lv2, axis=None, keepdims=False)
                 lv3_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
-                lv2_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(lv3_adjoint, (3, 3))
-                lv1_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
-                    lv2_adjoint, (3, 3)
+                lv2_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(
+                    lv3_adjoint, (3, 3)
                 )
-                x_adjoint: R.Tensor((3, 3), dtype="float32") = R.collapse_sum_to(
-                    lv1_adjoint, (3, 3)
-                )
+                lv1_adjoint: R.Tensor((3, 3), dtype="float32") = lv2_adjoint
+                x_adjoint: R.Tensor((3, 3), dtype="float32") = lv1_adjoint
                 R.output(lv3, x_adjoint)
             return (lv3, (x_adjoint,))
 
@@ -323,7 +313,7 @@ def test_default_require_grads():
 
 
 def test_tuple():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(
@@ -340,7 +330,7 @@ def test_tuple():
                 R.output(lv5)
             return lv5
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
         def main(
@@ -407,9 +397,9 @@ def test_tuple():
     After.show()
     # assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
-
+test_tuple()
 def test_tuple_assignment():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(
@@ -427,7 +417,7 @@ def test_tuple_assignment():
                 R.output(lv6)
             return lv6
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
         def main(
@@ -501,7 +491,7 @@ def test_tuple_assignment():
 
 
 def test_tuple_nested():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(
@@ -645,7 +635,7 @@ def test_tuple_nested():
 def test_tuple_update():
     """One tensor `x` is used in and out of tuple many times."""
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")):
@@ -664,7 +654,7 @@ def test_tuple_update():
                 R.output(lv10)
             return lv10
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
         def main(
@@ -764,7 +754,7 @@ def test_tuple_update():
 
 
 def test_tuple_ops():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(
@@ -780,7 +770,7 @@ def test_tuple_ops():
                 R.output(lv6)
             return lv6
 
-    # @I.ir_module
+    # @tvm.script.ir_module
     # class Expected:
     #     @R.function
     #     def main(
@@ -852,7 +842,7 @@ def test_const():
     """const could be used in variable assignment, call argument, and as a part of tuple"""
     cst = relax.const(np.ones((3, 3)), dtype="float32")
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(
@@ -870,7 +860,7 @@ def test_const():
                 R.output(gv0)
             return gv0
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
         def main(
@@ -945,7 +935,7 @@ def test_const():
 
 
 def test_params_copy():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(
@@ -971,7 +961,7 @@ def test_params_copy():
 
 
 def test_function_copy():
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(
@@ -1001,7 +991,7 @@ def test_function_copy():
 
 
 def test_report_error():
-    @I.ir_module
+    @tvm.script.ir_module
     class TargetNotScalar:
         @R.function
         def main(x0: R.Tensor((3, 3), "float32"), x1: R.Tensor((3, 3), "float32")):
@@ -1013,7 +1003,7 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient(TargetNotScalar.get_global_var("main"))(TargetNotScalar)
 
-    @I.ir_module
+    @tvm.script.ir_module
     class NoDataflow:
         @R.function
         def main(x0: R.Tensor((3, 3), "float32")):
@@ -1023,7 +1013,7 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient(NoDataflow.get_global_var("main"))(NoDataflow)
 
-    @I.ir_module
+    @tvm.script.ir_module
     class MultiBlocks:
         @R.function
         def main(x0: R.Tensor((3, 3), "float32"), x1: R.Tensor((3, 3), "float32")):
@@ -1038,7 +1028,7 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient(MultiBlocks.get_global_var("main"))(MultiBlocks)
 
-    @I.ir_module
+    @tvm.script.ir_module
     class NormalModule:
         @R.function
         def main(x0: R.Tensor((3, 3), "float32"), x1: R.Tensor((3, 3), "float32")):
@@ -1055,7 +1045,7 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient(main_gv, require_grads=MultiBlocks["main"].params[0])(NormalModule)
 
-    @I.ir_module
+    @tvm.script.ir_module
     class IntDtype:
         @R.function
         def main(x: R.Tensor((3, 3), "int64")):
@@ -1068,7 +1058,7 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient(IntDtype.get_global_var("main"))(IntDtype)
 
-    @I.ir_module
+    @tvm.script.ir_module
     class IntDtypeTuple:
         @R.function
         def main(x: R.Tuple(R.Tensor((3, 3), "int64"), R.Tensor((3, 3), "int64"))):
@@ -1091,7 +1081,7 @@ def test_mlp_script():
     For n-layer perceptron, see test_transform_gradient_numeric.py.
     """
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Before:
         @R.function
         def main(
@@ -1108,7 +1098,7 @@ def test_mlp_script():
                 R.output(loss)
             return loss
 
-    @I.ir_module
+    @tvm.script.ir_module
     class Expected:
         @R.function
         def main(
@@ -1166,5 +1156,5 @@ def test_mlp_script():
     # assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
-if __name__ == "__main__":
-    pytest.main([__file__])
+# if __name__ == "__main__":
+#     pytest.main([__file__])

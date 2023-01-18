@@ -99,7 +99,8 @@ class BackwardBindingGenerator : public ExprVisitor {
 
     Var adjoint_var = adjoint_var_map_[binding->var];
     const Op& call_op = GetRef<Op>(call->op.as<OpNode>());
-    const Array<Expr>& partials = gradient_op_map[call_op](GetRef<Call>(call), adjoint_var);
+    const Array<Expr>& partials =
+        gradient_op_map[call_op](GetRef<Call>(call), binding->var, adjoint_var, builder_);
     ICHECK(partials.size() == call->args.size()) << "partials number != inputs number";
 
     for (size_t i = 0; i < partials.size(); ++i) {
