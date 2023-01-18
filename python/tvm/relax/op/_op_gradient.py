@@ -166,7 +166,7 @@ def sigmoid_grad(
     Backward:
         Returns [y_grad * y * (1 - y)].
     """
-    x_ones = ones(orig_call.args[0].struct_info.shape, orig_call.args[0].struct_info.dtype)
+    x_ones = ones(_get_shape(orig_call.args[0]), orig_call.args[0].struct_info.dtype)
     return [
         multiply(
             output_grad,
@@ -190,7 +190,7 @@ def tanh_grad(
     Backward:
         Returns [y_grad * (1 - y * y)].
     """
-    x_ones = ones(orig_call.args[0].struct_info.shape, orig_call.args[0].struct_info.dtype)
+    x_ones = ones(_get_shape(orig_call.args[0]), orig_call.args[0].struct_info.dtype)
     return [
         multiply(
             output_grad,
@@ -220,7 +220,7 @@ def sum_grad(
     keepdims = orig_call.attrs["keepdims"]
     if not keepdims and axis:
         output_grad = expand_dims(output_grad, [int(ax) for ax in axis])
-    return [broadcast_to(output_grad, orig_call.args[0].struct_info.shape)]
+    return [broadcast_to(output_grad, _get_shape(orig_call.args[0]))]
 
 
 # Manipulate
@@ -270,9 +270,13 @@ def concat_grad(
     assert axis is not None
     axis = int(axis)
     split_indices: List[PrimExpr] = []
-    for i in range(len(orig_call.args[0]) - 1):
-        shape = _get_shape(orig_call.args[0][i])
-        index = shape[axis]
+    sinfo = orig_call.args[0].struct_info
+    assert isinstance(sinfo, relax.TupleStructInfo)
+    for i in range(len(sinfo.fields) - 1):
+        tensor_sinfo = sinfo.fields[i]
+        assert isinstance(tensor_sinfo, relax.TensorStructInfo)
+        assert tensor_sinfo.shape is not None
+        index = tensor_sinfo.shape[axis]
         if i > 0:
             index += split_indices[i - 1]
         split_indices.append(index)
@@ -321,8 +325,8 @@ def matmul_grad(
 
     tensor_a, tensor_b = orig_call.args
 
-    a_dim = len(tensor_a.struct_info.shape)
-    b_dim = len(tensor_b.struct_info.shape)
+    a_dim = len(_get_shape(tensor_a))
+    b_dim = len(_get_shape(tensor_b))
 
     def _transpose_last_two_dim(tensor, ndim):
         """Helper function for reversing the last two dimensions."""
@@ -378,8 +382,9 @@ def relu_grad(
         Returns [y_grad * (where(x < 0, 0, 1))].
     """
     x = orig_call.args[0]
-    x_zeros = zeros(x.struct_info.shape, x.struct_info.dtype)
-    x_ones = ones(x.struct_info.shape, x.struct_info.dtype)
+    x_shape = _get_shape(x)
+    x_zeros = zeros(x_shape, x.struct_info.dtype)
+    x_ones = ones(x_shape, x.struct_info.dtype)
     return [where(less(x, x_zeros), x_zeros, multiply(x_ones, output_grad))]
 
 
@@ -432,7 +437,8 @@ def log_softmax_grad(
 def _divide_batch(x: Expr, expr: Expr):
     if x.struct_info.ndim > 1:
         # TODO(chaofan, yixin): support symbolic shape
-        batch_size = int(x.struct_info.shape[0])
+        x_shape = _get_shape(x)
+        batch_size = int(x_shape[0])
         # batch_size = take(shape_of(x), relax.const(0, dtype="int32"), axis=0)
         # expr = divide(expr, batch_size)
         expr = divide(expr, relax.const(batch_size, dtype=expr.struct_info.dtype))
