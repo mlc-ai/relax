@@ -24,10 +24,10 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - relax
   pull_request:
     branches:
-      - main
+      - relax
   workflow_dispatch:
 
 concurrency:
@@ -36,7 +36,6 @@ concurrency:
 
 jobs:
   MacOS:
-    if: ${{ github.repository == 'apache/tvm' }}
     runs-on: macOS-latest
     steps:
       - uses: actions/checkout@v2
