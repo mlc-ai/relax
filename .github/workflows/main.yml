@@ -36,6 +36,7 @@ concurrency:
 
 jobs:
   MacOS:
+    if: ${{ github.repository == 'mlc-ai/relax' }}
     runs-on: macOS-latest
     steps:
       - uses: actions/checkout@v2
@@ -78,7 +79,8 @@ jobs:
           python -m pytest -v tests/python/contrib/test_rpc_server_device.py
 
   Windows:
-    runs-on: windows-2016
+    if: ${{ github.repository == 'mlc-ai/relax' }}
+    runs-on: windows-2019
     steps:
       - uses: actions/checkout@v2
         with:
