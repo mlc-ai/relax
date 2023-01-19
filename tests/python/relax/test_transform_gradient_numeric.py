@@ -15,11 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 import numpy as np
-import pytest
 import tvm
-import tvm.script
+import tvm.testing
 from tvm import relax
-from tvm import relax as rx
 from tvm.relay.testing import rand
 from tvm.testing import assert_allclose
 from tvm.testing.utils import check_numerical_grads
@@ -82,22 +80,22 @@ def test_manual_gradient():
 def test_mlp_blockbuilder():
     layers, in_size, out_size, hidden_size, batch_size = 3, 5, 5, 5, 4
 
-    input_list = [rx.Var("x", R.Tensor((batch_size, in_size), "float32"))]
+    input_list = [relax.Var("x", R.Tensor((batch_size, in_size), "float32"))]
     w_list = (
-        [rx.Var("w_0", R.Tensor((in_size, hidden_size), "float32"))]
+        [relax.Var("w_0", R.Tensor((in_size, hidden_size), "float32"))]
         + [
-            rx.Var("w_" + str(i + 1), R.Tensor((hidden_size, hidden_size), "float32"))
+            relax.Var("w_" + str(i + 1), R.Tensor((hidden_size, hidden_size), "float32"))
             for i in range(layers - 2)
         ]
-        + [rx.Var("w_" + str(layers - 1), R.Tensor((hidden_size, out_size), "float32"))]
+        + [relax.Var("w_" + str(layers - 1), R.Tensor((hidden_size, out_size), "float32"))]
     )
     b_list = [
-        rx.Var("b_" + str(i), R.Tensor((hidden_size,), "float32")) for i in range(layers - 1)
-    ] + [rx.Var("b_" + str(layers - 1), R.Tensor((out_size,), "float32"))]
-    label_list = [rx.Var("y", R.Tensor((batch_size, out_size), "float32"))]
+        relax.Var("b_" + str(i), R.Tensor((hidden_size,), "float32")) for i in range(layers - 1)
+    ] + [relax.Var("b_" + str(layers - 1), R.Tensor((out_size,), "float32"))]
+    label_list = [relax.Var("y", R.Tensor((batch_size, out_size), "float32"))]
     args_list = input_list + w_list + b_list + label_list
 
-    bb = rx.BlockBuilder()
+    bb = relax.BlockBuilder()
     with bb.function("MLP", args_list):
         with bb.dataflow():
             current = input_list[0]
@@ -133,4 +131,4 @@ def test_mlp_blockbuilder():
 
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    tvm.testing.main()

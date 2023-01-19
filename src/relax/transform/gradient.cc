@@ -26,6 +26,7 @@
  */
 
 #include <tvm/relax/expr_functor.h>
+#include <tvm/relax/nested_msg.h>
 #include <tvm/relax/op_attr_types.h>
 #include <tvm/relax/transform.h>
 
@@ -36,6 +37,8 @@
 
 namespace tvm {
 namespace relax {
+
+using AdjointType = NestedMsg<Expr>;
 
 // A tool class for GradientMutator
 // Visit the forward bindings and generate the backward bindings
@@ -100,11 +103,15 @@ class BackwardBindingGenerator : public ExprVisitor {
     Var adjoint_var = adjoint_var_map_[binding->var];
     const Op& call_op = GetRef<Op>(call->op.as<OpNode>());
     const Array<Expr>& partials =
-        gradient_op_map[call_op](GetRef<Call>(call), binding->var, adjoint_var, builder_);
+        gradient_op_map[call_op](binding->var, GetRef<Call>(call), adjoint_var, builder_);
     ICHECK(partials.size() == call->args.size()) << "partials number != inputs number";
 
     for (size_t i = 0; i < partials.size(); ++i) {
-      UpdateAdjointForLeaf(call->args[i], builder_->Normalize(partials[i]));
+      Expr partial = partials[i];
+      if (!partial->struct_info_.defined()) {
+        UpdateStructInfo(partial, GetStructInfo(call->args[i]));
+      }
+      UpdateAdjointForLeaf(call->args[i], ExprToNestedMsg(partial));
     }
   }
 
@@ -116,7 +123,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   // b_adjoint_expr += a_adjoint_var[0][0], c_adjoint_expr += a_adjoint_var[0][1],
   // d_adjoint_expr += a_adjoint_var[1]
   void VisitBinding_(const VarBindingNode* binding, const TupleNode* tuple) override {
-    UpdateAdjointForLeaf(GetRef<Tuple>(tuple), adjoint_var_map_[binding->var]);
+    UpdateAdjointForLeaf(GetRef<Tuple>(tuple), ExprToNestedMsg(adjoint_var_map_[binding->var]));
   }
 
   // For TupleGetItem nodes, we do a partial update
@@ -133,37 +140,28 @@ class BackwardBindingGenerator : public ExprVisitor {
 
     const Var& tuple_var = Downcast<Var>(tuple_get_item->tuple);
     if (adjoint_expr_map_.count(tuple_var) == 0) {
-      const Expr& init = BuildZerosTuple(tuple_sinfo);
+      const AdjointType& init = BuildZerosAdjoint(tuple_sinfo);
       adjoint_expr_map_.Set(tuple_var, init);
     }
 
-    adjoint_expr_map_.Set(tuple_var,
-                          AddElementInTuple(adjoint_expr_map_[tuple_var], tuple_get_item->index,
-                                            adjoint_var_map_[binding->var]));
+    adjoint_expr_map_.Set(
+        tuple_var, AddElementInNestedAdjoint(adjoint_expr_map_[tuple_var], tuple_get_item->index,
+                                             ExprToNestedMsg(adjoint_var_map_[binding->var])));
   }
 
   // For assign nodes, we add the adjoint of output to the adjoint of input
   void VisitBinding_(const VarBindingNode* binding, const DataflowVarNode* var) override {
-    UpdateAdjointForLeaf(GetRef<Var>(var), adjoint_var_map_[binding->var]);
+    UpdateAdjointForLeaf(GetRef<Var>(var), ExprToNestedMsg(adjoint_var_map_[binding->var]));
   }
 
   void VisitBinding_(const VarBindingNode* binding, const VarNode* var) override {
-    UpdateAdjointForLeaf(GetRef<Var>(var), adjoint_var_map_[binding->var]);
+    UpdateAdjointForLeaf(GetRef<Var>(var), ExprToNestedMsg(adjoint_var_map_[binding->var]));
   }
 
   // For constant nodes, we do not have to handle it because it does not produce adjoint
   void VisitBinding_(const VarBindingNode* binding, const ConstantNode* var) override { return; }
 
  private:
-  Expr GetField(const Expr& expr, int index) {
-    if (const auto* node = expr.as<TupleNode>()) {
-      return node->fields[index];
-    }
-    const auto* sinfo = GetStructInfoAs<TupleStructInfoNode>(expr);
-    ICHECK(sinfo != nullptr) << "GetField: expr must has TupleStructInfo.";
-    return builder_->Normalize(TupleGetItem(expr, index));
-  }
-
   bool IsCallZeros(const Expr& expr) {
     return expr->IsInstance<CallNode>() && Downcast<Call>(expr)->op == Op::Get("relax.zeros");
   }
@@ -184,18 +182,20 @@ class BackwardBindingGenerator : public ExprVisitor {
   // Here leaf node means Var, Tuple, or Constant
   // The arguments of 1) *Function calls*, or 2) *Tuples* can be any kind of leaf nodes,
   // so we handle them uniformly here
-  void UpdateAdjointForLeaf(const Expr& leaf, const Expr& partial) {
+  void UpdateAdjointForLeaf(const Expr& leaf, const AdjointType& partial) {
     if (const auto* node = leaf.as<VarNode>()) {
       const Var& v = GetRef<Var>(node);
       if (adjoint_expr_map_.count(v) == 0) {
         adjoint_expr_map_.Set(v, partial);
       } else {
-        const Expr& updated = TupleAwareAdd(adjoint_expr_map_[v], partial);
-        adjoint_expr_map_.Set(v, updated);
+        adjoint_expr_map_.Set(v, TupleAwareAdd(adjoint_expr_map_[v], partial));
       }
     } else if (const auto* node0 = leaf.as<TupleNode>()) {
+      ICHECK(partial.IsNested()) << "If leaf is Tuple, the adjoint must be nested in thie case.";
+      auto arr = partial.NestedArray();
+      ICHECK(node0->fields.size() == arr.size());
       for (size_t i = 0; i < node0->fields.size(); ++i) {
-        UpdateAdjointForLeaf(node0->fields[i], GetField(partial, i));
+        UpdateAdjointForLeaf(node0->fields[i], arr[i]);
       }
     } else if (leaf.as<ConstantNode>()) {
       // nothing to do
@@ -206,75 +206,97 @@ class BackwardBindingGenerator : public ExprVisitor {
   }
 
   // Build a "zeros" tuple with specified tuple struct info and type
-  Expr BuildZerosTuple(const TupleStructInfoNode* sinfo) {
-    Array<Expr> ret;
-    for (const auto& field : sinfo->fields) {
-      if (auto* tuple_sinfo = field.as<TupleStructInfoNode>()) {
-        ret.push_back(BuildZerosTuple(tuple_sinfo));
-      } else if (auto* tensor_sinfo = field.as<TensorStructInfoNode>()) {
-        ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when building zeros tuple.";
-        const Expr& init = zeros(tensor_sinfo->shape.value(), tensor_sinfo->dtype);
-        ret.push_back(init);
-      } else {
-        LOG(FATAL) << "Unsupported struct info when building zeros tuple: " << field;
-      }
-    }
-    return builder_->Normalize(Tuple(ret));
+  AdjointType BuildZerosAdjoint(const TupleStructInfoNode* sinfo) {
+    return MapToNestedMsg<Expr>(GetRef<StructInfo>(sinfo), [](StructInfo sinfo) {
+      auto tensor_sinfo = sinfo.as<TensorStructInfoNode>();
+      ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
+      ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when building zeros tuple.";
+      const Expr& init = zeros(tensor_sinfo->shape.value(), tensor_sinfo->dtype);
+      UpdateStructInfo(init, sinfo);
+      return init;
+    });
   }
 
   // Return base + increment. A tuple-aware addition.
-  Expr TupleAwareAdd(const Expr& base, const Expr& increment) {
-    if (IsCallZeros(base)) {
-      return increment;
-    } else if (IsCallZeros(increment)) {
-      return base;
-    }
-
-    if (const auto* base_sinfo = GetStructInfoAs<TupleStructInfoNode>(base)) {
-      const auto* increment_sinfo = GetStructInfoAs<TupleStructInfoNode>(increment);
-      ICHECK(increment_sinfo)
-          << "StructInfo not match: base and increment should both have TupleStructInfo";
-      ICHECK(base_sinfo->fields.size() == increment_sinfo->fields.size())
-          << "Size of tuple not match";
-      Array<Expr> result;
-      for (size_t i = 0; i < base_sinfo->fields.size(); ++i) {
-        result.push_back(TupleAwareAdd(GetField(base, i), GetField(increment, i)));
+  AdjointType TupleAwareAdd(const AdjointType& base, const AdjointType& increment) {
+    return CombineNestedMsg(base, increment, [&](Expr lhs, Expr rhs) {
+      if (IsCallZeros(lhs)) {
+        return rhs;
+      } else if (IsCallZeros(rhs)) {
+        return lhs;
       }
-      return builder_->Normalize(Tuple(result));
-    } else if (GetStructInfoAs<TensorStructInfoNode>(base)) {
-      ICHECK(GetStructInfoAs<TensorStructInfoNode>(increment))
-          << "StructInfo not match: base and increment should both have TensorStructInfo";
-      return builder_->Normalize(add(base, increment));
-    } else {
-      LOG(FATAL) << "Unsupport struct info found in TupleAwareAdd.";
-    }
+      auto sinfo = GetStructInfoAs<TensorStructInfoNode>(lhs);
+      ICHECK(sinfo) << "The leaf of adjoint should have StructInfo and be a Tensor.";
+      ICHECK(GetStructInfoAs<TensorStructInfoNode>(rhs))
+          << "The leaf of adjoint should have StructInfo and be a Tensor.";
+      Expr res = add(lhs, rhs);
+      UpdateStructInfo(res, GetRef<StructInfo>(sinfo));
+      return res;
+    });
   }
 
   // Perform an addition in a specified position of tuple.
   // e.g. tuple=(a, b, c), index=1, increment=d, then return (a, b+d, c)
-  Expr AddElementInTuple(const Expr& tuple, int index, const Expr& increment) {
-    Array<Expr> ret;
-    auto* tuple_sinfo = GetStructInfoAs<TupleStructInfoNode>(tuple);
-    ICHECK(tuple_sinfo != nullptr) << "AddElementTuple: tuple expr must have TupleStructInfo.";
-    for (size_t i = 0; i < tuple_sinfo->fields.size(); ++i) {
+  AdjointType AddElementInNestedAdjoint(const AdjointType& adjoint, int index,
+                                        const AdjointType& increment) {
+    ICHECK(adjoint.IsNested()) << "The adjoint should be nested.";
+    Array<AdjointType> arr = adjoint.NestedArray();
+    Array<AdjointType> new_arr;
+    new_arr.reserve(arr.size());
+    for (size_t i = 0; i < arr.size(); ++i) {
       if ((int)i == index) {
-        ret.push_back(TupleAwareAdd(GetField(tuple, i), increment));
+        new_arr.push_back(TupleAwareAdd(arr[i], increment));
       } else {
-        ret.push_back(GetField(tuple, i));
+        new_arr.push_back(arr[i]);
       }
     }
-    return builder_->Normalize(Tuple(ret));
+    return AdjointType(new_arr);
   }
 
-  void BindAndEmit(const Var& v, const Expr& e) {
-    builder_->EmitNormalized(VarBinding(v, builder_->Normalize(e)));
+  Expr NestedMsgToExpr(AdjointType msg) {
+    auto fmapmerge = [](Array<Expr> subexpr) { return Tuple(subexpr); };
+    auto fmapleaf = [](AdjointType leaf_msg) {
+      ICHECK(leaf_msg.IsLeaf());
+      return leaf_msg.LeafValue();
+    };
+    auto fmapnull = []() {
+      LOG(FATAL) << "Error: null field should not appear in adjoint.";
+      return Expr();  // just for type checking
+    };
+    return MapFromNestedMsg<Expr>(msg, fmapmerge, fmapleaf, fmapnull);
+  }
+
+  AdjointType ExprToNestedMsg(Expr expr) {
+    auto fmapleaf = [](Expr leaf) {
+      auto sinfo = GetStructInfoAs<TensorStructInfoNode>(leaf);
+      ICHECK(sinfo) << "The leaf of adjoint: " << leaf
+                    << " should have StructInfo and be a Tensor.";
+      return AdjointType(leaf);
+    };
+    auto fstepprocess = [](Expr expr, size_t index) {
+      if (const auto* node = expr.as<TupleNode>()) {
+        return node->fields[index];
+      }
+      const auto* sinfo = GetStructInfoAs<TupleStructInfoNode>(expr);
+      ICHECK(sinfo != nullptr) << "GetField: expr must has TupleStructInfo.";
+      Expr ret = TupleGetItem(expr, index);
+      UpdateStructInfo(ret, sinfo->fields[index]);
+      return ret;
+    };
+    return MapToNestedMsg<Expr>(expr, fstepprocess, fmapleaf);
+  }
+
+  void BindAndEmit(const Var& v, const AdjointType& adjoint) {
+    Expr adjoint_expr = NestedMsgToExpr(adjoint);
+    builder_->EmitNormalized(VarBinding(v, builder_->Normalize(adjoint_expr)));
   }
 
   // Init the gradient of the target_var_ and update it in adjoint_expr_map_.
   void InitGradAsOnes(const Var& var) {
     auto sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
     ICHECK(sinfo->shape.defined());
-    adjoint_expr_map_.Set(var, ones(sinfo->shape.value(), sinfo->dtype));
+    adjoint_expr_map_.Set(
+        var, AdjointType(builder_->Normalize(ones(sinfo->shape.value(), sinfo->dtype))));
   }
 
   // Handle the return value of the AD function.
@@ -293,9 +315,12 @@ class BackwardBindingGenerator : public ExprVisitor {
       } else {
         // here we could assert that var do not contribute to the target
         // so we emit zeros as adjoint here
-        auto sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
-        ICHECK(sinfo->shape.defined());
-        BindAndEmit(adjoint_var, zeros(sinfo->shape.value(), sinfo->dtype));
+        if (auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(var)) {
+          ICHECK(sinfo->shape.defined());
+          BindAndEmit(adjoint_var, AdjointType(zeros(sinfo->shape.value(), sinfo->dtype)));
+        } else if (auto* sinfo = GetStructInfoAs<TupleStructInfoNode>(var)) {
+          BindAndEmit(adjoint_var, BuildZerosAdjoint(sinfo));
+        }
       }
 
       out_adjoints.push_back(adjoint_var);
@@ -314,7 +339,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   // Forward Var to its adjoint Var
   Map<Var, Var> adjoint_var_map_;
   // Forward Var to its adjoint Expr
-  Map<Var, Expr> adjoint_expr_map_;
+  Map<Var, AdjointType> adjoint_expr_map_;
 };
 
 class GradientMutator : public ExprMutator {

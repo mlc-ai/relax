@@ -306,6 +306,75 @@ NestedMsg<T> MapToNestedMsg(StructInfo sinfo, FType fmapleaf) {
 }
 
 /*!
+ * \brief Map expr with possible nested-tuple to nested message,
+ * according to its struct info.
+ *
+ * This function will unpack recursive sinfo, run fstepproces in every
+ * recursion step, and run fmapleaf for each leaf.
+ * then recursively combines the results together into a NestedMsg.
+ *
+ * The nesting structure will corresponds to the tuple structure.
+ *
+ * \param expr The input expression with tuple struct info.
+ * \param fstepprocess The processing function for each step with signature
+ *             Expr fstepprocess(Expr, size_t)
+ * \param fmapleaf The mapping function for each leaf with signature
+ *             NestedMsg<T> fmap(Expr)
+ * \tparam T the content type of nested msg
+ * \tparam FType The mapping function type
+ */
+template <typename T, typename FType1, typename FType2>
+NestedMsg<T> MapToNestedMsg(Expr expr, FType1 fstepprocess, FType2 fmapleaf) {
+  auto sinfo = GetStructInfo(expr);
+  if (auto* tuple = sinfo.as<TupleStructInfoNode>()) {
+    Array<NestedMsg<T>> res;
+    res.reserve(tuple->fields.size());
+    for (size_t i = 0; i < tuple->fields.size(); ++i) {
+      res.push_back(
+          MapToNestedMsg<T, FType1, FType2>(fstepprocess(expr, i), fstepprocess, fmapleaf));
+    }
+    return res;
+  } else {
+    return fmapleaf(expr);
+  }
+}
+
+/*!
+ * \brief Map nested message to the value we want.
+ *
+ * This function will decompose the nested message and
+ * construct the value by fmapmerge and fmapleaf.
+ *
+ * \param msg The input nested message.
+ * \param fmapmerge The mapping function for each merging process with signature
+ *             T fmap(Array<T>)
+ * \param fmapleaf The mapping function for each leaf with signature
+ *             T fmap(NestedMsg<T>)
+ * \param fmapnull The mapping function for null msg with signature
+ *             T fmap()
+ * \tparam T the content type of nested msg
+ * \tparam FType The mapping function type
+ */
+template <typename T, typename FType1, typename FType2, typename FType3>
+T MapFromNestedMsg(NestedMsg<T> msg, FType1 fmapmerge, FType2 fmapleaf, FType3 fmapnull) {
+  if (msg.IsNull()) {
+    return fmapnull();
+  } else if (msg.IsLeaf()) {
+    return fmapleaf(msg);
+  } else {
+    ICHECK(msg.IsNested());
+    Array<NestedMsg<T>> arr = msg.NestedArray();
+    Array<T> res;
+    res.reserve(arr.size());
+    for (size_t i = 0; i < arr.size(); ++i) {
+      res.push_back(
+          MapFromNestedMsg<T, FType1, FType2, FType3>(arr[i], fmapmerge, fmapleaf, fmapnull));
+    }
+    return fmapmerge(res);
+  }
+}
+
+/*!
  * \brief Recursively combine two nested message into one.
  *
  * This function requires the two messages to be compatible with each other.
