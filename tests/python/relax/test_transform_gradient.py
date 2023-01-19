@@ -393,7 +393,6 @@ def test_tuple_assignment():
     # fmt: on
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
-    After.show()
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
@@ -566,11 +565,11 @@ def test_tuple_update():
     # fmt: on
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
-    After.show()
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
 def test_tuple_ops():
+    # fmt: off
     @tvm.script.ir_module
     class Before:
         @R.function
@@ -584,8 +583,54 @@ def test_tuple_ops():
                 lv4 = lv2 + lv3
                 lv5 = (lv4, lv3)
                 lv6 = R.concat(lv5)
-                R.output(lv6)
-            return lv6
+                gv = R.sum(lv6)
+                R.output(gv)
+            return gv
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((6,), dtype="float32")) -> R.Tensor((), dtype="float32"):
+            with R.dataflow():
+                lv1: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(x, indices_or_sections=2, axis=0)
+                lv2: R.Tensor((3,), dtype="float32") = lv1[0]
+                lv3: R.Tensor((3,), dtype="float32") = lv1[1]
+                lv4: R.Tensor((3,), dtype="float32") = R.add(lv2, lv3)
+                lv5: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv4, lv3)
+                lv6: R.Tensor((6,), dtype="float32") = R.concat(lv5, axis=0)
+                gv: R.Tensor((), dtype="float32") = R.sum(lv6, axis=None, keepdims=False)
+                R.output(gv)
+            return gv
+
+        @R.function
+        def main_adjoint(x: R.Tensor((6,), dtype="float32")) -> R.Tuple(R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((6,), dtype="float32"))):
+            # block 0
+            with R.dataflow():
+                lv1: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(x, indices_or_sections=2, axis=0)
+                lv2: R.Tensor((3,), dtype="float32") = lv1[0]
+                lv3: R.Tensor((3,), dtype="float32") = lv1[1]
+                lv4: R.Tensor((3,), dtype="float32") = R.add(lv2, lv3)
+                lv5: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv4, lv3)
+                lv6: R.Tensor((6,), dtype="float32") = R.concat(lv5, axis=0)
+                gv: R.Tensor((), dtype="float32") = R.sum(lv6, axis=None, keepdims=False)
+                gv_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+                lv6_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(gv_adjoint, (6,))
+                lv: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(lv6_adjoint, indices_or_sections=[3], axis=0)
+                lv11: R.Tensor((3,), dtype="float32") = lv[0]
+                lv21: R.Tensor((3,), dtype="float32") = lv[1]
+                lv5_adjoint: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv11, lv21)
+                lv4_adjoint: R.Tensor((3,), dtype="float32") = lv5_adjoint[0]
+                lv31: R.Tensor((3,), dtype="float32") = lv5_adjoint[1]
+                lv3_adjoint: R.Tensor((3,), dtype="float32") = R.add(lv31, lv4_adjoint)
+                lv2_adjoint: R.Tensor((3,), dtype="float32") = lv4_adjoint
+                lv1_adjoint: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv2_adjoint, lv3_adjoint)
+                x_adjoint: R.Tensor((6,), dtype="float32") = R.concat(lv1_adjoint, axis=0)
+                R.output(gv, x_adjoint)
+            return (gv, (x_adjoint,))
+    # fmt: on
+
+    After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
 def test_const():
@@ -656,7 +701,6 @@ def test_const():
     # fmt: on
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
-    After.show()
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 

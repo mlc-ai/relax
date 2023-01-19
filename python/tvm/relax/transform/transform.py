@@ -23,10 +23,9 @@ from typing import Callable, Dict, Union, Optional, List
 import numpy as np  # type: ignore
 
 import tvm.ir
-from tvm import relax, IRModule
 from tvm.runtime import NDArray
 from . import _ffi_api
-from ..expr import Var, GlobalVar, Function
+from ..expr import Var, GlobalVar
 
 
 @tvm._ffi.register_object("relax.FunctionPass")

@@ -130,5 +130,60 @@ def test_mlp_blockbuilder():
     check_numerical_grads(func, [i.numpy() for i in args], [i.numpy() for i in grad])
 
 
+def test_complex():
+    cst = relax.const(np.ones((6,)), dtype="float32")
+    cst1 = relax.const(np.array([0, 0, 0, 1, 0, 0]), dtype="float32")
+
+    @tvm.script.ir_module
+    class Before:
+        @R.function
+        def main(x: R.Tensor((6,), "float32"), y: R.Tensor((6, 3, 4), "float32")):
+            with R.dataflow():
+                lv1 = R.split(x, 2)
+                lv2 = lv1[0]
+                lv3 = lv1[1]
+                lv4 = lv2 + lv3
+                lv5 = (lv4, lv3)
+                lv6 = R.concat(lv5)
+                lv7 = (x, x)
+                lv8 = R.concat(lv7)
+                lv9 = R.concat(lv7)
+                lv10 = R.add(lv8, lv9)
+                lv11 = R.split(lv10, 2)
+                lv12 = R.add(lv6, lv11[0])
+                lv13 = cst
+                lv14 = R.add(lv12, lv13)
+                lv15 = R.subtract(lv13, lv14)
+                lv16 = R.multiply(lv14, lv15)
+                lv17 = R.multiply(lv15, lv16)
+                lv18 = R.tanh(lv17)
+                lv19 = R.sigmoid(lv18)
+                lv20 = R.permute_dims(y, axes=[0, 2, 1])
+                lv21 = R.sigmoid(lv20)
+                lv22 = R.matmul(y, lv21)
+                lv23 = R.sum(lv22, axis=[1, 2])
+                lv24 = R.add(lv19, lv23)
+                lv25 = R.nn.log_softmax(lv24)
+                gv = R.nn.cross_entropy_with_logits(lv25, cst1)
+                R.output(gv)
+            return gv
+
+    After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    args = []
+    for arg in After["main_adjoint"].params:
+        shape = [int(l) for l in arg.struct_info.shape]
+        args.append(rand("float32", *shape))
+
+    vm_before = _legalize_and_build(Before)
+    vm_after = _legalize_and_build(After)
+    _, grad = vm_after["main_adjoint"](*args)
+
+    def func(*inputs):
+        loss = vm_before["main"](*[tvm.nd.array(i) for i in inputs])
+        return loss.numpy()
+
+    check_numerical_grads(func, [i.numpy() for i in args], [i.numpy() for i in grad])
+
+
 if __name__ == "__main__":
     tvm.testing.main()
