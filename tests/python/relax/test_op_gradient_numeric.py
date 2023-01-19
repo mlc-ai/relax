@@ -42,8 +42,8 @@ def relax_check_gradients(
     def _numpy_to_var(data, var_name):
         if isinstance(data, list):
             struct_infos = []
-            for i in range(len(data)):
-                tvm_var = _numpy_to_var(data[i], "")
+            for _data in data:
+                tvm_var = _numpy_to_var(_data, "")
                 struct_infos.append(tvm_var.struct_info)
             return relax.Var(var_name, relax.TupleStructInfo(struct_infos))
         return relax.Var(var_name, relax.TensorStructInfo(data.shape, "float32"))
@@ -51,8 +51,8 @@ def relax_check_gradients(
     def _numpy_to_tvm(data):
         if isinstance(data, list):
             ret_data = []
-            for i in range(len(data)):
-                tvm_data = _numpy_to_tvm(data[i])
+            for _data in data:
+                tvm_data = _numpy_to_tvm(_data)
                 ret_data.append(tvm_data)
             return tvm.runtime.container.ADT(0, ret_data)
         return tvm.nd.array(data)
@@ -71,7 +71,9 @@ def relax_check_gradients(
         else:
             return np.random.uniform(size=shape).astype(np.float32)
 
-    param_vars = [_numpy_to_var(inputs_numpy[i], "x_" + str(i)) for i in range(len(inputs_numpy))]
+    param_vars = [
+        _numpy_to_var(input_numpy, "x_" + str(i)) for i, input_numpy in enumerate(inputs_numpy)
+    ]
     weights = _gen_weights(output_shape)
     grad_var = _numpy_to_var(weights, "grad")
 
@@ -102,8 +104,8 @@ def relax_check_gradients(
             assert isinstance(weights, list)
             assert len(weights) == len(result_numpy)
             ret = 0
-            for i in range(len(weights)):
-                ret += np.sum(weights[i] * result_numpy[i])
+            for i, weight in enumerate(weights):
+                ret += np.sum(weight * result_numpy[i])
             return ret
         return np.sum(weights * result_numpy)
 
