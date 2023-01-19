@@ -38,7 +38,7 @@
 namespace tvm {
 namespace relax {
 
-using AdjointType = NestedMsg<Expr>;
+using AdjointMsg = NestedMsg<Expr>;
 
 // A tool class for GradientMutator
 // Visit the forward bindings and generate the backward bindings
@@ -54,14 +54,16 @@ class BackwardBindingGenerator : public ExprVisitor {
   Expr Generate(const BlockBuilder& builder, const DataflowBlock& forward_block,
                 const Array<Var>& require_grads, const Var& target_var) {
     this->builder_ = builder;
-    this->target_var_ = target_var;
+
+    // initialize the adjoint of target_var as ones op
+    InitAdjointAsOnes(target_var);
 
     // We do reverse-mode ad, so visit bindings backwards
     for (auto it = forward_block->bindings.rbegin(); it != forward_block->bindings.rend(); ++it) {
       this->VisitBinding(*it);
     }
 
-    return this->Epilogue(require_grads);
+    return this->Epilogue(require_grads, target_var);
   }
 
   void VisitBinding(const Binding& binding) override {
@@ -69,20 +71,16 @@ class BackwardBindingGenerator : public ExprVisitor {
     CHECK(binding->IsInstance<VarBindingNode>()) << "now only support VarBindingNode";
     auto var_binding = binding.as<VarBindingNode>();
 
-    // For target_var_, generate ones op as its adjoint
-    if (var_binding->var == target_var_) {
-      InitGradAsOnes(var_binding->var);
-    }
-
-    if (adjoint_expr_map_.count(var_binding->var) == 0) {
+    if (adjoint_msg_map_.count(var_binding->var) == 0) {
       // This var is not used in the bindings handled earlier
       return;
     }
 
     // Meet the definition of binding->var
     // Create the adjoint var and bind the adjoint value to it
-    Var adjoint_var = CreateAdjointVar(var_binding->var, /*is_datalfow_var=*/true);
-    BindAndEmit(adjoint_var, adjoint_expr_map_[var_binding->var]);
+    // Var adjoint_var = CreateAdjointVar(var_binding->var, /*is_datalfow_var=*/true);
+    // BindAndEmit(adjoint_var, ;
+    EmitAdjoint(var_binding->var, adjoint_msg_map_[var_binding->var], true);
 
     Expr value = var_binding->value;
     // TODO(chaofan, yixin): support other types of binding values
@@ -111,7 +109,7 @@ class BackwardBindingGenerator : public ExprVisitor {
       if (!partial->struct_info_.defined()) {
         UpdateStructInfo(partial, GetStructInfo(call->args[i]));
       }
-      UpdateAdjointForLeaf(call->args[i], ExprToNestedMsg(partial));
+      UpdateAdjoint(call->args[i], partial);
     }
   }
 
@@ -123,7 +121,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   // b_adjoint_expr += a_adjoint_var[0][0], c_adjoint_expr += a_adjoint_var[0][1],
   // d_adjoint_expr += a_adjoint_var[1]
   void VisitBinding_(const VarBindingNode* binding, const TupleNode* tuple) override {
-    UpdateAdjointForLeaf(GetRef<Tuple>(tuple), ExprToNestedMsg(adjoint_var_map_[binding->var]));
+    UpdateAdjoint(GetRef<Tuple>(tuple), adjoint_var_map_[binding->var]);
   }
 
   // For TupleGetItem nodes, we do a partial update
@@ -139,23 +137,23 @@ class BackwardBindingGenerator : public ExprVisitor {
         << "The tuple field of a TupleGetItem must has a TupleStructInfo";
 
     const Var& tuple_var = Downcast<Var>(tuple_get_item->tuple);
-    if (adjoint_expr_map_.count(tuple_var) == 0) {
-      const AdjointType& init = BuildZerosAdjoint(tuple_sinfo);
-      adjoint_expr_map_.Set(tuple_var, init);
+    if (adjoint_msg_map_.count(tuple_var) == 0) {
+      const AdjointMsg& init = BuildZerosAdjointNested(GetRef<StructInfo>(tuple_sinfo));
+      adjoint_msg_map_.Set(tuple_var, init);
     }
 
-    adjoint_expr_map_.Set(
-        tuple_var, AddElementInNestedAdjoint(adjoint_expr_map_[tuple_var], tuple_get_item->index,
-                                             ExprToNestedMsg(adjoint_var_map_[binding->var])));
+    adjoint_msg_map_.Set(
+        tuple_var, AddElementInNestedAdjoint(adjoint_msg_map_[tuple_var], tuple_get_item->index,
+                                             ExprToAdjointMsg(adjoint_var_map_[binding->var])));
   }
 
   // For assign nodes, we add the adjoint of output to the adjoint of input
   void VisitBinding_(const VarBindingNode* binding, const DataflowVarNode* var) override {
-    UpdateAdjointForLeaf(GetRef<Var>(var), ExprToNestedMsg(adjoint_var_map_[binding->var]));
+    UpdateAdjoint(GetRef<Var>(var), adjoint_var_map_[binding->var]);
   }
 
   void VisitBinding_(const VarBindingNode* binding, const VarNode* var) override {
-    UpdateAdjointForLeaf(GetRef<Var>(var), ExprToNestedMsg(adjoint_var_map_[binding->var]));
+    UpdateAdjoint(GetRef<Var>(var), adjoint_var_map_[binding->var]);
   }
 
   // For constant nodes, we do not have to handle it because it does not produce adjoint
@@ -166,48 +164,30 @@ class BackwardBindingGenerator : public ExprVisitor {
     return expr->IsInstance<CallNode>() && Downcast<Call>(expr)->op == Op::Get("relax.zeros");
   }
 
-  Var CreateAdjointVar(const Var& v, bool is_dataflow_var) {
-    Var adjoint;
-    auto sinfo = GetStructInfo(v);
-    if (is_dataflow_var) {
-      adjoint = DataflowVar(v->name_hint() + "_adjoint", sinfo);
-    } else {
-      adjoint = Var(v->name_hint() + "_adjoint", sinfo);
-    }
-    adjoint_var_map_.Set(v, adjoint);
-    return adjoint;
-  }
-
-  // Update the adjoint of a leaf node by partial: adjoint_expr_map_[leaf] += partial
-  // Here leaf node means Var, Tuple, or Constant
-  // The arguments of 1) *Function calls*, or 2) *Tuples* can be any kind of leaf nodes,
-  // so we handle them uniformly here
-  void UpdateAdjointForLeaf(const Expr& leaf, const AdjointType& partial) {
-    if (const auto* node = leaf.as<VarNode>()) {
-      const Var& v = GetRef<Var>(node);
-      if (adjoint_expr_map_.count(v) == 0) {
-        adjoint_expr_map_.Set(v, partial);
+  // Update the adjoint of expr by an Expr partial
+  void UpdateAdjoint(const Expr& expr, const Expr& partial) {
+    DecomposeNestedMsg(expr, ExprToAdjointMsg(partial), [&](Expr leaf, AdjointMsg msg) {
+      if (leaf->IsInstance<VarNode>()) {
+        const Var& v = Downcast<Var>(leaf);
+        if (adjoint_msg_map_.count(v) == 0) {
+          adjoint_msg_map_.Set(v, msg);
+        } else {
+          adjoint_msg_map_.Set(v, TupleAwareAdd(adjoint_msg_map_[v], msg));
+        }
+      } else if (leaf->IsInstance<ConstantNode>()) {
+        // nothing to do
       } else {
-        adjoint_expr_map_.Set(v, TupleAwareAdd(adjoint_expr_map_[v], partial));
+        LOG(FATAL) << "UpdateAdjoint: leaf type not supported. Currently Var and Constant leaves "
+                      "are supported.";
       }
-    } else if (const auto* node0 = leaf.as<TupleNode>()) {
-      ICHECK(partial.IsNested()) << "If leaf is Tuple, the adjoint must be nested in thie case.";
-      auto arr = partial.NestedArray();
-      ICHECK(node0->fields.size() == arr.size());
-      for (size_t i = 0; i < node0->fields.size(); ++i) {
-        UpdateAdjointForLeaf(node0->fields[i], arr[i]);
-      }
-    } else if (leaf.as<ConstantNode>()) {
-      // nothing to do
-    } else {
-      LOG(FATAL)
-          << "The base is expected to a leaf node. Currently supported: Var, Tuple, Constant.";
-    }
+    });
   }
 
-  // Build a "zeros" tuple with specified tuple struct info and type
-  AdjointType BuildZerosAdjoint(const TupleStructInfoNode* sinfo) {
-    return MapToNestedMsg<Expr>(GetRef<StructInfo>(sinfo), [](StructInfo sinfo) {
+  // Build a "zeros" AdjointMsg with specified struct info
+  // sinfo may be TupleStructInfo or TensorStructInfo. In the first case, it would recursive and
+  // build a nested zeros AdjointMsg.
+  AdjointMsg BuildZerosAdjointNested(const StructInfo& sinfo) {
+    return MapToNestedMsg<Expr>(sinfo, [](StructInfo sinfo) {
       auto tensor_sinfo = sinfo.as<TensorStructInfoNode>();
       ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
       ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when building zeros tuple.";
@@ -217,8 +197,19 @@ class BackwardBindingGenerator : public ExprVisitor {
     });
   }
 
+  // Init the gradient of the var as ones op and update it in adjoint_msg_map_.
+  void InitAdjointAsOnes(const Var& var) {
+    auto tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
+    ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
+    ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when building ones.";
+    const Expr& init = ones(tensor_sinfo->shape.value(), tensor_sinfo->dtype);
+    UpdateStructInfo(init, GetRef<StructInfo>(tensor_sinfo));
+
+    adjoint_msg_map_.Set(var, AdjointMsg(init));
+  }
+
   // Return base + increment. A tuple-aware addition.
-  AdjointType TupleAwareAdd(const AdjointType& base, const AdjointType& increment) {
+  AdjointMsg TupleAwareAdd(const AdjointMsg& base, const AdjointMsg& increment) {
     return CombineNestedMsg(base, increment, [&](Expr lhs, Expr rhs) {
       if (IsCallZeros(lhs)) {
         return rhs;
@@ -237,11 +228,11 @@ class BackwardBindingGenerator : public ExprVisitor {
 
   // Perform an addition in a specified position of tuple.
   // e.g. tuple=(a, b, c), index=1, increment=d, then return (a, b+d, c)
-  AdjointType AddElementInNestedAdjoint(const AdjointType& adjoint, int index,
-                                        const AdjointType& increment) {
+  AdjointMsg AddElementInNestedAdjoint(const AdjointMsg& adjoint, int index,
+                                       const AdjointMsg& increment) {
     ICHECK(adjoint.IsNested()) << "The adjoint should be nested.";
-    Array<AdjointType> arr = adjoint.NestedArray();
-    Array<AdjointType> new_arr;
+    Array<AdjointMsg> arr = adjoint.NestedArray();
+    Array<AdjointMsg> new_arr;
     new_arr.reserve(arr.size());
     for (size_t i = 0; i < arr.size(); ++i) {
       if (static_cast<int>(i) == index) {
@@ -250,12 +241,12 @@ class BackwardBindingGenerator : public ExprVisitor {
         new_arr.push_back(arr[i]);
       }
     }
-    return AdjointType(new_arr);
+    return AdjointMsg(new_arr);
   }
 
-  Expr NestedMsgToExpr(AdjointType msg) {
+  Expr AdjointMsgToExpr(AdjointMsg msg) {
     auto fmapmerge = [](Array<Expr> subexpr) { return Tuple(subexpr); };
-    auto fmapleaf = [](AdjointType leaf_msg) {
+    auto fmapleaf = [](AdjointMsg leaf_msg) {
       ICHECK(leaf_msg.IsLeaf());
       return leaf_msg.LeafValue();
     };
@@ -266,80 +257,69 @@ class BackwardBindingGenerator : public ExprVisitor {
     return MapFromNestedMsg<Expr>(msg, fmapmerge, fmapleaf, fmapnull);
   }
 
-  AdjointType ExprToNestedMsg(Expr expr) {
-    auto fmapleaf = [](Expr leaf) {
-      auto sinfo = GetStructInfoAs<TensorStructInfoNode>(leaf);
-      ICHECK(sinfo) << "The leaf of adjoint: " << leaf
-                    << " should have StructInfo and be a Tensor.";
-      return AdjointType(leaf);
-    };
-    auto fstepprocess = [](Expr expr, size_t index) {
-      if (const auto* node = expr.as<TupleNode>()) {
-        return node->fields[index];
-      }
-      const auto* sinfo = GetStructInfoAs<TupleStructInfoNode>(expr);
-      ICHECK(sinfo != nullptr) << "GetField: expr must has TupleStructInfo.";
-      Expr ret = TupleGetItem(expr, index);
-      UpdateStructInfo(ret, sinfo->fields[index]);
-      return ret;
-    };
-    return MapToNestedMsg<Expr>(expr, fstepprocess, fmapleaf);
+  static Expr GetField(Expr expr, size_t index) {
+    if (const auto* node = expr.as<TupleNode>()) {
+      return node->fields[index];
+    }
+    const auto* sinfo = GetStructInfoAs<TupleStructInfoNode>(expr);
+    ICHECK(sinfo != nullptr) << "GetField: expr must has TupleStructInfo.";
+    Expr ret = TupleGetItem(expr, index);
+    UpdateStructInfo(ret, sinfo->fields[index]);
+    return ret;
   }
 
-  void BindAndEmit(const Var& v, const AdjointType& adjoint) {
-    Expr adjoint_expr = NestedMsgToExpr(adjoint);
-    builder_->EmitNormalized(VarBinding(v, builder_->Normalize(adjoint_expr)));
+  AdjointMsg ExprToAdjointMsg(Expr expr) {
+    return MapToNestedMsg<Expr>(expr, GetField, [](Expr leaf) {
+      ICHECK(GetStructInfoAs<TensorStructInfoNode>(leaf))
+          << "The leaf of adjoint: " << leaf << " should have StructInfo and be a Tensor.";
+      return AdjointMsg(leaf);
+    });
   }
 
-  // Init the gradient of the target_var_ and update it in adjoint_expr_map_.
-  void InitGradAsOnes(const Var& var) {
-    auto sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
-    ICHECK(sinfo->shape.defined());
-    adjoint_expr_map_.Set(
-        var, AdjointType(builder_->Normalize(ones(sinfo->shape.value(), sinfo->dtype))));
+  // Transform the adjoint expressed as NestedMsg<Expr> into adjoint Expr, and then emit it
+  // If the adjoint is assigned to a DataflowVar (the adjoint corresponds to a non-output binding),
+  // it would be stored in adjoint_var_map_ for future lookup
+  Var EmitAdjoint(const Var& source_var, const AdjointMsg& adjoint, bool is_dataflow_var) {
+    Var adjoint_var;
+    if (is_dataflow_var) {
+      adjoint_var = builder_->Emit(AdjointMsgToExpr(adjoint), source_var->name_hint() + "_adjoint");
+      adjoint_var_map_.Set(source_var, adjoint_var);
+    } else {
+      adjoint_var =
+          builder_->EmitOutput(AdjointMsgToExpr(adjoint), source_var->name_hint() + "_adjoint");
+    }
+    return adjoint_var;
   }
 
   // Handle the return value of the AD function.
   // Returns the new return value, which would be like:
   // Tuple(original_return_value,
   //       Tuple(adjoint_of_require_grads_1, adjoint_of_require_grads_2, ...))
-  Expr Epilogue(const Array<Var>& require_grads) {
+  Expr Epilogue(const Array<Var>& require_grads, const Var& target_var) {
     // create adjoint variables for inputs, and then bind adjoints
     Array<Expr> out_adjoints;
 
     for (Var var : require_grads) {
-      Var adjoint_var = CreateAdjointVar(var, /*is_datalfow_var=*/false);
-
-      if (adjoint_expr_map_.count(var)) {
-        BindAndEmit(adjoint_var, adjoint_expr_map_[var]);
-      } else {
-        // here we could assert that var do not contribute to the target
-        // so we emit zeros as adjoint here
-        if (auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(var)) {
-          ICHECK(sinfo->shape.defined());
-          BindAndEmit(adjoint_var, AdjointType(zeros(sinfo->shape.value(), sinfo->dtype)));
-        } else if (auto* sinfo = GetStructInfoAs<TupleStructInfoNode>(var)) {
-          BindAndEmit(adjoint_var, BuildZerosAdjoint(sinfo));
-        }
-      }
-
+      // If the var don't have adjoint msg, it do not contribute to the target
+      // so its adjoint is zeros
+      AdjointMsg adjoint =
+          adjoint_msg_map_.Get(var).value_or(BuildZerosAdjointNested(GetStructInfo(var)));
+      Var adjoint_var = EmitAdjoint(var, adjoint, false);
       out_adjoints.push_back(adjoint_var);
     }
 
-    Expr ret = Tuple(Array<Expr>{target_var_, Tuple(out_adjoints)});
-    return builder_->Normalize(ret);
+    return Tuple(Array<Expr>{target_var, Tuple(out_adjoints)});
   }
 
   // The block builder of the corresponding GradientMutator, to emit bindings
   BlockBuilder builder_;
 
-  // The differentiation target
-  Var target_var_;
-
   // Forward Var to its adjoint Var
   Map<Var, Var> adjoint_var_map_;
-  // Forward Var to its adjoint Expr
-  Map<Var, AdjointType> adjoint_expr_map_;
+  // Forward Var to its adjoint NestedMsg<Expr>
+  // Here we use NestedMsg<Expr> to save the adjoint information (equaivalent to adjoint Expr)
+  // When emiting, adjoint information will be transformed into adjoint Expr
+  Map<Var, AdjointMsg> adjoint_msg_map_;
 };
 
 class GradientMutator : public ExprMutator {
