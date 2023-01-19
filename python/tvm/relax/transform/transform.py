@@ -399,7 +399,7 @@ def Gradient(
     if require_grads is not None and not isinstance(require_grads, list):
         require_grads = [require_grads]
 
-    return _ffi_api.Gradient(global_var, require_grads)
+    return _ffi_api.Gradient(global_var, require_grads)  # type: ignore
 
 
 def _wrap_class_function_pass(pass_cls, pass_info):

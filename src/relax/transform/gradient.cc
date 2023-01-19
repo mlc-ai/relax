@@ -244,7 +244,7 @@ class BackwardBindingGenerator : public ExprVisitor {
     Array<AdjointType> new_arr;
     new_arr.reserve(arr.size());
     for (size_t i = 0; i < arr.size(); ++i) {
-      if ((int)i == index) {
+      if (static_cast<int>(i) == index) {
         new_arr.push_back(TupleAwareAdd(arr[i], increment));
       } else {
         new_arr.push_back(arr[i]);
