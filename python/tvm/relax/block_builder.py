@@ -35,7 +35,7 @@ from .expr import (
     Binding,
 )
 from .struct_info import ShapeStructInfo, StructInfo, TensorStructInfo
-from .op.base import call_tir
+
 from . import _ffi_api
 
 
@@ -458,7 +458,7 @@ class BlockBuilder(Object):
 
         # add arguments for extra parameters from unbound var
         if len(unbound_tir_vars) > 0:
-            call = call_tir(
+            call = rx.call_tir(
                 gvar,
                 call_args,
                 output_shape,
@@ -466,7 +466,7 @@ class BlockBuilder(Object):
                 tir_vars=_shape_with_old_tir_var(unbound_tir_vars, tir_var_inverse_map),
             )
         else:
-            call = call_tir(gvar, call_args, output_shape, output_dtype)
+            call = rx.call_tir(gvar, call_args, output_shape, output_dtype)
         return call
 
     def emit_te(self, func: Callable, *args: Any, **kwargs: Any) -> Var:
