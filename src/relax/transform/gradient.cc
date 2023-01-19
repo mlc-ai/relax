@@ -56,7 +56,7 @@ class BackwardBindingGenerator : public ExprVisitor {
     this->builder_ = builder;
 
     // initialize the adjoint of target_var as ones op
-    InitAdjointAsOnes(target_var);
+    adjoint_msg_map_.Set(target_var, BuildOnesAdjoint(target_var));
 
     // We do reverse-mode ad, so visit bindings backwards
     for (auto it = forward_block->bindings.rbegin(); it != forward_block->bindings.rend(); ++it) {
@@ -78,8 +78,6 @@ class BackwardBindingGenerator : public ExprVisitor {
 
     // Meet the definition of binding->var
     // Create the adjoint var and bind the adjoint value to it
-    // Var adjoint_var = CreateAdjointVar(var_binding->var, /*is_datalfow_var=*/true);
-    // BindAndEmit(adjoint_var, ;
     EmitAdjoint(var_binding->var, adjoint_msg_map_[var_binding->var], true);
 
     Expr value = var_binding->value;
@@ -198,14 +196,13 @@ class BackwardBindingGenerator : public ExprVisitor {
   }
 
   // Init the gradient of the var as ones op and update it in adjoint_msg_map_.
-  void InitAdjointAsOnes(const Var& var) {
+  static AdjointMsg BuildOnesAdjoint(const Var& var) {
     auto tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
     ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
     ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when building ones.";
     const Expr& init = ones(tensor_sinfo->shape.value(), tensor_sinfo->dtype);
     UpdateStructInfo(init, GetRef<StructInfo>(tensor_sinfo));
-
-    adjoint_msg_map_.Set(var, AdjointMsg(init));
+    return init;
   }
 
   // Return base + increment. A tuple-aware addition.

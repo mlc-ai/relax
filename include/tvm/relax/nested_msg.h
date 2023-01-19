@@ -340,6 +340,32 @@ NestedMsg<T> MapToNestedMsg(Expr expr, FType1 fstepprocess, FType2 fmapleaf) {
 }
 
 /*!
+ * \brief Map expr with possible nested-tuple to nested message,
+ * according to its struct info.
+ */
+template <typename T, typename FType>
+NestedMsg<T> MapToNestedMsgNew(Expr expr, FType fmapleaf) {
+  auto sinfo = GetStructInfo(expr);
+  if (auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
+    Array<NestedMsg<T>> res;
+    res.reserve(tuple_sinfo->fields.size());
+    for (size_t i = 0; i < tuple_sinfo->fields.size(); ++i) {
+      Expr field;
+      if (const auto* node = expr.as<TupleNode>()) {
+        field = node->fields[i];
+      } else {
+        field = TupleGetItem(expr, i);
+        UpdateStructInfo(field, tuple_sinfo->fields[i]);
+      }
+      res.push_back(MapToNestedMsgNew<T, FType>(field, fmapleaf));
+    }
+    return res;
+  } else {
+    return fmapleaf(expr);
+  }
+}
+
+/*!
  * \brief Map nested message to the value we want.
  *
  * This function will decompose the nested message and
