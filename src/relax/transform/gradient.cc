@@ -54,7 +54,7 @@ class BackwardBindingGenerator : public ExprVisitor {
    * \param target_var The target Var to differentiate
    */
   static Expr Generate(const BlockBuilder& builder, const DataflowBlock& forward_block,
-                const Array<Var>& require_grads, const Var& target_var) {
+                       const Array<Var>& require_grads, const Var& target_var) {
     BackwardBindingGenerator generator;
     generator.builder_ = builder;
 
@@ -258,23 +258,15 @@ class BackwardBindingGenerator : public ExprVisitor {
     return MapFromNestedMsg<Expr>(msg, fmapmerge, fmapleaf, fmapnull);
   }
 
-  static Expr GetField(Expr expr, size_t index) {
-    if (const auto* node = expr.as<TupleNode>()) {
-      return node->fields[index];
-    }
-    const auto* sinfo = GetStructInfoAs<TupleStructInfoNode>(expr);
-    ICHECK(sinfo != nullptr) << "GetField: expr must has TupleStructInfo.";
-    Expr ret = TupleGetItem(expr, index);
-    UpdateStructInfo(ret, sinfo->fields[index]);
-    return ret;
-  }
-
   AdjointMsg ExprToAdjointMsg(Expr expr) {
-    return MapToNestedMsg<Expr>(expr, [](Expr leaf) {
-      ICHECK(GetStructInfoAs<TensorStructInfoNode>(leaf))
-          << "The leaf of adjoint: " << leaf << " should have StructInfo and be a Tensor.";
-      return AdjointMsg(leaf);
-    }, true);
+    return MapToNestedMsg<Expr>(
+        expr,
+        [](Expr leaf) {
+          ICHECK(GetStructInfoAs<TensorStructInfoNode>(leaf))
+              << "The leaf of adjoint: " << leaf << " should have StructInfo and be a Tensor.";
+          return AdjointMsg(leaf);
+        },
+        true);
   }
 
   // Transform the adjoint expressed as NestedMsg<Expr> into adjoint Expr, and then emit it
@@ -380,20 +372,23 @@ class GradientMutator : public ExprMutator {
 
     // generate backward bindings and the return value
     return_expr_ = BackwardBindingGenerator::Generate(this->builder_, GetRef<DataflowBlock>(block),
-                                                       this->require_grads_, this->target_var_);
+                                                      this->require_grads_, this->target_var_);
 
     return builder_->EndBlock();
   }
 
  private:
-  GradientMutator(const IRModule& module, const Array<Var>& require_grads) : ExprMutator(module), require_grads_(require_grads) {}
+  GradientMutator(const IRModule& module, const Array<Var>& require_grads)
+      : ExprMutator(module), require_grads_(require_grads) {}
 
   // check that the target should be a output Var
   // and a scalar Tensor
   static void CheckTarget(const Expr& e) {
-    CHECK(e->IsInstance<VarNode>() && !e->IsInstance<DataflowVarNode>()) << "The differentiation target must be a output Var";
-    CHECK(IsScalarTensor(e)) << "The differentiation target must be a scalar Tensor, but the StructInfo of the given target "
-    << e << " is " << GetStructInfo(e);
+    CHECK(e->IsInstance<VarNode>() && !e->IsInstance<DataflowVarNode>())
+        << "The differentiation target must be a output Var";
+    CHECK(IsScalarTensor(e)) << "The differentiation target must be a scalar Tensor, but the "
+                                "StructInfo of the given target "
+                             << e << " is " << GetStructInfo(e);
   }
 
   // Checks every Var in require_grads:
@@ -410,9 +405,9 @@ class GradientMutator : public ExprMutator {
       CHECK_EQ(var_set.count(var), 0) << "Var " << var->name_hint() << " appears more than once";
       var_set.emplace(var);
 
-      CHECK(IsNestedFloatTensor(var))
-          << "Only Tensors of floating point dtype or Tuples of float Tensors can require gradients, but the StructInfo of Var "
-          << var->name_hint() << " is " << GetStructInfo(var);
+      CHECK(IsNestedFloatTensor(var)) << "Only Tensors of floating point dtype or Tuples of float "
+                                         "Tensors can require gradients, but the StructInfo of Var "
+                                      << var->name_hint() << " is " << GetStructInfo(var);
     }
   }
 

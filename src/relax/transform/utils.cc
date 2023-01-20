@@ -40,7 +40,7 @@ bool IsNestedTensor(const StructInfo& sinfo) {
     return true;
   } else if (const auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
     return !std::any_of(tuple_sinfo->fields.begin(), tuple_sinfo->fields.end(),
-                        [](const StructInfo& field) { return !IsNestedTensor(field); }); //remove &
+                        [](const StructInfo& field) { return !IsNestedTensor(field); });
   }
   return false;
 }
@@ -50,16 +50,15 @@ bool IsNestedTensor(const Expr& expr) { return IsNestedTensor(GetStructInfo(expr
 bool IsNestedFloatTensor(const StructInfo& sinfo) {
   if (auto* tensor_sinfo = sinfo.as<TensorStructInfoNode>()) {
     return tensor_sinfo->dtype.is_float() || tensor_sinfo->dtype.is_float16() ||
-          tensor_sinfo->dtype.is_bfloat16();
+           tensor_sinfo->dtype.is_bfloat16();
   } else if (auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
-    return !std::any_of(tuple_sinfo->fields.begin(), tuple_sinfo->fields.end(), [](const StructInfo& field) { return !IsNestedFloatTensor(field); });
+    return !std::any_of(tuple_sinfo->fields.begin(), tuple_sinfo->fields.end(),
+                        [](const StructInfo& field) { return !IsNestedFloatTensor(field); });
   }
   return false;
 }
 
-bool IsNestedFloatTensor(const Expr& expr) {
-  return IsNestedFloatTensor(GetStructInfo(expr));
-}
+bool IsNestedFloatTensor(const Expr& expr) { return IsNestedFloatTensor(GetStructInfo(expr)); }
 
 }  // namespace relax
 }  // namespace tvm
