@@ -55,6 +55,7 @@ def test_simple():
     # fmt: on
 
     After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    assert_structural_equal(After["main"], Expected["main"])
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
@@ -568,7 +569,7 @@ def test_tuple_update():
     assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
-def test_tuple_ops():
+def test_tuple_op_simple():
     # fmt: off
     @tvm.script.ir_module
     class Before:
@@ -578,12 +579,8 @@ def test_tuple_ops():
         ):
             with R.dataflow():
                 lv1 = R.split(x, 2)
-                lv2 = lv1[0]
-                lv3 = lv1[1]
-                lv4 = lv2 + lv3
-                lv5 = (lv4, lv3)
-                lv6 = R.concat(lv5)
-                gv = R.sum(lv6)
+                lv2 = R.concat(lv1)
+                gv = R.sum(lv2)
                 R.output(gv)
             return gv
 
@@ -591,40 +588,225 @@ def test_tuple_ops():
     class Expected:
         @R.function
         def main(x: R.Tensor((6,), dtype="float32")) -> R.Tensor((), dtype="float32"):
+            # block 0
             with R.dataflow():
-                lv1: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(x, indices_or_sections=2, axis=0)
-                lv2: R.Tensor((3,), dtype="float32") = lv1[0]
-                lv3: R.Tensor((3,), dtype="float32") = lv1[1]
-                lv4: R.Tensor((3,), dtype="float32") = R.add(lv2, lv3)
-                lv5: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv4, lv3)
-                lv6: R.Tensor((6,), dtype="float32") = R.concat(lv5, axis=0)
+                lv1: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = R.split(x, indices_or_sections=2, axis=0)
+                lv2: R.Tensor((6,), dtype="float32") = R.concat(lv1, axis=0)
+                gv: R.Tensor((), dtype="float32") = R.sum(lv2, axis=None, keepdims=False)
+                R.output(gv)
+            return gv
+
+        @R.function
+        def main_adjoint(
+            x: R.Tensor((6,), dtype="float32")
+        ) -> R.Tuple(
+            R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((6,), dtype="float32"))
+        ):
+            # block 0
+            with R.dataflow():
+                lv1: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = R.split(x, indices_or_sections=2, axis=0)
+                lv2: R.Tensor((6,), dtype="float32") = R.concat(lv1, axis=0)
+                gv: R.Tensor((), dtype="float32") = R.sum(lv2, axis=None, keepdims=False)
+                gv_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+                lv2_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(
+                    gv_adjoint, (6,)
+                )
+                lv: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = R.split(lv2_adjoint, indices_or_sections=[3], axis=0)
+                lv11: R.Tensor((3,), dtype="float32") = lv[0]
+                lv21: R.Tensor((3,), dtype="float32") = lv[1]
+                lv1_adjoint: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = (lv11, lv21)
+                x_adjoint: R.Tensor((6,), dtype="float32") = R.concat(lv1_adjoint, axis=0)
+                R.output(gv, x_adjoint)
+            return (gv, (x_adjoint,))
+    # fmt: on
+
+    After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+
+
+def test_tuple_op_construct():
+    # fmt: off
+    @tvm.script.ir_module
+    class Before:
+        @R.function
+        def main(
+            x: R.Tensor((3,), "float32"),
+            y: R.Tuple(R.Tensor((3, ), "float32"), R.Tensor((3, ), "float32")),
+        ):
+            with R.dataflow():
+                lv1 = (x, x)
+                lv2 = R.concat(lv1)
+                lv3 = R.concat((x, x))
+                lv4 = R.concat(y)
+                lv5 = R.add(lv2, lv3)
+                lv6 = R.add(lv5, lv4)
+                gv = R.sum(lv6)
+                R.output(gv)
+            return gv
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def main(
+            x: R.Tensor((3,), dtype="float32"),
+            y: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        ) -> R.Tensor((), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv1: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = (x, x)
+                lv2: R.Tensor((6,), dtype="float32") = R.concat(lv1, axis=0)
+                lv3: R.Tensor((6,), dtype="float32") = R.concat((x, x), axis=0)
+                lv4: R.Tensor((6,), dtype="float32") = R.concat(y, axis=0)
+                lv5: R.Tensor((6,), dtype="float32") = R.add(lv2, lv3)
+                lv6: R.Tensor((6,), dtype="float32") = R.add(lv5, lv4)
                 gv: R.Tensor((), dtype="float32") = R.sum(lv6, axis=None, keepdims=False)
                 R.output(gv)
             return gv
 
         @R.function
-        def main_adjoint(x: R.Tensor((6,), dtype="float32")) -> R.Tuple(R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((6,), dtype="float32"))):
+        def main_adjoint(
+            x: R.Tensor((3,), dtype="float32"),
+            y: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        ) -> R.Tuple(
+            R.Tensor((), dtype="float32"),
+            R.Tuple(
+                R.Tensor((3,), dtype="float32"),
+                R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")),
+            ),
+        ):
             # block 0
             with R.dataflow():
-                lv1: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(x, indices_or_sections=2, axis=0)
-                lv2: R.Tensor((3,), dtype="float32") = lv1[0]
-                lv3: R.Tensor((3,), dtype="float32") = lv1[1]
-                lv4: R.Tensor((3,), dtype="float32") = R.add(lv2, lv3)
-                lv5: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv4, lv3)
-                lv6: R.Tensor((6,), dtype="float32") = R.concat(lv5, axis=0)
+                lv1: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = (x, x)
+                lv2: R.Tensor((6,), dtype="float32") = R.concat(lv1, axis=0)
+                lv3: R.Tensor((6,), dtype="float32") = R.concat((x, x), axis=0)
+                lv4: R.Tensor((6,), dtype="float32") = R.concat(y, axis=0)
+                lv5: R.Tensor((6,), dtype="float32") = R.add(lv2, lv3)
+                lv6: R.Tensor((6,), dtype="float32") = R.add(lv5, lv4)
                 gv: R.Tensor((), dtype="float32") = R.sum(lv6, axis=None, keepdims=False)
                 gv_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
-                lv6_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(gv_adjoint, (6,))
-                lv: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(lv6_adjoint, indices_or_sections=[3], axis=0)
+                lv6_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(
+                    gv_adjoint, (6,)
+                )
+                lv5_adjoint: R.Tensor((6,), dtype="float32") = lv6_adjoint
+                lv4_adjoint: R.Tensor((6,), dtype="float32") = lv6_adjoint
+                lv3_adjoint: R.Tensor((6,), dtype="float32") = lv5_adjoint
+                lv2_adjoint: R.Tensor((6,), dtype="float32") = lv5_adjoint
+                lv: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = R.split(lv2_adjoint, indices_or_sections=[3], axis=0)
                 lv11: R.Tensor((3,), dtype="float32") = lv[0]
                 lv21: R.Tensor((3,), dtype="float32") = lv[1]
-                lv5_adjoint: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv11, lv21)
-                lv4_adjoint: R.Tensor((3,), dtype="float32") = lv5_adjoint[0]
-                lv31: R.Tensor((3,), dtype="float32") = lv5_adjoint[1]
-                lv3_adjoint: R.Tensor((3,), dtype="float32") = R.add(lv31, lv4_adjoint)
-                lv2_adjoint: R.Tensor((3,), dtype="float32") = lv4_adjoint
-                lv1_adjoint: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv2_adjoint, lv3_adjoint)
-                x_adjoint: R.Tensor((6,), dtype="float32") = R.concat(lv1_adjoint, axis=0)
+                lv1_adjoint: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = (lv11, lv21)
+                lv31: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = R.split(lv3_adjoint, indices_or_sections=[3], axis=0)
+                lv41: R.Tensor((3,), dtype="float32") = lv31[0]
+                lv51: R.Tensor((3,), dtype="float32") = lv31[1]
+                lv61: R.Tensor((3,), dtype="float32") = R.add(lv41, lv51)
+                lv7: R.Tensor((3,), dtype="float32") = lv1_adjoint[0]
+                lv8: R.Tensor((3,), dtype="float32") = R.add(lv61, lv7)
+                lv9: R.Tensor((3,), dtype="float32") = lv1_adjoint[1]
+                x_adjoint: R.Tensor((3,), dtype="float32") = R.add(lv8, lv9)
+                lv10: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = R.split(lv4_adjoint, indices_or_sections=[3], axis=0)
+                lv111: R.Tensor((3,), dtype="float32") = lv10[0]
+                lv12: R.Tensor((3,), dtype="float32") = lv10[1]
+                y_adjoint: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = (lv111, lv12)
+                R.output(gv, x_adjoint, y_adjoint)
+            return (gv, (x_adjoint, y_adjoint))
+    # fmt: on
+
+    After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+
+
+def test_tuple_op_const():
+    c1 = R.const(np.zeros(3).astype(np.float32))
+    c2 = R.const(np.zeros(3).astype(np.float32))
+    c3 = R.const(np.zeros(3).astype(np.float32))
+
+    # fmt: off
+    @tvm.script.ir_module
+    class Before:
+        @R.function
+        def main(
+            x: R.Tensor((3,), "float32")
+        ):
+            with R.dataflow():
+                lv1 = R.concat((c1, c2))
+                lv2 = R.concat((c3, x))
+                lv3 = R.concat((x, x))
+                lv4 = R.add(lv1, lv2)
+                lv5 = R.add(lv4, lv3)
+                gv = R.sum(lv5)
+                R.output(gv)
+            return gv
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((3,), dtype="float32")) -> R.Tensor((), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv1: R.Tensor((6,), dtype="float32") = R.concat((c1, c2), axis=0)
+                lv2: R.Tensor((6,), dtype="float32") = R.concat((c3, x), axis=0)
+                lv3: R.Tensor((6,), dtype="float32") = R.concat((x, x), axis=0)
+                lv4: R.Tensor((6,), dtype="float32") = R.add(lv1, lv2)
+                lv5: R.Tensor((6,), dtype="float32") = R.add(lv4, lv3)
+                gv: R.Tensor((), dtype="float32") = R.sum(lv5, axis=None, keepdims=False)
+                R.output(gv)
+            return gv
+
+        @R.function
+        def main_adjoint(
+            x: R.Tensor((3,), dtype="float32")
+        ) -> R.Tuple(
+            R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((3,), dtype="float32"))
+        ):
+            # block 0
+            with R.dataflow():
+                lv1: R.Tensor((6,), dtype="float32") = R.concat((c1, c2), axis=0)
+                lv2: R.Tensor((6,), dtype="float32") = R.concat((c3, x), axis=0)
+                lv3: R.Tensor((6,), dtype="float32") = R.concat((x, x), axis=0)
+                lv4: R.Tensor((6,), dtype="float32") = R.add(lv1, lv2)
+                lv5: R.Tensor((6,), dtype="float32") = R.add(lv4, lv3)
+                gv: R.Tensor((), dtype="float32") = R.sum(lv5, axis=None, keepdims=False)
+                gv_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+                lv5_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(
+                    gv_adjoint, (6,)
+                )
+                lv4_adjoint: R.Tensor((6,), dtype="float32") = lv5_adjoint
+                lv3_adjoint: R.Tensor((6,), dtype="float32") = lv5_adjoint
+                lv2_adjoint: R.Tensor((6,), dtype="float32") = lv4_adjoint
+                lv1_adjoint: R.Tensor((6,), dtype="float32") = lv4_adjoint
+                lv: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = R.split(lv3_adjoint, indices_or_sections=[3], axis=0)
+                lv11: R.Tensor((3,), dtype="float32") = lv[0]
+                lv21: R.Tensor((3,), dtype="float32") = lv[1]
+                lv31: R.Tensor((3,), dtype="float32") = R.add(lv11, lv21)
+                lv41: R.Tuple(
+                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
+                ) = R.split(lv2_adjoint, indices_or_sections=[3], axis=0)
+                lv51: R.Tensor((3,), dtype="float32") = lv41[1]
+                x_adjoint: R.Tensor((3,), dtype="float32") = R.add(lv31, lv51)
                 R.output(gv, x_adjoint)
             return (gv, (x_adjoint,))
     # fmt: on

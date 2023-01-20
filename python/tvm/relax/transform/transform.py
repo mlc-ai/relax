@@ -391,6 +391,7 @@ def Gradient(
         The relax variables whose adjoints is needed. Must be parameters of the given function and
         should not be duplicate. If it is not specified, adjoints of all arguments would be
         computed.
+
     Returns
     -------
     ret: tvm.ir.transform.Pass

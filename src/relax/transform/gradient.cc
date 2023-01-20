@@ -34,6 +34,7 @@
 
 #include "../op/tensor/binary.h"
 #include "../op/tensor/create.h"
+#include "utils.h"
 
 namespace tvm {
 namespace relax {
@@ -47,23 +48,25 @@ class BackwardBindingGenerator : public ExprVisitor {
   /*!
    * \brief Generate the backward bindings for the corresponding GradientMutator
    *
-   * \param forward_block The forward dataflow block
-   * \param require_grads The relax variables whose adjoints are needed.
-   * \param post The expression with rewritten inputs.
+   * \param builder The BlockBuilder of GradientMutator, used to generate bindings
+   * \param forward_block The forward DataflowBlock
+   * \param require_grads The Var list to differentiate w.r.t.
+   * \param target_var The target Var to differentiate
    */
-  Expr Generate(const BlockBuilder& builder, const DataflowBlock& forward_block,
+  static Expr Generate(const BlockBuilder& builder, const DataflowBlock& forward_block,
                 const Array<Var>& require_grads, const Var& target_var) {
-    this->builder_ = builder;
+    BackwardBindingGenerator generator;
+    generator.builder_ = builder;
 
     // initialize the adjoint of target_var as ones op
-    adjoint_msg_map_.Set(target_var, BuildOnesAdjoint(target_var));
+    generator.adjoint_msg_map_.Set(target_var, InitOnesAdjoint(target_var));
 
     // We do reverse-mode ad, so visit bindings backwards
     for (auto it = forward_block->bindings.rbegin(); it != forward_block->bindings.rend(); ++it) {
-      this->VisitBinding(*it);
+      generator.VisitBinding(*it);
     }
 
-    return this->Epilogue(require_grads, target_var);
+    return generator.Epilogue(require_grads, target_var);
   }
 
   void VisitBinding(const Binding& binding) override {
@@ -71,14 +74,15 @@ class BackwardBindingGenerator : public ExprVisitor {
     CHECK(binding->IsInstance<VarBindingNode>()) << "now only support VarBindingNode";
     auto var_binding = binding.as<VarBindingNode>();
 
-    if (adjoint_msg_map_.count(var_binding->var) == 0) {
-      // This var is not used in the bindings handled earlier
+    auto it = adjoint_msg_map_.find(var_binding->var);
+    if (it == adjoint_msg_map_.end()) {
+      // This var is not used in the following bindings
       return;
     }
 
     // Meet the definition of binding->var
     // Create the adjoint var and bind the adjoint value to it
-    EmitAdjoint(var_binding->var, adjoint_msg_map_[var_binding->var], true);
+    EmitAdjoint(var_binding->var, (*it).second, true);
 
     Expr value = var_binding->value;
     // TODO(chaofan, yixin): support other types of binding values
@@ -136,7 +140,7 @@ class BackwardBindingGenerator : public ExprVisitor {
 
     const Var& tuple_var = Downcast<Var>(tuple_get_item->tuple);
     if (adjoint_msg_map_.count(tuple_var) == 0) {
-      const AdjointMsg& init = BuildZerosAdjointNested(GetRef<StructInfo>(tuple_sinfo));
+      const AdjointMsg& init = InitZerosAdjointNested(GetRef<StructInfo>(tuple_sinfo));
       adjoint_msg_map_.Set(tuple_var, init);
     }
 
@@ -184,7 +188,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   // Build a "zeros" AdjointMsg with specified struct info
   // sinfo may be TupleStructInfo or TensorStructInfo. In the first case, it would recursive and
   // build a nested zeros AdjointMsg.
-  AdjointMsg BuildZerosAdjointNested(const StructInfo& sinfo) {
+  static AdjointMsg InitZerosAdjointNested(const StructInfo& sinfo) {
     return MapToNestedMsg<Expr>(sinfo, [](StructInfo sinfo) {
       auto tensor_sinfo = sinfo.as<TensorStructInfoNode>();
       ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
@@ -196,7 +200,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   }
 
   // Init the gradient of the var as ones op and update it in adjoint_msg_map_.
-  static AdjointMsg BuildOnesAdjoint(const Var& var) {
+  static AdjointMsg InitOnesAdjoint(const Var& var) {
     auto tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
     ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
     ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when building ones.";
@@ -266,11 +270,11 @@ class BackwardBindingGenerator : public ExprVisitor {
   }
 
   AdjointMsg ExprToAdjointMsg(Expr expr) {
-    return MapToNestedMsg<Expr>(expr, GetField, [](Expr leaf) {
+    return MapToNestedMsg<Expr>(expr, [](Expr leaf) {
       ICHECK(GetStructInfoAs<TensorStructInfoNode>(leaf))
           << "The leaf of adjoint: " << leaf << " should have StructInfo and be a Tensor.";
       return AdjointMsg(leaf);
-    });
+    }, true);
   }
 
   // Transform the adjoint expressed as NestedMsg<Expr> into adjoint Expr, and then emit it
@@ -300,7 +304,7 @@ class BackwardBindingGenerator : public ExprVisitor {
       // If the var don't have adjoint msg, it do not contribute to the target
       // so its adjoint is zeros
       AdjointMsg adjoint =
-          adjoint_msg_map_.Get(var).value_or(BuildZerosAdjointNested(GetStructInfo(var)));
+          adjoint_msg_map_.Get(var).value_or(InitZerosAdjointNested(GetStructInfo(var)));
       Var adjoint_var = EmitAdjoint(var, adjoint, false);
       out_adjoints.push_back(adjoint_var);
     }
@@ -321,29 +325,23 @@ class BackwardBindingGenerator : public ExprVisitor {
 
 class GradientMutator : public ExprMutator {
  public:
-  explicit GradientMutator(const IRModule& mod, const GlobalVar& gvar,
-                           const Array<Var>& require_grads)
-      : ExprMutator(mod),
-        mod_(mod),
-        gvar_(std::move(gvar)),
-        require_grads_(std::move(require_grads)) {}
-
-  IRModule Transform() {
-    Function old_func = Downcast<Function>(mod_->Lookup(gvar_));
-    CheckRequireGrads(require_grads_, old_func->params, gvar_->name_hint);
+  static IRModule Transform(IRModule mod, GlobalVar gvar, Array<Var> require_grads) {
+    Function old_func = Downcast<Function>(mod->Lookup(gvar));
+    CheckRequireGrads(require_grads, old_func->params, gvar->name_hint);
 
     Function new_func = CopyWithNewParams(old_func);
     // map the parameter list into new params
-    for (size_t i = 0; i < require_grads_.size(); ++i) {
-      int idx = std::find(old_func->params.begin(), old_func->params.end(), require_grads_[i]) -
+    for (size_t i = 0; i < require_grads.size(); ++i) {
+      int idx = std::find(old_func->params.begin(), old_func->params.end(), require_grads[i]) -
                 old_func->params.begin();
-      require_grads_.Set(i, new_func->params[idx]);
+      require_grads.Set(i, new_func->params[idx]);
     }
 
-    Function new_func_transformed = Downcast<Function>(this->VisitExpr(new_func));
+    GradientMutator mutator(mod, require_grads);
+    Function new_func_transformed = Downcast<Function>(mutator.VisitExpr(new_func));
 
-    IRModule new_module = GetRef<IRModule>(mod_.CopyOnWrite());
-    new_module->Add(GlobalVar(gvar_->name_hint + "_adjoint"), new_func_transformed);
+    IRModule new_module = GetRef<IRModule>(mod.CopyOnWrite());
+    new_module->Add(GlobalVar(gvar->name_hint + "_adjoint"), new_func_transformed);
     return new_module;
   }
 
@@ -381,40 +379,21 @@ class GradientMutator : public ExprMutator {
     }
 
     // generate backward bindings and the return value
-    return_expr_ = BackwardBindingGenerator().Generate(this->builder_, GetRef<DataflowBlock>(block),
+    return_expr_ = BackwardBindingGenerator::Generate(this->builder_, GetRef<DataflowBlock>(block),
                                                        this->require_grads_, this->target_var_);
 
     return builder_->EndBlock();
   }
 
  private:
-  // check that the target should be a VarNode, not DataflowVarNode
-  // and a scalar of type "DynTensorType"
-  static void CheckTarget(const Expr& e) {
-    CHECK(e->IsInstance<VarNode>()) << "The differentiation target must be a Var";
-    CHECK(!e->IsInstance<DataflowVarNode>()) << "The differentiation target is not an output node";
-    auto sinfo = GetStructInfoAs<TensorStructInfoNode>(e);
-    CHECK(sinfo != nullptr) << "The differentiation target must be a Tensor";
-    CHECK(sinfo->shape.defined() && sinfo->shape.as<ShapeExprNode>())
-        << "Error when getting the shape of the differentiation target";
-    CHECK(sinfo->shape.as<ShapeExprNode>()->values.size() == 0)
-        << "The differentiation target must be scalar";
-  }
+  GradientMutator(const IRModule& module, const Array<Var>& require_grads) : ExprMutator(module), require_grads_(require_grads) {}
 
-  // Check the type of the input var should be Tensor of floating point dtype, or Tuple of that
-  static void CheckFloatTensorType(const StructInfo& sinfo, const String& name_hint) {
-    if (auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
-      for (auto item : tuple_sinfo->fields) {
-        CheckFloatTensorType(item, name_hint);
-      }
-    } else if (auto* tensor_sinfo = sinfo.as<TensorStructInfoNode>()) {
-      CHECK(tensor_sinfo->dtype.is_float() || tensor_sinfo->dtype.is_float16() ||
-            tensor_sinfo->dtype.is_bfloat16())
-          << "Only Tensors of floating point dtype can require gradients, but the dtype of Var "
-          << name_hint << " is " << tensor_sinfo->dtype;
-    } else {
-      LOG(FATAL) << "The input Var " << name_hint << " is neither a Tensor nor a Tuple of Tensors";
-    }
+  // check that the target should be a output Var
+  // and a scalar Tensor
+  static void CheckTarget(const Expr& e) {
+    CHECK(e->IsInstance<VarNode>() && !e->IsInstance<DataflowVarNode>()) << "The differentiation target must be a output Var";
+    CHECK(IsScalarTensor(e)) << "The differentiation target must be a scalar Tensor, but the StructInfo of the given target "
+    << e << " is " << GetStructInfo(e);
   }
 
   // Checks every Var in require_grads:
@@ -428,20 +407,20 @@ class GradientMutator : public ExprMutator {
       CHECK(std::find(func_params.begin(), func_params.end(), var) != func_params.end())
           << "There is no Var named " << var->name_hint() << " in the parameters of the function "
           << func_name;
-      CHECK(var_set.count(var) == 0) << "Var " << var->name_hint() << " appears more than once";
+      CHECK_EQ(var_set.count(var), 0) << "Var " << var->name_hint() << " appears more than once";
       var_set.emplace(var);
 
-      CheckFloatTensorType(GetStructInfo(var), var->name_hint());
+      CHECK(IsNestedFloatTensor(var))
+          << "Only Tensors of floating point dtype or Tuples of float Tensors can require gradients, but the StructInfo of Var "
+          << var->name_hint() << " is " << GetStructInfo(var);
     }
   }
 
-  // inputs
-  IRModule mod_;
-  GlobalVar gvar_;
+  // differentiation sources
   Array<Var> require_grads_;
-
   // the differentiation target
   Var target_var_;
+
   // the return value of the differentiated function
   Expr return_expr_;
 };
@@ -462,7 +441,7 @@ IRModule Gradient(const IRModule& mod, const GlobalVar& gvar, Optional<Array<Var
     require_grads = func->params;
   }
 
-  return GradientMutator(mod, gvar, require_grads.value()).Transform();
+  return GradientMutator::Transform(mod, gvar, require_grads.value());
 }
 
 namespace transform {

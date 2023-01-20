@@ -22,17 +22,44 @@
 namespace tvm {
 namespace relax {
 
+bool IsScalarTensor(const StructInfo& sinfo) {
+  if (!sinfo->IsInstance<TensorStructInfoNode>()) {
+    return false;
+  }
+  TensorStructInfo tensor_sinfo = Downcast<TensorStructInfo>(sinfo);
+  if (!tensor_sinfo->shape.defined() || !tensor_sinfo->shape->IsInstance<ShapeExprNode>()) {
+    return false;
+  }
+  return tensor_sinfo->shape.as<ShapeExprNode>()->values.size() == 0;
+}
+
+bool IsScalarTensor(const Expr& expr) { return IsScalarTensor(GetStructInfo(expr)); }
+
 bool IsNestedTensor(const StructInfo& sinfo) {
   if (sinfo->IsInstance<TensorStructInfoNode>()) {
     return true;
   } else if (const auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
     return !std::any_of(tuple_sinfo->fields.begin(), tuple_sinfo->fields.end(),
-                        [&](const StructInfo& field) { return !IsNestedTensor(field); });
+                        [](const StructInfo& field) { return !IsNestedTensor(field); }); //remove &
   }
   return false;
 }
 
 bool IsNestedTensor(const Expr& expr) { return IsNestedTensor(GetStructInfo(expr)); }
+
+bool IsNestedFloatTensor(const StructInfo& sinfo) {
+  if (auto* tensor_sinfo = sinfo.as<TensorStructInfoNode>()) {
+    return tensor_sinfo->dtype.is_float() || tensor_sinfo->dtype.is_float16() ||
+          tensor_sinfo->dtype.is_bfloat16();
+  } else if (auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
+    return !std::any_of(tuple_sinfo->fields.begin(), tuple_sinfo->fields.end(), [](const StructInfo& field) { return !IsNestedFloatTensor(field); });
+  }
+  return false;
+}
+
+bool IsNestedFloatTensor(const Expr& expr) {
+  return IsNestedFloatTensor(GetStructInfo(expr));
+}
 
 }  // namespace relax
 }  // namespace tvm
