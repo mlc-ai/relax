@@ -25,6 +25,8 @@
 #include <tvm/relax/op_attr_types.h>
 #include <tvm/relax/transform.h>
 
+#include <array>
+
 #include "../op/nn/convolution.h"
 #include "../op/tensor/datatype.h"
 #include "../op/tensor/linear_algebra.h"
