@@ -21,12 +21,11 @@ import numpy as np
 
 import tvm
 import tvm.ir
-from tvm import relax
 from tvm import relax as rx
-from tvm.runtime.container import ADT, tuple_object
+from tvm.runtime.container import tuple_object
 from tvm.relax.op import add, subtract, multiply
-from typing import Callable, Dict, List, Optional, Union
-from tvm.relax import Var
+from typing import List, Union
+from tvm.relax import Var, Function
 
 
 class Optimizer:
@@ -44,7 +43,7 @@ class Optimizer:
     """
 
     def __init__(self, params: Union[Var, List[Var]]) -> None:
-        """Default initializer for relax.training.Optimizer.
+        """Default initializer for rx.training.Optimizer.
 
         Parameters
         ----------
@@ -70,6 +69,7 @@ class Optimizer:
         params: Union[Var, list[Var]]
             The parameter or the list of parameters to optimize.
         """
+        assert self._state is None
         if not isinstance(params, list):
             params = [params]
         if not all(isinstance(x, Var) for x in params):
@@ -84,7 +84,7 @@ class Optimizer:
         Here state is a property because self._state is constructed when its first used. Before that,
         you can freely add parameters using `add_params()`.
 
-        See also `relax.training.Optimizer`.
+        See also `rx.training.Optimizer`.
         """
         return self._state
 
@@ -97,12 +97,12 @@ class Optimizer:
         """
         self._state = value
 
-    def get_function(self) -> relax.Function:
+    def get_function(self) -> Function:
         """Use blockbuilder to build a new function that executes parameter and optimizer state update.
 
         Returns
         -------
-        func: relax.Function
+        func: Function
 
         Examples
         --------
@@ -110,7 +110,7 @@ class Optimizer:
 
         .. code-block:: python
             # You could assume adjoint function be like:
-            # See also `relax.transform.SimpleAD`.
+            # See also `rx.transform.SimpleAD`.
             @R.function
             def main_adjoint(arg1: R.Tensor((1, 10), "float32"), arg2: R.Tensor((1, 10), "float32")):
                 # some calculation...
@@ -127,78 +127,62 @@ class Optimizer:
         raise NotImplementedError()
 
 
-def _get_var_shape_list(var):
+def _get_shape_list(var):
     """
     var should be DynTensorType.
     var.shape should be a ShapeExpr whose all fields are IntImm.
     """
-    return [int(val) for val in var.shape]
-
-
-def _float2constant(*f_list):
-    return [relax.Constant(tvm.nd.array(np.array(f).astype(np.float32))) for f in f_list]
-
-
-def _copy_var(var, name_suffix="", is_dataflow=True):
-    if is_dataflow:
-        return relax.DataflowVar(var.name_hint + name_suffix, var.shape, var.checked_type)
-    else:
-        return Var(var.name_hint + name_suffix, var.shape, var.checked_type)
+    return [int(val) for val in var.struct_info.shape]
 
 
 class SGD(Optimizer):
     def __init__(self, param_list, lr, weight_decay=0):
         super().__init__(param_list)
-        self.lr = lr
-        self.weight_decay = weight_decay
+        self.lr = float(lr)
+        self.weight_decay = float(weight_decay)
 
     @property
     def state(self):
         if self._state is None:
-            self._state = tuple_object((
-                # num_steps = 0
-                tvm.nd.array(np.zeros(()).astype(np.float32)),
-            ))
+            self._state = tuple_object(
+                (
+                    # num_steps = 0
+                    tvm.nd.array(np.zeros((), "int64")),
+                )
+            )
         return self._state
 
     @state.setter
     def state(self, value):
         self._state = value
 
-    def get_function(self) -> relax.Function:
-        var_len = len(self._param_list)
+    def get_function(self) -> Function:
+        plist = self._param_list
+        len_param = len(plist)
 
         # input variables
-        param_var = Var("params", rx.Tuple([p.shape for p in self._param_list]),
-            rx.TupleType([p.checked_type for p in self._param_list]))
-        grad_var = Var("gradients", rx.Tuple([p.shape for p in self._param_list]),
-            rx.TupleType([p.checked_type for p in self._param_list]))
-        state_var = Var("optim_states", rx.Tuple([relax.ShapeExpr([])]),
-            rx.TupleType([rx.DynTensorType(0, "float32")]))
+        param_var = Var("params", rx.TupleStructInfo([p.struct_info for p in plist]))
+        grad_var = Var("gradients", rx.TupleStructInfo([p.struct_info for p in plist]))
+        state_var = Var("optim_states", rx.TupleStructInfo([rx.TensorStructInfo((), "int64")]))
 
         # constants
-        lr, weight_decay, one = \
-            _float2constant(self.lr, self.weight_decay, 1.0)
+        lr = rx.const(self.lr)
+        weight_decay = rx.const(self.weight_decay)
+        one = rx.const(1, "int64")
 
         bb = rx.BlockBuilder()
         with bb.function("SGD", [param_var, grad_var, state_var]):
             with bb.dataflow():
                 # get variables in tuples
                 param_var_list = [
-                    bb.emit_var_binding(VarBinding(_copy_var(self._param_list[i]),
-                                                         relax.TupleGetItem(param_var, i)))
-                    for i in range(var_len)
+                    bb.emit(rx.TupleGetItem(param_var, i))
+                    for i in range(len_param)
                 ]
                 grad_var_list = [
-                    bb.emit_var_binding(VarBinding(_copy_var(self._param_list[i], "_adjoint"),
-                                                         relax.TupleGetItem(grad_var, i)))
-                    for i in range(var_len)
+                    bb.emit(rx.TupleGetItem(grad_var, i))
+                    for i in range(len_param)
                 ]
-                num_steps_var = relax.DataflowVar("num_steps", [], rx.DynTensorType(0, "float32"))
-                state_var_list = [
-                    bb.emit_var_binding(VarBinding(num_steps_var,
-                                                         relax.TupleGetItem(state_var, 0)))
-                ]
+                state_var_list = [bb.emit(rx.TupleGetItem(state_var, 0))]
 
                 # computation logic
                 state_var_list[0] = bb.emit(add(state_var_list[0], one))
@@ -209,8 +193,8 @@ class SGD(Optimizer):
                     param_var_list[i] = p
 
                 # handle return values
-                param_var_tuple = relax.Tuple(param_var_list)
-                state_var_tuple = relax.Tuple(state_var_list)
+                param_var_tuple = rx.Tuple(param_var_list)
+                state_var_tuple = rx.Tuple(state_var_list)
                 gv0, gv1 = bb.emit_output(param_var_tuple), bb.emit_output(state_var_tuple)
             bb.emit_func_output((gv0, gv1))
         return bb.get()["SGD"]
@@ -219,63 +203,67 @@ class SGD(Optimizer):
 class MomentumSGD(Optimizer):
     def __init__(self, param_list, lr, momentum, dampening=0, weight_decay=0, nesterov=False):
         super().__init__(param_list)
-        self.lr = lr
-        self.momentum = momentum
-        self.weight_decay = weight_decay
-        self.dampening = dampening
-        self.nesterov = nesterov
+        self.lr = float(lr)
+        self.momentum = float(momentum)
+        self.weight_decay = float(weight_decay)
+        self.dampening = float(dampening)
+        self.nesterov = float(nesterov)
 
     @property
     def state(self):
         if self._state is None:
-            self._state = tuple_object((
-                # num_steps = 0
-                tvm.nd.array(np.zeros(()).astype(np.float32)),
-                # v_{param} is initialized to all zeros
-                *(tvm.nd.array(np.zeros(_get_var_shape_list(p)).astype(np.float32)) for p in self._param_list)
-            ))
+            self._state = tuple_object(
+                (
+                    # num_steps = 0
+                    tvm.nd.array(np.zeros((), "int64")),
+                    # v_{param} is initialized to all zeros
+                    *(
+                        tvm.nd.array(np.zeros(_get_shape_list(p), "float32"))
+                        for p in self._param_list
+                    ),
+                )
+            )
         return self._state
 
     @state.setter
     def state(self, value):
         self._state = value
 
-    def get_function(self) -> relax.Function:
-        var_len = len(self._param_list)
+    def get_function(self) -> Function:
+        plist = self._param_list
+        len_param = len(plist)
 
         # input variables
-        param_var = Var("params", rx.Tuple([p.shape for p in self._param_list]),
-            rx.TupleType([p.checked_type for p in self._param_list]))
-        grad_var = Var("gradients", rx.Tuple([p.shape for p in self._param_list]),
-            rx.TupleType([p.checked_type for p in self._param_list]))
-        state_var = Var("optim_states",
-            rx.Tuple([relax.ShapeExpr([])] + [p.shape for p in self._param_list]),
-            rx.TupleType([rx.DynTensorType(0, "float32")] + [p.checked_type for p in self._param_list]))
+        param_var = Var("params", rx.TupleStructInfo([p.struct_info for p in plist]))
+        grad_var = Var("gradients", rx.TupleStructInfo([p.struct_info for p in plist]))
+        state_var = Var("optim_states", rx.TupleStructInfo([rx.TensorStructInfo((), "int64"), *(p.struct_info for p in plist)]))
 
-        lr, momentum, weight_decay, dampening_inv, one = \
-            _float2constant(self.lr, self.momentum, self.weight_decay, 1 - self.dampening, 1)
+        # constants
+        lr = rx.const(self.lr)
+        momentum = rx.const(self.momentum)
+        weight_decay = rx.const(self.weight_decay)
+        dampening_inv = rx.const(1 - self.dampening)
+        one = rx.const(1, "int64")
 
         bb = rx.BlockBuilder()
         with bb.function("MomentumSGD", [param_var, grad_var, state_var]):
             with bb.dataflow():
                 # get variables in tuples
                 param_var_list = [
-                    bb.emit_var_binding(VarBinding(_copy_var(self._param_list[i]),
-                                                         relax.TupleGetItem(param_var, i)))
-                    for i in range(var_len)
+                    bb.emit(rx.TupleGetItem(param_var, i))
+                    for i in range(len_param)
                 ]
                 grad_var_list = [
-                    bb.emit_var_binding(VarBinding(_copy_var(self._param_list[i], "_adjoint"),
-                                                         relax.TupleGetItem(grad_var, i)))
-                    for i in range(var_len)
+                    bb.emit(rx.TupleGetItem(grad_var, i))
+                    for i in range(len_param)
                 ]
-                num_steps_var = relax.DataflowVar("num_steps", [], rx.DynTensorType(0, "float32"))
-                state_var_list = \
-                    [bb.emit_var_binding(VarBinding(num_steps_var,
-                                                          relax.TupleGetItem(state_var, 0)))] + \
-                    [bb.emit_var_binding(VarBinding(_copy_var(self._param_list[i], "_velocity"),
-                                         relax.TupleGetItem(state_var, i + 1)))
-                     for i in range(var_len)]
+                state_var_list = [
+                    bb.emit(rx.TupleGetItem(state_var, 0)),
+                    *(
+                        bb.emit(rx.TupleGetItem(state_var, i + 1))
+                        for i in range(len_param)
+                    ),
+                ]
 
                 # computation logic:
                 # num_steps = state_var_list[0]
@@ -300,8 +288,8 @@ class MomentumSGD(Optimizer):
                     state_var_list[i + 1] = v
 
                 # handle return values
-                param_var_tuple = relax.Tuple(param_var_list)
-                state_var_tuple = relax.Tuple(state_var_list)
+                param_var_tuple = rx.Tuple(param_var_list)
+                state_var_tuple = rx.Tuple(state_var_list)
                 gv0, gv1 = bb.emit_output(param_var_tuple), bb.emit_output(state_var_tuple)
             bb.emit_func_output((gv0, gv1))
         return bb.get()["MomentumSGD"]

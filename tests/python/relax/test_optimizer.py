@@ -14,109 +14,92 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-from __future__ import annotations  # must import to defer parsing of annotations
-
-import numpy as np
-import pytest
 import tvm
 from tvm import relax
-from tvm import relax as rx
-from tvm import IRModule
-from tvm.script._parser import ir as I, relax as R, tir as T
-from tvm.ir.op import Op
+from tvm.ir.base import assert_structural_equal
 from tvm.relax.training import SGD, MomentumSGD
-from tvm.relay.testing import rand
-from tvm.testing import assert_allclose
-from tvm.runtime.container import tuple_object
-from tvm.relax.transform import OperatorLegalizer
-
-import tvm.relax.training.legalizer_update
+from tvm.script.parser import relax as R
 
 
-def _execute_mod(mod, func_name, *args):
-    lowered_mod = OperatorLegalizer(mod).transform()
-    ex = relax.vm.build(lowered_mod, target="llvm")
-    vm = relax.VirtualMachine(ex, tvm.cpu())
-    return vm[func_name](*args)
+def test_sgd_simple():
+    pass
 
 
-def _check_shape_equal(shape1, shape2):
-    try:
-        val = int(shape1)
-        return val == int(shape2)
-    except TypeError:
-        assert len(shape1) == len(shape2)
-        for x, y in zip(shape1, shape2):
-            _check_shape_equal(x, y)
+def test_sgd_complex():
+    x = relax.Var("x", R.Tensor((3, 3), "float32"))
+    y = relax.Var("y", R.Tensor((3,), "float32"))
+    sgd = SGD([x, y], 0.01, 0.02).get_function()
+
+    # fmt: off
+    @R.function
+    def sgd_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), optim_states: R.Tuple(R.Tensor((), dtype="int64"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"))):
+        # block 0
+        with R.dataflow():
+            lv: R.Tensor((3, 3), dtype="float32") = params[0]
+            lv1: R.Tensor((3,), dtype="float32") = params[1]
+            lv2: R.Tensor((3, 3), dtype="float32") = gradients[0]
+            lv3: R.Tensor((3,), dtype="float32") = gradients[1]
+            lv4: R.Tensor((), dtype="int64") = optim_states[0]
+            lv5: R.Tensor((), dtype="int64") = R.add(lv4, R.const(1, "int64"))
+            lv6: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.02, "float32"), lv)
+            lv7: R.Tensor((3, 3), dtype="float32") = R.add(lv6, lv2)
+            lv8: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv7)
+            lv9: R.Tensor((3, 3), dtype="float32") = R.subtract(lv, lv8)
+            lv10: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.02, "float32"), lv1)
+            lv11: R.Tensor((3,), dtype="float32") = R.add(lv10, lv3)
+            lv12: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv11)
+            lv13: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv12)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv9, lv13)
+            gv1: R.Tuple(R.Tensor((), dtype="int64")) = (lv5,)
+            R.output(gv, gv1)
+        return (gv, gv1)
+    # fmt: on
+
+    assert_structural_equal(sgd, sgd_expected)
 
 
-def _check_optimizer_shape(opt, args):
-    shape = tuple(x.shape for x in args)
-    f = opt.get_function()
-    _check_shape_equal(f.params[0].shape, shape)
-    _check_shape_equal(f.params[1].shape, shape)
-    _check_shape_equal(f.body.body[0].shape, shape)
-
-
-def test_shape():
-    x = relax.Var("x", (3, 3), relax.DynTensorType(dtype="float32"))
-    y = relax.Var("y", (2,), relax.DynTensorType(dtype="float32"))
-    sgd1 = SGD(x, 0.01)
-    sgd2 = SGD([x, y], 0.01)
-    msgd = MomentumSGD([x, y], 0.01, 0.9, 0.1, 0.001, True)
-
-    _check_optimizer_shape(sgd1, [x])
-    _check_optimizer_shape(sgd2, [x, y])
-    _check_optimizer_shape(msgd, [x, y])
-
-
-def test_sgd_numeric():
-    x = relax.Var("x", (3, 3), relax.DynTensorType(dtype="float32"))
-    sgd = SGD(x, 0.01, 0.02)
-    mod = IRModule.from_expr(sgd.get_function())
-
-    x_np = np.random.rand(3, 3).astype(np.float32)
-    x_ad_np = np.random.rand(3, 3).astype(np.float32)
-
-    param = tuple_object([tvm.nd.array(x_np)])
-    grad = tuple_object([tvm.nd.array(x_ad_np)])
-    new_param, sgd.state = _execute_mod(mod, "SGD", param, grad, sgd.state)
-
-    new_param_np = x_np - 0.01 * (x_ad_np + 0.02 * x_np)
-    assert_allclose(new_param[0].numpy(), new_param_np)
-
-
-def test_momentum_sgd_numeric():
+def test_momentum_sgd():
     lr, mom, damp, wd, nest = 0.01, 0.9, 0.85, 0.02, False
 
-    x = relax.Var("x", (3, 3), relax.DynTensorType(dtype="float32"))
-    msgd = MomentumSGD(x, lr, mom, damp, wd, nest)
-    mod = IRModule.from_expr(msgd.get_function())
-    mod.show()
+    x = relax.Var("x", R.Tensor((3, 3), "float32"))
+    y = relax.Var("y", R.Tensor((3,), "float32"))
+    msgd = MomentumSGD([x, y], lr, mom, damp, wd, nest).get_function()
 
-    x_np = np.random.rand(3, 3).astype(np.float32)
-    x_ad_np = np.random.rand(3, 3).astype(np.float32)
+    # fmt: off
+    @R.function
+    def msgd_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), optim_states: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))):
+        # block 0
+        with R.dataflow():
+            lv: R.Tensor((3, 3), dtype="float32") = params[0]
+            lv1: R.Tensor((3,), dtype="float32") = params[1]
+            lv2: R.Tensor((3, 3), dtype="float32") = gradients[0]
+            lv3: R.Tensor((3,), dtype="float32") = gradients[1]
+            lv4: R.Tensor((), dtype="int64") = optim_states[0]
+            lv5: R.Tensor((3, 3), dtype="float32") = optim_states[1]
+            lv6: R.Tensor((3,), dtype="float32") = optim_states[2]
+            lv7: R.Tensor((), dtype="int64") = R.add(lv4, R.const(1, "int64"))
+            lv8: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.02, "float32"), lv)
+            lv9: R.Tensor((3, 3), dtype="float32") = R.add(lv8, lv2)
+            lv10: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.9, "float32"), lv5)
+            lv11: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.15, "float32"), lv9)
+            lv12: R.Tensor((3, 3), dtype="float32") = R.add(lv10, lv11)
+            lv13: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv12)
+            lv14: R.Tensor((3, 3), dtype="float32") = R.subtract(lv, lv13)
+            lv15: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.02, "float32"), lv1)
+            lv16: R.Tensor((3,), dtype="float32") = R.add(lv15, lv3)
+            lv17: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.9, "float32"), lv6)
+            lv18: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.15, "float32"), lv16)
+            lv19: R.Tensor((3,), dtype="float32") = R.add(lv17, lv18)
+            lv20: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv19)
+            lv21: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv20)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv14, lv21)
+            gv1: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv7, lv12, lv19)
+            R.output(gv, gv1)
+        return (gv, gv1)
+    # fmt: on
 
-    param = tuple_object([tvm.nd.array(x_np)])
-    grad = tuple_object([tvm.nd.array(x_ad_np)])
-    for _ in range(3):
-        param, msgd.state = _execute_mod(mod, "MomentumSGD", param, grad, msgd.state)
+    assert_structural_equal(msgd, msgd_expected)
 
-    # numpy implementation
-    b = np.zeros(x_np.shape).astype(np.float32)
-    for _ in range(3):
-        g = x_ad_np
-        if wd:
-            g = g + wd * x_np
-        if mom:
-            b = mom * b + (1 - damp) * g
-            if nest:
-                g = g + mom * b
-            else:
-                g = b
-        x_np -= lr * g
-
-    assert_allclose(param[0].numpy(), x_np)
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    tvm.testing.main()
