@@ -58,7 +58,7 @@ class BackwardBindingGenerator : public ExprVisitor {
     BackwardBindingGenerator generator;
     generator.builder_ = builder;
 
-    // initialize the adjoint of target_var as ones op
+    // Initialize the adjoint of target_var as ones op
     generator.adjoint_msg_map_.Set(target_var, InitOnesAdjoint(target_var));
 
     // We do reverse-mode ad, so visit bindings backwards
@@ -118,10 +118,12 @@ class BackwardBindingGenerator : public ExprVisitor {
   // For Tuple nodes, we would iterate over the input tuple and update adjoint exprs for each input
   // e.g.
   // a = (b, c)
-  // b_adjoint_expr += a_adjoint_var[0], c_adjoint_expr += a_adjoint_var[1]
+  // b_adjoint += a_adjoint_var[0], c_adjoint += a_adjoint_var[1]
   // a = ((b, c), d)
-  // b_adjoint_expr += a_adjoint_var[0][0], c_adjoint_expr += a_adjoint_var[0][1],
-  // d_adjoint_expr += a_adjoint_var[1]
+  // b_adjoint += a_adjoint_var[0][0], c_adjoint += a_adjoint_var[0][1],
+  // d_adjoint += a_adjoint_var[1]
+  //
+  // Here we use adjoint_var to simplify calculation
   void VisitBinding_(const VarBindingNode* binding, const TupleNode* tuple) override {
     UpdateAdjoint(GetRef<Tuple>(tuple), adjoint_var_map_[binding->var]);
   }
@@ -129,7 +131,8 @@ class BackwardBindingGenerator : public ExprVisitor {
   // For TupleGetItem nodes, we do a partial update
   // e.g.
   // b = a[0]
-  // a_adjoint_expr[0] (in fields) += b_adjoint_var
+  // a_adjoint[0] += b_adjoint_var
+  // If a_adjoint does not exist, we would create a zeros tuple as a_adjoint first, and then add
   void VisitBinding_(const VarBindingNode* binding,
                      const TupleGetItemNode* tuple_get_item) override {
     ICHECK(tuple_get_item->tuple->IsInstance<VarNode>())
@@ -158,7 +161,7 @@ class BackwardBindingGenerator : public ExprVisitor {
     UpdateAdjoint(GetRef<Var>(var), adjoint_var_map_[binding->var]);
   }
 
-  // For constant nodes, we do not have to handle it because it does not produce adjoint
+  // For constant nodes, we do not have to handle it because it does not contribute to the adjoint
   void VisitBinding_(const VarBindingNode* binding, const ConstantNode* var) override { return; }
 
  private:
@@ -166,7 +169,7 @@ class BackwardBindingGenerator : public ExprVisitor {
     return expr->IsInstance<CallNode>() && Downcast<Call>(expr)->op == Op::Get("relax.zeros");
   }
 
-  // Update the adjoint of expr by an Expr partial
+  // Add partial (Expr type) to the adjoint of expr
   void UpdateAdjoint(const Expr& expr, const Expr& partial) {
     DecomposeNestedMsg(expr, ExprToAdjointMsg(partial), [&](Expr leaf, AdjointMsg msg) {
       if (leaf->IsInstance<VarNode>()) {
@@ -185,9 +188,8 @@ class BackwardBindingGenerator : public ExprVisitor {
     });
   }
 
-  // Build a "zeros" AdjointMsg with specified struct info
-  // sinfo may be TupleStructInfo or TensorStructInfo. In the first case, it would recursive and
-  // build a nested zeros AdjointMsg.
+  // Create a zeros AdjointMsg with specified struct info
+  // When sinfo is TupleStructInfo, we would create a nested zeros Tuple
   static AdjointMsg InitZerosAdjointNested(const StructInfo& sinfo) {
     return MapToNestedMsg<Expr>(sinfo, [](StructInfo sinfo) {
       auto tensor_sinfo = sinfo.as<TensorStructInfoNode>();
@@ -199,7 +201,8 @@ class BackwardBindingGenerator : public ExprVisitor {
     });
   }
 
-  // Init the gradient of the var as ones op and update it in adjoint_msg_map_.
+  // Create a ones AdjointMsg with the same StructInfo as var
+  // var should be a Tensor
   static AdjointMsg InitOnesAdjoint(const Var& var) {
     auto tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
     ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
@@ -310,7 +313,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   // Forward Var to its adjoint Var
   Map<Var, Var> adjoint_var_map_;
   // Forward Var to its adjoint NestedMsg<Expr>
-  // Here we use NestedMsg<Expr> to save the adjoint information (equaivalent to adjoint Expr)
+  // We use NestedMsg<Expr> to save the adjoint information (equaivalent to adjoint Expr)
   // When emiting, adjoint information will be transformed into adjoint Expr
   Map<Var, AdjointMsg> adjoint_msg_map_;
 };
