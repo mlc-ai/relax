@@ -134,8 +134,8 @@ def _get_shape_list(var):
     """
     return [int(val) for val in var.struct_info.shape]
 
-
 class SGD(Optimizer):
+    # def __init__(self, param_list, lr, momentum=0, dampening=0, weight_decay=0, nesterov=False):
     def __init__(self, param_list, lr, weight_decay=0):
         super().__init__(param_list)
         self.lr = float(lr)
@@ -265,17 +265,6 @@ class MomentumSGD(Optimizer):
                     ),
                 ]
 
-                # computation logic:
-                # num_steps = state_var_list[0]
-                # num_steps += 1
-                # for p, g, v in zip(param_var_list, grad_var_list, state_var_list[1:]):
-                #     dp = p * weight_decay + g
-                #     v = momentum * v + dp * (1 - dampening)
-                #     if nesterov:
-                #         p = p - (dp + momentum * v) * lr
-                #     else:
-                #         p = p - v * lr
-                #     update p, v in var lists
                 state_var_list[0] = bb.emit(add(state_var_list[0], one))
                 for i in range(len(self._param_list)):
                     p, g, v = param_var_list[i], grad_var_list[i], state_var_list[i + 1]
@@ -294,7 +283,29 @@ class MomentumSGD(Optimizer):
             bb.emit_func_output((gv0, gv1))
         return bb.get()["MomentumSGD"]
 
-
-class Adam(Optimizer):
-    def __init__(self, param_list, lr, beta1, beta2, eps, normalize: bool):
-        pass
+    # def step(self, loss=None, retain_graph=False):
+    #     self.pre_step(loss, retain_graph)
+    #     n = float(self.n_step)
+    #     jt.flags.node_order = 1
+    #     for pg in self.param_groups:
+    #         # get arguments from each param_groups
+    #         lr = pg.get("lr", self.lr)
+    #         eps = pg.get("eps", self.eps)
+    #         weight_decay = pg.get("weight_decay", self.weight_decay)
+    #         b0, b1 = pg.get("betas", self.betas)
+    #         for p, g, v, m in zip(pg["params"], pg["grads"], pg["values"], pg["m"]):
+    #             if p.is_stop_grad(): continue
+    #             g = p * weight_decay + g
+    #             m.update(b0 * m + (1-b0) * g)
+    #             v.update(b1 * v + (1-b1) * g * g)
+    #             step_size = lr * jt.sqrt(1-b1**n) / (1-b0 ** n)
+    #             p.update(p - m * step_size / (jt.sqrt(v) + eps))
+    #     self.post_step()
+# class Adam(Optimizer):
+#     def __init__(self, param_list, lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False):
+#         super().__init__(param_list)
+#         self.lr = float(lr)
+#         self.beta1 = float(momentum)
+#         self.weight_decay = float(weight_decay)
+#         self.dampening = float(dampening)
+#         self.nesterov = float(nesterov)

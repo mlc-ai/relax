@@ -66,54 +66,63 @@ def _assert_run_result_same(tvm_func: Callable, np_func: Callable, np_inputs: Li
     _assert_allclose_nested(result, expected)
 
 
-def test_sgd():
+def _test_optimizer(np_func, opt_type, *args, **kwargs):
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
-    sgd = SGD(x, 0.01, 0.02)
-    mod = IRModule.from_expr(sgd.get_function())
+    y = relax.Var("y", R.Tensor((3,), "float32"))
+    opt = opt_type([x, y], *args, **kwargs)
+    mod = IRModule.from_expr(opt.get_function())
     tvm_func = _legalize_and_build(mod)["main"]
 
-    x_arr = [np.random.rand(3, 3).astype(np.float32)]
-    x_grad_arr = [np.random.rand(3, 3).astype(np.float32)]
-    state_arr = _tvm_to_numpy(sgd.state)
-
-    def np_func(x_arr, x_grad_arr, state_arr):
-        x = x_arr[0]
-        x_grad = x_grad_arr[0]
-        num_steps = state_arr[0]
-        return [x - 0.01 * (x_grad + 0.02 * x)], [num_steps + 1]
+    x_arr = [np.random.rand(3, 3).astype(np.float32), np.random.rand(3).astype(np.float32)]
+    x_grad_arr = [np.random.rand(3, 3).astype(np.float32), np.random.rand(3).astype(np.float32)]
+    state_arr = _tvm_to_numpy(opt.state)
 
     _assert_run_result_same(tvm_func, np_func, [x_arr, x_grad_arr, state_arr])
+
+
+def test_sgd():
+    def np_func(x_arr, x_grad_arr, state_arr):
+        num_steps = state_arr[0]
+        state_arr[0] = num_steps + 1
+        for i in range(len(x_arr)):
+            x = x_arr[i]
+            x_grad = x_grad_arr[i]
+            x_arr[i] = x - lr * (x_grad + weight_decay * x)
+        return x_arr, state_arr
+
+    lr, weight_decay = 0.01, 0
+    _test_optimizer(np_func, SGD, lr)
+    lr, weight_decay = 0.01, 0.02
+    _test_optimizer(np_func, SGD, lr, weight_decay)
 
 
 def test_momentum_sgd():
-    lr, mom, damp, wd, nest = 0.01, 0.9, 0.85, 0.02, False
-
-    x = relax.Var("x", R.Tensor((3, 3), "float32"))
-    msgd = MomentumSGD(x, lr, mom, damp, wd, nest)
-    mod = IRModule.from_expr(msgd.get_function())
-    tvm_func = _legalize_and_build(mod)["main"]
-
-    x_arr = [np.random.rand(3, 3).astype(np.float32)]
-    x_grad_arr = [np.random.rand(3, 3).astype(np.float32)]
-    state_arr = _tvm_to_numpy(msgd.state)
-
     def np_func(x_arr, x_grad_arr, state_arr):
-        x = x_arr[0]
-        x_grad = x_grad_arr[0]
         num_steps = state_arr[0]
-        x_velocity = state_arr[1]
+        state_arr[0] = num_steps + 1
 
-        dp = x * wd + x_grad
-        x_velocity = mom * x_velocity + dp * (1 - damp)
-        if nest:
-            x = x - (dp + mom * x_velocity) * lr
-        else:
-            x = x - x_velocity * lr
+        for i in range(len(x_arr)):
+            x = x_arr[i]
+            x_grad = x_grad_arr[i]
+            x_velocity = state_arr[i + 1]
+            dp = x * wd + x_grad
+            x_velocity = mom * x_velocity + dp * (1 - damp)
+            if nest:
+                x = x - (dp + mom * x_velocity) * lr
+            else:
+                x = x - x_velocity * lr
+            x_arr[i] = x
+            state_arr[i + 1] = x_velocity
 
-        return [x], [num_steps + 1, x_velocity]
+        return x_arr, state_arr
 
-    _assert_run_result_same(tvm_func, np_func, [x_arr, x_grad_arr, state_arr])
+    lr, mom, damp, wd, nest = 0.01, 0.9, 0, 0, False
+    _test_optimizer(np_func, MomentumSGD, lr, mom, damp, wd, nest)
+    lr, mom, damp, wd, nest = 0.01, 0.9, 0.85, 0.02, False
+    _test_optimizer(np_func, MomentumSGD, lr, mom, damp, wd, nest)
+    lr, mom, damp, wd, nest = 0.01, 0.9, 0.85, 0.02, True
+    _test_optimizer(np_func, MomentumSGD, lr, mom, damp, wd, nest)
 
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    tvm.testing.main()
