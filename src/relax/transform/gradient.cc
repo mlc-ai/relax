@@ -423,9 +423,14 @@ class GradientMutator : public ExprMutator {
       CHECK_EQ(var_set.count(var), 0) << "Var " << var->name_hint() << " appears more than once";
       var_set.emplace(var);
 
-      CHECK(IsNestedFloatTensor(var)) << "Only Tensors of floating point dtype or Tuples of float "
-                                         "Tensors can require gradients, but the StructInfo of Var "
-                                      << var->name_hint() << " is " << GetStructInfo(var);
+      auto is_float_tensor = [](const TensorStructInfo& sinfo) {
+        return sinfo->dtype.is_float() || sinfo->dtype.is_float16() || sinfo->dtype.is_bfloat16();
+      };
+
+      CHECK(IsNestedTensorConditioned(GetStructInfo(var), is_float_tensor))
+          << "Only Tensors of floating point dtype or Tuples of float "
+             "Tensors can require gradients, but the StructInfo of Var "
+          << var->name_hint() << " is " << GetStructInfo(var);
     }
   }
 

@@ -41,13 +41,5 @@ bool IsNestedTensor(const StructInfo& sinfo) {
 
 bool IsNestedTensor(const Expr& expr) { return IsNestedTensor(GetStructInfo(expr)); }
 
-bool IsNestedFloatTensor(const StructInfo& sinfo) {
-  return IsNestedTensorConditioned(sinfo, [](const TensorStructInfo& sinfo) {
-    return sinfo->dtype.is_float() || sinfo->dtype.is_float16() || sinfo->dtype.is_bfloat16();
-  });
-}
-
-bool IsNestedFloatTensor(const Expr& expr) { return IsNestedFloatTensor(GetStructInfo(expr)); }
-
 }  // namespace relax
 }  // namespace tvm
