@@ -36,7 +36,7 @@ class Optimizer:
 
     Parameters
     ----------
-    params: Union[Var, list[Var]]
+    params : Union[Var, list[Var]]
         The parameter or the list of parameters to optimize.
 
         If params is None, it indicates params will be added later using add_params.
@@ -53,13 +53,16 @@ class Optimizer:
         self._state = None
 
     def add_params(self, params: Union[Var, list[Var]]):
-        """Append one parameter or a list of new parameters to the optimizer. This method must be
-        called before `opt.state` and `opt.get_function()`.
+        """Append one parameter or a list of new parameters to the optimizer.
 
         Parameters
         ----------
-        params: Union[Var, list[Var]]
+        params : Union[Var, list[Var]]
             The parameter or the list of parameters to append.
+
+        Note
+        ----
+        This method can only be called before `opt.state` or `opt.get_function()`.
         """
         assert self._state is None, "Add parameter after the state is acquired"
         if not isinstance(params, list):
@@ -96,7 +99,7 @@ class Optimizer:
 
         Returns
         -------
-        func: Function
+        func : Function
             The optimizer function.
 
         Examples
