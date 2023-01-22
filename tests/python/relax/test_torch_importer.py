@@ -27,6 +27,7 @@ def verify_model(torch_model, input_info, binding, expected):
     mod = TorchFXTranslator().from_pytorch(torch_model, input_info)
     binding = {k: tvm.nd.array(v) for k, v in binding.items()}
     expected = relax.transform.BindParams("main", binding)(expected)
+    print(mod.script())
     tvm.ir.assert_structural_equal(mod, expected)
 
 
@@ -177,7 +178,7 @@ def test_linear():
     input_info = {"input_1": ([1, 3, 10, 10], "float32")}
 
     model = Dense1()
-    binding = {"w1": model.linear.weight.numpy().T, "w2": model.linear.bias.numpy().reshape(1, -1)}
+    binding = {"w1": model.linear.weight.numpy().T, "w2": model.linear.bias.numpy()}
     verify_model(model, input_info, binding, expected1)
 
     model = Dense2()
@@ -399,7 +400,7 @@ def test_flatten():
     class Flatten(Module):
         def __init__(self):
             super().__init__()
-            self.f = torch.nn.Flatten(1, -1)
+            self.f = torch.nn.Flatten(2, -1)
 
         def forward(self, input):
             return self.f(input)
@@ -409,18 +410,18 @@ def test_flatten():
         @R.function
         def main(
             input_1: R.Tensor((1, 3, 10, 10), dtype="float32")
-        ) -> R.Tensor((300,), dtype="float32"):
+        ) -> R.Tensor((1, 3, 100), dtype="float32"):
             # block 0
             with R.dataflow():
-                lv: R.Tensor((300,), dtype="float32") = R.flatten(input_1)
-                gv: R.Tensor((300,), dtype="float32") = lv
+                lv: R.Tensor((1, 3, 100), dtype="float32") = R.reshape(input_1, (1, 3, 100))
+                gv: R.Tensor((1, 3, 100), dtype="float32") = lv
                 R.output(gv)
             return gv
 
     # call_module
     verify_model(Flatten(), input_info, {}, expected1)
     # call_method
-    verify_model(torch.nn.Flatten(1, -1), input_info, {}, expected1)
+    verify_model(torch.nn.Flatten(2, -1), input_info, {}, expected1)
 
 
 @tvm.testing.requires_gpu
@@ -953,27 +954,10 @@ def test_size():
     @tvm.script.ir_module
     class expected1:
         @R.function
-        def main(
-            input_1: R.Tensor((1, 3, 10, 10), dtype="float32")
-        ) -> R.Tuple(
-            R.Tensor((), dtype="int32"),
-            R.Tensor((), dtype="int32"),
-            R.Tensor((), dtype="int32"),
-            R.Tensor((), dtype="int32"),
-        ):
+        def main(input_1: R.Tensor((1, 3, 10, 10), dtype="float32")) -> R.Shape([1, 3, 10, 10]):
             # block 0
             with R.dataflow():
-                gv: R.Tuple(
-                    R.Tensor((), dtype="int32"),
-                    R.Tensor((), dtype="int32"),
-                    R.Tensor((), dtype="int32"),
-                    R.Tensor((), dtype="int32"),
-                ) = (
-                    R.const(1, "int32"),
-                    R.const(3, "int32"),
-                    R.const(10, "int32"),
-                    R.const(10, "int32"),
-                )
+                gv: R.Shape([1, 3, 10, 10]) = (1, 3, 10, 10)
                 R.output(gv)
             return gv
 

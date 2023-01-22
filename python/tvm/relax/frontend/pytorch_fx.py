@@ -19,6 +19,7 @@
 # pylint: disable=import-outside-toplevel
 """PyTorch FX frontend of Relax."""
 from typing import Dict
+from functools import reduce
 
 from tvm import relax
 import numpy as np  # type: ignore
@@ -62,7 +63,7 @@ class TorchFXTranslator:
         for i, atom in enumerate(target_atoms):
             if not hasattr(attr_itr, atom):
                 raise RuntimeError(
-                    f"Node referenced nonexistant target {'.'.join(target_atoms[:i])}"
+                    f"Node referenced non existing target {'.'.join(target_atoms[:i])}"
                 )
             attr_itr = getattr(attr_itr, atom)
         if isinstance(attr_itr, torch.Tensor):
@@ -88,20 +89,20 @@ class TorchFXTranslator:
             return tensor.data.shape
         raise ValueError("Unsupported type: {}".format(type(tensor)))
 
-    def retrive_args(self, node):
-        return self._retrive_args(node.args)
+    def retrieve_args(self, node):
+        return self._retrieve_args(node.args)
 
-    def _retrive_args(self, node):
+    def _retrieve_args(self, node):
         from torch import fx
 
         if isinstance(node, fx.node.Node):
             return self.env[node]
         elif isinstance(node, tuple):
-            return tuple(self._retrive_args(x) for x in node)
+            return tuple(self._retrieve_args(x) for x in node)
         elif isinstance(node, list):
-            return [self._retrive_args(x) for x in node]
+            return [self._retrieve_args(x) for x in node]
         elif isinstance(node, dict):
-            return {self._retrive_args(k): self._retrive_args(v) for k, v in node.items()}
+            return {self._retrieve_args(k): self._retrieve_args(v) for k, v in node.items()}
         else:
             return node
 
@@ -121,19 +122,6 @@ class TorchFXTranslator:
     def _call_binary_op(self, op, lhs, rhs):
         lhs, rhs = TorchFXTranslator._promote_binary_op_args(lhs, rhs)
         return self.block_builder.emit(op(lhs, rhs))
-
-    def normalize_axes(self, axes, ndim):
-        if not isinstance(axes, (tuple, list)):
-            axes = [axes]
-        axes = tuple(self._normalize_axis(axis, ndim) for axis in axes)
-        return axes
-
-    def _normalize_axis(self, axis, ndim):
-        if axis < 0:
-            axis += ndim
-        if axis < 0 or axis >= ndim:
-            raise ValueError("axis %d is out of bounds for array of dimension %d" % (axis, ndim))
-        return axis
 
     def _conv2d(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -182,12 +170,6 @@ class TorchFXTranslator:
             return dense
 
         bias = self.params[module.bias]
-        if len(bias.data.shape) == 1:
-            bias_data = bias.data.numpy().reshape(1, -1)
-            reshaped_bias = relax.const(
-                bias_data, relax.TensorStructInfo(bias_data.shape, bias.data.dtype)
-            )
-            bias = self.params[module.bias] = reshaped_bias
 
         return self.block_builder.emit(relax.op.add(dense, bias))
 
@@ -203,20 +185,16 @@ class TorchFXTranslator:
             stride = module.stride
             padding = module.padding
             dilation = module.dilation
+            ceil_mode = module.ceil_mode
         else:
             nargs = len(node.args)
             kernel = node.args[1] if nargs > 1 else node.kwargs["kernel_size"]
             stride = node.args[2] if nargs > 2 else node.kwargs["stride"]
             padding = node.args[3] if nargs > 3 else node.kwargs["padding"]
             dilation = node.args[4] if nargs > 4 else node.kwargs["dilation"]
+            ceil_mode = node.args[5] if nargs > 5 else node.kwargs["ceil_mode"]
 
-        kernel = kernel if isinstance(kernel, (list, tuple)) else (kernel, kernel)
         stride = kernel if stride is None else stride
-        stride = stride if isinstance(stride, (list, tuple)) else (stride, stride)
-        padding = (
-            padding if isinstance(padding, (list, tuple)) else (padding, padding, padding, padding)
-        )
-        dilation = dilation if isinstance(dilation, (list, tuple)) else (dilation, dilation)
 
         return self.block_builder.emit(
             relax.op.nn.max_pool2d(
@@ -226,6 +204,7 @@ class TorchFXTranslator:
                 padding=padding,
                 dilation=dilation,
                 layout="NCHW",
+                ceil_mode=ceil_mode,
             )
         )
 
@@ -253,8 +232,16 @@ class TorchFXTranslator:
         else:
             start_dim = node.args[1] if len(node.args) >= 2 else 0
             end_dim = node.args[2] if len(node.args) == 3 else -1
-        assert start_dim == 1 and end_dim == -1
-        return self.block_builder.emit(relax.op.flatten(x))
+        shape = self.shape_of(x)
+        start_dim = start_dim if start_dim >= 0 else len(shape) + start_dim
+        end_dim = end_dim if end_dim >= 0 else len(shape) + end_dim
+        flattened = reduce(lambda x, y: x * y, [shape[i] for i in range(start_dim, end_dim + 1)])
+        new_shape = (
+            [shape[i] for i in range(0, start_dim)]
+            + [flattened]
+            + [shape[i] for i in range(end_dim + 1, len(shape))]
+        )
+        return self.block_builder.emit(relax.op.reshape(x, new_shape))
 
     def _batch_norm_2d(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -281,13 +268,13 @@ class TorchFXTranslator:
         return self.block_builder.emit(relax.TupleGetItem(res_tuple, 0))
 
     def _add(self, node: fx.node.Node) -> relax.Expr:
-        lhs, rhs = self.retrive_args(node)
+        lhs, rhs = self.retrieve_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
             return self._call_binary_op(relax.op.add, lhs, rhs)
         return lhs + rhs
 
     def _sub(self, node: fx.node.Node) -> relax.Expr:
-        lhs, rhs = self.retrive_args(node)
+        lhs, rhs = self.retrieve_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
             return self._call_binary_op(relax.op.subtract, lhs, rhs)
         return lhs - rhs
@@ -297,13 +284,13 @@ class TorchFXTranslator:
         shape = self.shape_of(x)
         if len(node.args) == 1:
             assert isinstance(shape, relax.ShapeExpr)
-            return tuple(relax.const(s.value) for s in shape.values)
+            return shape
         assert len(node.args) == 2
         idx = node.args[1]
         return self.shape_of(x)[idx].value
 
     def _type(self, node: fx.node.Node) -> relax.Var:
-        args = self.retrive_args(node)
+        args = self.retrieve_args(node)
         return self.block_builder.emit(relax.op.astype(args[0], args[1]))
 
     def _getattr(self, node: fx.node.Node) -> relax.Var:
@@ -362,7 +349,7 @@ class TorchFXTranslator:
             assert False
 
     def _mul(self, node: fx.node.Node) -> relax.Var:
-        lhs, rhs = self.retrive_args(node)
+        lhs, rhs = self.retrieve_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
             return self._call_binary_op(relax.op.multiply, lhs, rhs)
         else:
@@ -381,25 +368,25 @@ class TorchFXTranslator:
         return self.block_builder.emit(relax.op.sqrt(arg))
 
     def _cat(self, node: fx.node.Node) -> relax.Var:
-        args = self.retrive_args(node)
+        args = self.retrieve_args(node)
         return self.block_builder.emit(relax.op.concat(args[0], axis=node.kwargs["dim"]))
 
     def _truediv(self, node: fx.node.Node) -> relax.Var:
-        lhs, rhs = self.retrive_args(node)
+        lhs, rhs = self.retrieve_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
             return self._call_binary_op(relax.op.divide, lhs, rhs)
         else:
             return lhs / rhs
 
     def _floordiv(self, node: fx.node.Node) -> relax.Var:
-        lhs, rhs = self.retrive_args(node)
+        lhs, rhs = self.retrieve_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
             return self._call_binary_op(relax.op.floor_divide, lhs, rhs)
         else:
             return lhs // rhs
 
     def _matmul(self, node: fx.node.Node) -> relax.Var:
-        args = self.retrive_args(node)
+        args = self.retrieve_args(node)
         res = self._matmul_impl(
             args[0],
             args[1],
@@ -476,7 +463,7 @@ class TorchFXTranslator:
         return self.block_builder.emit(relax.op.create.tril(x, k))
 
     def _new_ones(self, node: fx.node.Node) -> relax.Var:
-        args = self.retrive_args(node)
+        args = self.retrieve_args(node)
         self_var = args[0]
         size = args[1:]
         if not isinstance(size, (list, tuple)):
@@ -491,7 +478,7 @@ class TorchFXTranslator:
         )
 
     def _expand(self, node: fx.node.Node) -> relax.Var:
-        args = self.retrive_args(node)
+        args = self.retrieve_args(node)
         return self.block_builder.emit(relax.op.broadcast_to(args[0], args[1:]))
 
     def _float(self, node: fx.node.Node) -> relax.Var:
@@ -501,11 +488,11 @@ class TorchFXTranslator:
         return self.block_builder.emit(relax.op.astype(self.env[node.args[0]], "float16"))
 
     def _permute(self, node: fx.node.Node) -> relax.Var:
-        args = self.retrive_args(node)
+        args = self.retrieve_args(node)
         return self.block_builder.emit(relax.op.permute_dims(args[0], args[1:]))
 
     def _reshape(self, node: fx.node.Node) -> relax.Var:
-        args = self.retrive_args(node)
+        args = self.retrieve_args(node)
         infer_idx = -1
         prod = 1
         for i in range(1, len(args)):
@@ -518,7 +505,7 @@ class TorchFXTranslator:
         return self.block_builder.emit(relax.op.reshape(args[0], args[1:]))
 
     def _transpose(self, node: fx.node.Node) -> relax.Var:
-        args = self.retrive_args(node)
+        args = self.retrieve_args(node)
         full_idx = list(range(len(self.shape_of(args[0]))))
         full_idx[args[1]], full_idx[args[2]] = full_idx[args[2]], full_idx[args[1]]
         return self.block_builder.emit(relax.op.permute_dims(args[0], full_idx))
@@ -537,7 +524,7 @@ class TorchFXTranslator:
     def _view(self, node: fx.node.Node) -> relax.Var:
         import torch  # type: ignore
 
-        args = self.retrive_args(node)
+        args = self.retrieve_args(node)
         if isinstance(args[1], (torch.Size, tuple, list)):
             return self.block_builder.emit(relax.op.reshape(args[0], tuple(args[1])))
         return self.block_builder.emit(relax.op.reshape(args[0], args[1:]))
@@ -665,17 +652,6 @@ class TorchFXTranslator:
             "type": self._type,
             "contiguous": lambda node: self.env[node.args[0]],
         }
-
-    def fetch_attr(self, model, target: str):
-        target_atoms = target.split(".")
-        attr_itr = model
-        for i, atom in enumerate(target_atoms):
-            if not hasattr(attr_itr, atom):
-                raise RuntimeError(
-                    f"Node referenced nonexistant target {'.'.join(target_atoms[:i])}"
-                )
-            attr_itr = getattr(attr_itr, atom)
-        return attr_itr
 
     def from_pytorch(self, model, input_info):
         """Convert a PyTorch model to a Relax program.
