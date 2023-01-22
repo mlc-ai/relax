@@ -199,7 +199,7 @@ class BlockMatcher : public TensorizeComparator {
 class FuncMatcher : public StmtExprVisitor {
  public:
   void Match(Stmt body) {
-    OpMatternMatch(body);
+    OpPatternMatch(body);
     if (fail) return;
     auto f = tvm::runtime::Registry::Get("tvm.relax.cutlass.op_pattern_stitch");
     ICHECK(f != nullptr) << "Cannot find cutlass op pattern stitch function";
@@ -253,7 +253,7 @@ class FuncMatcher : public StmtExprVisitor {
   }
 
   // For each block in the body, try to find its corresponding pattern one by one
-  void OpMatternMatch(const Stmt& body) {
+  void OpPatternMatch(const Stmt& body) {
     Array<Stmt> blocks;
     if (body->IsInstance<ForNode>()) {
       // {for}

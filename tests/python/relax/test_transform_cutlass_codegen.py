@@ -16,16 +16,15 @@
 # under the License.
 
 from __future__ import annotations
+
 import tempfile
 
-from tvm import relax, runtime
-import tvm
-import tvm.testing
-from tvm import relax
 import numpy as np
-from tvm.relax.vm import build as relax_build
-
+import tvm
 import tvm.relax.cutlass.pattern
+import tvm.testing
+from tvm import relax, runtime
+from tvm.relax.vm import build as relax_build
 
 PKG_FILE = "/tmp/test_transform_cutlass_codegen.so"
 GLOBAL_SYMBOL = "HGEMM"
@@ -44,9 +43,9 @@ def f_run(rt_mod: runtime.Module, device: runtime.ndarray.Device, *input):
 def build(mod):
     mod = relax.transform.SplitCutlass()(mod)
     mod = relax.transform.CutlassCodegen()(mod)
-    executbale = relax_build(mod, target)
-    executbale.mod.export_library(PKG_FILE, cc="nvcc")
-    return executbale
+    executable = relax_build(mod, target)
+    executable.mod.export_library(PKG_FILE, cc="nvcc")
+    return executable
 
 
 def constructGEMM(m, n, k, GLOBAL_SYMBOL="HGEMM"):
