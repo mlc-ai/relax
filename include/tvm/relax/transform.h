@@ -206,8 +206,8 @@ TVM_DLL Pass ToMixedPrecision(const DataType& out_dtype);
  * specified arguments of the original function with respect to the only one return value of the
  * original function.
  *
- * For examples, see the MLP examples in tests/python/relax/test_transform_gradient.py and
- * tests/python/relax/test_transform_gradient_numeric.py.
+ * For examples, see the MLP examples in `tests/python/relax/test_transform_gradient.py` and
+ * `tests/python/relax/test_transform_gradient_numeric.py`.
  *
  * \param global_var The GlobalVar of the specified function.
  * \param require_grads The relax variables whose adjoints are needed. Must be parameters of the

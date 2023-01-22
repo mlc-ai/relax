@@ -36,26 +36,15 @@ bool IsScalarTensor(const StructInfo& sinfo) {
 bool IsScalarTensor(const Expr& expr) { return IsScalarTensor(GetStructInfo(expr)); }
 
 bool IsNestedTensor(const StructInfo& sinfo) {
-  if (sinfo->IsInstance<TensorStructInfoNode>()) {
-    return true;
-  } else if (const auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
-    return !std::any_of(tuple_sinfo->fields.begin(), tuple_sinfo->fields.end(),
-                        [](const StructInfo& field) { return !IsNestedTensor(field); });
-  }
-  return false;
+  return IsNestedTensorConditioned(sinfo, [](const TensorStructInfo& sinfo) { return true; });
 }
 
 bool IsNestedTensor(const Expr& expr) { return IsNestedTensor(GetStructInfo(expr)); }
 
 bool IsNestedFloatTensor(const StructInfo& sinfo) {
-  if (auto* tensor_sinfo = sinfo.as<TensorStructInfoNode>()) {
-    return tensor_sinfo->dtype.is_float() || tensor_sinfo->dtype.is_float16() ||
-           tensor_sinfo->dtype.is_bfloat16();
-  } else if (auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
-    return !std::any_of(tuple_sinfo->fields.begin(), tuple_sinfo->fields.end(),
-                        [](const StructInfo& field) { return !IsNestedFloatTensor(field); });
-  }
-  return false;
+  return IsNestedTensorConditioned(sinfo, [](const TensorStructInfo& sinfo) {
+    return sinfo->dtype.is_float() || sinfo->dtype.is_float16() || sinfo->dtype.is_bfloat16();
+  });
 }
 
 bool IsNestedFloatTensor(const Expr& expr) { return IsNestedFloatTensor(GetStructInfo(expr)); }

@@ -590,9 +590,7 @@ def test_tuple_op_simple():
         def main(x: R.Tensor((6,), dtype="float32")) -> R.Tensor((), dtype="float32"):
             # block 0
             with R.dataflow():
-                lv1: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = R.split(x, indices_or_sections=2, axis=0)
+                lv1: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(x, indices_or_sections=2, axis=0)
                 lv2: R.Tensor((6,), dtype="float32") = R.concat(lv1, axis=0)
                 gv: R.Tensor((), dtype="float32") = R.sum(lv2, axis=None, keepdims=False)
                 R.output(gv)
@@ -606,23 +604,15 @@ def test_tuple_op_simple():
         ):
             # block 0
             with R.dataflow():
-                lv1: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = R.split(x, indices_or_sections=2, axis=0)
+                lv1: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(x, indices_or_sections=2, axis=0)
                 lv2: R.Tensor((6,), dtype="float32") = R.concat(lv1, axis=0)
                 gv: R.Tensor((), dtype="float32") = R.sum(lv2, axis=None, keepdims=False)
                 gv_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
-                lv2_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(
-                    gv_adjoint, (6,)
-                )
-                lv: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = R.split(lv2_adjoint, indices_or_sections=[3], axis=0)
+                lv2_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(gv_adjoint, (6,))
+                lv: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(lv2_adjoint, indices_or_sections=[3], axis=0)
                 lv11: R.Tensor((3,), dtype="float32") = lv[0]
                 lv21: R.Tensor((3,), dtype="float32") = lv[1]
-                lv1_adjoint: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = (lv11, lv21)
+                lv1_adjoint: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv11, lv21)
                 x_adjoint: R.Tensor((6,), dtype="float32") = R.concat(lv1_adjoint, axis=0)
                 R.output(gv, x_adjoint)
             return (gv, (x_adjoint,))
@@ -661,9 +651,7 @@ def test_tuple_op_construct():
         ) -> R.Tensor((), dtype="float32"):
             # block 0
             with R.dataflow():
-                lv1: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = (x, x)
+                lv1: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (x, x)
                 lv2: R.Tensor((6,), dtype="float32") = R.concat(lv1, axis=0)
                 lv3: R.Tensor((6,), dtype="float32") = R.concat((x, x), axis=0)
                 lv4: R.Tensor((6,), dtype="float32") = R.concat(y, axis=0)
@@ -674,21 +662,10 @@ def test_tuple_op_construct():
             return gv
 
         @R.function
-        def main_adjoint(
-            x: R.Tensor((3,), dtype="float32"),
-            y: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")),
-        ) -> R.Tuple(
-            R.Tensor((), dtype="float32"),
-            R.Tuple(
-                R.Tensor((3,), dtype="float32"),
-                R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")),
-            ),
-        ):
+        def main_adjoint(x: R.Tensor((3,), dtype="float32"), y: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32"))) -> R.Tuple(R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((3,), dtype="float32"), R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")))):
             # block 0
             with R.dataflow():
-                lv1: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = (x, x)
+                lv1: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (x, x)
                 lv2: R.Tensor((6,), dtype="float32") = R.concat(lv1, axis=0)
                 lv3: R.Tensor((6,), dtype="float32") = R.concat((x, x), axis=0)
                 lv4: R.Tensor((6,), dtype="float32") = R.concat(y, axis=0)
@@ -696,24 +673,16 @@ def test_tuple_op_construct():
                 lv6: R.Tensor((6,), dtype="float32") = R.add(lv5, lv4)
                 gv: R.Tensor((), dtype="float32") = R.sum(lv6, axis=None, keepdims=False)
                 gv_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
-                lv6_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(
-                    gv_adjoint, (6,)
-                )
+                lv6_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(gv_adjoint, (6,))
                 lv5_adjoint: R.Tensor((6,), dtype="float32") = lv6_adjoint
                 lv4_adjoint: R.Tensor((6,), dtype="float32") = lv6_adjoint
                 lv3_adjoint: R.Tensor((6,), dtype="float32") = lv5_adjoint
                 lv2_adjoint: R.Tensor((6,), dtype="float32") = lv5_adjoint
-                lv: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = R.split(lv2_adjoint, indices_or_sections=[3], axis=0)
+                lv: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(lv2_adjoint, indices_or_sections=[3], axis=0)
                 lv11: R.Tensor((3,), dtype="float32") = lv[0]
                 lv21: R.Tensor((3,), dtype="float32") = lv[1]
-                lv1_adjoint: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = (lv11, lv21)
-                lv31: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = R.split(lv3_adjoint, indices_or_sections=[3], axis=0)
+                lv1_adjoint: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv11, lv21)
+                lv31: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(lv3_adjoint, indices_or_sections=[3], axis=0)
                 lv41: R.Tensor((3,), dtype="float32") = lv31[0]
                 lv51: R.Tensor((3,), dtype="float32") = lv31[1]
                 lv61: R.Tensor((3,), dtype="float32") = R.add(lv41, lv51)
@@ -721,14 +690,10 @@ def test_tuple_op_construct():
                 lv8: R.Tensor((3,), dtype="float32") = R.add(lv61, lv7)
                 lv9: R.Tensor((3,), dtype="float32") = lv1_adjoint[1]
                 x_adjoint: R.Tensor((3,), dtype="float32") = R.add(lv8, lv9)
-                lv10: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = R.split(lv4_adjoint, indices_or_sections=[3], axis=0)
+                lv10: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(lv4_adjoint, indices_or_sections=[3], axis=0)
                 lv111: R.Tensor((3,), dtype="float32") = lv10[0]
                 lv12: R.Tensor((3,), dtype="float32") = lv10[1]
-                y_adjoint: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = (lv111, lv12)
+                y_adjoint: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv111, lv12)
                 R.output(gv, x_adjoint, y_adjoint)
             return (gv, (x_adjoint, y_adjoint))
     # fmt: on
@@ -775,11 +740,7 @@ def test_tuple_op_const():
             return gv
 
         @R.function
-        def main_adjoint(
-            x: R.Tensor((3,), dtype="float32")
-        ) -> R.Tuple(
-            R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((3,), dtype="float32"))
-        ):
+        def main_adjoint(x: R.Tensor((3,), dtype="float32")) -> R.Tuple(R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((3,), dtype="float32"))):
             # block 0
             with R.dataflow():
                 lv1: R.Tensor((6,), dtype="float32") = R.concat((c1, c2), axis=0)
@@ -789,22 +750,16 @@ def test_tuple_op_const():
                 lv5: R.Tensor((6,), dtype="float32") = R.add(lv4, lv3)
                 gv: R.Tensor((), dtype="float32") = R.sum(lv5, axis=None, keepdims=False)
                 gv_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
-                lv5_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(
-                    gv_adjoint, (6,)
-                )
+                lv5_adjoint: R.Tensor((6,), dtype="float32") = R.broadcast_to(gv_adjoint, (6,))
                 lv4_adjoint: R.Tensor((6,), dtype="float32") = lv5_adjoint
                 lv3_adjoint: R.Tensor((6,), dtype="float32") = lv5_adjoint
                 lv2_adjoint: R.Tensor((6,), dtype="float32") = lv4_adjoint
                 lv1_adjoint: R.Tensor((6,), dtype="float32") = lv4_adjoint
-                lv: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = R.split(lv3_adjoint, indices_or_sections=[3], axis=0)
+                lv: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(lv3_adjoint, indices_or_sections=[3], axis=0)
                 lv11: R.Tensor((3,), dtype="float32") = lv[0]
                 lv21: R.Tensor((3,), dtype="float32") = lv[1]
                 lv31: R.Tensor((3,), dtype="float32") = R.add(lv11, lv21)
-                lv41: R.Tuple(
-                    R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")
-                ) = R.split(lv2_adjoint, indices_or_sections=[3], axis=0)
+                lv41: R.Tuple(R.Tensor((3,), dtype="float32"), R.Tensor((3,), dtype="float32")) = R.split(lv2_adjoint, indices_or_sections=[3], axis=0)
                 lv51: R.Tensor((3,), dtype="float32") = lv41[1]
                 x_adjoint: R.Tensor((3,), dtype="float32") = R.add(lv31, lv51)
                 R.output(gv, x_adjoint)

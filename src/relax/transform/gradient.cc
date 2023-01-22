@@ -69,7 +69,7 @@ class BackwardBindingGenerator : public ExprVisitor {
     return generator.Epilogue(require_grads, target_var);
   }
 
-  void VisitBinding(const Binding& binding) override {
+  void VisitBinding(const Binding& binding) final {
     // TODO(chaofan, yixin): support other types of bindings
     CHECK(binding->IsInstance<VarBindingNode>()) << "now only support VarBindingNode";
     auto var_binding = binding.as<VarBindingNode>();
@@ -96,7 +96,7 @@ class BackwardBindingGenerator : public ExprVisitor {
 
   // Handle the adjoint expr of the inputs of binding
   // For call node, we would call the registered gradient functions
-  void VisitBinding_(const VarBindingNode* binding, const CallNode* call) override {
+  void VisitBinding_(const VarBindingNode* binding, const CallNode* call) final {
     static const OpAttrMap<FPrimalGradient>& gradient_op_map =
         Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
 
@@ -124,7 +124,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   // d_adjoint += a_adjoint_var[1]
   //
   // Here we use adjoint_var to simplify calculation
-  void VisitBinding_(const VarBindingNode* binding, const TupleNode* tuple) override {
+  void VisitBinding_(const VarBindingNode* binding, const TupleNode* tuple) final {
     UpdateAdjoint(GetRef<Tuple>(tuple), adjoint_var_map_[binding->var]);
   }
 
@@ -133,8 +133,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   // b = a[0]
   // a_adjoint[0] += b_adjoint_var
   // If a_adjoint does not exist, we would create a zeros tuple as a_adjoint first, and then add
-  void VisitBinding_(const VarBindingNode* binding,
-                     const TupleGetItemNode* tuple_get_item) override {
+  void VisitBinding_(const VarBindingNode* binding, const TupleGetItemNode* tuple_get_item) final {
     ICHECK(tuple_get_item->tuple->IsInstance<VarNode>())
         << "The tuple field of a TupleGetItem is not bound to a Var";
     auto tuple_sinfo = GetStructInfoAs<TupleStructInfoNode>(tuple_get_item->tuple);
@@ -153,16 +152,16 @@ class BackwardBindingGenerator : public ExprVisitor {
   }
 
   // For assign nodes, we add the adjoint of output to the adjoint of input
-  void VisitBinding_(const VarBindingNode* binding, const DataflowVarNode* var) override {
+  void VisitBinding_(const VarBindingNode* binding, const DataflowVarNode* var) final {
     UpdateAdjoint(GetRef<Var>(var), adjoint_var_map_[binding->var]);
   }
 
-  void VisitBinding_(const VarBindingNode* binding, const VarNode* var) override {
+  void VisitBinding_(const VarBindingNode* binding, const VarNode* var) final {
     UpdateAdjoint(GetRef<Var>(var), adjoint_var_map_[binding->var]);
   }
 
   // For constant nodes, we do not have to handle it because it does not contribute to the adjoint
-  void VisitBinding_(const VarBindingNode* binding, const ConstantNode* var) override { return; }
+  void VisitBinding_(const VarBindingNode* binding, const ConstantNode* var) final { return; }
 
  private:
   bool IsCallZeros(const Expr& expr) {
@@ -313,8 +312,8 @@ class BackwardBindingGenerator : public ExprVisitor {
   // Forward Var to its adjoint Var
   Map<Var, Var> adjoint_var_map_;
   // Forward Var to its adjoint NestedMsg<Expr>
-  // We use NestedMsg<Expr> to save the adjoint information (equaivalent to adjoint Expr)
-  // When emiting, adjoint information will be transformed into adjoint Expr
+  // We use NestedMsg<Expr> to save the adjoint information (equivalent to adjoint Expr)
+  // When emitting, adjoint information will be transformed into adjoint Expr
   Map<Var, AdjointMsg> adjoint_msg_map_;
 };
 
@@ -340,7 +339,7 @@ class GradientMutator : public ExprMutator {
     return new_module;
   }
 
-  Expr VisitExpr_(const FunctionNode* func) override {
+  Expr VisitExpr_(const FunctionNode* func) final {
     CHECK(func->body->IsInstance<SeqExprNode>())
         << "Currently the body of the function must be SeqExpr.";
     auto* func_sinfo = GetStructInfoAs<FuncStructInfoNode>(GetRef<Function>(func));
@@ -351,7 +350,7 @@ class GradientMutator : public ExprMutator {
     return Function(func->params, new_body, GetStructInfo(return_expr_), func->attrs);
   }
 
-  Expr VisitExpr_(const SeqExprNode* seq_expr) override {
+  Expr VisitExpr_(const SeqExprNode* seq_expr) final {
     // TODO(chaofan, yixin): multiple blocks AD
     CHECK(seq_expr->blocks.size() == 1) << "now only support one dataflow block";
     // TODO(chaofan, yixin): AD in non-dataflow block.
@@ -366,7 +365,7 @@ class GradientMutator : public ExprMutator {
     return SeqExpr({new_block}, this->return_expr_);
   }
 
-  BindingBlock VisitBindingBlock_(const DataflowBlockNode* block) override {
+  BindingBlock VisitBindingBlock_(const DataflowBlockNode* block) final {
     builder_->BeginDataflowBlock();
     // accept bindings in the original block
     for (const auto& binding : block->bindings) {
