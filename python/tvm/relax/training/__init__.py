@@ -16,4 +16,4 @@
 # under the License.
 # pylint: disable=wildcard-import, redefined-builtin
 
-from .optimizer import *
+from . import optimizer

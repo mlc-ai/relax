@@ -22,9 +22,10 @@ import tvm
 from tvm import relax
 from tvm import relax as rx
 from tvm import IRModule
+from tvm.relax.training.optimizer import Adam
 from tvm.script.parser import ir as I, relax as R, tir as T
 from tvm.ir.op import Op
-from tvm.relax.training import SGD, MomentumSGD
+from tvm.relax.training.optimizer import SGD, MomentumSGD
 from tvm.relay.testing import rand
 from tvm.testing import assert_allclose
 from tvm.runtime.container import tuple_object
@@ -81,14 +82,14 @@ def _test_optimizer(np_func, opt_type, *args, **kwargs):
 
 
 def test_sgd():
-    def np_func(x_arr, x_grad_arr, state_arr):
-        num_steps = state_arr[0]
-        state_arr[0] = num_steps + 1
-        for i in range(len(x_arr)):
-            x = x_arr[i]
-            x_grad = x_grad_arr[i]
-            x_arr[i] = x - lr * (x_grad + weight_decay * x)
-        return x_arr, state_arr
+    def np_func(param_tuple, grad_tuple, state_tuple):
+        num_steps = state_tuple[0]
+        state_tuple[0] = num_steps + 1
+        for i in range(len(param_tuple)):
+            param = param_tuple[i]
+            grad = grad_tuple[i]
+            param_tuple[i] = param - lr * (grad + weight_decay * param)
+        return param_tuple, state_tuple
 
     lr, weight_decay = 0.01, 0
     _test_optimizer(np_func, SGD, lr)
@@ -97,31 +98,61 @@ def test_sgd():
 
 
 def test_momentum_sgd():
-    def np_func(x_arr, x_grad_arr, state_arr):
-        num_steps = state_arr[0]
-        state_arr[0] = num_steps + 1
+    def np_func(param_tuple, grad_tuple, state_tuple):
+        num_steps = state_tuple[0]
+        state_tuple[0] = num_steps + 1
 
-        for i in range(len(x_arr)):
-            x = x_arr[i]
-            x_grad = x_grad_arr[i]
-            x_velocity = state_arr[i + 1]
-            dp = x * wd + x_grad
-            x_velocity = mom * x_velocity + dp * (1 - damp)
-            if nest:
-                x = x - (dp + mom * x_velocity) * lr
+        for i in range(len(param_tuple)):
+            param = param_tuple[i]
+            grad = grad_tuple[i]
+            velocity = state_tuple[i + 1]
+            grad = param * weight_decay + grad
+            velocity = momentum * velocity + grad * (1 - dampening)
+            if nesterov:
+                param = param - (grad + momentum * velocity) * lr
             else:
-                x = x - x_velocity * lr
-            x_arr[i] = x
-            state_arr[i + 1] = x_velocity
+                param = param - velocity * lr
+            param_tuple[i] = param
+            state_tuple[i + 1] = velocity
 
-        return x_arr, state_arr
+        return param_tuple, state_tuple
 
-    lr, mom, damp, wd, nest = 0.01, 0.9, 0, 0, False
-    _test_optimizer(np_func, MomentumSGD, lr, mom, damp, wd, nest)
-    lr, mom, damp, wd, nest = 0.01, 0.9, 0.85, 0.02, False
-    _test_optimizer(np_func, MomentumSGD, lr, mom, damp, wd, nest)
-    lr, mom, damp, wd, nest = 0.01, 0.9, 0.85, 0.02, True
-    _test_optimizer(np_func, MomentumSGD, lr, mom, damp, wd, nest)
+    lr, momentum, dampening, weight_decay, nesterov = 0.01, 0.9, 0, 0, False
+    _test_optimizer(np_func, MomentumSGD, lr, momentum, dampening, weight_decay, nesterov)
+    lr, momentum, dampening, weight_decay, nesterov = 0.01, 0.9, 0.85, 0.02, False
+    _test_optimizer(np_func, MomentumSGD, lr, momentum, dampening, weight_decay, nesterov)
+    lr, momentum, dampening, weight_decay, nesterov = 0.01, 0.9, 0.85, 0.02, True
+    _test_optimizer(np_func, MomentumSGD, lr, momentum, dampening, weight_decay, nesterov)
+
+
+def test_adam():
+    def np_func(param_tuple, grad_tuple, state_tuple):
+        state_tuple[0] += 1
+        state_tuple[1] *= betas[0]
+        state_tuple[2] *= betas[1]
+        num_steps = state_tuple[0]
+
+        for i in range(len(param_tuple)):
+            param = param_tuple[i]
+            grad = grad_tuple[i]
+            m = state_tuple[i + 3]
+            v = state_tuple[i + 3 + len(param_tuple)]
+            grad = grad + weight_decay * param
+            m = betas[0] * m + (1 - betas[0]) * grad
+            v = betas[1] * v + (1 - betas[1]) * grad * grad
+            m_hat = m / (1 - betas[0] ** num_steps)
+            v_hat = v / (1 - betas[1] ** num_steps)
+            param = param - lr * m_hat / (np.sqrt(v_hat) + eps)
+            param_tuple[i] = param
+            state_tuple[i + 3] = m
+            state_tuple[i + 3 + len(param_tuple)] = v
+
+        return param_tuple, state_tuple
+
+    lr, betas, eps, weight_decay = 0.01, (0.9, 0.999), 1e-08, 0
+    _test_optimizer(np_func, Adam, lr, betas, eps, weight_decay)
+    lr, betas, eps, weight_decay = 0.01, (0.8, 0.85), 1e-07, 0.1
+    _test_optimizer(np_func, Adam, lr, betas, eps, weight_decay)
 
 
 if __name__ == "__main__":

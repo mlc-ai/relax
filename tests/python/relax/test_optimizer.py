@@ -15,9 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 import tvm
+import tvm.testing
 from tvm import relax
 from tvm.ir.base import assert_structural_equal
 from tvm.relax.training import SGD, MomentumSGD
+from tvm.relax.training.optimizer import Adam
 from tvm.script.parser import relax as R
 
 
@@ -87,7 +89,6 @@ def test_momentum_sgd_simple():
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
     msgd = MomentumSGD([x, y], 0.01, 0.9).get_function()
-    print(msgd)
 
     # fmt: off
     @R.function
@@ -117,6 +118,7 @@ def test_momentum_sgd_simple():
     # fmt: on
 
     assert_structural_equal(msgd, msgd_expected)
+
 
 def test_momentum_sgd_complex():
     lr, mom, damp, wd, nest = 0.01, 0.9, 0.85, 0.02, False
@@ -167,7 +169,6 @@ def test_momentum_sgd_nesterov():
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
     msgd = MomentumSGD([x, y], lr, mom, damp, wd, nest).get_function()
-    print(msgd)
 
     # fmt: off
     @R.function
@@ -209,5 +210,171 @@ def test_momentum_sgd_nesterov():
     assert_structural_equal(msgd, msgd_expected)
 
 
-# if __name__ == "__main__":
-#     tvm.testing.main()
+def test_adam_simple():
+    x = relax.Var("x", R.Tensor((3, 3), "float32"))
+    y = relax.Var("y", R.Tensor((3,), "float32"))
+    adam = Adam([x, y], 0.01).get_function()
+
+    # fmt: off
+    @R.function
+    def adam_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), optim_states: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((), dtype="float32"), R.Tensor((), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((), dtype="float32"), R.Tensor((), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))):
+        # block 0
+        with R.dataflow():
+            lv: R.Tensor((3, 3), dtype="float32") = params[0]
+            lv1: R.Tensor((3,), dtype="float32") = params[1]
+            lv2: R.Tensor((3, 3), dtype="float32") = gradients[0]
+            lv3: R.Tensor((3,), dtype="float32") = gradients[1]
+            lv4: R.Tensor((), dtype="int64") = optim_states[0]
+            lv5: R.Tensor((), dtype="float32") = optim_states[1]
+            lv6: R.Tensor((), dtype="float32") = optim_states[2]
+            lv7: R.Tensor((3, 3), dtype="float32") = optim_states[3]
+            lv8: R.Tensor((3,), dtype="float32") = optim_states[4]
+            lv9: R.Tensor((3, 3), dtype="float32") = optim_states[5]
+            lv10: R.Tensor((3,), dtype="float32") = optim_states[6]
+            lv11: R.Tensor((), dtype="int64") = R.add(lv4, R.const(1, "int64"))
+            lv12: R.Tensor((), dtype="float32") = R.multiply(lv5, R.const(0.9, "float32"))
+            lv13: R.Tensor((), dtype="float32") = R.multiply(lv6, R.const(0.999, "float32"))
+            lv14: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.9, "float32"), lv7)
+            lv15: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.1, "float32"), lv2)
+            lv16: R.Tensor((3, 3), dtype="float32") = R.add(lv14, lv15)
+            lv17: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.999, "float32"), lv9)
+            lv18: R.Tensor((3, 3), dtype="float32") = R.multiply(lv2, lv2)
+            lv19: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.001, "float32"), lv18)
+            lv20: R.Tensor((3, 3), dtype="float32") = R.add(lv17, lv19)
+            lv21: R.Tensor((), dtype="float32") = R.subtract(R.const(1, "float32"), lv12)
+            lv22: R.Tensor((3, 3), dtype="float32") = R.divide(lv16, lv21)
+            lv23: R.Tensor((), dtype="float32") = R.subtract(R.const(1, "float32"), lv13)
+            lv24: R.Tensor((3, 3), dtype="float32") = R.divide(lv20, lv23)
+            lv25: R.Tensor((3, 3), dtype="float32") = R.sqrt(lv24)
+            lv26: R.Tensor((3, 3), dtype="float32") = R.add(lv25, R.const(1e-08, "float32"))
+            lv27: R.Tensor((3, 3), dtype="float32") = R.divide(lv22, lv26)
+            lv28: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv27)
+            lv29: R.Tensor((3, 3), dtype="float32") = R.subtract(lv, lv28)
+            lv30: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.9, "float32"), lv8)
+            lv31: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.1, "float32"), lv3)
+            lv32: R.Tensor((3,), dtype="float32") = R.add(lv30, lv31)
+            lv33: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.999, "float32"), lv10)
+            lv34: R.Tensor((3,), dtype="float32") = R.multiply(lv3, lv3)
+            lv35: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.001, "float32"), lv34)
+            lv36: R.Tensor((3,), dtype="float32") = R.add(lv33, lv35)
+            lv37: R.Tensor((), dtype="float32") = R.subtract(R.const(1, "float32"), lv12)
+            lv38: R.Tensor((3,), dtype="float32") = R.divide(lv32, lv37)
+            lv39: R.Tensor((), dtype="float32") = R.subtract(R.const(1, "float32"), lv13)
+            lv40: R.Tensor((3,), dtype="float32") = R.divide(lv36, lv39)
+            lv41: R.Tensor((3,), dtype="float32") = R.sqrt(lv40)
+            lv42: R.Tensor((3,), dtype="float32") = R.add(lv41, R.const(1e-08, "float32"))
+            lv43: R.Tensor((3,), dtype="float32") = R.divide(lv38, lv42)
+            lv44: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv43)
+            lv45: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv44)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv29, lv45)
+            gv1: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((), dtype="float32"), R.Tensor((), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv11, lv12, lv13, lv16, lv32, lv20, lv36)
+            R.output(gv, gv1)
+        return (gv, gv1)
+    # fmt: on
+
+    assert_structural_equal(adam, adam_expected)
+
+
+def test_adam_complex():
+    x = relax.Var("x", R.Tensor((3, 3), "float32"))
+    y = relax.Var("y", R.Tensor((3,), "float32"))
+    adam = Adam([x, y], 0.01, (0.8, 0.85), 1e-7, 0.1).get_function()
+
+    @R.function
+    def adam_expected(
+        params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        optim_states: R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((), dtype="float32"),
+            R.Tensor((), dtype="float32"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ) -> R.Tuple(
+        R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((), dtype="float32"),
+            R.Tensor((), dtype="float32"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ):
+        # block 0
+        with R.dataflow():
+            lv: R.Tensor((3, 3), dtype="float32") = params[0]
+            lv1: R.Tensor((3,), dtype="float32") = params[1]
+            lv2: R.Tensor((3, 3), dtype="float32") = gradients[0]
+            lv3: R.Tensor((3,), dtype="float32") = gradients[1]
+            lv4: R.Tensor((), dtype="int64") = optim_states[0]
+            lv5: R.Tensor((), dtype="float32") = optim_states[1]
+            lv6: R.Tensor((), dtype="float32") = optim_states[2]
+            lv7: R.Tensor((3, 3), dtype="float32") = optim_states[3]
+            lv8: R.Tensor((3,), dtype="float32") = optim_states[4]
+            lv9: R.Tensor((3, 3), dtype="float32") = optim_states[5]
+            lv10: R.Tensor((3,), dtype="float32") = optim_states[6]
+            lv11: R.Tensor((), dtype="int64") = R.add(lv4, R.const(1, "int64"))
+            lv12: R.Tensor((), dtype="float32") = R.multiply(lv5, R.const(0.8, "float32"))
+            lv13: R.Tensor((), dtype="float32") = R.multiply(lv6, R.const(0.85, "float32"))
+            lv14: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.1, "float32"), lv)
+            lv15: R.Tensor((3, 3), dtype="float32") = R.add(lv14, lv2)
+            lv16: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.8, "float32"), lv7)
+            lv17: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.2, "float32"), lv15)
+            lv18: R.Tensor((3, 3), dtype="float32") = R.add(lv16, lv17)
+            lv19: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.85, "float32"), lv9)
+            lv20: R.Tensor((3, 3), dtype="float32") = R.multiply(lv15, lv15)
+            lv21: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.15, "float32"), lv20)
+            lv22: R.Tensor((3, 3), dtype="float32") = R.add(lv19, lv21)
+            lv23: R.Tensor((), dtype="float32") = R.subtract(R.const(1, "float32"), lv12)
+            lv24: R.Tensor((3, 3), dtype="float32") = R.divide(lv18, lv23)
+            lv25: R.Tensor((), dtype="float32") = R.subtract(R.const(1, "float32"), lv13)
+            lv26: R.Tensor((3, 3), dtype="float32") = R.divide(lv22, lv25)
+            lv27: R.Tensor((3, 3), dtype="float32") = R.sqrt(lv26)
+            lv28: R.Tensor((3, 3), dtype="float32") = R.add(lv27, R.const(1e-07, "float32"))
+            lv29: R.Tensor((3, 3), dtype="float32") = R.divide(lv24, lv28)
+            lv30: R.Tensor((3, 3), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv29)
+            lv31: R.Tensor((3, 3), dtype="float32") = R.subtract(lv, lv30)
+            lv32: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.1, "float32"), lv1)
+            lv33: R.Tensor((3,), dtype="float32") = R.add(lv32, lv3)
+            lv34: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.8, "float32"), lv8)
+            lv35: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.2, "float32"), lv33)
+            lv36: R.Tensor((3,), dtype="float32") = R.add(lv34, lv35)
+            lv37: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.85, "float32"), lv10)
+            lv38: R.Tensor((3,), dtype="float32") = R.multiply(lv33, lv33)
+            lv39: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.15, "float32"), lv38)
+            lv40: R.Tensor((3,), dtype="float32") = R.add(lv37, lv39)
+            lv41: R.Tensor((), dtype="float32") = R.subtract(R.const(1, "float32"), lv12)
+            lv42: R.Tensor((3,), dtype="float32") = R.divide(lv36, lv41)
+            lv43: R.Tensor((), dtype="float32") = R.subtract(R.const(1, "float32"), lv13)
+            lv44: R.Tensor((3,), dtype="float32") = R.divide(lv40, lv43)
+            lv45: R.Tensor((3,), dtype="float32") = R.sqrt(lv44)
+            lv46: R.Tensor((3,), dtype="float32") = R.add(lv45, R.const(1e-07, "float32"))
+            lv47: R.Tensor((3,), dtype="float32") = R.divide(lv42, lv46)
+            lv48: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv47)
+            lv49: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv48)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (
+                lv31,
+                lv49,
+            )
+            gv1: R.Tuple(
+                R.Tensor((), dtype="int64"),
+                R.Tensor((), dtype="float32"),
+                R.Tensor((), dtype="float32"),
+                R.Tensor((3, 3), dtype="float32"),
+                R.Tensor((3,), dtype="float32"),
+                R.Tensor((3, 3), dtype="float32"),
+                R.Tensor((3,), dtype="float32"),
+            ) = (lv11, lv12, lv13, lv18, lv36, lv22, lv40)
+            R.output(gv, gv1)
+        return (gv, gv1)
+
+    assert_structural_equal(adam, adam_expected)
+
+
+if __name__ == "__main__":
+    tvm.testing.main()
