@@ -27,7 +27,6 @@ def verify_model(torch_model, input_info, binding, expected):
     mod = TorchFXTranslator().from_pytorch(torch_model, input_info)
     binding = {k: tvm.nd.array(v) for k, v in binding.items()}
     expected = relax.transform.BindParams("main", binding)(expected)
-    print(mod.script())
     tvm.ir.assert_structural_equal(mod, expected)
 
 
@@ -750,12 +749,12 @@ def test_binary():
     class expected1:
         @R.function
         def main(
-            lhs_1: R.Tensor((1, 3, 10, 10), dtype="float32"),
-            rhs_1: R.Tensor((1, 3, 10, 10), dtype="float32"),
+            lhs: R.Tensor((1, 3, 10, 10), dtype="float32"),
+            rhs: R.Tensor((1, 3, 10, 10), dtype="float32"),
         ) -> R.Tensor((1, 3, 10, 10), dtype="float32"):
             # block 0
             with R.dataflow():
-                lv: R.Tensor((1, 3, 10, 10), dtype="float32") = R.add(lhs_1, rhs_1)
+                lv: R.Tensor((1, 3, 10, 10), dtype="float32") = R.add(lhs, rhs)
                 gv: R.Tensor((1, 3, 10, 10), dtype="float32") = lv
                 R.output(gv)
             return gv

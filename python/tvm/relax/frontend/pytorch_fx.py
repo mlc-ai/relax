@@ -352,8 +352,7 @@ class TorchFXTranslator:
         lhs, rhs = self.retrieve_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
             return self._call_binary_op(relax.op.multiply, lhs, rhs)
-        else:
-            return lhs * rhs
+        return lhs * rhs
 
     def _sin(self, node: fx.node.Node) -> relax.Var:
         return self.block_builder.emit(relax.op.sin(self.env[node.args[0]]))
@@ -375,15 +374,13 @@ class TorchFXTranslator:
         lhs, rhs = self.retrieve_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
             return self._call_binary_op(relax.op.divide, lhs, rhs)
-        else:
-            return lhs / rhs
+        return lhs / rhs
 
     def _floordiv(self, node: fx.node.Node) -> relax.Var:
         lhs, rhs = self.retrieve_args(node)
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
             return self._call_binary_op(relax.op.floor_divide, lhs, rhs)
-        else:
-            return lhs // rhs
+        return lhs // rhs
 
     def _matmul(self, node: fx.node.Node) -> relax.Var:
         args = self.retrieve_args(node)
@@ -453,7 +450,7 @@ class TorchFXTranslator:
             dim = node.kwargs["dim"]
         else:
             dim = 0
-        n_section = self.shape_of(x)[dim].value // split_size
+        n_section = (self.shape_of(x)[dim].value + split_size - 1) // split_size
         return self.block_builder.emit(relax.op.split(x, n_section, dim))
 
     def _tril(self, node: fx.node.Node) -> relax.Var:
