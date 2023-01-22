@@ -187,6 +187,27 @@ TEST(NestedMsg, MapAndDecompose) {
   EXPECT_EQ(z_count, 1);
 }
 
+TEST(NestedMsg, MapToNestedMsgBySInfo) {
+  auto sf0 = TensorStructInfo(DataType::Float(32), /*ndim=*/0);
+  auto sf1 = TupleStructInfo({sf0, sf0});
+  auto sf2 = TupleStructInfo({sf0, sf0});
+  auto x = relax::Var("x", TupleStructInfo({sf1, sf2, sf0}));
+
+  auto msg = MapToNestedMsgBySInfo<Expr>(x, [](Expr value) { return value; });
+
+  EXPECT_TRUE(msg.IsNested());
+  auto arr = msg.NestedArray();
+
+  EXPECT_TRUE(arr[1].IsNested());
+  auto arr1 = arr[1].NestedArray();
+
+  EXPECT_TRUE(arr1[0].IsLeaf());
+  EXPECT_TRUE(StructuralEqual()(arr1[0].LeafValue(), TupleGetItem(TupleGetItem(x, 1), 0)));
+
+  EXPECT_TRUE(arr[2].IsLeaf());
+  EXPECT_TRUE(StructuralEqual()(arr[2].LeafValue(), TupleGetItem(x, 2)));
+}
+
 TEST(NestedMsg, CombineNestedMsg) {
   auto c0 = Integer(0);
   auto c1 = Integer(1);

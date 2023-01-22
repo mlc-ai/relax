@@ -248,7 +248,26 @@ class BackwardBindingGenerator : public ExprVisitor {
   }
 
   Expr AdjointMsgToExpr(AdjointMsg msg) {
-    auto fmapmerge = [](Array<Expr> subexpr) { return Tuple(subexpr); };
+    auto fmapmerge = [](Array<Expr> subexpr) {
+      Optional<Expr> simplified_tuple;
+      bool simplified_flag = false;
+      if (subexpr.size() >= 1) {
+        simplified_flag = true;
+        for (size_t i = 0; i < subexpr.size() && simplified_flag; ++i) {
+          auto* node = subexpr[i].as<TupleGetItemNode>();
+          if (node == nullptr || node->index != static_cast<int>(i)) {
+            simplified_flag = false;
+          } else {
+            if (simplified_tuple.defined()) {
+              simplified_flag &= (simplified_tuple == node->tuple);
+            } else {
+              simplified_tuple = node->tuple;
+            }
+          }
+        }
+      }
+      return simplified_flag ? simplified_tuple.value() : Tuple(subexpr);
+    };
     auto fmapleaf = [](AdjointMsg leaf_msg) {
       ICHECK(leaf_msg.IsLeaf());
       return leaf_msg.LeafValue();
@@ -261,14 +280,11 @@ class BackwardBindingGenerator : public ExprVisitor {
   }
 
   AdjointMsg ExprToAdjointMsg(Expr expr) {
-    return MapToNestedMsg<Expr>(
-        expr,
-        [](Expr leaf) {
-          ICHECK(GetStructInfoAs<TensorStructInfoNode>(leaf))
-              << "The leaf of adjoint: " << leaf << " should have StructInfo and be a Tensor.";
-          return AdjointMsg(leaf);
-        },
-        true);
+    return MapToNestedMsgBySInfo<Expr>(expr, [](Expr leaf) {
+      ICHECK(GetStructInfoAs<TensorStructInfoNode>(leaf))
+          << "The leaf of adjoint: " << leaf << " should have StructInfo and be a Tensor.";
+      return AdjointMsg(leaf);
+    });
   }
 
   // Transform the adjoint expressed as NestedMsg<Expr> into adjoint Expr, and then emit it
@@ -393,7 +409,7 @@ class GradientMutator : public ExprMutator {
                              << e << " is " << GetStructInfo(e);
   }
 
-  // Checks every Var in require_grads:
+  // Check every Var in require_grads:
   // 1. there should be no duplicate var
   // 2. every var should be a parameter of the function
   // 3. the type of the input var should be Tensor of floating point dtype, or Tuple of that
