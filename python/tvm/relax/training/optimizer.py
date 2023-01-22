@@ -69,7 +69,7 @@ class Optimizer:
         params: Union[Var, list[Var]]
             The parameter or the list of parameters to optimize.
         """
-        assert self._state is None
+        assert self._state is None, "Add parameter after the state is acquired"
         if not isinstance(params, list):
             params = [params]
         if not all(isinstance(x, Var) for x in params):
@@ -134,8 +134,8 @@ def _get_shape_list(var):
     """
     return [int(val) for val in var.struct_info.shape]
 
+
 class SGD(Optimizer):
-    # def __init__(self, param_list, lr, momentum=0, dampening=0, weight_decay=0, nesterov=False):
     def __init__(self, param_list, lr, weight_decay=0):
         super().__init__(param_list)
         self.lr = float(lr)
@@ -207,7 +207,7 @@ class MomentumSGD(Optimizer):
         self.momentum = float(momentum)
         self.weight_decay = float(weight_decay)
         self.dampening = float(dampening)
-        self.nesterov = float(nesterov)
+        self.nesterov = nesterov
 
     @property
     def state(self):
@@ -301,11 +301,33 @@ class MomentumSGD(Optimizer):
     #             step_size = lr * jt.sqrt(1-b1**n) / (1-b0 ** n)
     #             p.update(p - m * step_size / (jt.sqrt(v) + eps))
     #     self.post_step()
-# class Adam(Optimizer):
-#     def __init__(self, param_list, lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False):
-#         super().__init__(param_list)
-#         self.lr = float(lr)
-#         self.beta1 = float(momentum)
-#         self.weight_decay = float(weight_decay)
-#         self.dampening = float(dampening)
-#         self.nesterov = float(nesterov)
+
+class Adam(Optimizer):
+    def __init__(self, param_list, lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False):
+        super().__init__(param_list)
+        self.lr = float(lr)
+        self.beta1 = float(betas[0])
+        self.beta2 = float(betas[1])
+        self.eps = float(eps)
+        self.weight_decay = float(weight_decay)
+        self.amsgrad = amsgrad
+
+    @property
+    def state(self):
+        if self._state is None:
+            self._state = tuple_object(
+                (
+                    # num_steps = 0
+                    tvm.nd.array(np.zeros((), "int64")),
+                    # v_{param} is initialized to all zeros
+                    *(
+                        tvm.nd.array(np.zeros(_get_shape_list(p), "float32"))
+                        for p in self._param_list
+                    ),
+                )
+            )
+        return self._state
+
+    @state.setter
+    def state(self, value):
+        self._state = value
