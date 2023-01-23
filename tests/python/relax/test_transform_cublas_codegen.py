@@ -41,7 +41,11 @@ def f_run(rt_mod: runtime.Module, device: runtime.ndarray.Device, *input):
 
 
 def build(mod):
+    print("original module:")
+    mod.show()
     mod = relax.transform.SplitCublas()(mod)
+    print("after SplitCublas:")
+    mod.show()
     """
     mod = relax.transform.CublasCodegen()(mod)
     executable = relax_build(mod, target)
@@ -105,3 +109,4 @@ def test_cublas_dense():
 
 if __name__ == "__main__":
     test_cublas_dense()
+    print("end of test")
