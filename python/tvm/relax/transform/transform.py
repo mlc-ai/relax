@@ -19,11 +19,12 @@
 import functools
 import inspect
 import types
-from typing import Callable, Dict, Union, Optional, List
-import numpy as np  # type: ignore
+from typing import Callable, Dict, List, Optional, Union
 
+import numpy as np  # type: ignore
 import tvm.ir
 from tvm.runtime import NDArray
+
 from . import _ffi_api
 
 
@@ -375,6 +376,19 @@ def SplitCutlass() -> tvm.ir.transform.Pass:
         The registered pass for cutlass codegen.
     """
     return _ffi_api.SplitCutlass()
+
+
+def SplitCublas() -> tvm.ir.transform.Pass:
+    """Split a PrimFunc into 2 parts: the first part is a TIR PrimFunc which is
+       matched with some cublas kernels, and the second part is the rest of the original
+       PrimFunc that is not fused with cublas kernels.
+
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass for cublas codegen.
+    """
+    return _ffi_api.SplitCublas()
 
 
 def ToMixedPrecision(out_dtype="float32") -> tvm.ir.transform.Pass:
