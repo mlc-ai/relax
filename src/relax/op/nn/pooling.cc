@@ -110,12 +110,30 @@ StructInfo InferStructInfoMaxPool2D(const Call& call, const BlockBuilder& ctx) {
   return TensorStructInfo(ShapeExpr(out_shape), data_sinfo->dtype);
 }
 
+InferLayoutOutput InferLayoutMaxPool2d(const Call& call,
+                                       const Map<String, Array<String>>& desired_layouts,
+                                       const VarLayoutMap& var_layout_map) {
+  ICHECK(NoDesiredLayout(call, desired_layouts));
+  const auto* tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(call);
+  ICHECK(tensor_sinfo != nullptr) << "Invalid Call";
+  ICHECK_EQ(tensor_sinfo->ndim, 4) << "Unsupported initial layout";
+  const auto* attrs = call->attrs.as<MaxPool2DAttrs>();
+  ICHECK(attrs) << "Invalid Call";
+
+  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  ObjectPtr<MaxPool2DAttrs> new_attrs = make_object<MaxPool2DAttrs>(*attrs);
+  new_attrs->layout = TransposeLike(attrs->layout, InitialLayout(4), layout).name();
+  new_attrs->out_layout = TransposeLike(attrs->out_layout, InitialLayout(4), layout).name();
+  return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
+}
+
 TVM_REGISTER_OP("relax.nn.max_pool2d")
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
     .set_attrs_type<MaxPool2DAttrs>()
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoMaxPool2D)
-    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutMaxPool2d);
 
 /* relax.nn.adaptive_avg_pool2d */
 TVM_REGISTER_NODE_TYPE(AdaptivePool2DAttrs);
@@ -175,12 +193,30 @@ StructInfo InferStructInfoAdaptiveAvgPool2D(const Call& call, const BlockBuilder
   return TensorStructInfo(ShapeExpr(out_shape), data_sinfo->dtype);
 }
 
+InferLayoutOutput InferLayoutAdaptiveAvgPool2D(const Call& call,
+                                               const Map<String, Array<String>>& desired_layouts,
+                                               const VarLayoutMap& var_layout_map) {
+  ICHECK(NoDesiredLayout(call, desired_layouts));
+  const auto* tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(call);
+  ICHECK(tensor_sinfo != nullptr) << "Invalid Call";
+  ICHECK_EQ(tensor_sinfo->ndim, 4) << "Unsupported initial layout";
+  const auto* attrs = call->attrs.as<AdaptivePool2DAttrs>();
+  ICHECK(attrs) << "Invalid Call";
+
+  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  ObjectPtr<AdaptivePool2DAttrs> new_attrs = make_object<AdaptivePool2DAttrs>(*attrs);
+  new_attrs->layout = TransposeLike(attrs->layout, InitialLayout(4), layout).name();
+  new_attrs->out_layout = TransposeLike(attrs->out_layout, InitialLayout(4), layout).name();
+  return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
+}
+
 TVM_REGISTER_OP("relax.nn.adaptive_avg_pool2d")
     .set_attrs_type<AdaptivePool2DAttrs>()
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoAdaptiveAvgPool2D)
-    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutAdaptiveAvgPool2D);
 
 }  // namespace relax
 }  // namespace tvm

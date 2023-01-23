@@ -97,7 +97,10 @@ Layout::Layout(const std::string& name, DataType dtype) {  // NOLINT(*)
   auto node = make_object<LayoutNode>();
   node->name = name;
 
-  if (name.empty()) return;  // scalar
+  if (name.empty()) {
+    data_ = std::move(node);
+    return;
+  }  // scalar
 
   // parse layout string
   int32_t factor = 0;

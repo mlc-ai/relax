@@ -367,6 +367,23 @@ def ToMixedPrecision(out_dtype="float32") -> tvm.ir.transform.Pass:
     return _ffi_api.ToMixedPrecision(out_dtype)  # type: ignore
 
 
+def ConvertLayout(desired_layouts: Dict[str, List[str]]) -> tvm.ir.transform.Pass:
+    """Automatic layout conversion pass.
+    Parameters
+    ----------
+    desired_layouts : Dict[str, List[str]]
+        The desired layout of conv2d ops is a map from the name of the op to the desired layout
+        of the desired feature map, weight and output. For example, if we want to convert the
+        layout of conv2d from NCHW to NHWC, we can set the desired layout of conv2d to be
+        {"conv2d": ["NHWC", "OHWI"]}.
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass for layout conversion.
+    """
+    return _ffi_api.ConvertLayout(desired_layouts)  # type: ignore
+
+
 def Gradient(
     global_var: GlobalVar, require_grads: Optional[Union[Var, List[Var]]] = None
 ) -> tvm.ir.transform.Pass:

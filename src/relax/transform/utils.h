@@ -26,9 +26,12 @@
 #define TVM_RELAX_TRANSFORM_UTILS_H_
 
 #include <tvm/relax/expr.h>
+#include <tvm/relax/expr_functor.h>
 #include <tvm/relax/nested_msg.h>
 #include <tvm/relax/op_attr_types.h>
 #include <tvm/tir/data_layout.h>
+
+#include <unordered_map>
 
 namespace tvm {
 namespace relax {
@@ -97,6 +100,28 @@ bool IsNestedFloatTensor(const StructInfo& sinfo);
  * \return true if the given expr is a nested tensor of floating point dtype.
  */
 bool IsNestedFloatTensor(const Expr& expr);
+
+// TODO(@bohan): implements some postorder function accepts a visitor closure
+class VarReplacer : public ExprMutator {
+ public:
+  using VarMap = std::unordered_map<Id, Var, ObjectPtrHash, ObjectPtrEqual>;
+
+  explicit VarReplacer(const VarMap& var_remap) : var_remap_(var_remap) {}
+
+  static Expr Replace(const Expr& expr, const VarMap& var_remap) {
+    VarReplacer replacer(var_remap);
+    return replacer(expr);
+  }
+
+ private:
+  Expr VisitExpr_(const VarNode* op) final {
+    Var var = GetRef<Var>(op);
+    auto it = var_remap_.find(var->vid);
+    return it == var_remap_.end() ? var : it->second;
+  }
+
+  const VarMap& var_remap_;
+};
 
 }  // namespace relax
 }  // namespace tvm
