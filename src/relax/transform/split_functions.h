@@ -373,6 +373,7 @@ inline std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
   FuncMatcher matcher;
   matcher.Match(func->body.as<BlockRealizeNode>()->block->body, vendor_type);
   if (matcher.fail) {
+    std::cout << "Failed to match anything" << std::endl;
     return {func, NullOpt};
   }
   bool has_second_func = false;
