@@ -248,35 +248,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   }
 
   Expr AdjointMsgToExpr(AdjointMsg msg) {
-    auto fmapmerge = [](Array<Expr> subexpr) {
-      Optional<Expr> simplified_tuple;
-      bool simplified_flag = false;
-      if (subexpr.size() >= 1) {
-        simplified_flag = true;
-        for (size_t i = 0; i < subexpr.size() && simplified_flag; ++i) {
-          auto* node = subexpr[i].as<TupleGetItemNode>();
-          if (node == nullptr || node->index != static_cast<int>(i)) {
-            simplified_flag = false;
-          } else {
-            if (simplified_tuple.defined()) {
-              simplified_flag &= (simplified_tuple == node->tuple);
-            } else {
-              simplified_tuple = node->tuple;
-            }
-          }
-        }
-      }
-      return simplified_flag ? simplified_tuple.value() : Tuple(subexpr);
-    };
-    auto fmapleaf = [](AdjointMsg leaf_msg) {
-      ICHECK(leaf_msg.IsLeaf());
-      return leaf_msg.LeafValue();
-    };
-    auto fmapnull = []() {
-      LOG(FATAL) << "Error: null field should not appear in adjoint.";
-      return Expr();  // just for type checking
-    };
-    return MapFromNestedMsg<Expr>(msg, fmapmerge, fmapleaf, fmapnull);
+    return MapFromNestedMsg<Expr>(msg, [](AdjointMsg leaf_msg) { return leaf_msg.LeafValue(); });
   }
 
   AdjointMsg ExprToAdjointMsg(Expr expr) {

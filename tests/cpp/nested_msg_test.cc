@@ -208,6 +208,40 @@ TEST(NestedMsg, MapToNestedMsgBySInfo) {
   EXPECT_TRUE(StructuralEqual()(arr[2].LeafValue(), TupleGetItem(x, 2)));
 }
 
+TEST(NestedMsg, MapFromNestedMsg) {
+  auto sf0 = TensorStructInfo(DataType::Float(32), /*ndim=*/0);
+  auto sf1 = TupleStructInfo({sf0, sf0});
+
+  auto c0 = Integer(0);
+  auto c1 = Integer(1);
+  auto c2 = Integer(2);
+
+  relax::Var x("x", sf0), y("y", sf0), z("z", sf0);
+
+  NestedMsg<Integer> msg = {c0, {c0, c1}, {c0, {c1, c2}}};
+  auto expr = MapFromNestedMsg<Integer>(msg, [&](NestedMsg<Integer> leaf_msg) {
+    int value = leaf_msg.LeafValue().IntValue();
+    switch (value) {
+      case 0:
+        return x;
+      case 1:
+        return y;
+      default:
+        return z;
+    }
+  });
+
+  Expr expected = Tuple({x, Tuple({x, y}), Tuple({x, Tuple({y, z})})});
+  EXPECT_TRUE(StructuralEqual()(expr, expected));
+
+  // test simplified
+  relax::Var t("t", sf1);
+  NestedMsg<Expr> msg1 = {TupleGetItem(t, 0), TupleGetItem(t, 1)};
+  auto expr1 =
+      MapFromNestedMsg<Expr>(msg1, [](NestedMsg<Expr> leaf_msg) { return leaf_msg.LeafValue(); });
+  EXPECT_TRUE(StructuralEqual()(expr1, t));
+}
+
 TEST(NestedMsg, CombineNestedMsg) {
   auto c0 = Integer(0);
   auto c1 = Integer(1);

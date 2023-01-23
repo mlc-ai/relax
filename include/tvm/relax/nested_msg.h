@@ -343,37 +343,51 @@ NestedMsg<T> MapToNestedMsgBySInfo(Expr expr, FType fmapleaf) {
 }
 
 /*!
- * \brief Map nested message to the value we want.
+ * \brief Map nested message back to the expr.
  *
  * This function will decompose the nested message and
- * construct the value by fmapmerge and fmapleaf.
+ * run fmapleaf for each leaf message and get the leaf expr,
+ * then recursively combines the results as tuple expr.
  *
  * \param msg The input nested message.
- * \param fmapmerge The mapping function for each merging process with signature
- *             T fmap(Array<T>)
  * \param fmapleaf The mapping function for each leaf with signature
- *             T fmap(NestedMsg<T>)
- * \param fmapnull The mapping function for null msg with signature
- *             T fmap()
+ *             Expr fmap(NestedMsg<T>)
  * \tparam T the content type of nested msg
  * \tparam FType The mapping function type
  */
-template <typename T, typename FType1, typename FType2, typename FType3>
-T MapFromNestedMsg(NestedMsg<T> msg, FType1 fmapmerge, FType2 fmapleaf, FType3 fmapnull) {
-  if (msg.IsNull()) {
-    return fmapnull();
-  } else if (msg.IsLeaf()) {
+template <typename T, typename FType>
+Expr MapFromNestedMsg(NestedMsg<T> msg, FType fmapleaf) {
+  ICHECK(!msg.IsNull()) << "Cannot map null msg.";
+
+  if (msg.IsLeaf()) {
     return fmapleaf(msg);
   } else {
     ICHECK(msg.IsNested());
     Array<NestedMsg<T>> arr = msg.NestedArray();
-    Array<T> res;
-    res.reserve(arr.size());
+    Array<Expr> subexpr;
+    subexpr.reserve(arr.size());
     for (size_t i = 0; i < arr.size(); ++i) {
-      res.push_back(
-          MapFromNestedMsg<T, FType1, FType2, FType3>(arr[i], fmapmerge, fmapleaf, fmapnull));
+      subexpr.push_back(MapFromNestedMsg<T, FType>(arr[i], fmapleaf));
     }
-    return fmapmerge(res);
+    Optional<Expr> simplified_tuple;
+    bool simplified_flag = false;
+    if (subexpr.size() >= 1) {
+      simplified_flag = true;
+      for (size_t i = 0; i < subexpr.size() && simplified_flag; ++i) {
+        auto* node = subexpr[i].as<TupleGetItemNode>();
+        if (node == nullptr || node->index != static_cast<int>(i)) {
+          simplified_flag = false;
+        } else {
+          if (simplified_tuple.defined()) {
+            simplified_flag &= (simplified_tuple == node->tuple);
+          } else {
+            simplified_tuple = node->tuple;
+            ICHECK(simplified_tuple.defined());
+          }
+        }
+      }
+    }
+    return simplified_flag ? simplified_tuple.value() : Tuple(subexpr);
   }
 }
 
