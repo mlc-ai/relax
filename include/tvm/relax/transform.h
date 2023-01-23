@@ -249,6 +249,13 @@ TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_opt
 TVM_DLL Pass ToMixedPrecision(const DataType& out_dtype);
 
 /*!
+ * \brief Automatic layout conversion pass.
+ * \param desired_layouts The desired layouts for some operators.
+ * \return The Pass.
+ */
+TVM_DLL Pass ConvertLayout(Map<String, Array<String>> desired_layouts);
+
+/*!
  * \brief Reverse-mode automatic differentiation.
  *
  * Now only supports differentiating one function in the IRModule with one dataflow block
@@ -268,6 +275,7 @@ TVM_DLL Pass ToMixedPrecision(const DataType& out_dtype);
  * \return The Pass.
  */
 TVM_DLL Pass Gradient(GlobalVar global_var, Optional<Array<Var>> require_grads = NullOpt);
+
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm
