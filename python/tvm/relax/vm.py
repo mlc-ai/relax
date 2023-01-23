@@ -16,10 +16,9 @@
 # under the License.
 # pylint: disable=invalid-name, redefined-builtin, no-else-return
 """The Relax virtual machine"""
-from typing import Callable, List, Optional, Union, Dict, Tuple
-import numpy as np  # type: ignore
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
-from tvm._ffi import base as _base
+import numpy as np  # type: ignore
 import tvm
 from tvm import relax
 from tvm._ffi import base as _base
@@ -251,8 +250,7 @@ class VirtualMachine(object):
         # kwargs can be a super set of the required function parameters.
         # We only find the ones that are needed.
         func_arity = self._get_function_arity(func_name)
-        func_params = [self._get_function_param_name(
-            func_name, i) for i in range(func_arity)]
+        func_params = [self._get_function_param_name(func_name, i) for i in range(func_arity)]
         new_args = [None] * len(func_params)
         cnt = 0
         for k in kwargs:
@@ -261,8 +259,7 @@ class VirtualMachine(object):
                 new_args[idx] = kwargs[k]
                 cnt += 1
             else:
-                print(
-                    f'Warning: Keyword argument "{k}" is unused in {func_name}')
+                print(f'Warning: Keyword argument "{k}" is unused in {func_name}')
         assert len(args) + cnt == len(func_params)
         idx = 0
         for i, arg in enumerate(new_args):
@@ -513,6 +510,12 @@ def build(
 
     # Split primfunc and relax function
     rx_mod, tir_mod = _split_tir_relax(new_mod)
+    print("building in progress ...")
+    print("---------------------")
+    print("relax module:")
+    rx_mod.show()
+    print("remaining tir module:")
+    tir_mod.show()
     lib = tvm.build(tir_mod, target=target)
 
     # Extract external runtime modules if exist.
