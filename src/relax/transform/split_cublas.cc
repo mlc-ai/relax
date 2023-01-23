@@ -18,15 +18,25 @@
  */
 /*!
  * \file src/relax/transform/split_cublas.cc
- * \brief Dispatch subgraphs to cublas implementation.
+ * \brief Dispatch graph-level tir to cublas.
  */
-#include <tvm/arith/analyzer.h>
-#include <tvm/ir/module.h>
-#include <tvm/relax/expr_functor.h>
-#include <tvm/relax/transform.h>
-#include <tvm/relax/type.h>
-#include <tvm/tir/builtin.h>
-#include <tvm/tir/op.h>
-#include <tvm/tir/stmt_functor.h>
+#include "./split_functions.h"
 
-#include "../../tir/schedule/ir_comparator.h"
+namespace tvm {
+namespace relax {
+
+namespace transform {
+Pass SplitCublas() {
+  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =  //
+      [=](IRModule m, PassContext pc) { return SplitMutator::Transform(m); };
+  return CreateModulePass(/*pass_function=*/pass_func,  //
+                          /*opt_level=*/0,              //
+                          /*pass_name=*/"SplitCublas",  //
+                          /*required=*/{});
+}
+TVM_REGISTER_GLOBAL("relax.transform.SplitCublas").set_body_typed(SplitCublas);
+
+}  // namespace transform
+
+}  // namespace relax
+}  // namespace tvm
