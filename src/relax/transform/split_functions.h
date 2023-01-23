@@ -362,7 +362,7 @@ class BlockMasker : public StmtExprMutator {
  * \param arg_partition The input arg for the functions after split.
  * \return A pair of functions, the first one is the cutlass kernel and the second one is the rest.
  */
-std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
+inline std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     PrimFunc func, std::vector<std::vector<int>>* arg_partition) {
   // Step 1. Find the cutlass kernel and the rest.
   FuncMatcher matcher;
