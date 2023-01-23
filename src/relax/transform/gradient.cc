@@ -59,7 +59,7 @@ class BackwardBindingGenerator : private ExprVisitor {
     BackwardBindingGenerator generator(builder);
 
     // Initialize the adjoint of target_var as ones op. We have already check the target.
-    auto target_sinfo = GetStructInfoAs<TensorStructInfoNode>(target_var);
+    auto* target_sinfo = GetStructInfoAs<TensorStructInfoNode>(target_var);
     const Expr& target_adjoint = ones(target_sinfo->shape.value(), target_sinfo->dtype);
     UpdateStructInfo(target_adjoint, GetRef<StructInfo>(target_sinfo));
     generator.adjoint_msg_map_.Set(target_var, AdjointMsg(target_adjoint));
@@ -73,12 +73,12 @@ class BackwardBindingGenerator : private ExprVisitor {
   }
 
  private:
-  BackwardBindingGenerator(const BlockBuilder& builder) : builder_(builder) {}
+  explicit BackwardBindingGenerator(const BlockBuilder& builder) : builder_(builder) {}
 
   void VisitBinding(const Binding& binding) final {
     // TODO(chaofan, yixin): support other types of bindings
     CHECK(binding->IsInstance<VarBindingNode>()) << "now only support VarBindingNode";
-    auto var_binding = binding.as<VarBindingNode>();
+    auto* var_binding = binding.as<VarBindingNode>();
 
     auto it = adjoint_msg_map_.find(var_binding->var);
     if (it == adjoint_msg_map_.end()) {
@@ -107,7 +107,7 @@ class BackwardBindingGenerator : private ExprVisitor {
         Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
 
     Var adjoint_var = adjoint_var_map_[binding->var];
-    const Op& call_op = GetRef<Op>(call->op.as<OpNode>());
+    const Op& call_op = Downcast<Op>(call->op);
     const Array<Expr>& partials =
         gradient_op_map[call_op](binding->var, GetRef<Call>(call), adjoint_var, builder_);
     ICHECK(partials.size() == call->args.size()) << "partials number != inputs number";
@@ -142,9 +142,8 @@ class BackwardBindingGenerator : private ExprVisitor {
   void VisitBinding_(const VarBindingNode* binding, const TupleGetItemNode* tuple_get_item) final {
     ICHECK(tuple_get_item->tuple->IsInstance<VarNode>())
         << "The tuple field of a TupleGetItem is not bound to a Var";
-    auto tuple_sinfo = GetStructInfoAs<TupleStructInfoNode>(tuple_get_item->tuple);
-    ICHECK(tuple_sinfo != nullptr)
-        << "The tuple field of a TupleGetItem must has a TupleStructInfo";
+    auto* tuple_sinfo = GetStructInfoAs<TupleStructInfoNode>(tuple_get_item->tuple);
+    ICHECK(tuple_sinfo) << "The tuple field of a TupleGetItem must has a TupleStructInfo";
 
     const Var& tuple_var = Downcast<Var>(tuple_get_item->tuple);
     if (adjoint_msg_map_.count(tuple_var) == 0) {
@@ -185,19 +184,6 @@ class BackwardBindingGenerator : private ExprVisitor {
         LOG(FATAL) << "UpdateAdjoint: leaf type not supported. Currently Var and Constant leaves "
                       "are supported.";
       }
-    });
-  }
-
-  // Create a zeros AdjointMsg with specified struct info
-  // When sinfo is TupleStructInfo, we would create a nested zeros Tuple
-  static AdjointMsg InitZerosAdjointNested(const StructInfo& sinfo) {
-    return MapToNestedMsg<Expr>(sinfo, [](StructInfo sinfo) {
-      auto tensor_sinfo = sinfo.as<TensorStructInfoNode>();
-      ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
-      ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when building zeros tuple.";
-      const Expr& init = zeros(tensor_sinfo->shape.value(), tensor_sinfo->dtype);
-      UpdateStructInfo(init, sinfo);
-      return init;
     });
   }
 
@@ -252,15 +238,29 @@ class BackwardBindingGenerator : private ExprVisitor {
     });
   }
 
+  // Create a zeros AdjointMsg with specified struct info
+  // When sinfo is TupleStructInfo, we would create a nested zeros Tuple
+  static AdjointMsg InitZerosAdjointNested(const StructInfo& sinfo) {
+    return MapToNestedMsg<Expr>(sinfo, [](StructInfo sinfo) {
+      auto* tensor_sinfo = sinfo.as<TensorStructInfoNode>();
+      ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
+      ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when building zeros tuple.";
+      const Expr& init = zeros(tensor_sinfo->shape.value(), tensor_sinfo->dtype);
+      UpdateStructInfo(init, sinfo);
+      return init;
+    });
+  }
+
   // Return base + increment. A tuple-aware addition.
   static AdjointMsg TupleAwareAdd(const AdjointMsg& base, const AdjointMsg& increment) {
     return CombineNestedMsg(base, increment, [&](Expr lhs, Expr rhs) {
+      // a small optimization: a+0=a, 0+a=a.
       if (IsCallZeros(lhs)) {
         return rhs;
       } else if (IsCallZeros(rhs)) {
         return lhs;
       }
-      auto sinfo = GetStructInfoAs<TensorStructInfoNode>(lhs);
+      auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(lhs);
       ICHECK(sinfo) << "The leaf of adjoint should have StructInfo and be a Tensor.";
       ICHECK(GetStructInfoAs<TensorStructInfoNode>(rhs))
           << "The leaf of adjoint should have StructInfo and be a Tensor.";
@@ -276,6 +276,7 @@ class BackwardBindingGenerator : private ExprVisitor {
                                     const AdjointMsg& increment) {
     ICHECK(adjoint.IsNested()) << "The adjoint should be nested.";
     Array<AdjointMsg> arr = adjoint.NestedArray();
+    ICHECK(index >= 0 && index < static_cast<int>(arr.size()));
     arr.Set(index, TupleAwareAdd(arr[index], increment));
     return AdjointMsg(arr);
   }
