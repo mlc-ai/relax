@@ -90,13 +90,29 @@ StructInfo InferStructInfoEwiseFMA(const Call& call, const BlockBuilder& ctx) {
   return TensorStructInfo(output_dtype, ndim);
 }
 
+InferLayoutOutput InferLayoutEwiseFMA(const Call& call,
+                                      const Map<String, Array<String>>& desired_layouts,
+                                      const VarLayoutMap& var_layout_map) {
+  ICHECK(NoDesiredLayout(call, desired_layouts));
+
+  Layout layout0 = GetLayout(var_layout_map, call->args[0]);
+  Layout layout1 = GetLayout(var_layout_map, call->args[1]);
+  Layout layout2 = GetLayout(var_layout_map, call->args[2]);
+  Layout layout = layout0;
+  if (layout1.Equals(layout2)) {
+    layout = layout1;
+  }
+  return InferLayoutOutput({layout, layout, layout}, {layout}, Attrs(call->attrs));
+}
+
 TVM_REGISTER_OP("relax.ewise_fma")
     .set_num_inputs(3)
     .add_argument("x1", "Tensor", "The left hand operand of the multiplication")
     .add_argument("x2", "Tensor", "The right hand operand of the multiplication")
     .add_argument("x3", "Tensor", "The operand of the addition")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoEwiseFMA)
-    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutEwiseFMA);
 
 Expr ewise_fma(Expr x1, Expr x2, Expr x3) {
   static const Op& op = Op::Get("relax.ewise_fma");

@@ -30,6 +30,7 @@
 #include <string>
 #include <utility>
 
+#include "../../transform/infer_layout_utils.h"
 #include "../op_common.h"
 
 namespace tvm {
