@@ -14,19 +14,15 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-from typing import Callable, List  # must import to defer parsing of annotations
+"""Numeric tests for relax optimizer APIs."""
+from typing import Callable, List
 
 import numpy as np
-import pytest
 import tvm
 from tvm import relax
-from tvm import relax as rx
 from tvm import IRModule
-from tvm.relax.training.optimizer import Adam
-from tvm.script.parser import ir as I, relax as R, tir as T
-from tvm.ir.op import Op
-from tvm.relax.training.optimizer import SGD, MomentumSGD
-from tvm.relay.testing import rand
+from tvm.relax.training.optimizer import Adam, SGD, MomentumSGD
+from tvm.script.parser import relax as R
 from tvm.testing import assert_allclose
 from tvm.runtime.container import tuple_object
 from tvm.relax.transform import LegalizeOps

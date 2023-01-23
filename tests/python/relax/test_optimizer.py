@@ -14,12 +14,12 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+"""Unit tests for relax optimizer APIs."""
 import tvm
 import tvm.testing
 from tvm import relax
 from tvm.ir.base import assert_structural_equal
-from tvm.relax.training import SGD, MomentumSGD
-from tvm.relax.training.optimizer import Adam
+from tvm.relax.training.optimizer import SGD, MomentumSGD, Adam
 from tvm.script.parser import relax as R
 
 
