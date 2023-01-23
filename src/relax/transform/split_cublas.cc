@@ -28,7 +28,9 @@ namespace relax {
 namespace transform {
 Pass SplitCublas() {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =  //
-      [=](IRModule m, PassContext pc) { return SplitMutator::Transform(m); };
+      [=](IRModule m, PassContext pc) {
+        return SplitMutator::Transform(/*mod=*/m, /*vendor_type=*/"cublas");
+      };
   return CreateModulePass(/*pass_function=*/pass_func,  //
                           /*opt_level=*/0,              //
                           /*pass_name=*/"SplitCublas",  //

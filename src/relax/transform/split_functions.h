@@ -441,7 +441,7 @@ namespace relax {
 class SplitMutator : public ExprMutator {
  public:
   SplitMutator(const tvm::IRModule& mod) : ExprMutator(mod), mod_(mod) {}
-  static IRModule Transform(const IRModule& mod) {
+  static IRModule Transform(const IRModule& mod, const std::string vendor_type) {
     SplitMutator mutator(mod);
     for (auto& kv : mod->functions) {
       if (auto* func = kv.second.as<FunctionNode>()) {
