@@ -78,6 +78,14 @@ StructInfo InferStructInfoBroadcastCMP(const Call& call, const BlockBuilder& ctx
          const TensorStructInfo& x2_sinfo) { return DataType::Bool(); });
 }
 
+InferLayoutOutput InferLayoutBinaryEwise(const Call& call,
+                                         const Map<String, Array<String>>& desired_layouts,
+                                         const VarLayoutMap& var_layout_map) {
+  ICHECK(NoDesiredLayout(call, desired_layouts));
+  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  return InferLayoutOutput({layout, layout}, {layout}, Attrs(call->attrs));
+}
+
 /***************** Arithmetic operators *****************/
 
 RELAX_REGISTER_BINARY_BROADCAST_OP_AND_IMPL(add);

@@ -55,7 +55,8 @@ TVM_REGISTER_OP("relax.astype")
     .set_num_inputs(1)
     .add_argument("x", "Tensor", "The input tensor")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoAstype)
-    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutUnaryEwise);
 
 /* relax.wrap_param */
 TVM_REGISTER_NODE_TYPE(WrapParamAttrs);
@@ -82,7 +83,8 @@ TVM_REGISTER_OP("relax.wrap_param")
     .set_attrs_type<WrapParamAttrs>()
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoWrapParam);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoWrapParam)
+    .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutUnaryEwise);
 
 }  // namespace relax
 }  // namespace tvm
