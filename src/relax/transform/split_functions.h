@@ -17,8 +17,9 @@
  * under the License.
  */
 /*!
- * \file src/relax/transform/to_non_dataflow.cc
- * \brief Transform all dataflow structure to non-dataflow version.
+ * \file src/relax/transform/split_functions.h
+ * \brief Helper functions for splitting a primitive function into vendor library kernel and
+ * the rest of the function.
  */
 #include <tvm/arith/analyzer.h>
 #include <tvm/ir/module.h>
@@ -195,15 +196,16 @@ class BlockMatcher : public TensorizeComparator {
   tir::PrimFunc pattern_;
 };
 
-// Analyze the function and match it with supported cutlass kernels
+// Analyze the function and match it with supported vendor kernels
 class FuncMatcher : public StmtExprVisitor {
  public:
-  void Match(Stmt body) {
+  void Match(Stmt body, std::string vendor_type) {
+    vendor_type_ = vendor_type;
     OpPatternMatch(body);
     if (fail) return;
-    auto f = tvm::runtime::Registry::Get("tvm.relax.cutlass.op_pattern_stitch");
-    ICHECK(f != nullptr) << "Cannot find cutlass op pattern stitch function";
-    cutlass_annotation =
+    auto f = tvm::runtime::Registry::Get("tvm.relax." + vendor_type_ + ".op_pattern_stitch");
+    ICHECK(f != nullptr) << "Cannot find " + vendor_type_ + " op pattern stitch function";
+    vendor_annotation =
         (*f)(Array<Array<PrimExpr>>(evaluated_symbols_), Array<Array<Buffer>>(evaluated_buffers_),
              Array<runtime::String>(matched_pattern_names_));
     this->VisitStmt(body);
@@ -222,8 +224,8 @@ class FuncMatcher : public StmtExprVisitor {
   // The output buffer for the first function, which is also the input buffer for the second
   // function
   Buffer intermediate_buffer;
-  // The accumulated annotation for which cutlass kernel we are matching.
-  Array<runtime::String> cutlass_annotation;
+  // The accumulated annotation for which vendor kernel we are matching.
+  Array<runtime::String> vendor_annotation;
   // Indicate whether we have failed. If failed, we will not do any further analysis and directly
   // return the original one.
   bool fail = false;
@@ -231,10 +233,10 @@ class FuncMatcher : public StmtExprVisitor {
  private:
   // Find an op that matches this block
   bool BlockPatternMatch(const For& top) {
-    auto f = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern_list");
-    auto g = tvm::runtime::Registry::Get("tvm.relax.cutlass.get_op_pattern");
-    CHECK(f != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern_list";
-    CHECK(g != nullptr) << "Cannot find tvm.relax.cutlass.get_op_pattern";
+    auto f = tvm::runtime::Registry::Get("tvm.relax." + vendor_type_ + ".get_op_pattern_list");
+    auto g = tvm::runtime::Registry::Get("tvm.relax." + vendor_type_ + ".get_op_pattern");
+    CHECK(f != nullptr) << "Cannot find tvm.relax." + vendor_type_ + ".get_op_pattern_list";
+    CHECK(g != nullptr) << "Cannot find tvm.relax." + vendor_type_ + ".get_op_pattern";
     Array<runtime::String> pattern_list = (*f)();
 
     for (const runtime::String& pattern : pattern_list) {
@@ -275,8 +277,8 @@ class FuncMatcher : public StmtExprVisitor {
 
   void VisitStmt_(const BlockNode* op) final {
     block_counter_++;
-    bool is_matching_ = block_counter_ <= cutlass_annotation.size();
-    if (block_counter_ == cutlass_annotation.size() + 1) {
+    bool is_matching_ = block_counter_ <= vendor_annotation.size();
+    if (block_counter_ == vendor_annotation.size() + 1) {
       allocs1.erase(intermediate_buffer);
     }
     for (const auto& read : op->reads) {
@@ -305,6 +307,7 @@ class FuncMatcher : public StmtExprVisitor {
   }
 
   size_t block_counter_ = 0;
+  std::string vendor_type_;
 
   std::vector<Array<PrimExpr>> evaluated_symbols_;
   std::vector<Array<Buffer>> evaluated_buffers_;
@@ -356,17 +359,19 @@ class BlockMasker : public StmtExprMutator {
 };
 
 /*!
- * \brief Split the input function into two functions, one for the cutlass kernel and one for the
+ * \brief Split the input function into two functions, one for the vendor kernel and one for the
  * rest.
  * \param func The input function.
  * \param arg_partition The input arg for the functions after split.
- * \return A pair of functions, the first one is the cutlass kernel and the second one is the rest.
+ * \return A pair of functions, the first one is the vendor kernel and the second one is the rest.
  */
 inline std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
-    PrimFunc func, std::vector<std::vector<int>>* arg_partition) {
-  // Step 1. Find the cutlass kernel and the rest.
+    PrimFunc func, std::vector<std::vector<int>>* arg_partition, std::string vendor_type) {
+  const std::string codegen_type = vendor_type + "_codegen";
+  const std::string kernel_type = vendor_type + "_kernel";
+  // Step 1. Find the vendor kernel and the rest.
   FuncMatcher matcher;
-  matcher.Match(func->body.as<BlockRealizeNode>()->block->body);
+  matcher.Match(func->body.as<BlockRealizeNode>()->block->body, vendor_type);
   if (matcher.fail) {
     return {func, NullOpt};
   }
@@ -378,8 +383,9 @@ inline std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
     }
   }
   if (!has_second_func) {
-    func = WithAttr(func, "cutlass_codegen", Bool(true));
-    return {WithAttr(func, "cutlass_kernel", matcher.cutlass_annotation), NullOpt};
+    std::cout << "SplitFunctions does not find second function" << std::endl;
+    func = WithAttr(func, codegen_type, Bool(true));
+    return {WithAttr(func, kernel_type, matcher.vendor_annotation), NullOpt};
   }
   // Step 2. Split the function into two functions.
   Stmt body1 = BlockMasker::Mask(func->body, matcher.block_partition, matcher.allocs1, true);
@@ -406,7 +412,7 @@ inline std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
   }
   new_buffer_map1.Set(new_params1.back(), matcher.intermediate_buffer);
   PrimFunc func1 = PrimFunc(new_params1, body1, func->ret_type, new_buffer_map1, func->attrs);
-  func1 = WithAttr(func1, "cutlass_kernel", matcher.cutlass_annotation);
+  func1 = WithAttr(func1, "cutlass_kernel", matcher.vendor_annotation);
   func1 = WithAttr(func1, "cutlass_codegen", Bool(true));
   // Step 4. Craft the second function.
   Array<Var> new_params2;
@@ -437,12 +443,13 @@ inline std::pair<PrimFunc, Optional<PrimFunc>> SplitFunctions(
 
 namespace relax {
 
-// Emit 2 calls to the cutlass kernel and the rest of the function.
+// Emit 2 calls to the vendor kernel and the rest of the function.
 class SplitMutator : public ExprMutator {
  public:
-  SplitMutator(const tvm::IRModule& mod) : ExprMutator(mod), mod_(mod) {}
+  SplitMutator(const tvm::IRModule& mod, const std::string vendor_type)
+      : ExprMutator(mod), mod_(mod), vendor_type_(vendor_type) {}
   static IRModule Transform(const IRModule& mod, const std::string vendor_type) {
-    SplitMutator mutator(mod);
+    SplitMutator mutator(mod, vendor_type);
     for (auto& kv : mod->functions) {
       if (auto* func = kv.second.as<FunctionNode>()) {
         Function new_func = Downcast<Function>(mutator(GetRef<Function>(func)));
@@ -468,10 +475,11 @@ class SplitMutator : public ExprMutator {
       GlobalVar gv = Downcast<GlobalVar>(call->args[0]);
       tir::PrimFunc func = Downcast<tir::PrimFunc>(mod_->Lookup(gv));
       std::vector<std::vector<int>> arg_partition;
-      // split the function into two functions, one for the cutlass kernel and one for the rest.
+      // split the function into two functions, one for the vendor kernel and one for the rest.
       std::pair<tir::PrimFunc, Optional<tir::PrimFunc>> split_funcs =
-          tir::SplitFunctions(func, &arg_partition);
+          tir::SplitFunctions(func, &arg_partition, vendor_type_);
       if (!split_funcs.second.defined()) {
+        std::cout << "second function not defined" << std::endl;
         // no need to split
         ObjectPtr<CallNode> new_call = make_object<CallNode>(*call.operator->());
         builder_->UpdateFunction(gv, split_funcs.first);
@@ -480,7 +488,7 @@ class SplitMutator : public ExprMutator {
       tir::PrimFunc func1 = split_funcs.first;
       tir::PrimFunc func2 = split_funcs.second.value();
       ICHECK(arg_partition.size() == 2);
-      // emit the first call to the cutlass kernel
+      // emit the first call to the vendor kernel
       Array<Expr> args1;
       for (int p : arg_partition[0]) {
         args1.push_back(GetCallTIRArgs(call->args[1])[p]);
@@ -504,6 +512,7 @@ class SplitMutator : public ExprMutator {
   }
 
   tvm::IRModule mod_;
+  std::string vendor_type_;
 };
 
 }  // namespace relax
