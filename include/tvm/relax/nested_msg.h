@@ -258,8 +258,7 @@ bool Equal(const NestedMsg<T>& lhs, const NestedMsg<T>& rhs, FType fequal) {
  * The nesting structure will corresponds to the tuple structure.
  *
  * \param expr The input expression.
- * \param fmapleaf The mapping function for each leaf with signature
- *             NestedMsg<T> fmap(Expr)
+ * \param fmapleaf The mapping function for each leaf with signature `NestedMsg<T> fmap(Expr)`
  * \tparam T the content type of nested msg
  * \tparam FType The mapping function type
  */
@@ -286,8 +285,7 @@ NestedMsg<T> MapToNestedMsg(Expr expr, FType fmapleaf) {
  * The nesting structure will corresponds to the tuple structure.
  *
  * \param sinfo The input struct info.
- * \param fmapleaf The mapping function for each leaf with signature
- *             NestedMsg<T> fmap(StructInfo)
+ * \param fmapleaf The mapping function for each leaf with signature `NestedMsg<T> fmap(StructInfo)`
  * \tparam T the content type of nested msg
  * \tparam FType The mapping function type
  */
@@ -315,8 +313,7 @@ NestedMsg<T> MapToNestedMsg(StructInfo sinfo, FType fmapleaf) {
  * The nesting structure will corresponds to the struct info of expr.
  *
  * \param expr The input expression which should have struct info.
- * \param fmapleaf The mapping function for each leaf with signature
- *             NestedMsg<T> fmap(Expr)
+ * \param fmapleaf The mapping function for each leaf with signature `NestedMsg<T> fmapleaf(Expr)`
  * \tparam T the content type of nested msg
  * \tparam FType The mapping function type
  */
@@ -350,24 +347,23 @@ NestedMsg<T> MapToNestedMsgBySInfo(Expr expr, FType fmapleaf) {
  * then recursively combines the results as tuple expr.
  *
  * \param msg The input nested message.
- * \param fmapleaf The mapping function for each leaf with signature
- *             Expr fmap(NestedMsg<T>)
- * \tparam T the content type of nested msg
- * \tparam FType The mapping function type
+ * \param fmapleaf The mapping function for each leaf with signature `Expr fmapleaf(T)`.
+ * \tparam T the content type of nested msg.
+ * \tparam FType The mapping function type.
  */
 template <typename T, typename FType>
-Expr MapFromNestedMsg(NestedMsg<T> msg, FType fmapleaf) {
+Expr NestedMsgToExpr(NestedMsg<T> msg, FType fmapleaf) {
   ICHECK(!msg.IsNull()) << "Cannot map null msg.";
 
   if (msg.IsLeaf()) {
-    return fmapleaf(msg);
+    return fmapleaf(msg.LeafValue());
   } else {
     ICHECK(msg.IsNested());
     Array<NestedMsg<T>> arr = msg.NestedArray();
     Array<Expr> subexpr;
     subexpr.reserve(arr.size());
     for (size_t i = 0; i < arr.size(); ++i) {
-      subexpr.push_back(MapFromNestedMsg<T, FType>(arr[i], fmapleaf));
+      subexpr.push_back(NestedMsgToExpr<T, FType>(arr[i], fmapleaf));
     }
     Optional<Expr> simplified_tuple;
     bool simplified_flag = false;

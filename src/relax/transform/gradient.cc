@@ -43,7 +43,7 @@ using AdjointMsg = NestedMsg<Expr>;
 
 // A tool class for GradientMutator
 // Visit the forward bindings and generate the backward bindings
-class BackwardBindingGenerator : public ExprVisitor {
+class BackwardBindingGenerator : private ExprVisitor {
  public:
   /*!
    * \brief Generate the backward bindings for the corresponding GradientMutator
@@ -56,8 +56,7 @@ class BackwardBindingGenerator : public ExprVisitor {
    */
   static Expr Generate(const BlockBuilder& builder, const DataflowBlock& forward_block,
                        const Array<Var>& require_grads, const Var& target_var) {
-    BackwardBindingGenerator generator;
-    generator.builder_ = builder;
+    BackwardBindingGenerator generator(builder);
 
     // Initialize the adjoint of target_var as ones op. We have already check the target.
     auto target_sinfo = GetStructInfoAs<TensorStructInfoNode>(target_var);
@@ -74,6 +73,8 @@ class BackwardBindingGenerator : public ExprVisitor {
   }
 
  private:
+  BackwardBindingGenerator(const BlockBuilder& builder) : builder_(builder) {}
+
   void VisitBinding(const Binding& binding) final {
     // TODO(chaofan, yixin): support other types of bindings
     CHECK(binding->IsInstance<VarBindingNode>()) << "now only support VarBindingNode";
@@ -168,10 +169,6 @@ class BackwardBindingGenerator : public ExprVisitor {
   // For constant nodes, we do not have to handle it because it does not contribute to the adjoint
   void VisitBinding_(const VarBindingNode* binding, const ConstantNode* var) final { return; }
 
-  bool IsCallZeros(const Expr& expr) {
-    return expr->IsInstance<CallNode>() && Downcast<Call>(expr)->op == Op::Get("relax.zeros");
-  }
-
   // Add partial (Expr type) to the adjoint of expr
   void UpdateAdjoint(const Expr& expr, const Expr& partial) {
     DecomposeNestedMsg(expr, ExprToAdjointMsg(partial), [&](Expr leaf, AdjointMsg msg) {
@@ -201,45 +198,6 @@ class BackwardBindingGenerator : public ExprVisitor {
       const Expr& init = zeros(tensor_sinfo->shape.value(), tensor_sinfo->dtype);
       UpdateStructInfo(init, sinfo);
       return init;
-    });
-  }
-
-  // Return base + increment. A tuple-aware addition.
-  AdjointMsg TupleAwareAdd(const AdjointMsg& base, const AdjointMsg& increment) {
-    return CombineNestedMsg(base, increment, [&](Expr lhs, Expr rhs) {
-      if (IsCallZeros(lhs)) {
-        return rhs;
-      } else if (IsCallZeros(rhs)) {
-        return lhs;
-      }
-      auto sinfo = GetStructInfoAs<TensorStructInfoNode>(lhs);
-      ICHECK(sinfo) << "The leaf of adjoint should have StructInfo and be a Tensor.";
-      ICHECK(GetStructInfoAs<TensorStructInfoNode>(rhs))
-          << "The leaf of adjoint should have StructInfo and be a Tensor.";
-      Expr res = add(lhs, rhs);
-      UpdateStructInfo(res, GetRef<StructInfo>(sinfo));
-      return res;
-    });
-  }
-
-  // Perform an addition in a specified position of tuple.
-  // e.g. tuple=(a, b, c), index=1, increment=d, then return (a, b+d, c)
-  AdjointMsg AddInAdjointMsg(const AdjointMsg& adjoint, int index, const AdjointMsg& increment) {
-    ICHECK(adjoint.IsNested()) << "The adjoint should be nested.";
-    Array<AdjointMsg> arr = adjoint.NestedArray();
-    arr.Set(index, TupleAwareAdd(arr[index], increment));
-    return AdjointMsg(arr);
-  }
-
-  Expr AdjointMsgToExpr(AdjointMsg msg) {
-    return MapFromNestedMsg<Expr>(msg, [](AdjointMsg leaf_msg) { return leaf_msg.LeafValue(); });
-  }
-
-  AdjointMsg ExprToAdjointMsg(Expr expr) {
-    return MapToNestedMsgBySInfo<Expr>(expr, [](Expr leaf) {
-      ICHECK(GetStructInfoAs<TensorStructInfoNode>(leaf))
-          << "The leaf of adjoint: " << leaf << " should have StructInfo and be a Tensor.";
-      return AdjointMsg(leaf);
     });
   }
 
@@ -278,9 +236,52 @@ class BackwardBindingGenerator : public ExprVisitor {
     return Tuple({target_var, Tuple(out_adjoints)});
   }
 
+  static bool IsCallZeros(const Expr& expr) {
+    return expr->IsInstance<CallNode>() && Downcast<Call>(expr)->op == Op::Get("relax.zeros");
+  }
+
+  static Expr AdjointMsgToExpr(AdjointMsg msg) {
+    return NestedMsgToExpr<Expr>(msg, [](Expr leaf_expr) { return leaf_expr; });
+  }
+
+  static AdjointMsg ExprToAdjointMsg(Expr expr) {
+    return MapToNestedMsgBySInfo<Expr>(expr, [](Expr leaf) {
+      ICHECK(GetStructInfoAs<TensorStructInfoNode>(leaf))
+          << "The leaf of adjoint: " << leaf << " should have StructInfo and be a Tensor.";
+      return AdjointMsg(leaf);
+    });
+  }
+
+  // Return base + increment. A tuple-aware addition.
+  static AdjointMsg TupleAwareAdd(const AdjointMsg& base, const AdjointMsg& increment) {
+    return CombineNestedMsg(base, increment, [&](Expr lhs, Expr rhs) {
+      if (IsCallZeros(lhs)) {
+        return rhs;
+      } else if (IsCallZeros(rhs)) {
+        return lhs;
+      }
+      auto sinfo = GetStructInfoAs<TensorStructInfoNode>(lhs);
+      ICHECK(sinfo) << "The leaf of adjoint should have StructInfo and be a Tensor.";
+      ICHECK(GetStructInfoAs<TensorStructInfoNode>(rhs))
+          << "The leaf of adjoint should have StructInfo and be a Tensor.";
+      Expr res = add(lhs, rhs);
+      UpdateStructInfo(res, GetRef<StructInfo>(sinfo));
+      return res;
+    });
+  }
+
+  // Perform an addition in a specified position of tuple.
+  // e.g. tuple=(a, b, c), index=1, increment=d, then return (a, b+d, c)
+  static AdjointMsg AddInAdjointMsg(const AdjointMsg& adjoint, int index,
+                                    const AdjointMsg& increment) {
+    ICHECK(adjoint.IsNested()) << "The adjoint should be nested.";
+    Array<AdjointMsg> arr = adjoint.NestedArray();
+    arr.Set(index, TupleAwareAdd(arr[index], increment));
+    return AdjointMsg(arr);
+  }
+
   // The block builder of the corresponding GradientMutator, to emit bindings
   BlockBuilder builder_;
-
   // Forward Var to its adjoint Var
   Map<Var, Var> adjoint_var_map_;
   // Forward Var to its adjoint NestedMsg<Expr>
@@ -289,7 +290,7 @@ class BackwardBindingGenerator : public ExprVisitor {
   Map<Var, AdjointMsg> adjoint_msg_map_;
 };
 
-class GradientMutator : public ExprMutator {
+class GradientMutator : private ExprMutator {
  public:
   static IRModule Transform(IRModule mod, GlobalVar gvar, Array<Var> require_grads) {
     Function old_func = Downcast<Function>(mod->Lookup(gvar));
@@ -310,6 +311,10 @@ class GradientMutator : public ExprMutator {
     new_module->Add(GlobalVar(gvar->name_hint + "_adjoint"), new_func_transformed);
     return new_module;
   }
+
+ private:
+  GradientMutator(const IRModule& module, const Array<Var>& require_grads)
+      : ExprMutator(module), require_grads_(require_grads) {}
 
   Expr VisitExpr_(const FunctionNode* func) final {
     CHECK(func->body->IsInstance<SeqExprNode>())
@@ -351,10 +356,6 @@ class GradientMutator : public ExprMutator {
     return builder_->EndBlock();
   }
 
- private:
-  GradientMutator(const IRModule& module, const Array<Var>& require_grads)
-      : ExprMutator(module), require_grads_(require_grads) {}
-
   // check that the target should be a output Var
   // and a scalar Tensor
   static void CheckTarget(const Expr& e) {
@@ -394,7 +395,6 @@ class GradientMutator : public ExprMutator {
   Array<Var> require_grads_;
   // the differentiation target
   Var target_var_;
-
   // the return value of the differentiated function
   Expr return_expr_;
 };
