@@ -52,14 +52,18 @@ class BackwardBindingGenerator : public ExprVisitor {
    * \param forward_block The forward DataflowBlock
    * \param require_grads The Var list to differentiate w.r.t.
    * \param target_var The target Var to differentiate
+   * \return The return expr of new adjoint function.
    */
   static Expr Generate(const BlockBuilder& builder, const DataflowBlock& forward_block,
                        const Array<Var>& require_grads, const Var& target_var) {
     BackwardBindingGenerator generator;
     generator.builder_ = builder;
 
-    // Initialize the adjoint of target_var as ones op
-    generator.adjoint_msg_map_.Set(target_var, InitOnesAdjoint(target_var));
+    // Initialize the adjoint of target_var as ones op. We have already check the target.
+    auto target_sinfo = GetStructInfoAs<TensorStructInfoNode>(target_var);
+    const Expr& target_adjoint = ones(target_sinfo->shape.value(), target_sinfo->dtype);
+    UpdateStructInfo(target_adjoint, GetRef<StructInfo>(target_sinfo));
+    generator.adjoint_msg_map_.Set(target_var, AdjointMsg(target_adjoint));
 
     // We do reverse-mode ad, so visit bindings backwards
     for (auto it = forward_block->bindings.rbegin(); it != forward_block->bindings.rend(); ++it) {
@@ -69,6 +73,7 @@ class BackwardBindingGenerator : public ExprVisitor {
     return generator.Epilogue(require_grads, target_var);
   }
 
+ private:
   void VisitBinding(const Binding& binding) final {
     // TODO(chaofan, yixin): support other types of bindings
     CHECK(binding->IsInstance<VarBindingNode>()) << "now only support VarBindingNode";
@@ -146,9 +151,9 @@ class BackwardBindingGenerator : public ExprVisitor {
       adjoint_msg_map_.Set(tuple_var, init);
     }
 
-    adjoint_msg_map_.Set(
-        tuple_var, AddElementInNestedAdjoint(adjoint_msg_map_[tuple_var], tuple_get_item->index,
-                                             ExprToAdjointMsg(adjoint_var_map_[binding->var])));
+    adjoint_msg_map_.Set(tuple_var,
+                         AddInAdjointMsg(adjoint_msg_map_[tuple_var], tuple_get_item->index,
+                                         ExprToAdjointMsg(adjoint_var_map_[binding->var])));
   }
 
   // For assign nodes, we add the adjoint of output to the adjoint of input
@@ -163,7 +168,6 @@ class BackwardBindingGenerator : public ExprVisitor {
   // For constant nodes, we do not have to handle it because it does not contribute to the adjoint
   void VisitBinding_(const VarBindingNode* binding, const ConstantNode* var) final { return; }
 
- private:
   bool IsCallZeros(const Expr& expr) {
     return expr->IsInstance<CallNode>() && Downcast<Call>(expr)->op == Op::Get("relax.zeros");
   }
@@ -200,17 +204,6 @@ class BackwardBindingGenerator : public ExprVisitor {
     });
   }
 
-  // Create a ones AdjointMsg with the same StructInfo as var
-  // var should be a Tensor
-  static AdjointMsg InitOnesAdjoint(const Var& var) {
-    auto tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(var);
-    ICHECK(tensor_sinfo) << "The leaf of adjoint should be a Tensor.";
-    ICHECK(tensor_sinfo->shape.defined()) << "Error: missing shape when building ones.";
-    const Expr& init = ones(tensor_sinfo->shape.value(), tensor_sinfo->dtype);
-    UpdateStructInfo(init, GetRef<StructInfo>(tensor_sinfo));
-    return init;
-  }
-
   // Return base + increment. A tuple-aware addition.
   AdjointMsg TupleAwareAdd(const AdjointMsg& base, const AdjointMsg& increment) {
     return CombineNestedMsg(base, increment, [&](Expr lhs, Expr rhs) {
@@ -231,20 +224,11 @@ class BackwardBindingGenerator : public ExprVisitor {
 
   // Perform an addition in a specified position of tuple.
   // e.g. tuple=(a, b, c), index=1, increment=d, then return (a, b+d, c)
-  AdjointMsg AddElementInNestedAdjoint(const AdjointMsg& adjoint, int index,
-                                       const AdjointMsg& increment) {
+  AdjointMsg AddInAdjointMsg(const AdjointMsg& adjoint, int index, const AdjointMsg& increment) {
     ICHECK(adjoint.IsNested()) << "The adjoint should be nested.";
     Array<AdjointMsg> arr = adjoint.NestedArray();
-    Array<AdjointMsg> new_arr;
-    new_arr.reserve(arr.size());
-    for (size_t i = 0; i < arr.size(); ++i) {
-      if (static_cast<int>(i) == index) {
-        new_arr.push_back(TupleAwareAdd(arr[i], increment));
-      } else {
-        new_arr.push_back(arr[i]);
-      }
-    }
-    return AdjointMsg(new_arr);
+    arr.Set(index, TupleAwareAdd(arr[index], increment));
+    return AdjointMsg(arr);
   }
 
   Expr AdjointMsgToExpr(AdjointMsg msg) {
@@ -291,7 +275,7 @@ class BackwardBindingGenerator : public ExprVisitor {
       out_adjoints.push_back(adjoint_var);
     }
 
-    return Tuple(Array<Expr>{target_var, Tuple(out_adjoints)});
+    return Tuple({target_var, Tuple(out_adjoints)});
   }
 
   // The block builder of the corresponding GradientMutator, to emit bindings
