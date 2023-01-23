@@ -18,7 +18,7 @@
 
 from typing import List, Union
 
-import numpy as np
+import numpy as np  # type: ignore
 
 import tvm
 from tvm import relax as rx
@@ -33,7 +33,7 @@ class Optimizer:
 
     Parameters
     ----------
-    params : Union[Var, list[Var]]
+    params : Union[Var, List[Var]]
         The parameter or the list of parameters to optimize.
 
         If params is None, it indicates params will be added later using add_params.
@@ -49,12 +49,12 @@ class Optimizer:
         self._param_list = params
         self._state = None
 
-    def add_params(self, params: Union[Var, list[Var]]):
+    def add_params(self, params: Union[Var, List[Var]]):
         """Append one parameter or a list of new parameters to the optimizer.
 
         Parameters
         ----------
-        params : Union[Var, list[Var]]
+        params : Union[Var, List[Var]]
             The parameter or the list of parameters to append.
 
         Note
@@ -219,11 +219,8 @@ class SGD(Optimizer):
                     param_var_list[i] = p
 
                 # handle return values
-                param_var_tuple = rx.Tuple(param_var_list)
-                state_var_tuple = rx.Tuple(state_var_list)
-                gv0, gv1 = builder.emit_output(param_var_tuple), builder.emit_output(
-                    state_var_tuple
-                )
+                gv0 = builder.emit_output(rx.Tuple(param_var_list))
+                gv1 = builder.emit_output(rx.Tuple(state_var_list))
             builder.emit_func_output((gv0, gv1))
         return builder.get()["SGD"]
 
@@ -349,11 +346,8 @@ class MomentumSGD(Optimizer):
                     state_var_list[i + 1] = v
 
                 # handle return values
-                param_var_tuple = rx.Tuple(param_var_list)
-                state_var_tuple = rx.Tuple(state_var_list)
-                gv0, gv1 = builder.emit_output(param_var_tuple), builder.emit_output(
-                    state_var_tuple
-                )
+                gv0 = builder.emit_output(rx.Tuple(param_var_list))
+                gv1 = builder.emit_output(rx.Tuple(state_var_list))
             builder.emit_func_output((gv0, gv1))
         return builder.get()["MomentumSGD"]
 
