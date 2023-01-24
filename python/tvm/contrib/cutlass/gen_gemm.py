@@ -177,7 +177,16 @@ class CutlassGemmProfiler:
         self.cache = {}
 
     def get_default(
-        self, op_type, out_dtype, arg0_dtype, arg1_dtype, out_layout, arg0_layout, arg1_layout, use_3xtf32=True, batched=False
+        self,
+        op_type,
+        out_dtype,
+        arg0_dtype,
+        arg1_dtype,
+        out_layout,
+        arg0_layout,
+        arg1_layout,
+        use_3xtf32=True,
+        batched=False,
     ):
         """Return the default kernel for the requested architecture.
         For now, the default kernel was picked arbitrary.

@@ -24,6 +24,7 @@ from .._ffi.base import py_str
 from tvm.contrib.nvcc import get_target_compute_version
 from tvm.target import Target
 
+
 def _is_linux_like():
     return (
         sys.platform == "darwin"
