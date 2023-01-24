@@ -14,11 +14,11 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-
+# pylint: disable=invalid-name,missing-function-docstring,chained-comparison
+"""TIR Patterns"""
 from typing import List
 
 import tvm
-from tvm import tir, relax
 from tvm.runtime import Object
 import tvm._ffi
 

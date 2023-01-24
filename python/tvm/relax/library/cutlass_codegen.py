@@ -14,21 +14,32 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=invalid-name,comparison-with-callable,unused-variable,no-value-for-parameter,missing-function-docstring
+"""codegen for cutlass"""
 import inspect
+from typing import List
 
-import tvm
 from tvm.contrib.cutlass.build import select_gemm_kernel, _get_cutlass_path, handle_conv2d
 from tvm.contrib.cutlass.gen_gemm import CutlassGemmProfiler
 from tvm.contrib.cutlass.gen_conv2d import CutlassConv2DProfiler
-
-from typing import List
 from tvm import register_func
-from .pattern import *
+from .pattern import (
+    MatchResult,
+    dense_row_row_row_fp16,
+    bias_row_fp16,
+    batch_bias_row_fp16,
+    relu_fp16,
+    batch_dense_row_row_row_fp16,
+    batch_dense_2_row_row_row_fp16,
+    conv2d_nhwc_fp16,
+    padding_2d_nhwc_fp16,
+    copy_4d_nhwc_fp16,
+)
 
 # list representing the anchor ops
-dense_list = [dense_row_row_row_fp16]
-batch_dense_list = [batch_dense_row_row_row_fp16, batch_dense_2_row_row_row_fp16]
-conv2d_list = [conv2d_nhwc_fp16]
+DENSE_LIST = [dense_row_row_row_fp16]
+BATCH_DENSE_LIST = [batch_dense_row_row_row_fp16, batch_dense_2_row_row_row_fp16]
+CONV2D_LIST = [conv2d_nhwc_fp16]
 
 # attributes for anchor ops used in code generation
 OP_PATTERN_ATTR_LIST = {
@@ -68,14 +79,14 @@ OP_PATTERN_ATTR_LIST = {
 @register_func("tvm.relax.cutlass.op_pattern_stitch")
 def op_pattern_stitch(match_results: List[MatchResult]):
     # add shape into attr
-    if match_results[0].pattern in dense_list:
+    if match_results[0].pattern in DENSE_LIST:
         A_dense, B_dense, C_dense = match_results[0].matched_buffers
         m, n, k = A_dense.shape[0], B_dense.shape[1], A_dense.shape[1]
         attr = OP_PATTERN_ATTR_LIST[match_results[0].pattern]
         attr["m"] = m
         attr["n"] = n
         attr["k"] = k
-    elif match_results[0].pattern in batch_dense_list:
+    elif match_results[0].pattern in BATCH_DENSE_LIST:
         A_dense, B_dense, C_dense = match_results[0].matched_buffers
         _, m, k = A_dense.shape
         n = B_dense.shape[-1]
@@ -83,7 +94,7 @@ def op_pattern_stitch(match_results: List[MatchResult]):
         attr["m"] = m
         attr["n"] = n
         attr["k"] = k
-    elif match_results[1].pattern in conv2d_list:
+    elif match_results[1].pattern in CONV2D_LIST:
         A_conv2d, B_conv2d, C_conv2d = match_results[1].matched_buffers
         d = A_conv2d.shape
         w = B_conv2d.shape
@@ -95,7 +106,7 @@ def op_pattern_stitch(match_results: List[MatchResult]):
 
     if len(match_results) >= 3:
         if (
-            match_results[0].pattern in dense_list
+            match_results[0].pattern in DENSE_LIST
             and match_results[1].pattern == bias_row_fp16
             and match_results[2].pattern == relu_fp16
         ):
@@ -118,7 +129,7 @@ def op_pattern_stitch(match_results: List[MatchResult]):
                 return [get_graph_pattern_cutlass_code(attr=attr), 3]
     if len(match_results) >= 2:
         # dense + bias
-        if match_results[0].pattern in dense_list and match_results[1].pattern == bias_row_fp16:
+        if match_results[0].pattern in DENSE_LIST and match_results[1].pattern == bias_row_fp16:
             m_dense, n_dense, k_dense = match_results[0].symbol_values
             m_bias, n_bias = match_results[1].symbol_values
             A_dense, B_dense, C_dense = match_results[0].matched_buffers
@@ -128,7 +139,7 @@ def op_pattern_stitch(match_results: List[MatchResult]):
                 return [get_graph_pattern_cutlass_code(attr=attr), 2]
         # batch_dense + batch_bias
         if (
-            match_results[0].pattern in batch_dense_list
+            match_results[0].pattern in BATCH_DENSE_LIST
             and match_results[1].pattern == batch_bias_row_fp16
         ):
             m_dense, n_dense, k_dense, b_dense = match_results[0].symbol_values
@@ -205,44 +216,45 @@ def op_pattern_stitch(match_results: List[MatchResult]):
                     attr["op_type"] = "cutlass.conv2d"
                     return [get_graph_pattern_cutlass_code(attr=attr), 2]
     if len(match_results) >= 1:
-        if match_results[0].pattern in dense_list:
+        if match_results[0].pattern in DENSE_LIST:
             # dense
             attr["op_type"] = "cutlass.dense"
             return [get_graph_pattern_cutlass_code(attr=attr), 1]
-        elif match_results[0].pattern in batch_dense_list:
+        elif match_results[0].pattern in BATCH_DENSE_LIST:
             # batch_dense
             attr["op_type"] = "cutlass.batch_matmul"
             return [get_graph_pattern_cutlass_code(attr=attr), 1]
     return ["", 0]
 
 
-def get_graph_pattern_cutlass_code(**kwargs):
-    attr = kwargs["attr"]
+def get_graph_pattern_cutlass_code(attr):
     pattern = attr["op_type"]
     if pattern.startswith("cutlass.dense"):
         # initialize arg list for codegen function
-        arg_names = inspect.getargspec(cutlass_codegen_gemm)[0]
-        return cutlass_codegen_gemm(*_attr_to_list(kwargs["attr"], arg_names))
+        arg_names = inspect.getfullargspec(cutlass_codegen_gemm).args
+        return cutlass_codegen_gemm(*_attr_to_list(attr, arg_names))
     elif pattern.startswith("cutlass.batch_matmul"):
-        arg_names = inspect.getargspec(cutlass_codegen_batch_gemm)[0]
-        return cutlass_codegen_batch_gemm(*_attr_to_list(kwargs["attr"], arg_names))
+        arg_names = inspect.getfullargspec(cutlass_codegen_batch_gemm).args
+        return cutlass_codegen_batch_gemm(*_attr_to_list(attr, arg_names))
     elif pattern.startswith("cutlass.conv2d"):
-        arg_names = inspect.getargspec(cutlass_codegen_conv2d)[0]
-        return cutlass_codegen_conv2d(*_attr_to_list(kwargs["attr"], arg_names))
+        arg_names = inspect.getfullargspec(cutlass_codegen_conv2d).args
+        return cutlass_codegen_conv2d(*_attr_to_list(attr, arg_names))
+    else:
+        raise ValueError("op not supported")
 
 
-def _convert_type_str(type):
-    if isinstance(type, list):
+def _convert_dtype_str(dtype):
+    if isinstance(dtype, list):
         arr = []
-        for t in type:
-            arr.append(_convert_type_str(t))
+        for t in dtype:
+            arr.append(_convert_dtype_str(t))
         return arr
-    elif isinstance(type, str):
-        if type == "float16":
+    elif isinstance(dtype, str):
+        if dtype == "float16":
             return "cutlass::half_t"
-        elif type == "float32":
+        elif dtype == "float32":
             return "float"
-    raise ValueError("type not supported")
+    raise ValueError("dtype not supported")
 
 
 def _convert_layout_str(layout):
@@ -303,7 +315,7 @@ def cutlass_codegen_gemm(
         True,
     )
     op_name = "Operation_" + op_name
-    typea, typeb, typec = _convert_type_str([typea, typeb, typec])
+    typea, typeb, typec = _convert_dtype_str([typea, typeb, typec])
     layouta, layoutb, layoutc = _convert_layout_str([layouta, layoutb, layoutc])
     r_layouta, r_layoutb, r_layoutc = _reverse_layout([layouta, layoutb, layoutc])
 
@@ -408,7 +420,7 @@ def cutlass_codegen_batch_gemm(
         True,
     )
     op_name = "Operation_" + op_name
-    typea, typeb, typec = _convert_type_str([typea, typeb, typec])
+    typea, typeb, typec = _convert_dtype_str([typea, typeb, typec])
     layouta, layoutb, layoutc = _convert_layout_str([layouta, layoutb, layoutc])
     r_layouta, r_layoutb, r_layoutc = _reverse_layout([layouta, layoutb, layoutc])
 
@@ -541,7 +553,7 @@ def cutlass_codegen_conv2d(
     pad_H, pad_W = int(padding[0]), int(padding[1])
     stride_H, stride_W = int(strides[0]), int(strides[1])
     dilation_H, dilation_W = int(dilation[0]), int(dilation[1])
-    out_dtype, data_dtype, weight_dtype = _convert_type_str([out_dtype, data_dtype, weight_dtype])
+    out_dtype, data_dtype, weight_dtype = _convert_dtype_str([out_dtype, data_dtype, weight_dtype])
     text = f"""
         #define CUTLASS_ENABLE_CUBLAS 1
         #define CUTLASS_NAMESPACE cutlass
