@@ -74,6 +74,8 @@ def get_graph_pattern_code(cublas_op):
 GRAPH_PATTERN_CODE_LIST[
     "dense_row_row_row"
 ] = """
+      #define CUTLASS_ENABLE_CUBLAS 1
+
       #include <cublas_v2.h>
       #include <tvm/runtime/packed_func.h>
 
@@ -104,6 +106,8 @@ GRAPH_PATTERN_CODE_LIST[
         // Set up Cublas handle
         cublasHandle_t handle;
         cublasCreate(&handle);
+        // Cublas status
+        cudaError_t cudaStatus;
         // Cublas is column primary, so the order is transposed
         cublasSgemm(
             handle,            //
@@ -121,6 +125,8 @@ GRAPH_PATTERN_CODE_LIST[
             c,                 //
             ldc                //
         );
+        cudaStatus = cudaGetLastError();
+        CHECK(cudaStatus == cudaSuccess);
       }
 
       }  // namespace
