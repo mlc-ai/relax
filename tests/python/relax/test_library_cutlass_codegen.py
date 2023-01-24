@@ -17,7 +17,6 @@
 
 from __future__ import annotations
 import tempfile
-import torch
 
 from tvm import relax, runtime
 import tvm
@@ -80,6 +79,7 @@ def constructGEMM(M, N, K):
     return relax_mod
 
 
+@tvm.testing.requires_cutlass
 def test_cutlass_dense():
     m, n, k = 128, 128, 128
     build(constructGEMM(m, n, k))
@@ -117,6 +117,7 @@ def constructGEMM_bias(M, N, K):
     return relax_mod
 
 
+@tvm.testing.requires_cutlass
 def test_cutlass_dense_bias():
     m, n, k = 128, 128, 128
     build(constructGEMM_bias(m, n, k))
@@ -157,6 +158,7 @@ def constructGEMM_bias_relu(M, N, K):
     return relax_mod
 
 
+@tvm.testing.requires_cutlass
 def test_cutlass_dense_bias_relu():
     m, n, k = 128, 128, 128
     build(constructGEMM_bias_relu(m, n, k))
@@ -192,6 +194,7 @@ def constructBatchGEMM(batch, M, N, K):
     return relax_mod
 
 
+@tvm.testing.requires_cutlass
 def test_cutlass_batch_dense():
     b, m, n, k = 2, 128, 128, 128
     build(constructBatchGEMM(b, m, n, k))
@@ -225,6 +228,7 @@ def constructBatchGEMM2(batch, M, N, K):
     return relax_mod
 
 
+@tvm.testing.requires_cutlass
 def test_cutlass_batch_dense2():
     b, m, n, k = 2, 128, 128, 128
     build(constructBatchGEMM2(b, m, n, k))
@@ -262,6 +266,7 @@ def constructBatchGEMM_bias(batch, M, N, K):
     return relax_mod
 
 
+@tvm.testing.requires_cutlass
 def test_cutlass_batch_dense_bias():
     b, m, n, k = 2, 128, 128, 128
     build(constructBatchGEMM_bias(b, m, n, k))
@@ -301,6 +306,7 @@ def constructBatchGEMM2_bias(batch, M, N, K):
     return relax_mod
 
 
+@tvm.testing.requires_cutlass
 def test_cutlass_batch_dense2_bias():
     b, m, n, k = 2, 128, 128, 128
     build(constructBatchGEMM2_bias(b, m, n, k))
@@ -349,7 +355,10 @@ def constructConv2D(N, C, H, W, KH, KW, O, strides, padding, dilation):
     return mod
 
 
+@tvm.testing.requires_cutlass
 def test_cutlass_conv2d():
+    import torch
+
     n, c, h, w = 1, 3, 224, 224
     kh, kw, o = 3, 3, 64
     # strides = (1, 1)
