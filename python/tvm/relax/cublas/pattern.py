@@ -82,11 +82,25 @@ GRAPH_PATTERN_CODE_LIST[
       using namespace tvm::runtime;
 
       void _GEMM(NDArray A, NDArray B, NDArray C) {
-          const float alpha = 1.0f;
-          const float beta  = 0.0f;
-          float* a = reinterpret_cast<float*>(A->data);
-          float* b = reinterpret_cast<float*>(B->data);
-          float* c = reinterpret_cast<float*>(C->data);
+        // A: [M, K], B: [K, N]
+        CHECK_EQ(A->ndim, 2);
+        CHECK_EQ(B->ndim, 2);
+        CHECK_EQ(C->ndim, 2);
+        CHECK_EQ(A->shape[1], B->shape[0]);
+        int M = A->shape[0];
+        int K = A->shape[1];
+        int N = B->shape[1];
+        CHECK_EQ(C->shape[0], M);
+        CHECK_EQ(C->shape[1], N);
+        // Define variables
+        const float alpha = 1.0f;
+        const float beta  = 0.0f;
+        int lda = K;
+        int ldb = N;
+        int ldc = N;
+        float* a = reinterpret_cast<float*>(A->data);
+        float* b = reinterpret_cast<float*>(B->data);
+        float* c = reinterpret_cast<float*>(C->data);
       }
 
       }  // namespace
