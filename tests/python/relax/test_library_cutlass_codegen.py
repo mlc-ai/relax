@@ -31,7 +31,7 @@ from tvm.script.ir_builder import ir as I
 from tvm.script.ir_builder import tir as T
 from tvm.script.ir_builder import IRBuilder
 
-from tvm.relax.library import get_cutlass_pattern, op_pattern_stitch
+from tvm.relax.library import get_cutlass_pattern, cutlass_codegen_with_match_results
 
 PKG_FILE = "/tmp/test_transform_cutlass_codegen.so"
 GLOBAL_SYMBOL = "HGEMM"
@@ -52,7 +52,9 @@ def build(mod, file_name=PKG_FILE):
     mod = relax.transform.AnnotateTIROpPattern()(mod)
     mod = relax.transform.FuseOps()(mod)
     mod = relax.transform.FuseTIR()(mod)
-    mod = relax.transform.SplitCallTIRByPattern(get_cutlass_pattern(), op_pattern_stitch)(mod)
+    mod = relax.transform.SplitCallTIRByPattern(
+        get_cutlass_pattern(), cutlass_codegen_with_match_results
+    )(mod)
     executbale = relax_build(mod, target)
     executbale.mod.export_library(file_name, cc="nvcc")
     return executbale

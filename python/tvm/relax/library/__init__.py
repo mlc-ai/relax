@@ -17,4 +17,4 @@
 
 """Relax Library Dispatrch."""
 from .pattern import *
-from .cutlass_codegen import op_pattern_stitch
+from .cutlass_codegen import cutlass_codegen_with_match_results

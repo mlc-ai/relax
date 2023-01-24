@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name,comparison-with-callable,unused-variable,no-value-for-parameter,missing-function-docstring
+# pylint: disable=invalid-name,comparison-with-callable,unused-variable
 """codegen for cutlass"""
 from typing import List, Dict, Any
 
@@ -76,8 +76,8 @@ OP_PATTERN_ATTR_LIST = {
 }
 
 
-@register_func("tvm.relax.cutlass.op_pattern_stitch")
-def op_pattern_stitch(match_results: List[MatchResult]):
+def cutlass_codegen_with_match_results(match_results: List[MatchResult]):
+    """generate cutlass code with match results"""
     # add shape into attr
     if match_results[0].pattern in DENSE_LIST:
         A_dense, B_dense, C_dense = match_results[0].matched_buffers
@@ -126,7 +126,7 @@ def op_pattern_stitch(match_results: List[MatchResult]):
                 and C_bias == A_relu
             ):
                 attr["op_type"] = "cutlass.dense_bias_relu"
-                return [get_graph_pattern_cutlass_code(attr=attr), 3]
+                return [_get_graph_pattern_cutlass_code(attr=attr), 3]
     if len(match_results) >= 2:
         # dense + bias
         if match_results[0].pattern in DENSE_LIST and match_results[1].pattern == bias_row_fp16:
@@ -136,7 +136,7 @@ def op_pattern_stitch(match_results: List[MatchResult]):
             A_bias, B_bias, C_bias = match_results[1].matched_buffers
             if m_dense == m_bias and n_dense == n_bias and C_dense == A_bias:
                 attr["op_type"] = "cutlass.dense_bias"
-                return [get_graph_pattern_cutlass_code(attr=attr), 2]
+                return [_get_graph_pattern_cutlass_code(attr=attr), 2]
         # batch_dense + batch_bias
         if (
             match_results[0].pattern in BATCH_DENSE_LIST
@@ -148,7 +148,7 @@ def op_pattern_stitch(match_results: List[MatchResult]):
             A_bias, B_bias, C_bias = match_results[1].matched_buffers
             if b_dense == b_bias and m_dense == m_bias and n_dense == n_bias and C_dense == A_bias:
                 attr["op_type"] = "cutlass.batch_matmul_bias"
-                return [get_graph_pattern_cutlass_code(attr=attr), 2]
+                return [_get_graph_pattern_cutlass_code(attr=attr), 2]
         # padding2d_NHWC + conv2d_NHWC
         if (
             match_results[0].pattern in [padding_2d_nhwc_fp16, copy_4d_nhwc_fp16]
@@ -214,20 +214,20 @@ def op_pattern_stitch(match_results: List[MatchResult]):
                     attr["strides"] = strides
                     attr["dilation"] = dilation
                     attr["op_type"] = "cutlass.conv2d"
-                    return [get_graph_pattern_cutlass_code(attr=attr), 2]
+                    return [_get_graph_pattern_cutlass_code(attr=attr), 2]
     if len(match_results) >= 1:
         if match_results[0].pattern in DENSE_LIST:
             # dense
             attr["op_type"] = "cutlass.dense"
-            return [get_graph_pattern_cutlass_code(attr=attr), 1]
+            return [_get_graph_pattern_cutlass_code(attr=attr), 1]
         elif match_results[0].pattern in BATCH_DENSE_LIST:
             # batch_dense
             attr["op_type"] = "cutlass.batch_matmul"
-            return [get_graph_pattern_cutlass_code(attr=attr), 1]
+            return [_get_graph_pattern_cutlass_code(attr=attr), 1]
     return ["", 0]
 
 
-def get_graph_pattern_cutlass_code(attr):
+def _get_graph_pattern_cutlass_code(attr):
     pattern = attr["op_type"]
     if pattern.startswith("cutlass.dense"):
         # initialize arg list for codegen function
@@ -334,6 +334,7 @@ def _attr_to_list(attr, arg_names):
 def cutlass_codegen_gemm(
     m, n, k, typea, typeb, typec, layouta, layoutb, layoutc, op_type, sm=80, bin_dir="./bin"
 ):
+    """cutlass codegen for gemm"""
     cutlass_profiler = CutlassGemmProfiler(sm, _get_cutlass_path(), bin_dir)
     op_name, cutlass_op_def = select_gemm_kernel(
         cutlass_profiler,
@@ -432,13 +433,13 @@ def cutlass_codegen_gemm(
       }}  // namespace
       TVM_DLL_EXPORT_TYPED_FUNC({{global_symbol}}, _GEMM);
       """
-    print(text)
     return text
 
 
 def cutlass_codegen_batch_gemm(
     m, n, k, typea, typeb, typec, layouta, layoutb, layoutc, op_type, sm=80, bin_dir="./bin"
 ):
+    """cutlass codegen for batch gemm"""
     cutlass_profiler = CutlassGemmProfiler(sm, _get_cutlass_path(), bin_dir)
     op_name, cutlass_op_def = select_gemm_kernel(
         cutlass_profiler,
@@ -550,7 +551,6 @@ def cutlass_codegen_batch_gemm(
       }}  // namespace
       TVM_DLL_EXPORT_TYPED_FUNC({{global_symbol}}, _BHGEMM);
       """
-    print(text)
     return text
 
 
@@ -567,6 +567,7 @@ def cutlass_codegen_conv2d(
     sm=80,
     bin_dir="./bin",
 ):
+    """cutlass codegen for conv2d"""
     cutlass_profiler = CutlassConv2DProfiler(sm, _get_cutlass_path(), bin_dir)
     # cutlass backend only supports nhwc for now
     res = handle_conv2d(
@@ -690,5 +691,4 @@ def cutlass_codegen_conv2d(
         }}  // namespace
         TVM_DLL_EXPORT_TYPED_FUNC({{global_symbol}}, _HConv2D);
     """
-    print(text)
     return text
