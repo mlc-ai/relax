@@ -319,7 +319,7 @@ def cutlass_codegen_gemm(
     layouta, layoutb, layoutc = _convert_layout_str([layouta, layoutb, layoutc])
     r_layouta, r_layoutb, r_layoutc = _reverse_layout([layouta, layoutb, layoutc])
 
-    if op_type == "cutlass.dense_bias" or op_type == "cutlass.dense_bias_relu":
+    if op_type in ["cutlass.dense_bias", "cutlass.dense_bias_relu"]:
         bias_param = "NDArray Bias, "
         bias_var_def = f"""
         {r_layoutc}::Stride::Index ld_bias(0);
@@ -424,7 +424,7 @@ def cutlass_codegen_batch_gemm(
     layouta, layoutb, layoutc = _convert_layout_str([layouta, layoutb, layoutc])
     r_layouta, r_layoutb, r_layoutc = _reverse_layout([layouta, layoutb, layoutc])
 
-    if op_type == "cutlass.batch_matmul_bias" or op_type == "cutlass.batch_matmul_bias_relu":
+    if op_type in ["cutlass.batch_matmul_bias", "cutlass.batch_matmul_bias_relu"]:
         bias_param = "NDArray Bias, "
         bias_var_def = f"""
         {r_layoutc}::Stride::Index ld_bias(0);
