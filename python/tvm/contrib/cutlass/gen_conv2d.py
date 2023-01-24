@@ -113,7 +113,6 @@ def enumerate_conv2d_operators(
     tile_descriptions,
     data_type,
     alignment_constraints,
-    layout_constraints,
     swizzling_functor=SwizzlingFunctor.Identity4,
 ):
     """Exhaustively instantiate all kernels from a given configuration."""

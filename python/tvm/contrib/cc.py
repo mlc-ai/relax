@@ -21,7 +21,8 @@ import os
 import subprocess
 
 from .._ffi.base import py_str
-
+from tvm.contrib.nvcc import get_target_compute_version
+from tvm.target import Target
 
 def _is_linux_like():
     return (
@@ -229,9 +230,6 @@ def _linux_compile(output, objects, options, compile_cmd, compile_shared=False):
         elif output.endswith(".obj"):
             cmd += ["-c"]
     else:
-        from tvm.contrib.nvcc import get_target_compute_version
-        from tvm.target import Target
-
         if compile_shared or output.endswith(".so") or output.endswith(".dylib"):
             cmd += ["--shared"]
         compute_version = "".join(

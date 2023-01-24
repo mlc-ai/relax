@@ -121,7 +121,7 @@ def select_gemm_kernel(
     workloads."""
     if any(isinstance(s, tvm.tir.Any) for s in [MM, KK, NN]):
         out = cutlass_profiler.get_default(
-            op_type, out_dtype, arg0_dtype, arg1_dtype, use_3xtf32, batched=batched
+            op_type, out_dtype, arg0_dtype, arg1_dtype, out_layout, arg0_layout, arg1_layout, use_3xtf32, batched=batched
         )
         name, cutlass_op_def = out["name"], out["opdef"]
         logger.info("Picked the default kernel %s", name)
@@ -158,6 +158,9 @@ def handle_batch_matmul(
     out_dtype,
     arg0_dtype,
     arg1_dtype,
+    out_layout,
+    arg0_layout,
+    arg1_layout,
     use_3xtf32,
     find_first_valid,
     use_multiprocessing,
@@ -176,6 +179,9 @@ def handle_batch_matmul(
         out_dtype,
         arg0_dtype,
         arg1_dtype,
+        out_layout,
+        arg0_layout,
+        arg1_layout,
         use_3xtf32,
         True,
         find_first_valid,
@@ -203,6 +209,9 @@ def handle_dense(
     out_dtype,
     arg0_dtype,
     arg1_dtype,
+    out_layout,
+    arg0_layout,
+    arg1_layout,
     use_3xtf32,
     find_first_valid,
     use_multiprocessing,
@@ -221,6 +230,9 @@ def handle_dense(
         out_dtype,
         arg0_dtype,
         arg1_dtype,
+        out_layout,
+        arg0_layout,
+        arg1_layout,
         use_3xtf32,
         False,
         find_first_valid,
@@ -489,6 +501,9 @@ def tune_cutlass_function(
                 out_dtype,
                 arg0_dtype,
                 arg1_dtype,
+                "row",
+                "column",
+                "row",
                 use_3xtf32,
                 find_first_valid,
                 use_multiprocessing,
@@ -504,6 +519,9 @@ def tune_cutlass_function(
                 out_dtype,
                 arg0_dtype,
                 arg1_dtype,
+                "row",
+                "column",
+                "row",
                 use_3xtf32,
                 find_first_valid,
                 use_multiprocessing,
