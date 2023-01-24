@@ -95,6 +95,7 @@ def constructGEMM(m, n, k, GLOBAL_SYMBOL="HGEMM"):
 def test_cublas_dense():
     m, n, k = 128, 128, 128
     build(constructGEMM(m, n, k))
+    print("finished building.")
     dev = tvm.cuda()
     A = np.random.rand(m, k).astype("float16") * 5
     B = np.random.rand(k, n).astype("float16") * 5
@@ -107,4 +108,4 @@ def test_cublas_dense():
 
 if __name__ == "__main__":
     test_cublas_dense()
-    print("end of test")
+    print("test succeed")
