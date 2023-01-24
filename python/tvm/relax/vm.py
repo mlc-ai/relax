@@ -527,7 +527,14 @@ def build(
         params = {}
 
     # type: ignore
-    return Executable(_ffi_api.VMCodeGen(rx_mod, lib, ext_libs, target, params))
+    codegen = _ffi_api.VMCodeGen(rx_mod, lib, ext_libs, target, params)
+    res = Executable(codegen)
+
+    import pdb
+
+    pdb.set_trace()
+
+    return res
 
 
 def _split_tir_relax(mod: tvm.IRModule) -> Tuple[tvm.IRModule, tvm.IRModule]:

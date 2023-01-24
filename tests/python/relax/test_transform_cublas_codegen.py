@@ -46,12 +46,12 @@ def build(mod):
     mod = relax.transform.SplitCublas()(mod)
     print("after SplitCublas:")
     mod.show()
-    """
     mod = relax.transform.CublasCodegen()(mod)
+    print("after CublasCodegen:")
+    mod.show()
     executable = relax_build(mod, target)
     executable.mod.export_library(PKG_FILE, cc="nvcc")
     return executable
-    """
 
 
 def constructGEMM(m, n, k, GLOBAL_SYMBOL="HGEMM"):
@@ -95,7 +95,6 @@ def constructGEMM(m, n, k, GLOBAL_SYMBOL="HGEMM"):
 def test_cublas_dense():
     m, n, k = 128, 128, 128
     build(constructGEMM(m, n, k))
-    """
     dev = tvm.cuda()
     A = np.random.rand(m, k).astype("float16") * 5
     B = np.random.rand(k, n).astype("float16") * 5
@@ -104,7 +103,6 @@ def test_cublas_dense():
     executable = tvm.runtime.load_module(PKG_FILE)
     result = f_run(executable, dev, A_tvm, B_tvm)
     np.testing.assert_allclose(result.numpy(), A @ B, rtol=1e-2)
-    """
 
 
 if __name__ == "__main__":
