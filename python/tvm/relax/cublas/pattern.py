@@ -74,7 +74,6 @@ def get_graph_pattern_code(cublas_op):
 GRAPH_PATTERN_CODE_LIST[
     "dense_row_row_row"
 ] = """
-      #include <cutlass/gemm/device/gemm.h>
       #include <tvm/runtime/packed_func.h>
 
       namespace {
@@ -82,45 +81,6 @@ GRAPH_PATTERN_CODE_LIST[
       using namespace tvm::runtime;
 
       void _GEMM(NDArray A, NDArray B, NDArray C) {
-        // A: [M, K], B: [K, N]
-        CHECK_EQ(A->ndim, 2);
-        CHECK_EQ(B->ndim, 2);
-        CHECK_EQ(C->ndim, 2);
-        CHECK_EQ(A->shape[1], B->shape[0]);
-        int M = A->shape[0];
-        int K = A->shape[1];
-        int N = B->shape[1];
-        CHECK_EQ(C->shape[0], M);
-        CHECK_EQ(C->shape[1], N);
-        CHECK_EQ(A.DataType(), DataType::Float(16));
-        CHECK_EQ(B.DataType(), DataType::Float(16));
-        CHECK_EQ(C.DataType(), DataType::Float(16));
-        // Define the GEMM operation
-        using Gemm = cutlass::gemm::device::Gemm<cutlass::half_t,            // ElementA
-                                                cutlass::layout::RowMajor,  // LayoutA
-                                                cutlass::half_t,            // ElementB
-                                                cutlass::layout::RowMajor,  // LayoutB
-                                                cutlass::half_t,            // ElementOutput
-                                                cutlass::layout::RowMajor   // LayoutOutput
-                                                >;
-        Gemm gemm_op;
-        cutlass::half_t alpha(1.0);
-        cutlass::half_t beta(0.0);
-        cutlass::layout::ColumnMajor::Stride::Index lda(K);
-        cutlass::layout::ColumnMajor::Stride::Index ldb(N);
-        cutlass::layout::ColumnMajor::Stride::Index ldc(N);
-        cutlass::half_t* a = reinterpret_cast<cutlass::half_t*>(A->data);
-        cutlass::half_t* b = reinterpret_cast<cutlass::half_t*>(B->data);
-        cutlass::half_t* c = reinterpret_cast<cutlass::half_t*>(C->data);
-        cutlass::Status status = gemm_op({
-            {M, N, K},     //
-            {a, lda},      //
-            {b, ldb},      //
-            {c, ldc},      //
-            {c, ldc},      //
-            {alpha, beta}  //
-        });
-        CHECK(status == cutlass::Status::kSuccess);
       }
 
       }  // namespace
