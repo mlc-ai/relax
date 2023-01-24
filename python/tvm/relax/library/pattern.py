@@ -40,10 +40,10 @@ def dense_row_row_row_fp16(
     var_rxplaceholder: T.handle,
     var_rxplaceholder_1: T.handle,
     var_matmul: T.handle,
-    M: T.int64, 
-    N: T.int64, 
-    K: T.int64,  
-) -> None: 
+    M: T.int64,
+    N: T.int64,
+    K: T.int64,
+) -> None:
     # function attr dict
     T.func_attr({"tir.noalias": True})
     rxplaceholder = T.match_buffer(var_rxplaceholder, [M, K], dtype="float16")
@@ -111,9 +111,7 @@ def batch_bias_row_fp16(
 
 
 @T.prim_func
-def relu_fp16(
-    var_rxplaceholder: T.handle, var_compute: T.handle, M: T.int64, N: T.int64
-) -> None:
+def relu_fp16(var_rxplaceholder: T.handle, var_compute: T.handle, M: T.int64, N: T.int64) -> None:
     # function attr dict
     T.func_attr({"tir.noalias": True})
     rxplaceholder = T.match_buffer(var_rxplaceholder, [M, N], dtype="float16")
