@@ -21,7 +21,6 @@ from typing import List, Dict, Any
 from tvm.contrib.cutlass.build import select_gemm_kernel, _get_cutlass_path, handle_conv2d
 from tvm.contrib.cutlass.gen_gemm import CutlassGemmProfiler
 from tvm.contrib.cutlass.gen_conv2d import CutlassConv2DProfiler
-from tvm import register_func
 from .pattern import (
     MatchResult,
     dense_row_row_row_fp16,
