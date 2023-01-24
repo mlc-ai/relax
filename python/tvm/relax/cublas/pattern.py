@@ -82,6 +82,11 @@ GRAPH_PATTERN_CODE_LIST[
       using namespace tvm::runtime;
 
       void _GEMM(NDArray A, NDArray B, NDArray C) {
+          const float alpha = 1.0f;
+          const float beta  = 0.0f;
+          float* a = reinterpret_cast<float*>(A->data);
+          float* b = reinterpret_cast<float*>(B->data);
+          float* c = reinterpret_cast<float*>(C->data);
       }
 
       }  // namespace
