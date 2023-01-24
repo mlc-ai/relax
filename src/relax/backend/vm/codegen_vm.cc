@@ -90,8 +90,8 @@ class CodeGenVM : public ExprFunctor<Instruction::Arg(const Expr&)> {
   size_t NewRegister() { return registers_num_++; }
 
   void CompileCSource(const ExternFuncNode* func) {
-    const static constexpr char* kCSource = "c_source";
-    const static constexpr char* kCSourceFmt = "c_source_fmt";
+    static const constexpr char* kCSource = "c_source";
+    static const constexpr char* kCSourceFmt = "c_source_fmt";
     if (Optional<String> opt_code = func->attrs.GetAttr<String>(kCSource)) {
       String sym = func->global_symbol;
       String fmt = func->attrs.GetAttr<String>(kCSourceFmt).value_or("c");

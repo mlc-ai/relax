@@ -34,10 +34,10 @@
 
 namespace tvm {
 
-const static constexpr char* kLibraryKernel = "library_kernel";
-const static constexpr char* kCSource = "c_source";
-const static constexpr char* kCSourceFmt = "c_source_fmt";
-const static constexpr char* kCSourceFmtCuda = "cu";
+static const constexpr char* kLibraryKernel = "library_kernel";
+static const constexpr char* kCSource = "c_source";
+static const constexpr char* kCSourceFmt = "c_source_fmt";
+static const constexpr char* kCSourceFmtCuda = "cu";
 
 namespace tir {
 
@@ -374,7 +374,7 @@ class TIRPatternMatcher {
   }
 
  private:
-  TIRPatternMatcher(Array<TIRPattern> patterns) : patterns_(patterns) {}
+  explicit TIRPatternMatcher(Array<TIRPattern> patterns) : patterns_(patterns) {}
 
   // Find an op that matches this block
   bool BlockPatternMatch(const For& top) {

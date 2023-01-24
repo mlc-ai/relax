@@ -22,8 +22,8 @@
  * \brief Data Structure of TIR Pattern used for matching.
  */
 
-#ifndef TVM_RELAX_TRANSFORM_TIR_PATTERN_H_
-#define TVM_RELAX_TRANSFORM_TIR_PATTERN_H_
+#ifndef TVM_RELAX_TIR_PATTERN_H_
+#define TVM_RELAX_TIR_PATTERN_H_
 
 #include <tvm/tir/function.h>
 
@@ -72,4 +72,4 @@ class MatchResult : public ObjectRef {
 using FCodegen = runtime::TypedPackedFunc<Array<ObjectRef>(Array<MatchResult> match_results)>;
 }  // namespace relax
 }  // namespace tvm
-#endif  // TVM_RELAX_TRANSFORM_TIR_PATTERN_H_
+#endif  // TVM_RELAX_TIR_PATTERN_H_
