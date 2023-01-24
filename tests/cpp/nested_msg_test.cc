@@ -219,8 +219,9 @@ TEST(NestedMsg, NestedMsgToExpr) {
   relax::Var x("x", sf0), y("y", sf0), z("z", sf0);
 
   NestedMsg<Integer> msg = {c0, {c0, c1}, {c0, {c1, c2}}};
-  auto expr = NestedMsgToExpr<Integer>(msg, [&](NestedMsg<Integer> leaf_msg) {
-    int value = leaf_msg.LeafValue().IntValue();
+  auto expr = NestedMsgToExpr<Integer>(msg, [&](Optional<Integer> leaf) {
+    ICHECK(leaf.defined());
+    int value = leaf.value().IntValue();
     switch (value) {
       case 0:
         return x;
@@ -237,8 +238,7 @@ TEST(NestedMsg, NestedMsgToExpr) {
   // test simplified
   relax::Var t("t", sf1);
   NestedMsg<Expr> msg1 = {TupleGetItem(t, 0), TupleGetItem(t, 1)};
-  auto expr1 =
-      NestedMsgToExpr<Expr>(msg1, [](NestedMsg<Expr> leaf_msg) { return leaf_msg.LeafValue(); });
+  auto expr1 = NestedMsgToExpr<Expr>(msg1, [](Optional<Expr> leaf) { return leaf.value(); });
   EXPECT_TRUE(StructuralEqual()(expr1, t));
 }
 

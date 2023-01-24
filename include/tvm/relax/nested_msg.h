@@ -347,15 +347,15 @@ NestedMsg<T> MapToNestedMsgBySInfo(Expr expr, FType fmapleaf) {
  * then recursively combines the results as tuple expr.
  *
  * \param msg The input nested message.
- * \param fmapleaf The mapping function for each leaf with signature `Expr fmapleaf(T)`.
+ * \param fmapleaf The mapping function for each leaf with signature `Expr fmapleaf(Optional<T>)`.
  * \tparam T the content type of nested msg.
  * \tparam FType The mapping function type.
  */
 template <typename T, typename FType>
 Expr NestedMsgToExpr(NestedMsg<T> msg, FType fmapleaf) {
-  ICHECK(!msg.IsNull()) << "Cannot map null msg.";
-
-  if (msg.IsLeaf()) {
+  if (msg.IsNull()) {
+    return fmapleaf(NullOpt);
+  } else if (msg.IsLeaf()) {
     return fmapleaf(msg.LeafValue());
   } else {
     ICHECK(msg.IsNested());

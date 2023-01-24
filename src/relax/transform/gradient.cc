@@ -227,7 +227,12 @@ class BackwardBindingGenerator : private ExprVisitor {
   }
 
   static Expr AdjointMsgToExpr(AdjointMsg msg) {
-    return NestedMsgToExpr<Expr>(msg, [](Expr leaf_expr) { return leaf_expr; });
+    return NestedMsgToExpr<Expr>(msg, [](Optional<Expr> leaf_expr) {
+      if (!leaf_expr.defined()) {
+        LOG(FATAL) << "Null should not exist in AdjointMsg.";
+      }
+      return leaf_expr.value();
+    });
   }
 
   static AdjointMsg ExprToAdjointMsg(Expr expr) {
