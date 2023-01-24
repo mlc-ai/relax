@@ -31,12 +31,7 @@ const static constexpr char* kCSource = "c_source";
 const static constexpr char* kCSourceFmt = "c_source_fmt";
 const static constexpr char* kCSourceFmtCuda = "cu";
 
-void StringReplace(std::string* subject, const std::string& search, const std::string& replace) {
-  for (size_t pos = 0; (pos = subject->find(search, pos)) != std::string::npos;
-       pos += replace.length()) {
-    subject->replace(pos, search.length(), replace);
-  }
-}
+void StringReplace(std::string* subject, const std::string& search, const std::string& replace);
 
 ExternFunc CodegenWithCutlass(const tir::PrimFuncNode* pf, String global_symbol) {
   using namespace tvm::tir;

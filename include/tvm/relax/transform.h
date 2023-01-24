@@ -206,6 +206,13 @@ TVM_DLL Pass SplitCublas();
 TVM_DLL Pass CutlassCodegen();
 
 /*!
+ * \brief Inject the cublas code into the PrimFunc that is matched with cublas kernels.
+ *
+ * \return The Pass.
+ */
+TVM_DLL Pass CublasCodegen();
+
+/*!
  * \brief Automatic mixed precision pass.
  *
  * \return The Pass.

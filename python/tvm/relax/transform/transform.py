@@ -378,6 +378,17 @@ def SplitCutlass() -> tvm.ir.transform.Pass:
     return _ffi_api.SplitCutlass()
 
 
+def CublasCodegen() -> tvm.ir.transform.Pass:
+    """Inject the cublas code into the PrimFunc that is matched with cublas kernels.
+
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass for cublas codegen.
+    """
+    return _ffi_api.CublasCodegen()
+
+
 def SplitCublas() -> tvm.ir.transform.Pass:
     """Split a PrimFunc into 2 parts: the first part is a TIR PrimFunc which is
        matched with some cublas kernels, and the second part is the rest of the original
