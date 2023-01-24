@@ -436,7 +436,7 @@ def SplitCallTIRByPattern(patterns, fcodegen) -> tvm.ir.transform.Pass:
     ret : tvm.transform.Pass
         The registered pass for spliting calltir.
     """
-    return _ffi_api.SplitCallTIRByPattern(patterns, fcodegen)
+    return _ffi_api.SplitCallTIRByPattern(patterns, fcodegen) # type: ignore
 
 
 def _wrap_class_function_pass(pass_cls, pass_info):
