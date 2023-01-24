@@ -20,9 +20,9 @@ import sys
 import os
 import subprocess
 
-from .._ffi.base import py_str
 from tvm.contrib.nvcc import get_target_compute_version
 from tvm.target import Target
+from .._ffi.base import py_str
 
 
 def _is_linux_like():

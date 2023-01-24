@@ -197,7 +197,7 @@ class CutlassConv2DProfiler:
         For now, the default kernel was picked arbitrary.
         """
         gemm_profile_result = self.gemm_profiler.get_default(
-            op_type, out_dtype, arg0_dtype, arg1_dtype, use_3xtf32
+            op_type, out_dtype, arg0_dtype, arg1_dtype, "row", "column", "row", use_3xtf32
         )
         tile_description = gemm_profile_result["tile_description"]
         alignment = gemm_profile_result["alignment"]
