@@ -74,6 +74,7 @@ def get_graph_pattern_code(cublas_op):
 GRAPH_PATTERN_CODE_LIST[
     "dense_row_row_row"
 ] = """
+      #include <cublas_v2.h>
       #include <tvm/runtime/packed_func.h>
 
       namespace {
