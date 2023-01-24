@@ -84,8 +84,6 @@ GRAPH_PATTERN_CODE_LIST[
       #include <sstream>
       #include <vector>
 
-      #define DMLC_USE_LOGGING_LIBRARY <tvm/runtime/logging.h>
-
       #include <tvm/runtime/logging.h>
       #include <tvm/runtime/ndarray.h>
       #include <tvm/runtime/packed_func.h>

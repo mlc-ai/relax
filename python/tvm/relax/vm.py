@@ -530,10 +530,6 @@ def build(
     codegen = _ffi_api.VMCodeGen(rx_mod, lib, ext_libs, target, params)
     res = Executable(codegen)
 
-    import pdb
-
-    pdb.set_trace()
-
     return res
 
 
