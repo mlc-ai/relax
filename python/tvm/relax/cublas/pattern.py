@@ -101,6 +101,22 @@ GRAPH_PATTERN_CODE_LIST[
         float* a = reinterpret_cast<float*>(A->data);
         float* b = reinterpret_cast<float*>(B->data);
         float* c = reinterpret_cast<float*>(C->data);
+        // Cublas is column primary, so the order is transposed
+        cublasSgemm(
+            CUBLAS_OP_N,       //
+            CUBLAS_OP_N,       //
+            N,                 //
+            M,                 //
+            K,                 //
+            &alpha,            //
+            b,                 //
+            ldb,               //
+            a,                 //
+            lda,               //
+            &beta,             //
+            c,                 //
+            ldc                //
+        );
       }
 
       }  // namespace
