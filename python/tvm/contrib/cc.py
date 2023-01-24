@@ -229,8 +229,19 @@ def _linux_compile(output, objects, options, compile_cmd, compile_shared=False):
         elif output.endswith(".obj"):
             cmd += ["-c"]
     else:
+        from tvm.contrib.nvcc import get_target_compute_version
+        from tvm.target import Target
+
         if compile_shared or output.endswith(".so") or output.endswith(".dylib"):
             cmd += ["--shared"]
+        compute_version = "".join(
+            get_target_compute_version(Target.current(allow_none=True)).split(".")
+        )
+        cmd += ["-gencode", f"arch=compute_{compute_version},code=sm_{compute_version}"]
+        cmd += ["-O3"]
+        cmd += ["-std=c++17"]
+        cmd += ["-Xcompiler=-fPIC"]
+        cmd += ["-Xcompiler=-fno-strict-aliasing"]
     cmd += ["-o", output]
     if isinstance(objects, str):
         cmd += [objects]
