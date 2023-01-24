@@ -603,7 +603,7 @@ def cutlass_codegen_conv2d(
             using ImplicitGemm = cutlass::conv::device::ImplicitGemmConvolution<{op_name}>;
 
             // Construct Conv2dProblemSize with user defined output size
-            cutlass::conv::Conv2dProblemSize problem_size(      
+            cutlass::conv::Conv2dProblemSize problem_size(
                 {{N, H, W, C}},
                 {{O, KH, KW, C}},
                 {{{pad_H}, 0, {pad_W}, 0}},
