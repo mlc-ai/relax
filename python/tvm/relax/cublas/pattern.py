@@ -74,23 +74,11 @@ def get_graph_pattern_code(cublas_op):
 GRAPH_PATTERN_CODE_LIST[
     "dense_row_row_row"
 ] = """
-      #include <cutlass/cutlass.h>
       #include <cutlass/gemm/device/gemm.h>
-      #include <cutlass/layout/matrix.h>
-      #include <cutlass/numeric_types.h>
-
-      #include <fstream>
-      #include <iostream>
-      #include <sstream>
-      #include <vector>
-
-      #include <tvm/runtime/logging.h>
-      #include <tvm/runtime/ndarray.h>
       #include <tvm/runtime/packed_func.h>
 
       namespace {
 
-      using namespace tvm;
       using namespace tvm::runtime;
 
       void _GEMM(NDArray A, NDArray B, NDArray C) {
