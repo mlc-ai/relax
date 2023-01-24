@@ -15,11 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from typing import List
+
 import tvm
 from tvm import tir, relax
-from tvm.script.ir_builder import relax as R
-from tvm.script.ir_builder import ir as I
-from tvm.script.ir_builder import IRBuilder
 from tvm.runtime import Object
 import tvm._ffi
 
@@ -41,10 +40,10 @@ def dense_row_row_row_fp16(
     var_rxplaceholder: T.handle,
     var_rxplaceholder_1: T.handle,
     var_matmul: T.handle,
-    M: T.var("int64"),
-    N: T.var("int64"),
-    K: T.var("int64"),
-):
+    M: T.int64, 
+    N: T.int64, 
+    K: T.int64,  
+) -> None: 
     # function attr dict
     T.func_attr({"tir.noalias": True})
     rxplaceholder = T.match_buffer(var_rxplaceholder, [M, K], dtype="float16")
@@ -69,9 +68,9 @@ def bias_row_fp16(
     var_rxplaceholder: T.handle,
     var_rxplaceholder_1: T.handle,
     var_T_add: T.handle,
-    M: T.var("int64"),
-    N: T.var("int64"),
-):
+    M: T.int64,
+    N: T.int64,
+) -> None:
     # function attr dict
     T.func_attr({"tir.noalias": True})
     rxplaceholder = T.match_buffer(var_rxplaceholder, [M, N], dtype="float16")
@@ -92,10 +91,10 @@ def batch_bias_row_fp16(
     var_rxplaceholder: T.handle,
     var_rxplaceholder_1: T.handle,
     var_T_add: T.handle,
-    M: T.var("int64"),
-    N: T.var("int64"),
-    batch: T.var("int64"),
-):
+    M: T.int64,
+    N: T.int64,
+    batch: T.int64,
+) -> None:
     # function attr dict
     T.func_attr({"tir.noalias": True})
     rxplaceholder = T.match_buffer(var_rxplaceholder, [batch, M, N], dtype="float16")
@@ -113,8 +112,8 @@ def batch_bias_row_fp16(
 
 @T.prim_func
 def relu_fp16(
-    var_rxplaceholder: T.handle, var_compute: T.handle, M: T.var("int64"), N: T.var("int64")
-):
+    var_rxplaceholder: T.handle, var_compute: T.handle, M: T.int64, N: T.int64
+) -> None:
     # function attr dict
     T.func_attr({"tir.noalias": True})
     rxplaceholder = T.match_buffer(var_rxplaceholder, [M, N], dtype="float16")
@@ -134,11 +133,11 @@ def batch_dense_row_row_row_fp16(
     var_rxplaceholder: T.handle,
     var_rxplaceholder_1: T.handle,
     var_matmul: T.handle,
-    M: T.var("int64"),
-    N: T.var("int64"),
-    K: T.var("int64"),
-    batch: T.var("int64"),
-):
+    M: T.int64,
+    N: T.int64,
+    K: T.int64,
+    batch: T.int64,
+) -> None:
     # function attr dict
     T.func_attr({"tir.noalias": True})
     rxplaceholder = T.match_buffer(var_rxplaceholder, [batch, M, K], dtype="float16")
@@ -163,11 +162,11 @@ def batch_dense_2_row_row_row_fp16(
     var_rxplaceholder: T.handle,
     var_rxplaceholder_1: T.handle,
     var_matmul: T.handle,
-    M: T.var("int64"),
-    N: T.var("int64"),
-    K: T.var("int64"),
-    batch: T.var("int64"),
-):
+    M: T.int64,
+    N: T.int64,
+    K: T.int64,
+    batch: T.int64,
+) -> None:
     # function attr dict
     T.func_attr({"tir.noalias": True})
     rxplaceholder = T.match_buffer(var_rxplaceholder, [batch, M, K], dtype="float16")
@@ -192,11 +191,11 @@ def batch_dense_2_row_row_row_fp16(
 def copy_4d_nhwc_fp16(
     A_handle: T.handle,
     B_handle: T.handle,
-    N: T.var("int64"),
-    H: T.var("int64"),
-    W: T.var("int64"),
-    C: T.var("int64"),
-):
+    N: T.int64,
+    H: T.int64,
+    W: T.int64,
+    C: T.int64,
+) -> None:
     A = T.match_buffer(A_handle, [N, H, W, C], dtype="float16")
     B = T.match_buffer(B_handle, [N, H, W, C], dtype="float16")
     # body
@@ -213,17 +212,17 @@ def copy_4d_nhwc_fp16(
 def padding_2d_nhwc_fp16(
     A_handle: T.handle,
     B_handle: T.handle,
-    N: T.var("int64"),
-    H: T.var("int64"),
-    W: T.var("int64"),
-    C: T.var("int64"),
-    pH: T.var("int64"),
-    pW: T.var("int64"),
-    lH: T.var("int64"),
-    lW: T.var("int64"),
-    rH: T.var("int64"),
-    rW: T.var("int64"),
-):
+    N: T.int64,
+    H: T.int64,
+    W: T.int64,
+    C: T.int64,
+    pH: T.int64,
+    pW: T.int64,
+    lH: T.int64,
+    lW: T.int64,
+    rH: T.int64,
+    rW: T.int64,
+) -> None:
     A = T.match_buffer(A_handle, [N, H, W, C], dtype="float16")
     B = T.match_buffer(B_handle, [N, pH, pW, C], dtype="float16")
     # body
@@ -246,20 +245,20 @@ def conv2d_nhwc_fp16(
     A_handle: T.handle,
     B_handle: T.handle,
     out_handle: T.handle,
-    N: T.var("int64"),
-    pH: T.var("int64"),
-    pW: T.var("int64"),
-    H: T.var("int64"),
-    W: T.var("int64"),
-    C: T.var("int64"),
-    O: T.var("int64"),
-    KH: T.var("int64"),
-    KW: T.var("int64"),
-    StrideH: T.var("int64"),
-    StrideW: T.var("int64"),
-    DilateH: T.var("int64"),
-    DilateW: T.var("int64"),
-):
+    N: T.int64,
+    pH: T.int64,
+    pW: T.int64,
+    H: T.int64,
+    W: T.int64,
+    C: T.int64,
+    O: T.int64,
+    KH: T.int64,
+    KW: T.int64,
+    StrideH: T.int64,
+    StrideW: T.int64,
+    DilateH: T.int64,
+    DilateW: T.int64,
+) -> None:
     A = T.match_buffer(A_handle, [N, pH, pW, C], dtype="float16")
     B = T.match_buffer(B_handle, [O, KH, KW, C], dtype="float16")
     out = T.match_buffer(out_handle, [N, H, W, O], dtype="float16")
@@ -284,7 +283,8 @@ def conv2d_nhwc_fp16(
             )
 
 
-def get_cutlass_pattern():
+def get_cutlass_pattern() -> List[tvm.tir.PrimFunc]:
+    """Get the patterns for cutlass dispatch."""
     return [
         dense_row_row_row_fp16,
         bias_row_fp16,

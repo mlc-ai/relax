@@ -25,14 +25,13 @@ import tvm.testing
 from tvm import relax
 import numpy as np
 from tvm.relax.vm import build as relax_build
-from tvm.relax.transform import OperatorLegalizer
+from tvm.relax.transform import LegalizeOps
 from tvm.script.ir_builder import relax as R
 from tvm.script.ir_builder import ir as I
 from tvm.script.ir_builder import tir as T
 from tvm.script.ir_builder import IRBuilder
 
-from tvm.relax.library.pattern import get_cutlass_pattern
-from tvm.relax.library.cutlass_codegen import op_pattern_stitch
+from tvm.relax.library import get_cutlass_pattern, op_pattern_stitch
 
 PKG_FILE = "/tmp/test_transform_cutlass_codegen.so"
 GLOBAL_SYMBOL = "HGEMM"
@@ -49,7 +48,7 @@ def f_run(rt_mod: runtime.Module, device: runtime.ndarray.Device, *input):
 
 
 def build(mod, file_name=PKG_FILE):
-    mod = relax.transform.OperatorLegalizer(mod).transform()
+    mod = relax.transform.LegalizeOps()(mod)
     mod = relax.transform.AnnotateTIROpPattern()(mod)
     mod = relax.transform.FuseOps()(mod)
     mod = relax.transform.FuseTIR()(mod)
