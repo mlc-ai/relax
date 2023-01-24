@@ -113,6 +113,7 @@ def enumerate_conv2d_operators(
     tile_descriptions,
     data_type,
     alignment_constraints,
+    layout_constraints,
     swizzling_functor=SwizzlingFunctor.Identity4,
 ):
     """Exhaustively instantiate all kernels from a given configuration."""
@@ -125,7 +126,7 @@ def enumerate_conv2d_operators(
 
     if conv_kind == ConvKind.Dgrad and stride_support == StrideSupport.Strided:
         swizzling_functor = SwizzlingFunctor.StridedDgradIdentity1
-
+    assert layout_constraints == ["NHWC", "NHWC", "NHWC"]
     for split_k_slice in split_k_slices:
         for tile in tile_descriptions:
             for alignment in alignment_constraints:
@@ -152,7 +153,6 @@ def enumerate_conv2d_operators(
                     swizzling_functor,
                     split_k_slice,
                 )
-
                 ret.append(
                     {
                         "src": profiler_emitter.emit(

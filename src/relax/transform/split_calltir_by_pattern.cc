@@ -382,14 +382,14 @@ class TIRPatternMatcher {
       tir::PrimFunc pattern_func = pattern;
       Array<Var> pattern_symbolic_vars;
       int buffer_count = pattern_func->buffer_map.size();
-      for (int i = buffer_count; i < pattern_func->params.size(); i++) {
+      for (int i = buffer_count; i < static_cast<int>(pattern_func->params.size()); i++) {
         pattern_symbolic_vars.push_back(pattern_func->params[i]);
       }
       ForMatcher block_matcher(pattern_func, pattern_symbolic_vars);
       if (block_matcher.Match(top)) {
         // We have found a match
         Array<PrimExpr> symbol_values;
-        for (int i = buffer_count; i < pattern_func->params.size(); i++) {
+        for (int i = buffer_count; i < static_cast<int>(pattern_func->params.size()); i++) {
           symbol_values.push_back(block_matcher.evaluated_symbols.back()[pattern_func->params[i]]);
         }
         match_results_.push_back(
