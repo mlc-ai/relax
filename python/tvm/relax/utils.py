@@ -97,3 +97,54 @@ def copy_with_new_params(func: Function) -> Function:
         The copied function.
     """
     return _ffi_api.CopyWithNewParams(func)  # type: ignore
+
+
+def extend_func(orig_func: Function, ex_func: Function) -> Function:
+    """Extend a relax function by another given function. It will link orig_func with
+    ex_func and return a new function.
+
+    In detail, the result function has the arguments list of orig_func and the combination
+    of their body, which passes the return values of orig_func as the arguments of ex_func. For
+    those arguments of ex_func which are not mapped to some return values, they will be lifted and
+    appended to the argument list of result function.
+
+    This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in some
+    sense.
+
+    Note: the return value of orig_func will be bound to DataflowVar. So it is a bad idea to use this
+    util if the params of ex_func present in its R.output.
+
+    Example:
+
+    .. code-block:: python
+        # Before.
+            @R.function
+            def func1(a, b):
+                return a + b, a * b
+
+            @R.function
+            def func2(c, d, e):
+                return d, c, c + e
+
+        # After. func1_func2 = extend_func(orig_func=func1, ex_func=func2).
+            @R.function
+            def func1_func2(a, b, e):
+                c = a + b
+                d = a * b
+                return d, c, c + e
+
+    Parameters
+    ----------
+    orig_func : Function
+        The function to be extended.
+
+    ex_func : Function
+        The function to be linked after the orig_func.
+
+    Returns
+    -------
+    ret : Function
+        The result function.
+    """
+
+    return _ffi_api.ExtendFunc(orig_func, ex_func)  # type: ignore
