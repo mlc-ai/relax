@@ -22,6 +22,7 @@ import numpy as np  # type: ignore
 
 import tvm
 from tvm import relax as rx
+from tvm.relax.struct_info import TensorStructInfo
 from tvm.runtime.container import tuple_object
 from tvm.relax.op import add, subtract, multiply, divide, sqrt
 from tvm.relax import Var, Function
@@ -39,15 +40,30 @@ class Optimizer:
         If params is None, it indicates params will be added later using add_params.
     """
 
+    _param_list: List[Var]
+    _state: tvm.runtime.container.ADT
+    _dtype: str
+
     def __init__(self, params: Union[Var, List[Var]]) -> None:
         if params is None:
             params = []
         elif not isinstance(params, list):
             params = [params]
-        if not all(isinstance(x, Var) for x in params):
-            raise ValueError("Not all elements in argument params is Var")
         self._param_list = params
         self._state = None
+        self._dtype = None
+        self.check_params_and_dtype(params)
+
+    def check_params_and_dtype(self, params: List[Var]):
+        for x in params:
+            assert isinstance(x, Var), "Not every parameter is Var."
+            assert isinstance(x.struct_info, TensorStructInfo), "Not every parameter is Tensor Var"
+            data_type = tvm.DataType(x.struct_info.dtype)
+            assert data_type.type_code == tvm.DataTypeCode.BFLOAT or data_type.type_code == tvm.DataTypeCode.FLOAT, "Pamameters must be of float dtype"
+            if self._dtype is None:
+                self._dtype = x.struct_info.dtype
+            else:
+                assert self._dtype == x.struct_info.dtype, "All parameters should have the same dtype"
 
     def add_params(self, params: Union[Var, List[Var]]):
         """Append one parameter or a list of new parameters to the optimizer.
@@ -64,7 +80,7 @@ class Optimizer:
         assert self._state is None, "Add parameter after the state is acquired"
         if not isinstance(params, list):
             params = [params]
-        assert all(isinstance(x, Var) for x in params), "Not all elements in params are Vars"
+        self.check_params_and_dtype(params)
         self._param_list += params
 
     @property
@@ -75,6 +91,11 @@ class Optimizer:
 
         The state of an optimizer will be constructed when `opt.state` is called for the first time.
         Before that, you can freely add parameters using `opt.add_params()`.
+
+        Returns
+        -------
+        res : ADT
+            An ADT object representing the state of the optimizer.
         """
         return self._state
 
@@ -135,7 +156,7 @@ def _get_np_shape(var):
 
 
 def _get_np_dtype(var):
-    return str(var.struct_info.dtype)
+    return var.struct_info.dtype
 
 
 class SGD(Optimizer):
@@ -169,7 +190,13 @@ class SGD(Optimizer):
 
     @property
     def state(self):
-        """The state of SGD is `(num_steps,)`."""
+        """The state of SGD is `(num_steps,)`.
+
+        Returns
+        -------
+        res : ADT
+            The state of SGD.
+        """
         if self._state is None:
             self._state = tuple_object(
                 (
@@ -186,6 +213,7 @@ class SGD(Optimizer):
     def get_function(self) -> Function:
         plist = self._param_list
         len_param = len(plist)
+        dtype = self._dtype
 
         # input variables
         param_var = Var("params", rx.TupleStructInfo([p.struct_info for p in plist]))
@@ -193,8 +221,8 @@ class SGD(Optimizer):
         state_var = Var("optim_states", rx.TupleStructInfo([rx.TensorStructInfo((), "int64")]))
 
         # constants
-        lr = rx.const(self.lr, "float32")
-        weight_decay = rx.const(self.weight_decay, "float32")
+        lr = rx.const(self.lr, dtype)
+        weight_decay = rx.const(self.weight_decay, dtype)
         one = rx.const(1, "int64")
 
         builder = rx.BlockBuilder()
@@ -279,8 +307,13 @@ class MomentumSGD(Optimizer):
 
     @property
     def state(self):
-        """The state of momentum SGD:
+        """The state of momentum SGD is
         `(num_steps, velocity_of_param_0, ..., velocity_of_param_n-1)`
+
+        Returns
+        -------
+        res : ADT
+            The state of momentum SGD.
         """
         if self._state is None:
             self._state = tuple_object(
@@ -303,6 +336,7 @@ class MomentumSGD(Optimizer):
     def get_function(self) -> Function:
         plist = self._param_list
         len_param = len(plist)
+        dtype = self._dtype
 
         # input variables
         param_var = Var("params", rx.TupleStructInfo([p.struct_info for p in plist]))
@@ -313,10 +347,10 @@ class MomentumSGD(Optimizer):
         )
 
         # constants
-        lr = rx.const(self.lr, "float32")
-        momentum = rx.const(self.momentum, "float32")
-        weight_decay = rx.const(self.weight_decay, "float32")
-        dampening_inv = rx.const(1.0 - self.dampening, "float32")
+        lr = rx.const(self.lr, dtype)
+        momentum = rx.const(self.momentum, dtype)
+        weight_decay = rx.const(self.weight_decay, dtype)
+        dampening_inv = rx.const(1.0 - self.dampening, dtype)
         one = rx.const(1, "int64")
 
         builder = rx.BlockBuilder()
@@ -407,21 +441,26 @@ class Adam(Optimizer):
 
     @property
     def state(self):
-        """The state of Adam:
+        """The state of Adam is
 
         .. code-block:: python
             (num_steps, beta_0_prod, # beta0 ** num_steps
             beta_1_prod, # beta1 ** num_steps
             first_momentum_of_param_0, ..., first_momentum_of_param_n-1,
             second_momentum_of_param_0, ..., second_momentum_of_param_n-1)
+
+        Returns
+        -------
+        res : ADT
+            The state of Adam.
         """
         if self._state is None:
             self._state = tuple_object(
                 (
                     # num_steps, beta_0_prod, beta_1_prod
                     tvm.nd.array(np.zeros((), "int64")),
-                    tvm.nd.array(np.ones((), "float32")),
-                    tvm.nd.array(np.ones((), "float32")),
+                    tvm.nd.array(np.ones((), self._dtype)),
+                    tvm.nd.array(np.ones((), self._dtype)),
                     # first_momentum
                     *(
                         tvm.nd.array(np.zeros(_get_np_shape(p), _get_np_dtype(p)))
@@ -443,6 +482,7 @@ class Adam(Optimizer):
     def get_function(self) -> Function:
         plist = self._param_list
         len_param = len(plist)
+        dtype = self._dtype
 
         # input variables
         param_var = Var("params", rx.TupleStructInfo([p.struct_info for p in plist]))
@@ -452,8 +492,8 @@ class Adam(Optimizer):
             rx.TupleStructInfo(
                 [
                     rx.TensorStructInfo((), "int64"),
-                    rx.TensorStructInfo((), "float32"),
-                    rx.TensorStructInfo((), "float32"),
+                    rx.TensorStructInfo((), dtype),
+                    rx.TensorStructInfo((), dtype),
                     *(p.struct_info for p in plist),
                     *(p.struct_info for p in plist),
                 ]
@@ -461,15 +501,15 @@ class Adam(Optimizer):
         )
 
         # constants
-        lr = rx.const(self.lr, "float32")
-        beta1 = rx.const(self.beta1, "float32")
-        beta2 = rx.const(self.beta2, "float32")
-        beta1_inv = rx.const(1 - self.beta1, "float32")
-        beta2_inv = rx.const(1 - self.beta2, "float32")
-        eps = rx.const(self.eps, "float32")
-        weight_decay = rx.const(self.weight_decay, "float32")
+        lr = rx.const(self.lr, dtype)
+        beta1 = rx.const(self.beta1, dtype)
+        beta2 = rx.const(self.beta2, dtype)
+        beta1_inv = rx.const(1 - self.beta1, dtype)
+        beta2_inv = rx.const(1 - self.beta2, dtype)
+        eps = rx.const(self.eps, dtype)
+        weight_decay = rx.const(self.weight_decay, dtype)
         one_int = rx.const(1, "int64")
-        one_float = rx.const(1, "float32")
+        one_float = rx.const(1, dtype)
 
         builder = rx.BlockBuilder()
         with builder.function("Adam", [param_var, grad_var, state_var]):
