@@ -17,3 +17,4 @@
 """The Relax training APIs."""
 
 from . import optimizer
+from . import loss
