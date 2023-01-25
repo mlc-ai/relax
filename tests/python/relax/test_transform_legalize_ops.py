@@ -59,5 +59,68 @@ def test_customize_legalize_map():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_legalize_multiple_types_of_call():
+    # fmt: off
+    @tvm.script.ir_module
+    class Before:
+        @R.function
+        def mul2(x: R.Tensor((3, 3), "float32")):
+            gv = R.multiply(x, R.const(2.0, "float32"))
+            return gv
+
+        @T.prim_func
+        def identity(rxplaceholder: T.Buffer[(T.int64(3), T.int64(3)), "float32"], T_id: T.Buffer[(T.int64(3), T.int64(3)), "float32"]):
+            for ax0, ax1 in T.grid(T.int64(3), T.int64(3)):
+                with T.block("T_add"):
+                    v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])
+                    T.reads(rxplaceholder[v_ax0, v_ax1])
+                    T.writes(T_id[v_ax0, v_ax1])
+                    T_id[v_ax0, v_ax1] = rxplaceholder[v_ax0, v_ax1]
+
+        @R.function
+        def main(x: R.Tensor((3, 3), "float32")):
+            gv: R.Tensor((3, 3), "float32") = mul2(x)
+            gv1 = R.call_tir(identity, gv, (3, 3), dtype="float32")
+            gv2 = R.multiply(gv1, R.const(2.0, "float32"))
+            return gv2
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def mul2(x: R.Tensor((3, 3), dtype="float32")) -> R.Tensor((3, 3), dtype="float32"):
+            gv = R.call_tir(multiply, (x,), (3, 3), dtype="float32")
+            return gv
+
+        @T.prim_func
+        def identity(rxplaceholder: T.Buffer[(T.int64(3), T.int64(3)), "float32"], T_id: T.Buffer[(T.int64(3), T.int64(3)), "float32"]):
+            for ax0, ax1 in T.grid(T.int64(3), T.int64(3)):
+                with T.block("T_add"):
+                    v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])
+                    T.reads(rxplaceholder[v_ax0, v_ax1])
+                    T.writes(T_id[v_ax0, v_ax1])
+                    T_id[v_ax0, v_ax1] = rxplaceholder[v_ax0, v_ax1]
+
+        @T.prim_func
+        def multiply(rxplaceholder: T.Buffer[(T.int64(3), T.int64(3)), "float32"], T_multiply: T.Buffer[(T.int64(3), T.int64(3)), "float32"]):
+            T.func_attr({"tir.noalias": True})
+            for ax0, ax1 in T.grid(T.int64(3), T.int64(3)):
+                with T.block("T_multiply"):
+                    v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])
+                    T.reads(rxplaceholder[v_ax0, v_ax1])
+                    T.writes(T_multiply[v_ax0, v_ax1])
+                    T_multiply[v_ax0, v_ax1] = rxplaceholder[v_ax0, v_ax1] * T.float32(2)
+
+        @R.function
+        def main(x1: R.Tensor((3, 3), dtype="float32")) -> R.Tensor((3, 3), dtype="float32"):
+            gv1: R.Tensor((3, 3), dtype="float32") = mul2(x1)
+            gv11 = R.call_tir(identity, gv1, (3, 3), dtype="float32")
+            gv2 = R.call_tir(multiply, (gv11,), (3, 3), dtype="float32")
+            return gv2
+    # fmt: on
+
+    After = LegalizeOps()(Before)
+    tvm.ir.assert_structural_equal(After, Expected)
+
+
 if __name__ == "__main__":
     tvm.testing.main()
