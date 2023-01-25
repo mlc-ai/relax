@@ -16,6 +16,7 @@
 # under the License.
 """Provide abstraction for defining optimizers and a set of common optimizers."""
 
+from decimal import Decimal
 from typing import List, Union
 
 import numpy as np  # type: ignore
@@ -59,11 +60,16 @@ class Optimizer:
             assert isinstance(x, Var), "Not every parameter is Var."
             assert isinstance(x.struct_info, TensorStructInfo), "Not every parameter is Tensor Var"
             data_type = tvm.DataType(x.struct_info.dtype)
-            assert data_type.type_code == tvm.DataTypeCode.BFLOAT or data_type.type_code == tvm.DataTypeCode.FLOAT, "Pamameters must be of float dtype"
+            assert (
+                data_type.type_code == tvm.DataTypeCode.BFLOAT
+                or data_type.type_code == tvm.DataTypeCode.FLOAT
+            ), "Pamameters must be of float dtype"
             if self._dtype is None:
                 self._dtype = x.struct_info.dtype
             else:
-                assert self._dtype == x.struct_info.dtype, "All parameters should have the same dtype"
+                assert (
+                    self._dtype == x.struct_info.dtype
+                ), "All parameters should have the same dtype"
 
     def add_params(self, params: Union[Var, List[Var]]):
         """Append one parameter or a list of new parameters to the optimizer.
@@ -157,6 +163,12 @@ def _get_np_shape(var):
 
 def _get_np_dtype(var):
     return var.struct_info.dtype
+
+
+# We need to subtract on hyperparameters, but do not want to introduce floating point error.
+# That would lead to a few problems, such as making assert_structural_equal not passed in unit tests
+def _high_precision_minus(lhs, rhs):
+    return float(Decimal(str(lhs)) - Decimal(str(rhs)))
 
 
 class SGD(Optimizer):
@@ -350,7 +362,7 @@ class MomentumSGD(Optimizer):
         lr = rx.const(self.lr, dtype)
         momentum = rx.const(self.momentum, dtype)
         weight_decay = rx.const(self.weight_decay, dtype)
-        dampening_inv = rx.const(1.0 - self.dampening, dtype)
+        dampening_inv = rx.const(_high_precision_minus(1, self.dampening), dtype)
         one = rx.const(1, "int64")
 
         builder = rx.BlockBuilder()
@@ -504,8 +516,8 @@ class Adam(Optimizer):
         lr = rx.const(self.lr, dtype)
         beta1 = rx.const(self.beta1, dtype)
         beta2 = rx.const(self.beta2, dtype)
-        beta1_inv = rx.const(1 - self.beta1, dtype)
-        beta2_inv = rx.const(1 - self.beta2, dtype)
+        beta1_inv = rx.const(_high_precision_minus(1, self.beta1), dtype)
+        beta2_inv = rx.const(_high_precision_minus(1, self.beta2), dtype)
         eps = rx.const(self.eps, dtype)
         weight_decay = rx.const(self.weight_decay, dtype)
         one_int = rx.const(1, "int64")

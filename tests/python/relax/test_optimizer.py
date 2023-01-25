@@ -31,8 +31,9 @@ def test_optimizer_wrong_param():
     x4 = relax.Var("x3", R.Tensor((3, 3), "int64"))
     x5 = relax.Tuple([x1])
 
-    SGD(x1, 0.01) # fine
-    SGD([x1], 0.01) # fine
+    # fine cases
+    SGD(x1, 0.01)
+    SGD([x1], 0.01)
     assert SGD([x2], 0.01)._dtype == "bfloat16"
 
     with pytest.raises(AssertionError, match="Not every parameter is Var."):
@@ -404,7 +405,30 @@ def test_adam_float64():
     adam = Adam([x, y], 0.01, (0.8, 0.85), 1e-7, 0.1).get_function()
 
     @R.function
-    def adam_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64")), optim_states: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((), dtype="float64"), R.Tensor((), dtype="float64"), R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64"), R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64")), R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((), dtype="float64"), R.Tensor((), dtype="float64"), R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64"), R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64"))):
+    def adam_expected(
+        params: R.Tuple(R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64")),
+        gradients: R.Tuple(R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64")),
+        optim_states: R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((), dtype="float64"),
+            R.Tensor((), dtype="float64"),
+            R.Tensor((3, 3), dtype="float64"),
+            R.Tensor((3,), dtype="float64"),
+            R.Tensor((3, 3), dtype="float64"),
+            R.Tensor((3,), dtype="float64"),
+        ),
+    ) -> R.Tuple(
+        R.Tuple(R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64")),
+        R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((), dtype="float64"),
+            R.Tensor((), dtype="float64"),
+            R.Tensor((3, 3), dtype="float64"),
+            R.Tensor((3,), dtype="float64"),
+            R.Tensor((3, 3), dtype="float64"),
+            R.Tensor((3,), dtype="float64"),
+        ),
+    ):
         # block 0
         with R.dataflow():
             lv: R.Tensor((3, 3), dtype="float64") = params[0]
@@ -457,13 +481,24 @@ def test_adam_float64():
             lv47: R.Tensor((3,), dtype="float64") = R.divide(lv42, lv46)
             lv48: R.Tensor((3,), dtype="float64") = R.multiply(R.const(0.01, "float64"), lv47)
             lv49: R.Tensor((3,), dtype="float64") = R.subtract(lv1, lv48)
-            gv: R.Tuple(R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64")) = (lv31, lv49)
-            gv1: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((), dtype="float64"), R.Tensor((), dtype="float64"), R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64"), R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64")) = (lv11, lv12, lv13, lv18, lv36, lv22, lv40)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float64"), R.Tensor((3,), dtype="float64")) = (
+                lv31,
+                lv49,
+            )
+            gv1: R.Tuple(
+                R.Tensor((), dtype="int64"),
+                R.Tensor((), dtype="float64"),
+                R.Tensor((), dtype="float64"),
+                R.Tensor((3, 3), dtype="float64"),
+                R.Tensor((3,), dtype="float64"),
+                R.Tensor((3, 3), dtype="float64"),
+                R.Tensor((3,), dtype="float64"),
+            ) = (lv11, lv12, lv13, lv18, lv36, lv22, lv40)
             R.output(gv, gv1)
         return (gv, gv1)
 
     assert_structural_equal(adam, adam_expected)
 
-test_adam_float64()
-# if __name__ == "__main__":
-#     tvm.testing.main()
+
+if __name__ == "__main__":
+    tvm.testing.main()
