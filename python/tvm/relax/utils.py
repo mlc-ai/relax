@@ -287,8 +287,8 @@ def extend_func(orig_func: Function, ex_func: Function) -> Function:
     This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in some
     sense.
 
-    Note: the return value of orig_func will be bound to DataflowVar. So it is a bad idea to use this
-    util if the params of ex_func present in its R.output.
+    Note: the return value of orig_func will be bound to DataflowVar. So it is a bad idea to use
+    this util if the params of ex_func present in its R.output.
 
     Example:
 
