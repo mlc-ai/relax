@@ -28,9 +28,9 @@ from tvm.relax.vm import build as relax_build
 
 PKG_FILE = "/tmp/test_transform_cublas_codegen.so"
 GLOBAL_SYMBOL = "HGEMM"
-A_TYPE = "float16"
-B_TYPE = "float16"
-C_TYPE = "float16"
+A_TYPE = "float32"
+B_TYPE = "float32"
+C_TYPE = "float32"
 
 target = "cuda"
 
@@ -93,7 +93,7 @@ def constructGEMM(m, n, k, GLOBAL_SYMBOL="HGEMM"):
 
 
 def test_cublas_dense():
-    m, n, k = 128, 128, 128
+    m, n, k = 128, 32, 64
     build(constructGEMM(m, n, k))
     print("finished building.")
     dev = tvm.cuda()

@@ -24,9 +24,9 @@ def op_pattern_stitch(evaluated_symbols, evaluated_buffers, matched_pattern_name
     return matched_pattern_names
 
 
-A_TYPE = "float16"
-B_TYPE = "float16"
-C_TYPE = "float16"
+A_TYPE = "float32"
+B_TYPE = "float32"
+C_TYPE = "float32"
 
 
 @register_func("tvm.relax.cublas.get_op_pattern_list")
@@ -125,6 +125,7 @@ GRAPH_PATTERN_CODE_LIST[
             c,                 //
             ldc                //
         );
+        cudaThreadSynchronize();
         cudaStatus = cudaGetLastError();
         CHECK(cudaStatus == cudaSuccess);
       }
