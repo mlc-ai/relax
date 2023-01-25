@@ -848,6 +848,8 @@ class LegalizeOps:
 
             def visit_call_(self, call):  # pylint: disable=arguments-differ
                 call = self.visit_expr_post_order(call)
+                if not isinstance(call.op, tir.op.Op):
+                    return call
                 return self._convert_op(call)
 
         return OperatorLegalizer(mod, self.customize_legalize_map).transform()
