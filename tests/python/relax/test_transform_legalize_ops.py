@@ -79,7 +79,7 @@ def test_legalize_multiple_types_of_call():
         @R.function
         def main(x: R.Tensor((3, 3), "float32")):
             gv: R.Tensor((3, 3), "float32") = mul2(x)
-            gv1 = R.call_tir(identity, (gv, gv), (3, 3), dtype="float32")
+            gv1 = R.call_tir(identity, gv, (3, 3), dtype="float32")
             gv2 = R.multiply(gv1, R.const(2.0, "float32"))
             return gv2
 
@@ -112,7 +112,7 @@ def test_legalize_multiple_types_of_call():
         @R.function
         def main(x1: R.Tensor((3, 3), dtype="float32")) -> R.Tensor((3, 3), dtype="float32"):
             gv1: R.Tensor((3, 3), dtype="float32") = mul2(x1)
-            gv11 = R.call_tir(identity, (gv1, gv1), (3, 3), dtype="float32")
+            gv11 = R.call_tir(identity, gv1, (3, 3), dtype="float32")
             gv2 = R.call_tir(multiply, (gv11,), (3, 3), dtype="float32")
             return gv2
 
