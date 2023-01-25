@@ -39,6 +39,10 @@ class Optimizer:
         The parameter or the list of parameters to optimize.
 
         If params is None, it indicates params will be added later using add_params.
+
+        Parameters should all be Vars of floating point Tensors, including float32, float64,
+        float16, bfloat16, etc. Currently, all parameters should have the same dtype, and that dtype
+        will be used as the dtype of the optimizer states.
     """
 
     _param_list: List[Var]
@@ -53,16 +57,16 @@ class Optimizer:
         self._param_list = params
         self._state = None
         self._dtype = None
-        self.check_params_and_dtype(params)
+        self._check_params_and_dtype(params)
 
-    def check_params_and_dtype(self, params: List[Var]):
+    def _check_params_and_dtype(self, params: List[Var]):
         for x in params:
             assert isinstance(x, Var), "Not every parameter is Var."
             assert isinstance(x.struct_info, TensorStructInfo), "Not every parameter is Tensor Var"
             data_type = tvm.DataType(x.struct_info.dtype)
-            assert (
-                data_type.type_code == tvm.DataTypeCode.BFLOAT
-                or data_type.type_code == tvm.DataTypeCode.FLOAT
+            assert data_type.type_code in (
+                tvm.DataTypeCode.BFLOAT,
+                tvm.DataTypeCode.FLOAT,
             ), "Pamameters must be of float dtype"
             if self._dtype is None:
                 self._dtype = x.struct_info.dtype
@@ -79,6 +83,10 @@ class Optimizer:
         params : Union[Var, List[Var]]
             The parameter or the list of parameters to append.
 
+            Parameters should all be Vars of floating point Tensors, including float32, float64,
+            float16, bfloat16, etc. Currently, all parameters should have the same dtype, and that
+            dtype will be used as the dtype of the optimizer states.
+
         Note
         ----
         This method can only be called before `opt.state` or `opt.get_function()`.
@@ -86,7 +94,7 @@ class Optimizer:
         assert self._state is None, "Add parameter after the state is acquired"
         if not isinstance(params, list):
             params = [params]
-        self.check_params_and_dtype(params)
+        self._check_params_and_dtype(params)
         self._param_list += params
 
     @property
@@ -166,7 +174,8 @@ def _get_np_dtype(var):
 
 
 # We need to subtract on hyperparameters, but do not want to introduce floating point error.
-# That would lead to a few problems, such as making assert_structural_equal not passed in unit tests
+# Floating point error would lead to a few problems, such as making assert_structural_equal not
+# passed in unit tests
 def _high_precision_minus(lhs, rhs):
     return float(Decimal(str(lhs)) - Decimal(str(rhs)))
 
