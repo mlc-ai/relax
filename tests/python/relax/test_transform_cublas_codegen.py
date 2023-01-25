@@ -97,8 +97,8 @@ def test_cublas_dense():
     build(constructGEMM(m, n, k))
     print("finished building.")
     dev = tvm.cuda()
-    A = np.random.rand(m, k).astype("float16") * 5
-    B = np.random.rand(k, n).astype("float16") * 5
+    A = np.random.rand(m, k).astype("float32") * 5
+    B = np.random.rand(k, n).astype("float32") * 5
     A_tvm = tvm.nd.array(A, dev)
     B_tvm = tvm.nd.array(B, dev)
     executable = tvm.runtime.load_module(PKG_FILE)
