@@ -824,8 +824,6 @@ class LegalizeOps:
                     self.legalize_map[name] = func
 
             def _convert_op(self, call: Call) -> Expr:
-                if not isinstance(call.op, tir.op.Op):
-                    return call
                 if call.op.name in self.legalize_map:
                     # We only transform the op calls with known shape values
                     if not all(
@@ -850,6 +848,8 @@ class LegalizeOps:
 
             def visit_call_(self, call):  # pylint: disable=arguments-differ
                 call = self.visit_expr_post_order(call)
+                if not isinstance(call.op, tir.op.Op):
+                    return call
                 return self._convert_op(call)
 
         return OperatorLegalizer(mod, self.customize_legalize_map).transform()

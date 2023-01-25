@@ -60,6 +60,7 @@ def test_customize_legalize_map():
 
 
 def test_legalize_multiple_types_of_call():
+    # fmt: off
     @tvm.script.ir_module
     class Before:
         @R.function
@@ -115,6 +116,7 @@ def test_legalize_multiple_types_of_call():
             gv11 = R.call_tir(identity, gv1, (3, 3), dtype="float32")
             gv2 = R.call_tir(multiply, (gv11,), (3, 3), dtype="float32")
             return gv2
+    # fmt: on
 
     After = LegalizeOps()(Before)
     tvm.ir.assert_structural_equal(After, Expected)
