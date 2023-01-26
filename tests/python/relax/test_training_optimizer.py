@@ -36,6 +36,10 @@ def test_optimizer_wrong_param():
     SGD([x1], 0.01)
     assert SGD([x2], 0.01)._dtype == "bfloat16"
 
+    with pytest.raises(AssertionError, match="There exist duplicate Vars in the parameter list."):
+        SGD([x1, x1], 0.01)
+    with pytest.raises(AssertionError, match="There exist duplicate Vars in the parameter list."):
+        SGD(x1, 0.01).add_params([x1])
     with pytest.raises(AssertionError, match="Not every parameter is Var."):
         SGD(x5, 0.01)
     with pytest.raises(AssertionError, match="Not every parameter is Tensor Var"):

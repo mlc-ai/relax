@@ -54,10 +54,13 @@ class Optimizer:
             params = []
         elif not isinstance(params, list):
             params = [params]
-        self._param_list = params
         self._state = None
         self._dtype = None
         self._check_params_and_dtype(params)
+        self._param_list = params
+        assert len(self._param_list) == len(
+            set(self._param_list)
+        ), "There exist duplicate Vars in the parameter list."
 
     def _check_params_and_dtype(self, params: List[Var]):
         for x in params:
@@ -96,6 +99,9 @@ class Optimizer:
             params = [params]
         self._check_params_and_dtype(params)
         self._param_list += params
+        assert len(self._param_list) == len(
+            set(self._param_list)
+        ), "There exist duplicate Vars in the parameter list."
 
     @property
     def state(self):
