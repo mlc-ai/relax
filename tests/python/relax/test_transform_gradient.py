@@ -45,7 +45,7 @@ def test_simple():
             return gv
 
         @R.function
-        def main_adjoint(x: R.Tensor((3, 3), "float32")) -> R.Tuple(R.Tensor(None, "float32", ndim=0),R.Tuple(R.Tensor(None, "float32", ndim=2)),):
+        def main_adjoint(x: R.Tensor((3, 3), "float32")) -> R.Tuple(R.Tensor(None, "float32", ndim=0), R.Tuple(R.Tensor(None, "float32", ndim=2)),):
             with R.dataflow():
                 gv: R.Tensor((), "float32") = R.sum(x, axis=None, keepdims=False)
                 gv_adjoint: R.Tensor((), "float32") = R.ones((), "float32")
@@ -866,6 +866,68 @@ def test_function_copy():
     old_bindings_len = len(old_bindings)
     new_bindings = After["main_adjoint"].body.blocks[0].bindings[:old_bindings_len]
     assert_structural_equal(old_bindings, new_bindings, True)
+
+
+def test_mlp_script():
+    """
+    An example of single layer multi-layer perceptron. You can add extra layers if you want.
+
+    For n-layer perceptron, see test_transform_gradient_numeric.py.
+    """
+
+    # fmt: off
+    @tvm.script.ir_module
+    class Before:
+        @R.function
+        def main(x: R.Tensor((3, 10), "float32"), w0: R.Tensor((10, 5), "float32"), b0: R.Tensor((5,), "float32"), label: R.Tensor((3,), "int64")):
+            with R.dataflow():
+                lv0 = R.matmul(x, w0)
+                out = R.add(lv0, b0)
+                logits = R.nn.log_softmax(out)
+                loss = R.nn.nll_loss(logits, label)
+                R.output(loss)
+            return loss
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((3, 10), "float32"), w0: R.Tensor((10, 5), "float32"), b0: R.Tensor((5,), "float32"), label: R.Tensor((3,), "int64")) -> R.Tensor((), "float32"):
+            # block 0
+            with R.dataflow():
+                lv0: R.Tensor((3, 5), "float32") = R.matmul(x, w0, out_dtype="")
+                out: R.Tensor((3, 5), "float32") = R.add(lv0, b0)
+                logits: R.Tensor((3, 5), "float32") = R.nn.log_softmax(out, axis=-1)
+                loss: R.Tensor((), "float32") = R.nn.nll_loss(logits, label, reduction="mean", ignore_index=-100)
+                R.output(loss)
+            return loss
+
+        @R.function
+        def main_adjoint(x: R.Tensor((3, 10), "float32"), w0: R.Tensor((10, 5), "float32"), b0: R.Tensor((5,), "float32"), label: R.Tensor((3,), "int64")) -> R.Tuple(R.Tensor((), "float32"), R.Tuple(R.Tensor((10, 5), "float32"), R.Tensor((5,), "float32"))):
+            # block 0
+            with R.dataflow():
+                lv0: R.Tensor((3, 5), "float32") = R.matmul(x, w0, out_dtype="")
+                out: R.Tensor((3, 5), "float32") = R.add(lv0, b0)
+                logits: R.Tensor((3, 5), "float32") = R.nn.log_softmax(out, axis=-1)
+                loss: R.Tensor((), "float32") = R.nn.nll_loss(logits, label, reduction="mean", ignore_index=-100)
+                loss_adjoint: R.Tensor((), "float32") = R.ones((), "float32")
+                logits_adjoint: R.Tensor((3, 5), "float32") = R.nll_loss_backward(loss_adjoint, logits, label, reduction="mean", ignore_index=-100)
+                lv: R.Tensor((3, 1), "float32") = R.sum(logits_adjoint, axis=[-1], keepdims=True)
+                lv1: R.Tensor((3, 5), "float32") = R.exp(logits)
+                lv2: R.Tensor((3, 5), "float32") = R.multiply(lv, lv1)
+                out_adjoint: R.Tensor((3, 5), "float32") = R.subtract(logits_adjoint, lv2)
+                lv0_adjoint: R.Tensor((3, 5), "float32") = out_adjoint
+                lv3: R.Tensor((10, 3), "float32") = R.permute_dims(x, axes=[1, 0])
+                lv4: R.Tensor((10, 5), "float32") = R.matmul(lv3, lv0_adjoint, out_dtype="")
+                w0_adjoint: R.Tensor((10, 5), "float32") = R.collapse_sum_to(lv4, (10, 5))
+                b0_adjoint: R.Tensor((5,), "float32") = R.collapse_sum_to(out_adjoint, (5,))
+                R.output(loss, w0_adjoint, b0_adjoint)
+            return (loss, (w0_adjoint, b0_adjoint))
+    # fmt: on
+
+    After = relax.transform.Gradient(
+        Before.get_global_var("main"), require_grads=Before["main"].params[1:3]
+    )(Before)
+    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
 
 
 def test_report_error():

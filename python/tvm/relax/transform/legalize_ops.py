@@ -16,15 +16,17 @@
 # under the License.
 # pylint: disable=abstract-method,invalid-name,missing-class-docstring,missing-function-docstring,missing-module-docstring,unused-argument
 import logging
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union, Tuple
 
 import tvm
 from tvm import te, tir, topi, relax
+from tvm.ir.expr import PrimExpr
 from tvm.relax import struct_info
 from tvm.ir.module import IRModule
+from tvm.tir.expr import IntImm
 
 from ..analysis import remove_all_unused
-from ..expr import Call, Constant, Expr, Function, ShapeExpr, Tuple, TupleGetItem, Var
+from ..expr import Call, Constant, Expr, Function, ShapeExpr, Tuple as RxTuple, TupleGetItem, Var
 from ..expr_functor import mutator, PyExprMutator
 from ..block_builder import BlockBuilder
 
@@ -39,6 +41,8 @@ TEFunc = Callable[..., te.Tensor]
 # BlockBuilder and the Call to be legalized, and outputs the legalization
 # result Expr.
 LegalizeFunc = Callable[[BlockBuilder, Call], Expr]
+
+PrimExprLike = Union[int, PrimExpr]
 
 
 def has_known_shape_value(sinfo: struct_info.StructInfo) -> bool:
@@ -79,7 +83,7 @@ def try_convert_to_scalar_const(expr: Expr) -> Union[Expr, bool, float, int]:
         The expr to be checked and converted.
 
     Returns
-    --–----
+    -------
     ret : Union[Expr, bool, float, int]
         Return a Python native value (int/float/bool) if the given
         expr is a scalar constant. Or return the input itself
@@ -275,13 +279,15 @@ def _concat(bb: BlockBuilder, call: Call) -> Expr:
     n_field = len(t.struct_info.fields)
     while isinstance(t, Var):
         binding = bb.lookup_binding(t)
-        if not isinstance(binding, (Tuple, Var)):
+        if not isinstance(binding, (RxTuple, Var)):
             break
         t = binding
 
-    assert isinstance(t, (Tuple, Var))
+    assert isinstance(t, (RxTuple, Var))
     fields = (
-        t.fields if isinstance(t, Tuple) else [bb.emit(TupleGetItem(t, i)) for i in range(n_field)]
+        t.fields
+        if isinstance(t, RxTuple)
+        else [bb.emit(TupleGetItem(t, i)) for i in range(n_field)]
     )
     return bb.call_te(
         topi.concatenate, fields, None if call.attrs.axis is None else call.attrs.axis.value
@@ -390,6 +396,41 @@ def _std(bb: BlockBuilder, call: Call) -> Expr:
     )
 
 
+def _repeat(bb: BlockBuilder, call: Call) -> Expr:
+    if not isinstance(call.attrs.repeats, IntImm):
+        logging.info(
+            "TOPI repeat does not support symbolic parameter repeats, and thus cannot be legalized "
+            "by TOPI"
+        )
+        return call
+
+    def te_repeat(data: te.Tensor, repeats: IntImm, axis: Optional[IntImm]):
+        if axis is None:
+            # flatten data
+            out_shape = data.shape[0]
+            for i in data.shape[1:]:
+                out_shape *= i
+            data = topi.reshape(data, (out_shape,))
+            axis = 0
+        # topi only receives int repeats and axis
+        return topi.repeat(data, int(repeats), int(axis))
+
+    return bb.call_te(
+        te_repeat, call.args[0], call.attrs.repeats, call.attrs.axis, primfunc_name_hint="repeat"
+    )
+
+
+def _tile(bb: BlockBuilder, call: Call) -> Expr:
+    if not all(isinstance(i, IntImm) for i in call.attrs.repeats):
+        logging.info(
+            "TOPI tile does not support symbolic parameter repeats, and thus cannot be legalized "
+            "by TOPI"
+        )
+        return call
+
+    return bb.call_te(topi.tile, call.args[0], call.attrs.repeats)
+
+
 def _variance(bb: BlockBuilder, call: Call) -> Expr:
     return bb.call_te(
         _te_variance,
@@ -440,6 +481,51 @@ def _nn_conv2d(bb: BlockBuilder, call: Call) -> Expr:
         kernel_layout=call.attrs.kernel_layout,
         out_dtype=call.attrs.out_dtype if call.attrs.out_dtype != "" else None,
         primfunc_name_hint="conv2d",
+    )
+
+
+def _nn_conv2d_transpose(bb: BlockBuilder, call: Call) -> Expr:
+    if call.attrs.out_layout != call.attrs.data_layout:
+        logging.info(
+            "TOPI conv2d_transpose does not support different input-output "
+            "layouts, and thus cannot be legalized by TOPI"
+        )
+        return call
+    if call.attrs.data_layout != "NCHW" or call.attrs.kernel_layout != "IOHW":
+        logging.info(
+            "TOPI conv2d_transpose does not support input layout other than NCHW, "
+            "and kernel layout other than IOHW, so cannot be legalized by TOPI"
+        )
+        return call
+    dilation = call.attrs.dilation
+    if len(dilation) != 2 or dilation[0] != 1 or dilation[1] != 1:
+        logging.info(
+            "TOPI conv2d_transpose does not support dilations other than 1, "
+            "and thus cannot be legalized by TOPI"
+        )
+        return call
+    output_padding = call.attrs.output_padding
+    if (
+        len(output_padding) != 2
+        or not isinstance(output_padding[0], IntImm)
+        or not isinstance(output_padding[1], IntImm)
+    ):
+        logging.info(
+            "TOPI conv2d_transpose does not support symbolic output padding, "
+            "and thus cannot be legalized by TOPI"
+        )
+        return call
+
+    return bb.call_te(
+        topi.nn.group_conv2d_transpose_nchw,
+        call.args[0],
+        call.args[1],
+        stride=call.attrs.strides,
+        padding=call.attrs.padding,
+        out_dtype=call.struct_info.dtype,
+        output_padding=call.attrs.output_padding,
+        groups=call.attrs.groups,
+        primfunc_name_hint="conv2d_transpose",
     )
 
 
@@ -522,34 +608,6 @@ def _nn_log_softmax(bb: BlockBuilder, call: Call):
     return bb.call_te(topi.nn.log_softmax, call.args[0], call.attrs.axis)
 
 
-def _nn_cross_entropy_without_logits(bb: BlockBuilder, call: Call):
-    def te_cross_entropy_without_logits(x, y):
-        if len(x.shape) > 1:
-            return -topi.sum(topi.log(x) * y) / x.shape[0]
-        return -topi.sum(topi.log(x) * y)
-
-    return bb.call_te(
-        te_cross_entropy_without_logits,
-        call.args[0],
-        call.args[1],
-        primfunc_name_hint="cross_entropy_without_logits",
-    )
-
-
-def _nn_cross_entropy_with_logits(bb: BlockBuilder, call: Call):
-    def te_cross_entropy_with_logits(x, y):
-        if len(x.shape) > 1:
-            return -topi.sum(x * y) / x.shape[0]
-        return -topi.sum(x * y)
-
-    return bb.call_te(
-        te_cross_entropy_with_logits,
-        call.args[0],
-        call.args[1],
-        primfunc_name_hint="cross_entropy_with_logits",
-    )
-
-
 def _nn_batch_norm(bb: BlockBuilder, call: Call) -> Expr:
     return bb.call_te(
         topi.nn.batch_norm,
@@ -582,13 +640,23 @@ def _nn_dropout(bb: BlockBuilder, call: Call) -> Expr:
 
 
 def _nn_nll_loss(bb: BlockBuilder, call: Call) -> Expr:
-    if len(call.args) == 2:
-        # TODO(relax-team): handle optional arugment weight of NLLLoss
-        logging.info(
-            "Can not legalize it now, because don't know how to set "
-            "the default value of the optional argument 'weight' of NLLLoss."
+    def nll_loss_without_weight(predictions, targets, reduction, ignore_index):
+        weight = topi.full(
+            (predictions.shape[1] if len(predictions.shape) > 1 else predictions.shape[0],),
+            predictions.dtype,
+            1.0,
         )
-        return call
+        return topi.nn.nll_loss(predictions, targets, weight, reduction, ignore_index)
+
+    if len(call.args) == 2:
+        return bb.call_te(
+            nll_loss_without_weight,
+            call.args[0],
+            call.args[1],
+            reduction=call.attrs.reduction,
+            ignore_index=call.attrs.ignore_index,
+        )
+
     return bb.call_te(
         topi.nn.nll_loss,
         call.args[0],
@@ -623,6 +691,177 @@ def _image_resize2d(bb: BlockBuilder, call: Call) -> Expr:
 
 def _call_topi(te_func: TEFunc) -> LegalizeFunc:
     return lambda bb, call: bb.call_te(te_func, *call.args)
+
+
+##################### Gradient Operators #####################
+
+
+def _grad_nll_loss_backward(bb: BlockBuilder, call: Call) -> Expr:
+    # topi.sum don't support zero-dim x
+    # we add support for that
+    def topi_sum_extend(x):
+        return x if x.ndim == 0 else topi.sum(x)
+
+    def te_nll_loss_backward(output_grad, predictions, targets, weights, reduction, ignore_index):
+        # handle ignore_index
+        if ignore_index >= 0:
+            weights = te.compute(
+                weights.shape,
+                lambda i: tir.Select(i == ignore_index, tir.const(0, weights.dtype), weights(i)),
+                "weights_new",
+            )
+
+        all_weights = te.compute(targets.shape, lambda *i: weights(targets(*i)), "all_weights")
+
+        # handle reduction
+        if reduction == "sum":
+            output_grad = topi.broadcast_to(output_grad, targets.shape)
+        elif reduction == "mean":
+            output_grad = topi.divide(
+                topi.broadcast_to(output_grad, targets.shape), topi_sum_extend(all_weights)
+            )
+
+        # handle no batch
+        if predictions.ndim == 1:
+            return te.compute(
+                predictions.shape,
+                lambda i: tir.Select(
+                    i == targets(), -all_weights() * output_grad(), tir.const(0, predictions.dtype)
+                ),
+                "pred_grad",
+            )
+
+        return te.compute(
+            predictions.shape,
+            lambda *i: tir.Select(
+                i[1] == targets(*i[:1], *i[2:]),
+                -all_weights(*i[:1], *i[2:]) * output_grad(*i[:1], *i[2:]),
+                tir.const(0, predictions.dtype),
+            ),
+            "pred_grad",
+        )
+
+    def te_nll_loss_backward_no_weight(output_grad, predictions, targets, reduction, ignore_index):
+        weight = topi.full(
+            (predictions.shape[1] if len(predictions.shape) > 1 else predictions.shape[0],),
+            predictions.dtype,
+            1.0,
+        )
+        return te_nll_loss_backward(
+            output_grad, predictions, targets, weight, reduction, ignore_index
+        )
+
+    if len(call.args) == 3:
+        return bb.call_te(
+            te_nll_loss_backward_no_weight,
+            *call.args,
+            reduction=call.attrs.reduction,
+            ignore_index=call.attrs.ignore_index,
+        )
+
+    return bb.call_te(
+        te_nll_loss_backward,
+        *call.args,
+        reduction=call.attrs.reduction,
+        ignore_index=call.attrs.ignore_index,
+        primfunc_name_hint="nll_loss_backward",
+    )
+
+
+def _grad_conv2d_backward_weight(bb: BlockBuilder, call: Call) -> Expr:
+    def te_conv2d_backward_weight(
+        grad, data, weight, strides, padding, dilation, groups, out_dtype
+    ):
+        batch, in_channel, in_h, in_w = data.shape
+        _, _, filter_h, filter_w = weight.shape
+        _, out_channel, grad_h, grad_w = grad.shape
+        fpad_top, fpad_left, fpad_bottom, fpad_right = padding
+        stride_h, stride_w = strides
+        dilation_h, dilation_w = dilation
+
+        grad = topi.tile(grad, [1, in_channel // groups, 1, 1])
+        grad = topi.reshape(grad, [-1, 1, 0, 0])  # batch * oc * ic // groups, 1, oh, ow
+        data = topi.reshape(data, [1, -1, 0, 0])  # 1, batch * ic, ih, iw
+
+        backward_weight = topi.nn.conv(
+            data,
+            grad,
+            stride=dilation,
+            padding=padding,
+            dilation=strides,
+            groups=in_channel * batch,
+            out_dtype=out_dtype,
+        )
+
+        # infer shape of backward_weight
+        padded_weight_grad_h = (
+            in_h - (grad_h - 1) * stride_h - 1 + fpad_top + fpad_bottom
+        ) // dilation_h + 1
+        padded_weight_grad_w = (
+            in_w - (grad_w - 1) * stride_w - 1 + fpad_left + fpad_right
+        ) // dilation_w + 1
+
+        backward_weight = topi.reshape(
+            backward_weight,
+            [
+                batch,
+                in_channel // groups,
+                out_channel,
+                padded_weight_grad_h,
+                padded_weight_grad_w,
+            ],
+        )
+        backward_weight = topi.sum(backward_weight, axis=0)
+        backward_weight = topi.transpose(backward_weight, [1, 0, 2, 3])
+
+        assert padded_weight_grad_h >= filter_h
+        assert padded_weight_grad_w >= filter_w
+
+        if padded_weight_grad_h > filter_h or padded_weight_grad_w > filter_w:
+            backward_weight = topi.strided_slice(
+                backward_weight,
+                begin=[0, 0, 0, 0],
+                end=[out_channel, in_channel // groups, filter_h, filter_w],
+            )
+
+        return backward_weight
+
+    return bb.call_te(
+        te_conv2d_backward_weight,
+        call.args[0],
+        call.args[1],
+        call.args[2],
+        strides=call.attrs.strides,
+        padding=call.attrs.padding,
+        dilation=call.attrs.dilation,
+        groups=call.attrs.groups,
+        out_dtype=call.attrs.out_dtype if call.attrs.out_dtype != "" else None,
+        primfunc_name_hint="conv2d_backward_weight",
+    )
+
+
+def _grad_max_pool2d_backward(bb: BlockBuilder, call: Call) -> Expr:
+    def te_max_pool2d_backward(
+        output_grad, data, kernel, stride, dilation, padding, pool_type, ceil_mode, layout
+    ):
+        output = topi.nn.pool2d(
+            data, kernel, stride, dilation, padding, pool_type, ceil_mode, layout
+        )
+        return te.gradient(output, data, output_grad)
+
+    return bb.call_te(
+        te_max_pool2d_backward,
+        call.args[0],
+        call.args[1],
+        kernel=call.attrs.pool_size,
+        stride=call.attrs.strides,
+        dilation=call.attrs.dilation,
+        padding=call.attrs.padding,
+        pool_type="max",
+        ceil_mode=call.attrs.ceil_mode,
+        layout=call.attrs.layout,
+        primfunc_name_hint="max_pool2d_backward",
+    )
 
 
 ##########################################################
@@ -686,6 +925,8 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
         topi.collapse_sum, "collapse_sum", is_collapse_sum_like=True
     ),
     "relax.collapse_sum_to": _reshape(topi.collapse_sum, "collapse_sum"),
+    "relax.repeat": _repeat,
+    "relax.tile": _tile,
     # Search
     "relax.where": _where,
     # Statistical
@@ -698,6 +939,7 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.variance": _variance,
     # Neural network
     "relax.nn.conv2d": _nn_conv2d,
+    "relax.nn.conv2d_transpose": _nn_conv2d_transpose,
     "relax.nn.max_pool2d": _nn_max_pool2d,
     "relax.nn.adaptive_avg_pool2d": _nn_adaptive_max_pool2d,
     "relax.nn.relu": _nn_relu,
@@ -705,14 +947,16 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.nn.silu": _nn_silu,
     "relax.nn.softmax": _nn_softmax,
     "relax.nn.log_softmax": _nn_log_softmax,
-    "relax.nn.cross_entropy_without_logits": _nn_cross_entropy_without_logits,
-    "relax.nn.cross_entropy_with_logits": _nn_cross_entropy_with_logits,
     "relax.nn.batch_norm": _nn_batch_norm,
     "relax.nn.layer_norm": _nn_layer_norm,
     "relax.nn.dropout": _nn_dropout,
     "relax.nn.nll_loss": _nn_nll_loss,
     # Image
     "relax.image.resize2d": _image_resize2d,
+    # Gradient
+    "relax.grad.nll_loss_backward": _grad_nll_loss_backward,
+    "relax.grad.conv2d_backward_weight": _grad_conv2d_backward_weight,
+    "relax.grad.max_pool2d_backward": _grad_max_pool2d_backward,
     # Todo(relax-team): Introduce cumsum for GPT-2
     # "relax.cumsum": _cumsum,
 }

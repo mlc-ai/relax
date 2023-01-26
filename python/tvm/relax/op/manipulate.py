@@ -71,7 +71,7 @@ def concat(tensors: Union[Expr, List[Expr]], axis: Optional[int] = 0) -> Expr:
     return _ffi_api.concat(tensors, axis)  # type: ignore
 
 
-def expand_dims(x: Expr, axis: Union[int, List[int]]) -> Expr:
+def expand_dims(x: Expr, axis: Union[int, Tuple[int]]) -> Expr:
     """Insert new axes at the positions given by `axis`.
 
     Parameters
@@ -90,7 +90,7 @@ def expand_dims(x: Expr, axis: Union[int, List[int]]) -> Expr:
         The transformed result.
     """
     if isinstance(axis, int):
-        axis = [axis]
+        axis = (axis,)
     return _ffi_api.expand_dims(x, axis)  # type: ignore
 
 
@@ -151,7 +151,7 @@ def layout_transform(
     return _ffi_api.layout_transform(x, index_map, pad_value)  # type: ignore
 
 
-def permute_dims(x: Expr, axes: Optional[List[int]] = None) -> Expr:
+def permute_dims(x: Expr, axes: Optional[Union[Tuple[int], List[int]]] = None) -> Expr:
     """Permutes the dimensions of an array.
 
     Parameters
@@ -159,7 +159,7 @@ def permute_dims(x: Expr, axes: Optional[List[int]] = None) -> Expr:
     x : relax.Expr
         The input data to the operator.
 
-    axes : Optional[List[int]]
+    axes : Optional[Tuple[int], List[int]]
         The target axes order, reverse order if not specified.
 
     Returns
@@ -207,7 +207,7 @@ def reshape(x: Expr, shape: Union[Tuple[PrimExprLike], Expr]) -> Expr:
 
 def split(
     x: Expr,
-    indices_or_sections: Union[int, List[PrimExprLike]],
+    indices_or_sections: Union[int, Tuple[PrimExprLike], List[PrimExprLike]],
     axis: int = 0,
 ) -> Expr:
     """Split input tensor along axis by sections or indices.
@@ -224,7 +224,7 @@ def split(
     x : relax.Expr
         The tensor to be split.
 
-    indices_or_sections : Union[int, List[PrimExprLike]]
+    indices_or_sections : Union[int, Tuple[PrimExprLike], List[PrimExprLike]]
         Indices or sections to split into. Accepts an int or a list.
 
     axis : int
@@ -240,7 +240,7 @@ def split(
     return _ffi_api.split(x, indices_or_sections, axis)  # type: ignore
 
 
-def squeeze(x: Expr, axis: Optional[Union[int, List[int]]] = None) -> Expr:
+def squeeze(x: Expr, axis: Optional[Union[int, Tuple[int]]] = None) -> Expr:
     """Squeeze axes in the array.
 
     Parameters
@@ -248,7 +248,7 @@ def squeeze(x: Expr, axis: Optional[Union[int, List[int]]] = None) -> Expr:
     x : relax.Expr
         The input data to the operator.
 
-    axis : Optional[Union[int, List[int]]
+    axis : Optional[Union[int, Tuple[int]]
         The set of axes to remove.
         If axis = None, remove all axis of dimensions 1.
         If any specified axis has dimension that does not equal 1, it is an error.
@@ -259,7 +259,7 @@ def squeeze(x: Expr, axis: Optional[Union[int, List[int]]] = None) -> Expr:
         The squeezed result.
     """
     if isinstance(axis, int):
-        axis = [axis]
+        axis = (axis,)
     return _ffi_api.squeeze(x, axis)  # type: ignore
 
 
@@ -314,3 +314,77 @@ def collapse_sum_to(data: Expr, shape: Union[Tuple[PrimExprLike], Expr]) -> Expr
     if isinstance(shape, (tuple, list)):
         shape = ShapeExpr(shape)
     return _ffi_api.collapse_sum_to(data, shape)  # type: ignore
+
+
+def repeat(data: Expr, repeats: PrimExprLike, axis: Optional[int] = None) -> Expr:
+    """Repeats elements of an array.
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input tensor.
+
+    repeats : PrimExprLike
+        The number of repetitions.
+
+    axis: Optional[int]
+        The axis along which to repeat values. The negative numbers are interpreted
+        counting from the backward. By default, use the flattened input array, and
+        return a flat output array.
+
+    Returns
+    -------
+    ret : relax.Expr
+        The computed result.
+
+    Examples
+    --------
+    .. code-block:: python
+        x = R.const([[1, 2], [3, 4]])
+        lv1 = R.repeat(x, repeats=2) # lv1 == [1, 1, 2, 2, 3, 3, 4, 4]
+        lv2 = R.repeat(x, repeats=2, axis=1) # lv2 == [[1., 1., 2., 2.],
+                                             #         [3., 3., 4., 4.]]
+    """
+    return _ffi_api.repeat(data, repeats, axis)  # type: ignore
+
+
+def tile(data: Expr, repeats: Union[PrimExprLike, Tuple[PrimExprLike]]) -> Expr:
+    """Construct an array by repeating data the number of times given by repeats.
+
+    If repeats has length l, and data has dimension d, the result will have dimension of max(l, d).
+
+    If d < l, data is promoted to be l-dimensional by prepending new axes. So a shape (3,) Tensor is
+    promoted to (1, 3) for 2-D replication, or shape (1, 1, 3) for 3-D replication. If this is not
+    the desired behavior, promote data to d-dimensions manually before calling this function.
+
+    If d > l, reps is promoted to length d by pre-pending 1's to it. Thus for a data of shape
+    (2, 3, 4, 5), a reps of (2, 2) is treated as (1, 1, 2, 2).
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    repeats : Union[int, Tuple[int]]
+        The number of repetitions of data along each axis.
+
+    Returns
+    -------
+    ret : relax.Expr
+        The computed result.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        x = R.const([[1, 2], [3, 4]])
+        lv1 = R.tile(x, reps=(2, 3)) # lv1 = [[1., 2., 1., 2., 1., 2.],
+                                     #        [3., 4., 3., 4., 3., 4.],
+                                     #        [1., 2., 1., 2., 1., 2.],
+                                     #        [3., 4., 3., 4., 3., 4.]]
+        lv2 = R.tile(x, reps=2) # lv2 = [[1., 2., 1., 2.],
+                                #        [3., 4., 3., 4.]]
+    """
+    if isinstance(repeats, (int, PrimExpr)):
+        repeats = [repeats]
+    return _ffi_api.tile(data, repeats)  # type: ignore

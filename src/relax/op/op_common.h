@@ -238,6 +238,15 @@ inline Array<IntImm> ConvertIntImmToInt64(const Array<IntImm>& int_imms) {
   return int_imms.Map([](const IntImm& i) { return Downcast<IntImm>(cast(DataType::Int(64), i)); });
 }
 
+/*!
+ * \brief Convert an array of PrimExprs to int64 dtype.
+ * \param int_imms The input PrimExprs to be converted.
+ * \return The conversion result, where every PrimExpr has dtype int64
+ */
+inline Array<PrimExpr> ConvertPrimExprToInt64(const Array<PrimExpr>& prim_exprs) {
+  return prim_exprs.Map([](const PrimExpr& i) { return cast(DataType::Int(64), i); });
+}
+
 /************ Utilities for NN operators ************/
 
 /*!

@@ -52,7 +52,7 @@ Expr max_pool2d(Expr data, Array<IntImm> pool_size, Array<IntImm> strides, Array
       << dilation;
 
   auto attrs = make_object<MaxPool2DAttrs>();
-  attrs->pool_size = std::move(pool_size);
+  attrs->pool_size = ConvertIntImmToInt64(pool_size);
   attrs->strides = ConvertIntImmToInt64(strides);
   attrs->padding = ConvertIntImmToInt64(padding);
   attrs->dilation = ConvertIntImmToInt64(dilation);

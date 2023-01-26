@@ -124,6 +124,11 @@ class Conv2DAttrs(Attrs):
     """Attributes for nn.conv2d"""
 
 
+@tvm._ffi.register_object("relax.attrs.Conv2DTransposeAttrs")
+class Conv2DTransposeAttrs(Attrs):
+    """Attributes for nn.conv2d_transpose"""
+
+
 @tvm._ffi.register_object("relax.attrs.MaxPool2DAttrs")
 class MaxPool2DAttrs(Attrs):
     """Attributes for nn.max_pool2d"""

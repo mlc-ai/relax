@@ -660,20 +660,36 @@ inline tvm::te::Tensor batch_to_space_nd(const tvm::te::Tensor& data,
 inline Tensor nll_loss(const Tensor& predictions, const Tensor& targets, const Tensor& weights,
                        std::string reduction = "mean", int ignore_index = -100,
                        const std::string name = "nll_loss", const std::string tag = kBroadcast) {
-  auto T = tvm::te::compute(
-      targets->shape,
-      [&](const tvm::Array<tvm::tir::Var>& target_indices) {
-        auto c = targets(target_indices);
-        tvm::Array<tvm::PrimExpr> pred_indices;
-        pred_indices.push_back(target_indices[0]);  // batch index
-        pred_indices.push_back(c);                  // class index
-        for (size_t i = 1; i < target_indices.size(); i++) {
-          pred_indices.push_back(target_indices[i]);  // indices for multidimensional loss
-        }
-        return tvm::tir::Select(c != ignore_index, -predictions(pred_indices) * weights(c),
-                                tvm::tir::make_const(predictions->dtype, 0));
-      },
-      name, tag);
+  tvm::te::Tensor T;
+  if (predictions.ndim() == 1) {
+    // prediction->shape = (C,), targets->shape = (), weights->shape = (C,)
+    T = tvm::te::compute(
+        targets->shape,
+        [&](const tvm::Array<tvm::tir::Var>& target_indices) {
+          auto c = targets();
+          return tvm::tir::Select(c != ignore_index, -predictions(c) * weights(c),
+                                  tvm::tir::make_const(predictions->dtype, 0));
+        },
+        name, tag);
+  } else {
+    T = tvm::te::compute(
+        targets->shape,
+        [&](const tvm::Array<tvm::tir::Var>& target_indices) {
+          auto c = targets(target_indices);
+          tvm::Array<tvm::PrimExpr> pred_indices;
+          pred_indices.push_back(target_indices[0]);  // batch index
+          pred_indices.push_back(c);                  // class index
+          for (size_t i = 1; i < target_indices.size(); i++) {
+            pred_indices.push_back(target_indices[i]);  // indices for multidimensional loss
+          }
+          return tvm::tir::Select(c != ignore_index, -predictions(pred_indices) * weights(c),
+                                  tvm::tir::make_const(predictions->dtype, 0));
+        },
+        name, tag);
+  }
+  auto sum_update = [](tvm::te::Tensor input) {
+    return input.ndim() == 0 ? input : topi::sum(input, {});
+  };
   if (reduction == "mean") {
     auto W = tvm::te::compute(
         targets->shape,
@@ -683,13 +699,14 @@ inline Tensor nll_loss(const Tensor& predictions, const Tensor& targets, const T
                                   tvm::tir::make_const(predictions->dtype, 0));
         },
         name, tag);
-    return topi::divide(topi::sum(T, {}), topi::sum(W, {}));
+    return topi::divide(sum_update(T), sum_update(W));
   } else if (reduction == "sum") {
-    return topi::sum(T, {});
+    return sum_update(T);
   } else {  // reduction == "none"
     return T;
   }
 }
+
 }  // namespace topi
 }  // namespace tvm
 #endif  // TVM_TOPI_NN_H_

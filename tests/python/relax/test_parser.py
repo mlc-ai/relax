@@ -329,6 +329,20 @@ def test_tuplegetitem():
     check_call(bind_4.value, "relax.add", [bind_2.var, bind_3.var])
 
 
+def test_shape_expr():
+    @R.function
+    def f(x: R.Tensor((2, 2), "float32")):
+        a = R.ShapeExpr((1, 1, 4))
+        b = R.reshape(x, a)
+        return b
+
+    bind_0 = f.body.blocks[0].bindings[0]
+    bind_1 = f.body.blocks[0].bindings[1]
+    assert isinstance(bind_0.value, relax.ShapeExpr)
+    assert_structural_equal(bind_0.value, relax.ShapeExpr((1, 1, 4)))
+    assert_structural_equal(bind_1.var.struct_info.shape.struct_info, R.Shape([1, 1, 4]))
+
+
 def test_local_func():
     @R.function
     def f(x: R.Tensor):

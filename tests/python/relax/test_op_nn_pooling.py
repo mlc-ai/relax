@@ -203,7 +203,7 @@ def test_max_pool2d_infer_struct_info_more_input_dtype():
     )
 
 
-def test_conv2d_stride_padding_dilation_int64():
+def test_max_pool2d_stride_padding_dilation_int64():
     x = relax.Var("x", R.Tensor((2, 3, 28, 28), "float32"))
     max_pool2d = relax.op.nn.max_pool2d(x, (3, 3), strides=(1, 1), padding=(1, 1), dilation=(1, 1))
 

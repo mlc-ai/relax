@@ -513,6 +513,7 @@ inline Tensor pool_impl_nd(const Tensor& x, const Array<PrimExpr>& kernel_size,
                            const std::vector<int>& axis, bool count_include_pad) {
   int k_size = kernel_size.size();
   int x_size = x->shape.size();
+  DataType dtype = kernel_size[0].dtype();
   ICHECK_EQ(stride_size.size(), k_size) << "Pooling stride_size must have same elements as kernel";
   ICHECK_EQ(padding_size.size(), k_size * 2) << "Pooling padding_size must has double elements of"
                                                 " kernel";
@@ -524,23 +525,28 @@ inline Tensor pool_impl_nd(const Tensor& x, const Array<PrimExpr>& kernel_size,
   std::vector<PrimExpr> dilation(k_size);
   std::vector<PrimExpr> pad_head(k_size);
   std::vector<PrimExpr> pad_tail(k_size);
-  std::vector<PrimExpr> offset(k_size, 0);
-  Array<PrimExpr> pad_before(std::vector<PrimExpr>(x_size, 0));
-  Array<PrimExpr> pad_after(std::vector<PrimExpr>(x_size, 0));
+  std::vector<PrimExpr> offset(k_size, make_const(dtype, 0));
+  Array<PrimExpr> pad_before(std::vector<PrimExpr>(x_size, make_const(dtype, 0)));
+  Array<PrimExpr> pad_after(std::vector<PrimExpr>(x_size, make_const(dtype, 0)));
   Array<PrimExpr> data_shape = x->shape;
-  for (size_t i = 0; i < data_shape.size(); ++i) {
-    data_shape.Set(i, cast(DataType::DataType::Int(32), data_shape[i]));
-  }
+  // for (size_t i = 0; i < data_shape.size(); ++i) {
+  // data_shape.Set(i, cast(DataType::DataType::Int(32), data_shape[i]));
+  // }
   Array<PrimExpr> out_shape = data_shape;
 
   bool do_pad = false;
   for (int i = 0; i < k_size; i++) {
     int ii = axis[i];
-    kernel[i] = cast(DataType::Int(32), kernel_size[i]);
-    stride[i] = cast(DataType::Int(32), stride_size[i]);
-    dilation[i] = cast(DataType::Int(32), dilation_size[i]);
-    pad_head[i] = cast(DataType::Int(32), padding_size[i]);
-    pad_tail[i] = cast(DataType::Int(32), padding_size[i + k_size]);
+    kernel[i] = kernel_size[i];
+    stride[i] = stride_size[i];
+    dilation[i] = dilation_size[i];
+    pad_head[i] = padding_size[i];
+    pad_tail[i] = padding_size[i + k_size];
+    // kernel[i] = cast(DataType::Int(32), kernel_size[i]);
+    // stride[i] = cast(DataType::Int(32), stride_size[i]);
+    // dilation[i] = cast(DataType::Int(32), dilation_size[i]);
+    // pad_head[i] = cast(DataType::Int(32), padding_size[i]);
+    // pad_tail[i] = cast(DataType::Int(32), padding_size[i + k_size]);
 
     if (ceil_mode) {
       // The offset[i] is an additional padding to ensure we do ceil instead of floor when
@@ -615,7 +621,8 @@ inline Tensor pool_impl_nd(const Tensor& x, const Array<PrimExpr>& kernel_size,
           if (count_include_pad) {
             std::vector<PrimExpr> start(k_size);
             std::vector<PrimExpr> end(k_size);
-            auto num_el = make_const(DataType::Int(32), 1);
+            // auto num_el = make_const(DataType::Int(32), 1);
+            auto num_el = make_const(dtype, 1);
             for (int i = 0; i < k_size; i++) {
               int ii = axis[i];
               start[i] = output[ii] * stride[i] - pad_head[i];
@@ -631,7 +638,8 @@ inline Tensor pool_impl_nd(const Tensor& x, const Array<PrimExpr>& kernel_size,
           } else {
             std::vector<PrimExpr> start(k_size);
             std::vector<PrimExpr> end(k_size);
-            auto num_el = make_const(DataType::Int(32), 1);
+            // auto num_el = make_const(DataType::Int(32), 1);
+            auto num_el = make_const(dtype, 1);
             for (int i = 0; i < k_size; i++) {
               int ii = axis[i];
 
@@ -646,13 +654,14 @@ inline Tensor pool_impl_nd(const Tensor& x, const Array<PrimExpr>& kernel_size,
               // number that represents the number of steps along the dilated kernel to reach a
               // non-padded value. Otherwise this should be 0.
               PrimExpr jumps_to_non_pad = (dilation[i] - 1 - start[i]) / dilation[i];
-              jumps_to_non_pad = max(jumps_to_non_pad, make_const(DataType::Int(32), 0));
+              jumps_to_non_pad = max(jumps_to_non_pad, make_const(dtype, 0));
+              // jumps_to_non_pad = max(jumps_to_non_pad, make_const(DataType::Int(32), 0));
 
               end[i] = min(end[i], data_shape[ii] - 1);
               num_el *= (end[i] - (start[i] + dilation[i] * jumps_to_non_pad)) / dilation[i] + 1;
             }
 
-            PrimExpr divide_factor = max(num_el, make_const(DataType::Int(32), 1));
+            PrimExpr divide_factor = max(num_el, make_const(dtype, 1));
             return div(pool_sum(indices), divide_factor);
           }
         },

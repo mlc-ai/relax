@@ -83,6 +83,7 @@ def test_mlp_blockbuilder(target, dev):
     layers, in_size, out_size, hidden_size, batch_size = 3, 5, 5, 5, 4
 
     input_list = [relax.Var("x", R.Tensor((batch_size, in_size), "float32"))]
+    label_list = [relax.Var("y", R.Tensor((batch_size,), "int64"))]
     w_list = (
         [relax.Var("w_0", R.Tensor((in_size, hidden_size), "float32"))]
         + [
@@ -94,8 +95,7 @@ def test_mlp_blockbuilder(target, dev):
     b_list = [
         relax.Var("b_" + str(i), R.Tensor((hidden_size,), "float32")) for i in range(layers - 1)
     ] + [relax.Var("b_" + str(layers - 1), R.Tensor((out_size,), "float32"))]
-    label_list = [relax.Var("y", R.Tensor((batch_size, out_size), "float32"))]
-    args_list = input_list + w_list + b_list + label_list
+    args_list = input_list + label_list + w_list + b_list
 
     bb = relax.BlockBuilder()
     with bb.function("MLP", args_list):
@@ -106,7 +106,7 @@ def test_mlp_blockbuilder(target, dev):
                 lv1 = bb.emit(R.add(lv0, b_list[i]))
                 current = bb.emit(R.nn.relu(lv1) if i < layers - 1 else lv1)
             logits = R.nn.log_softmax(current)
-            loss = bb.emit(R.nn.cross_entropy_with_logits(logits, label_list[0]))
+            loss = bb.emit(R.nn.nll_loss(logits, label_list[0]))
             gv0 = bb.emit_output(loss)
         bb.emit_func_output(gv0)
 
@@ -114,28 +114,28 @@ def test_mlp_blockbuilder(target, dev):
     After = relax.transform.Gradient("MLP", args_list)(Before)
     # Check numerical gradients equal
     args = []
-    for arg in After["MLP_adjoint"].params[:-1]:
+    for arg in After["MLP_adjoint"].params:
         shape = [int(l) for l in arg.struct_info.shape]
-        args.append(rand("float32", *shape))
-    label = np.random.rand(batch_size, out_size).astype(np.float32)
-    label /= label.sum(axis=1, keepdims=True)
-    args.append(tvm.nd.array(label))
+        if arg.struct_info.dtype == "int64":
+            args.append(tvm.nd.array(np.random.randint(0, out_size, size=shape).astype(np.int64)))
+        else:  # float32
+            args.append(rand("float32", *shape))
 
     vm_before = _legalize_and_build(Before, target, dev)
     vm_after = _legalize_and_build(After, target, dev)
     _, grad = vm_after["MLP_adjoint"](*args)
 
     def func(*inputs):
-        loss = vm_before["MLP"](*[tvm.nd.array(i) for i in inputs])
+        loss = vm_before["MLP"](args[0], args[1], *[tvm.nd.array(i) for i in inputs])
         return loss.numpy()
 
-    check_numerical_grads(func, [i.numpy() for i in args], [i.numpy() for i in grad])
+    check_numerical_grads(func, [i.numpy() for i in args[2:]], [i.numpy() for i in grad])
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_complex(target, dev):
     cst = relax.const(np.ones((6,)), dtype="float32")
-    cst1 = relax.const(np.array([0, 0, 0, 1, 0, 0]), dtype="float32")
+    cst1 = relax.const(np.array(3), dtype="int64")
 
     @tvm.script.ir_module
     class Before:
@@ -167,7 +167,7 @@ def test_complex(target, dev):
                 lv23 = R.sum(lv22, axis=[1, 2])
                 lv24 = R.add(lv19, lv23)
                 lv25 = R.nn.log_softmax(lv24)
-                gv = R.nn.cross_entropy_with_logits(lv25, cst1)
+                gv = R.nn.nll_loss(lv25, cst1)
                 R.output(gv)
             return gv
 

@@ -127,6 +127,38 @@ def test_strided_slice():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_strided_slice_no_strides():
+    # fmt: off
+    @tvm.script.ir_module
+    class StridedSlice:
+        @R.function
+        def main(x: R.Tensor((8, 9, 10, 10), "float32")) -> R.Tensor((4, 9, 10, 3), "float32"):
+            gv: R.Tensor((4, 9, 10, 3), "float32") = R.strided_slice(x, axes=[0, 1, 3], begin=[1, 0, 2], end=[8, 9, 4])
+            return gv
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((8, 9, 10, 10), dtype="float32")) -> R.Tensor((4, 9, 10, 3), dtype="float32"):
+            gv = R.call_tir(strided_slice, (x,), out_sinfo=R.Tensor((7, 9, 10, 2), dtype="float32"))
+            return gv
+
+        @T.prim_func
+        def strided_slice(rxplaceholder: T.Buffer((T.int64(8), T.int64(9), T.int64(10), T.int64(10)), "float32"), T_strided_slice_with_axes: T.Buffer((T.int64(7), T.int64(9), T.int64(10), T.int64(2)), "float32")):
+            T.func_attr({"tir.noalias": True})
+            # with T.block("root"):
+            for ax0, ax1, ax2, ax3 in T.grid(T.int64(7), T.int64(9), T.int64(10), T.int64(2)):
+                with T.block("T_strided_slice_with_axes"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(rxplaceholder[v_ax0 + T.int64(1), v_ax1, v_ax2, v_ax3 + T.int64(2)])
+                    T.writes(T_strided_slice_with_axes[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_strided_slice_with_axes[v_ax0, v_ax1, v_ax2, v_ax3] = rxplaceholder[v_ax0 + T.int64(1), v_ax1, v_ax2, v_ax3 + T.int64(2)]
+    # fmt: on
+
+    mod = LegalizeOps()(StridedSlice)
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_strided_slice_symbolic_sliced_axis():
     # fmt: off
     @tvm.script.ir_module
