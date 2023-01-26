@@ -313,12 +313,6 @@ class SEqualHandlerDefault::Impl {
       *first_mismatch_ = current_paths;
     }
     if (assert_mode_ && !result) {
-      if (lhs->IsInstance<runtime::NDArray::Container>()) {
-        auto tmp = Downcast<runtime::NDArray>(lhs);
-        VLOG(0) << tmp.DataType() << " " << tmp.Shape() << " " << ((double*)(tmp->data))[0];
-        tmp = Downcast<runtime::NDArray>(rhs);
-        VLOG(0) << tmp.DataType() << " " << tmp.Shape() << " " << ((double*)(tmp->data))[0];
-      }
       LOG(FATAL) << "ValueError: StructuralEqual check failed, caused by lhs:" << std::endl
                  << PrettyPrint(lhs) << std::endl
                  << "and rhs:" << std::endl
