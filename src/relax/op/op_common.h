@@ -72,11 +72,10 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
  * be prepended with a prefix "relax." as the identifier string in the operator registry.
  * \param RequireFloatDtype A boolean indicating if the input is required to have float dtype.
  */
-#define RELAX_REGISTER_UNARY_OP(OpRegName, RequireFloatDtype)                                      \
+#define RELAX_REGISTER_UNARY_OP(OpRegName)                                                         \
   TVM_REGISTER_OP("relax." OpRegName)                                                              \
       .set_num_inputs(1)                                                                           \
       .add_argument("x", "Tensor", "The input tensor.")                                            \
-      .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoUnary<RequireFloatDtype>)     \
       .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow) \
       .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutUnaryEwise)
 
@@ -100,12 +99,26 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
  * \param OpName The name of operator to register.
  * \param RequireFloatDtype A boolean indicating if the input is required to have float dtype.
  */
-#define RELAX_REGISTER_UNARY_OP_INTERFACE(OpName, RequireFloatDtype) \
-  RELAX_UNARY_OP_INTERFACE(OpName, #OpName);                         \
-  RELAX_REGISTER_UNARY_OP(#OpName, RequireFloatDtype)
+#define RELAX_REGISTER_UNARY_OP_AND_IMPL(OpName) \
+  RELAX_UNARY_OP_INTERFACE(OpName, #OpName);     \
+  RELAX_REGISTER_UNARY_OP(#OpName)
 
-template <bool require_float_dtype>
-inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx) {
+#define RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(OpName, RequireFloatDtype) \
+  RELAX_REGISTER_UNARY_OP_AND_IMPL(OpName).set_attr<FInferStructInfo>(    \
+      "FInferStructInfo", InferStructInfoUnaryArith<RequireFloatDtype>)
+
+#define RELAX_REGISTER_UNARY_CHECK_OP_AND_IMPL(OpName, RequireFloatDtype) \
+  RELAX_REGISTER_UNARY_OP_AND_IMPL(OpName).set_attr<FInferStructInfo>(    \
+      "FInferStructInfo", InferStructInfoUnaryCheck<RequireFloatDtype>)
+
+#define RELAX_REGISTER_UNARY_NN_OP_AND_IMPL(OpName, OpRegName, RequireFloatDtype) \
+  RELAX_REGISTER_UNARY_OP(OpRegName).set_attr<FInferStructInfo>(                  \
+      "FInferStructInfo", InferStructInfoUnaryArith<RequireFloatDtype>);          \
+  RELAX_UNARY_OP_INTERFACE(OpName, OpRegName);
+
+template <bool require_float_dtype, typename FType>
+inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx,
+                                       FType f_compute_out_dtype) {
   TensorStructInfo input_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
   if (require_float_dtype && !input_sinfo->IsUnknownDtype() && !input_sinfo->dtype.is_float()) {
     ctx->ReportFatal(
@@ -114,7 +127,30 @@ inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx
         << " requires the input tensor to have float dtype. However, the given input dtype is "
         << input_sinfo->dtype);
   }
-  return input_sinfo;
+  DataType output_dtype = f_compute_out_dtype(call, ctx, input_sinfo);
+  if (input_sinfo->shape.defined()) {
+    return TensorStructInfo(input_sinfo->shape.value(), output_dtype);
+  } else {
+    return TensorStructInfo(output_dtype, input_sinfo->ndim);
+  }
+}
+
+template <bool require_float_dtype>
+StructInfo InferStructInfoUnaryArith(const Call& call, const BlockBuilder& ctx) {
+  return InferStructInfoUnary<require_float_dtype>(
+      call, ctx,
+      [](const Call& call, const BlockBuilder& ctx, const TensorStructInfo& input_sinfo) {
+        return input_sinfo->dtype;
+      });
+}
+
+template <bool require_float_dtype>
+StructInfo InferStructInfoUnaryCheck(const Call& call, const BlockBuilder& ctx) {
+  return InferStructInfoUnary<require_float_dtype>(
+      call, ctx,
+      [](const Call& call, const BlockBuilder& ctx, const TensorStructInfo& input_sinfo) {
+        return DataType::Bool();
+      });
 }
 
 /*!
