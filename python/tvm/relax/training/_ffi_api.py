@@ -13,26 +13,7 @@
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
-# under the License.
-import tvm.testing
-from tvm import relax
-from tvm.ir.base import assert_structural_equal
-from tvm.script.parser import relax as R
+"""FFI APIs for tvm.relax.training"""
+import tvm._ffi
 
-
-def test_copy_with_new_params():
-    @R.function
-    def before(x: R.Tensor((3,), "float32"), y: R.Tensor((3,), "float32")):
-        gv = R.add(x, y)
-        return gv
-
-    after = relax.utils.copy_with_new_params(before)
-    assert_structural_equal(after, before)
-
-    assert len(after.params) == len(before.params)
-    for before_var, after_var in zip(before.params, after.params):
-        assert before_var != after_var
-
-
-if __name__ == "__main__":
-    tvm.testing.main()
+tvm._ffi._init_api("relax.training", __name__)

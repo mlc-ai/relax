@@ -634,7 +634,7 @@ def nll_loss(
       The weight of each target value.
       If not specified, it is treated as if having all ones.
 
-    reduction : string
+    reduction : str
       The reduction method to apply to the output.
       Possible values are "mean", "sum" and "none".
 

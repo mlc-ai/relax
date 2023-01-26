@@ -14,12 +14,18 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=redefined-builtin
 """Loss functions library for relax."""
 
 from typing import Any, List, Optional, Union
-from tvm.script.parser import relax as R
-from tvm.relax import Var, Function, StructInfo, BlockBuilder
 from tvm import relax
+from ..expr import Expr, Var, Function, StructInfo
+
+from ..op import sum, mean, subtract, multiply
+from ..op.nn import log_softmax, nll_loss
+
+
+__all__ = ["L1Loss", "MSELoss", "CrossEntropyLoss"]
 
 
 def _create_param_var(param: Union[Var, StructInfo], param_name) -> Var:
@@ -34,6 +40,15 @@ class Loss:
 
     Parameters
     ----------
+    loss_name : str
+        The name of the loss function.
+
+    reduction : str
+        The reduction method to apply to output. Can be "mean", "sum" or "none".
+
+        none : no reduction will be applied,
+        mean : the sum of the output will be divided by the batch_size,
+        sum : the output will be summed.
     """
 
     reduction: str
@@ -43,8 +58,33 @@ class Loss:
         self.loss_name = loss_name
         self.reduction = reduction
 
+        valid_reductions = ["mean", "sum", "none"]
+
+        if self.reduction not in valid_reductions:
+            raise ValueError("Reduction can only be one of these values: ", valid_reductions)
+
     def __call__(self) -> Function:
+        """Calling a loss will get its relax function.
+
+        Usually it has some parameters with type Union[Var, StructInfo]. It means
+        the necessary inputs of the loss function. If a struct info is given, it will
+        construct a corresponding Var using the struct info; if a Var is given, it will
+        directly use this Var as the param.
+
+        Returns
+        ----------
+        The relax function of the loss with the loss name as its global symbol.
+        """
         raise NotImplementedError()
+
+    def _with_reduction(self, expr: Expr):
+        if self.reduction == "sum":
+            expr = sum(expr)
+        elif self.reduction == "mean":
+            expr = sum(mean(expr, axis=0))
+        else:
+            assert self.reduction == "none"
+        return expr
 
 
 class L1Loss(Loss):
@@ -52,6 +92,8 @@ class L1Loss(Loss):
 
     Parameters
     ----------
+    reduction : str
+        See the doc of Loss.
     """
 
     def __init__(self, reduction: str = "mean") -> None:
@@ -62,23 +104,15 @@ class L1Loss(Loss):
         predictions: Union[Var, StructInfo],
         targets: Union[Var, StructInfo],
     ) -> Function:
-        bb = BlockBuilder()
+        bb = relax.BlockBuilder()
 
         predictions = _create_param_var(predictions, "predictions")
         targets = _create_param_var(targets, "targets")
 
         with bb.function(self.loss_name, [predictions, targets]):
             with bb.dataflow():
-                lv = bb.emit(R.subtract(logits, targets))
-                if self.reduction == "none":
-                    loss = bb.emit_output(R.abs(lv))  # TODO: R.abs
-                else:
-                    loss = bb.emit(R.abs(lv))
-                    if self.reduction == "sum":
-                        loss = bb.emit_output(R.sum(loss))
-                    else:
-                        # TODO: mean
-                        pass
+                lv = abs(subtract(predictions, targets))  # TODO: R.abs
+                loss = bb.emit_output(self._with_reduction(lv))
             bb.emit_func_output(loss)
 
         return bb.get()[self.loss_name].with_attr("global_symbol", self.loss_name)
@@ -89,6 +123,8 @@ class MSELoss(Loss):
 
     Parameters
     ----------
+    reduction : str
+        See the doc of Loss.
     """
 
     def __init__(self, reduction: str = "mean") -> None:
@@ -99,23 +135,16 @@ class MSELoss(Loss):
         predictions: Union[Var, StructInfo],
         targets: Union[Var, StructInfo],
     ) -> Function:
-        bb = BlockBuilder()
+        bb = relax.BlockBuilder()
 
         predictions = _create_param_var(predictions, "predictions")
         targets = _create_param_var(targets, "targets")
 
         with bb.function(self.loss_name, [predictions, targets]):
             with bb.dataflow():
-                lv = bb.emit(R.subtract(logits, targets))
-                if self.reduction == "none":
-                    loss = bb.emit_output(R.mutiply(lv, lv))
-                else:
-                    loss = bb.emit(R.mutiply(lv, lv))
-                    if self.reduction == "sum":
-                        loss = bb.emit_output(R.sum(loss))
-                    else:
-                        # TODO: mean
-                        pass
+                lv = subtract(predictions, targets)
+                lv = multiply(lv, lv)
+                loss = bb.emit_output(self._with_reduction(lv))
             bb.emit_func_output(loss)
 
         return bb.get()[self.loss_name].with_attr("global_symbol", self.loss_name)
@@ -126,32 +155,50 @@ class CrossEntropyLoss(Loss):
 
     Parameters
     ----------
+    reduction : str
+        See the doc of Loss.
+
+    weights : Optional[Union[Var, StructInfo]]
+        a manual rescaling weight given to each class. It has to be a Tensor of size C.
+
+    ignore_index : int
+        Specifies a target value that is ignored and does not contribute to the input gradient.
     """
 
     ignore_index: int
 
-    def __init__(self, ignore_index: int = -100, reduction: str = "mean") -> None:
+    def __init__(
+        self,
+        reduction: str = "mean",
+        ignore_index: int = -100,
+        weights: Optional[Union[Var, StructInfo]] = None,
+    ) -> None:
         super(CrossEntropyLoss, self).__init__("cross_entropy_loss", reduction)
         self.ignore_index = ignore_index
+        if weights:
+            self.weights = _create_param_var(weights, "weights")
+        else:
+            self.weights = None
 
     def __call__(
         self,
         predictions: Union[Var, StructInfo],
         targets: Union[Var, StructInfo],
-        weights: Optional[Union[Var, StructInfo]],
     ) -> Function:
-        bb = BlockBuilder()
+        bb = relax.BlockBuilder()
 
         predictions = _create_param_var(predictions, "predictions")
         targets = _create_param_var(targets, "targets")
-        if weights:
-            weights = _create_param_var(weights, "predictions")
 
-        with bb.function(self.loss_name, [predictions, targets, weights]):
+        arg_list = [predictions, targets]
+        if self.weights:
+            arg_list.append(self.weights)
+
+        with bb.function(self.loss_name, arg_list):
             with bb.dataflow():
-                logits = bb.emit(R.nn.log_softmax(predictions))
+                logits = bb.emit(log_softmax(predictions))
                 loss = bb.emit_output(
-                    R.nn.nll_loss(logits, targets, weights, self.reduction, self.ignore_index)
+                    nll_loss(logits, targets, self.weights, self.reduction, self.ignore_index)
                 )
             bb.emit_func_output(loss)
 

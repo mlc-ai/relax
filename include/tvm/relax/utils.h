@@ -149,24 +149,6 @@ TVM_DLL bool IsLeafOrTuple(const Expr& expr);
  */
 TVM_DLL Function CopyWithNewParams(Function func);
 
-/*!
- * \brief Extend a relax function by another given function. It will link orig_func with
- * ex_func and return a new function.
- *
- * In detail, the result function has the arguments list of orig_func and the combination
- * of their body, which passes the return values of orig_func as the arguments of ex_func. For
- * those arguments of ex_func which are not mapped to some return values, they will be lifted and
- * appended to the argument list of result function.
- *
- * This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in some
- * sense.
- *
- * \param orig_func The function to be extended.
- * \param ex_func The function to be linked after the orig_func.
- * \return The result function after extending.
- */
-TVM_DLL Function ExtendFunc(Function orig_func, Function ex_func);
-
 }  // namespace relax
 }  // namespace tvm
 
