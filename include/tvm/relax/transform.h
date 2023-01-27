@@ -27,6 +27,7 @@
 #include <tvm/ir/transform.h>
 #include <tvm/relax/dataflow_pattern.h>
 #include <tvm/relax/expr.h>
+#include <tvm/relax/tir_pattern.h>
 
 namespace tvm {
 namespace relax {
@@ -262,6 +263,16 @@ TVM_DLL Pass ConvertLayout(Map<String, Array<String>> desired_layouts);
  * \return The Pass.
  */
 TVM_DLL Pass Gradient(GlobalVar global_var, Optional<Array<Var>> require_grads = NullOpt);
+
+/*!
+ * \brief Split a PrimFunc into 2 parts: the first part is a TIR PrimFunc which is
+ *        matched with some cutlass kernels, and the second part is the rest of the
+ *        original PrimFunc that is not fused with cutlass kernels.
+ * \param patterns The list of TIR patterns.
+ * \param fcodegen The function to generate the TIR PrimFunc for the matched pattern.
+ * \return The Pass.
+ */
+TVM_DLL Pass SplitCallTIRByPattern(Array<TIRPattern> patterns, FCodegen fcodegen);
 
 }  // namespace transform
 }  // namespace relax

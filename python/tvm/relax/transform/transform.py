@@ -484,6 +484,24 @@ def Gradient(
     return _ffi_api.Gradient(global_var, require_grads)  # type: ignore
 
 
+def SplitCallTIRByPattern(patterns, fcodegen) -> tvm.ir.transform.Pass:
+    """Split a PrimFunc into 2 parts: the first part is a TIR PrimFunc which is
+       matched with some cutlass kernels, and the second part is the rest of the original
+       PrimFunc that is not fused with cutlass kernels.
+    Parameters
+    ----------
+    patterns : List[PrimFunc]
+        The list of patterns to match.
+    fcodegen: Callable[[List[MatchResult]], List[Object]]
+        The function to generate the code for the matched patterns.
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass for spliting calltir.
+    """
+    return _ffi_api.SplitCallTIRByPattern(patterns, fcodegen)  # type: ignore
+
+
 def _wrap_class_function_pass(pass_cls, pass_info):
     """Wrap a python class as function pass."""
 
