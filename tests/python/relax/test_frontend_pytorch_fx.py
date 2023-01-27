@@ -22,9 +22,9 @@ from tvm.script.parser import relax as R, tir as T
 
 
 def verify_model(torch_model, input_info, binding, expected):
-    from tvm.relax.frontend.pytorch_fx import TorchFXTranslator
+    from tvm.relax.frontend import from_pytorch
 
-    mod = TorchFXTranslator().from_pytorch(torch_model, input_info)
+    mod = from_pytorch(torch_model, input_info)
     binding = {k: tvm.nd.array(v) for k, v in binding.items()}
     expected = relax.transform.BindParams("main", binding)(expected)
     tvm.ir.assert_structural_equal(mod, expected)
