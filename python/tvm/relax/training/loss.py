@@ -17,7 +17,7 @@
 # pylint: disable=redefined-builtin
 """Loss functions library for relax."""
 
-from typing import Any, List, Optional, Union
+from typing import Optional, Union
 from tvm import relax
 from ..expr import Expr, Var, Function, StructInfo
 
@@ -78,6 +78,13 @@ class Loss:
         raise NotImplementedError()
 
     def _with_reduction(self, expr: Expr):
+        """Add a reduction to the final loss.
+
+        Parameters
+        ----------
+        expr : Expr
+            The loss expr.
+        """
         if self.reduction == "sum":
             expr = sum(expr)
         elif self.reduction == "mean":
