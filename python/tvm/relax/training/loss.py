@@ -63,20 +63,6 @@ class Loss:
         if self.reduction not in valid_reductions:
             raise ValueError("Reduction can only be one of these values: ", valid_reductions)
 
-    def __call__(self) -> Function:
-        """Calling a loss will get its relax function.
-
-        Usually it has some parameters with type Union[Var, StructInfo]. It means
-        the necessary inputs of the loss function. If a struct info is given, it will
-        construct a corresponding Var using the struct info; if a Var is given, it will
-        directly use this Var as the param.
-
-        Returns
-        ----------
-        The relax function of the loss with the loss name as its global symbol.
-        """
-        raise NotImplementedError()
-
     def _with_reduction(self, expr: Expr):
         """Add a reduction to the final loss.
 
@@ -111,6 +97,20 @@ class L1Loss(Loss):
         predictions: Union[Var, StructInfo],
         targets: Union[Var, StructInfo],
     ) -> Function:
+        """Get the relax function of L1Loss. If the parameters are
+        struct info, it will create corresponding variables.
+
+        Parameters
+        ----------
+        predictions : Union[Var, StructInfo]
+            The predictions of the model in the calculation of loss.
+        targets : Union[Var, StructInfo]
+            The ground truth in the calculation of loss.
+
+        Returns
+        ----------
+        The relax function of L1Loss with the loss name as its global symbol.
+        """
         bb = relax.BlockBuilder()
 
         predictions = _create_param_var(predictions, "predictions")
@@ -142,6 +142,20 @@ class MSELoss(Loss):
         predictions: Union[Var, StructInfo],
         targets: Union[Var, StructInfo],
     ) -> Function:
+        """Get the relax function of MSELoss. If the parameters are
+        struct info, it will create corresponding variables.
+
+        Parameters
+        ----------
+        predictions : Union[Var, StructInfo]
+            The predictions of the model in the calculation of loss.
+        targets : Union[Var, StructInfo]
+            The ground truth in the calculation of loss.
+
+        Returns
+        ----------
+        The relax function of MSELoss with the loss name as its global symbol.
+        """
         bb = relax.BlockBuilder()
 
         predictions = _create_param_var(predictions, "predictions")
@@ -158,7 +172,7 @@ class MSELoss(Loss):
 
 
 class CrossEntropyLoss(Loss):
-    """CrossEntropyLoss.
+    """CrossEntropyLoss. It is a combination of a log_softmax computation and a nll_loss.
 
     Parameters
     ----------
@@ -192,6 +206,20 @@ class CrossEntropyLoss(Loss):
         predictions: Union[Var, StructInfo],
         targets: Union[Var, StructInfo],
     ) -> Function:
+        """Get the relax function of CrossEntropyLoss. If the parameters are
+        struct info, it will create corresponding variables.
+
+        Parameters
+        ----------
+        predictions : Union[Var, StructInfo]
+            The predictions of the model in the calculation of loss.
+        targets : Union[Var, StructInfo]
+            The ground truth in the calculation of loss.
+
+        Returns
+        ----------
+        The relax function of CrossEntropyLoss with the loss name as its global symbol.
+        """
         bb = relax.BlockBuilder()
 
         predictions = _create_param_var(predictions, "predictions")
