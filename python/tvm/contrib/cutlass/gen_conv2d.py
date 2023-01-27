@@ -113,6 +113,7 @@ def enumerate_conv2d_operators(
     tile_descriptions,
     data_type,
     alignment_constraints,
+    layout_constraints,
     swizzling_functor=SwizzlingFunctor.Identity4,
 ):
     """Exhaustively instantiate all kernels from a given configuration."""
@@ -125,7 +126,7 @@ def enumerate_conv2d_operators(
 
     if conv_kind == ConvKind.Dgrad and stride_support == StrideSupport.Strided:
         swizzling_functor = SwizzlingFunctor.StridedDgradIdentity1
-
+    assert layout_constraints == ["NHWC", "NHWC", "NHWC"]
     for split_k_slice in split_k_slices:
         for tile in tile_descriptions:
             for alignment in alignment_constraints:
@@ -152,7 +153,6 @@ def enumerate_conv2d_operators(
                     swizzling_functor,
                     split_k_slice,
                 )
-
                 ret.append(
                     {
                         "src": profiler_emitter.emit(
@@ -197,7 +197,7 @@ class CutlassConv2DProfiler:
         For now, the default kernel was picked arbitrary.
         """
         gemm_profile_result = self.gemm_profiler.get_default(
-            op_type, out_dtype, arg0_dtype, arg1_dtype, use_3xtf32
+            op_type, out_dtype, arg0_dtype, arg1_dtype, "row", "column", "row", use_3xtf32
         )
         tile_description = gemm_profile_result["tile_description"]
         alignment = gemm_profile_result["alignment"]
@@ -269,6 +269,9 @@ class CutlassConv2DProfiler:
             out_dtype,
             data_dtype,
             weight_dtype,
+            "NHWC",
+            "NHWC",
+            "NHWC",
             partial(enumerate_conv2d_operators, conv_kind, stride_support, split_k_slices),
             lambda align: all([dim % align == 0 for dim in [IC, OC]]),
             use_3xtf32,

@@ -528,6 +528,8 @@ Doc RelaxScriptPrinter::PrintIRModule(const IRModule& mod) {
     Doc func;
     if (pr.second.as<tir::PrimFuncNode>()) {
       func = PrintPrimFunc(pr.first->name_hint, Downcast<tir::PrimFunc>(pr.second));
+    } else if (pr.second.as<ExternFuncNode>()) {
+      func = Print(pr.second);
     } else {
       Doc func_name;
       Optional<String> gsymbol = pr.second->GetAttr<String>(tvm::attr::kGlobalSymbol);
