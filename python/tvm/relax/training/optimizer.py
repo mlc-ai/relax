@@ -154,25 +154,23 @@ class Optimizer:
         .. code-block:: python
             @R.function
             def SGD(
-                params: R.Tuple(R.Tensor((3, 3), dtype="float32")),
-                gradients: R.Tuple(R.Tensor((3, 3), dtype="float32")),
-                optim_states: R.Tuple(R.Tensor((), dtype="int64")),
+                params: R.Tuple(R.Tensor((3, 3), "float32")),
+                gradients: R.Tuple(R.Tensor((3, 3), "float32")),
+                optim_states: R.Tuple(R.Tensor((), "int64")),
             ) -> R.Tuple(
-                R.Tuple(R.Tensor((3, 3), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"))
+                R.Tuple(R.Tensor((3, 3), "float32")), R.Tuple(R.Tensor((), "int64"))
             ):
                 with R.dataflow():
-                    x: R.Tensor((3, 3), dtype="float32") = params[0]
-                    x_grad: R.Tensor((3, 3), dtype="float32") = gradients[0]
-                    num_steps: R.Tensor((), dtype="int64") = optim_states[0]
-                    num_steps_new: R.Tensor((), dtype="int64") = R.add(
-                        num_steps, R.const(1, "int64")
-                    )
-                    x_grad_lr: R.Tensor((3, 3), dtype="float32") = R.multiply(
+                    x: R.Tensor((3, 3), "float32") = params[0]
+                    x_grad: R.Tensor((3, 3), "float32") = gradients[0]
+                    num_steps: R.Tensor((), "int64") = optim_states[0]
+                    num_steps_new: R.Tensor((), "int64") = R.add(num_steps, R.const(1, "int64"))
+                    x_grad_lr: R.Tensor((3, 3), "float32") = R.multiply(
                         R.const(0.1, "float32"), x_grad
                     )
-                    x_new: R.Tensor((3, 3), dtype="float32") = R.subtract(x, x_grad_lr)
-                    params_new: R.Tuple(R.Tensor((3, 3), dtype="float32")) = (x_new,)
-                    optim_states_new: R.Tuple(R.Tensor((), dtype="int64")) = (num_steps_new,)
+                    x_new: R.Tensor((3, 3), "float32") = R.subtract(x, x_grad_lr)
+                    params_new: R.Tuple(R.Tensor((3, 3), "float32")) = (x_new,)
+                    optim_states_new: R.Tuple(R.Tensor((), "int64")) = (num_steps_new,)
                     R.output(params_new, optim_states_new)
                 return (params_new, optim_states_new)
         """
