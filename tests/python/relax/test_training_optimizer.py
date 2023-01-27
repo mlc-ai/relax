@@ -26,9 +26,9 @@ from tvm.script.parser import relax as R
 
 def test_optimizer_wrong_param():
     x1 = relax.Var("x1", R.Tensor((3, 3), "float32"))
-    x2 = relax.Var("x1", R.Tensor((3, 3), "float64"))
-    x3 = relax.Var("x2", R.Tuple([R.Tensor((3, 3), "float32")]))
-    x4 = relax.Var("x3", R.Tensor((3, 3), "int64"))
+    x2 = relax.Var("x2", R.Tensor((3, 3), "float64"))
+    x3 = relax.Var("x3", R.Tuple([R.Tensor((3, 3), "float32")]))
+    x4 = relax.Var("x4", R.Tensor((3, 3), "int64"))
     x5 = relax.Tuple([x1])
 
     # fine cases
@@ -582,5 +582,5 @@ def test_adam_float64():
     assert_structural_equal(adam, adam_expected)
 
 
-if __name__ == "__main__":
-    tvm.testing.main()
+# if __name__ == "__main__":
+#     tvm.testing.main()

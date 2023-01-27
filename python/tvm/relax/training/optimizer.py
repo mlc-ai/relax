@@ -88,22 +88,26 @@ class Optimizer:
                 raise ValueError(f"Parameter {x} is not a Var")
             if not isinstance(x.struct_info, TensorStructInfo):
                 raise ValueError(
-                    f"Only support Tensor parameters, but parameter {x.name_hint} has struct info {x.struct_info}"
+                    f"Optimizers only support Tensor parameters, but parameter {x.name_hint} has "
+                    f"struct info {x.struct_info}"
                 )
             data_type = tvm.DataType(x.struct_info.dtype)
             if not data_type.type_code in (tvm.DataTypeCode.BFLOAT, tvm.DataTypeCode.FLOAT):
                 raise ValueError(
-                    f"Only support Tensor parameters of floating point dtype, but parameter {x.name_hint} has struct info {x.struct_info}"
+                    f"Optimizers only support Tensor parameters of floating point dtype, but dtype "
+                    f"of {x.name_hint} is {x.struct_info.dtype}"
                 )
             if self._dtype is None:
                 self._dtype = x.struct_info.dtype
             else:
                 if self._dtype != x.struct_info.dtype:
                     raise ValueError(
-                        "All parameters should have the same dtype, but parameter {x.name_hint} has dtype {x.struct_info.dtype}, which differs from previous dtype {self._dtype}"
+                        f"All parameters should have the same dtype, but parameter {x.name_hint} "
+                        f"has dtype {x.struct_info.dtype}, which differs from the previous dtype "
+                        f"{self._dtype}"
                     )
             if x in params_set:
-                raise ValueError("Parameter {x.name_hint} appears more than once")
+                raise ValueError(f"Parameter {x.name_hint} appears more than once")
             params_set.add(x)
 
     @property
@@ -591,7 +595,7 @@ class Adam(Optimizer):
                 ]
 
                 param_list_new = []
-                state_list_new = [None] * len(state_list)
+                state_list_new = [None] * len(state_list)  # type: List[Optional[Var]]
                 state_list_new[0] = builder.emit(add(state_list[0], one_int))
                 state_list_new[1] = builder.emit(multiply(state_list[1], beta1))
                 state_list_new[2] = builder.emit(multiply(state_list[2], beta2))
