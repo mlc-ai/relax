@@ -94,8 +94,7 @@ inline TensorStructInfo GetUnaryInputTensorStructInfo(const Call& call, const Bl
 /************ Utilities ************/
 
 /*!
- * \brief Infer utils for unary elementwise ops. Since some NN operators are also
- * unary operators, these infer utils are put here to be used across different files.
+ * \brief Infer the struct info for unary elementwise ops.
  * \param call The context Call to the operator.
  * \param ctx The error reporting context.
  * \param f_compute_out_dtype The function to compute the output dtype, with
@@ -120,13 +119,19 @@ inline StructInfo InferStructInfoUnary(const Call& call, const BlockBuilder& ctx
   return TensorStructInfo(output_sinfo);
 }
 
+/*!
+ * \brief Infer  the struct info for unary arithmetic elementwise ops. It's also
+ * used in some NN operators.
+ * \param call The context Call to the operator.
+ * \param ctx The error reporting context.
+ * \tparam require_float_dtype whether this op requires the input dtype to be float
+ * \return The inferred struct info.
+ */
 template <bool require_float_dtype>
 StructInfo InferStructInfoUnaryArith(const Call& call, const BlockBuilder& ctx) {
   return InferStructInfoUnary<require_float_dtype>(
       call, ctx, [](const TensorStructInfo& input_sinfo) { return input_sinfo->dtype; });
 }
-
-StructInfo InferStructInfoUnaryCheck(const Call& call, const BlockBuilder& ctx);
 
 /*!
  * \brief Layout infer util for unary elementwise ops. It will simply take the layout of the input.

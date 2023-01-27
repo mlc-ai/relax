@@ -27,6 +27,11 @@
 namespace tvm {
 namespace relax {
 
+StructInfo InferStructInfoUnaryCheck(const Call& call, const BlockBuilder& ctx) {
+  return InferStructInfoUnary<false>(
+      call, ctx, [](const TensorStructInfo& input_sinfo) { return DataType::Bool(); });
+}
+
 /***************** Arithmetic operators *****************/
 
 RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(abs, /*require_float_dtype=*/false);
