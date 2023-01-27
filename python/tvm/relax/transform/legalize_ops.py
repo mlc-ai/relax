@@ -626,6 +626,7 @@ def _image_resize2d(bb: BlockBuilder, call: Call) -> Expr:
 
 DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     # Arithmetic and comparison
+    "relax.abs": _unary(topi.abs),
     "relax.cos": _unary(topi.cos),
     "relax.log": _unary(topi.log),
     "relax.exp": _unary(topi.exp),

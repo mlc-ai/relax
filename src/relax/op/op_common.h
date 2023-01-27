@@ -167,8 +167,6 @@ InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
                                         const VarLayoutMap& var_layout_map);
 
-/************ Utilities ************/
-
 /*!
  * \brief Infer the output datatype for binary arithmetic operators.
  * \param call The context Call to the operator.
