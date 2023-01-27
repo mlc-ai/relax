@@ -221,12 +221,12 @@ class SGD(Optimizer):
     lr : float
         learning rate
 
-    weight_decay : Optional[float]
+    weight_decay : float
         weight decay (L2 penalty) (default: 0)
     """
 
     def __init__(
-        self, param_list: Union[Var, List[Var]], lr: float, weight_decay: Optional[float] = 0
+        self, param_list: Union[Var, List[Var]], lr: float, weight_decay: float = 0
     ) -> None:
         super().__init__(param_list)
         self.lr = float(lr)
@@ -337,13 +337,13 @@ class MomentumSGD(Optimizer):
     momentum : float
         momentum factor (default: 0)
 
-    weight_decay : Optional[float]
+    weight_decay : float
         weight decay (L2 penalty) (default: 0)
 
-    dampening : Optional[float]
+    dampening : float
         dampening for momentum (default: 0)
 
-    nesterov : Optional[bool]
+    nesterov : bool
         enables Nesterov momentum (default: False)
     """
 
@@ -352,9 +352,9 @@ class MomentumSGD(Optimizer):
         param_list: Union[Var, List[Var]],
         lr: float,
         momentum: float,
-        dampening: Optional[float] = 0,
-        weight_decay: Optional[float] = 0,
-        nesterov: Optional[bool] = False,
+        dampening: float = 0,
+        weight_decay: float = 0,
+        nesterov: bool = False,
     ) -> None:
         super().__init__(param_list)
         self.lr = float(lr)
@@ -486,14 +486,14 @@ class Adam(Optimizer):
     lr : float
         learning rate
 
-    betas : Optional[Tuple[float, float]]
+    betas : Tuple[float, float]
         coefficients used for computing running averages of gradient and its square
         (default: (0.9, 0.999))
 
-    eps : Optional[float]
+    eps : float
         term added to the denominator to improve numerical stability (default: 1e-8)
 
-    weight_decay : Optional[float]
+    weight_decay : float
         weight decay (L2 penalty) (default: 0)
     """
 
@@ -501,9 +501,9 @@ class Adam(Optimizer):
         self,
         param_list: Union[Var, List[Var]],
         lr: float,
-        betas: Optional[Tuple[float, float]] = (0.9, 0.999),
-        eps: Optional[float] = 1e-08,
-        weight_decay: Optional[float] = 0,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-08,
+        weight_decay: float = 0,
     ) -> None:
         super().__init__(param_list)
         self.lr = float(lr)
