@@ -38,13 +38,11 @@ def test_optimizer_wrong_param():
 
     with pytest.raises(AssertionError, match="There exist duplicate Vars in the parameter list."):
         SGD([x1, x1], 0.01)
-    with pytest.raises(AssertionError, match="There exist duplicate Vars in the parameter list."):
-        SGD(x1, 0.01).add_params([x1])
     with pytest.raises(AssertionError, match="Not every parameter is Var."):
         SGD(x5, 0.01)
     with pytest.raises(AssertionError, match="Not every parameter is Tensor Var"):
         SGD(x3, 0.01)
-    with pytest.raises(AssertionError, match="Pamameters must be of float dtype"):
+    with pytest.raises(AssertionError, match="Parameters must be of float dtype"):
         SGD(x4, 0.01)
     with pytest.raises(AssertionError, match="All parameters should have the same dtype"):
         SGD([x1, x2], 0.01)
@@ -55,9 +53,15 @@ def test_sgd_simple():
     y = relax.Var("y", R.Tensor((3,), "float32"))
     sgd = SGD([x, y], 0.01).get_function()
 
-    # fmt: off
     @R.function
-    def sgd_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), optim_states: R.Tuple(R.Tensor((), dtype="int64"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"))):
+    def sgd_expected(
+        params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        optim_states: R.Tuple(R.Tensor((), dtype="int64")),
+    ) -> R.Tuple(
+        R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        R.Tuple(R.Tensor((), dtype="int64")),
+    ):
         # block 0
         with R.dataflow():
             lv: R.Tensor((3, 3), dtype="float32") = params[0]
@@ -70,11 +74,13 @@ def test_sgd_simple():
             lv7: R.Tensor((3, 3), dtype="float32") = R.subtract(lv, lv6)
             lv8: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv3)
             lv9: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv8)
-            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv7, lv9)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (
+                lv7,
+                lv9,
+            )
             gv1: R.Tuple(R.Tensor((), dtype="int64")) = (lv5,)
             R.output(gv, gv1)
         return (gv, gv1)
-    # fmt: on
 
     assert_structural_equal(sgd, sgd_expected)
 
@@ -84,9 +90,15 @@ def test_sgd_complex():
     y = relax.Var("y", R.Tensor((3,), "float32"))
     sgd = SGD([x, y], 0.01, 0.02).get_function()
 
-    # fmt: off
     @R.function
-    def sgd_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), optim_states: R.Tuple(R.Tensor((), dtype="int64"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"))):
+    def sgd_expected(
+        params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        optim_states: R.Tuple(R.Tensor((), dtype="int64")),
+    ) -> R.Tuple(
+        R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        R.Tuple(R.Tensor((), dtype="int64")),
+    ):
         # block 0
         with R.dataflow():
             lv: R.Tensor((3, 3), dtype="float32") = params[0]
@@ -103,11 +115,13 @@ def test_sgd_complex():
             lv11: R.Tensor((3,), dtype="float32") = R.add(lv10, lv3)
             lv12: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv11)
             lv13: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv12)
-            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv9, lv13)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (
+                lv9,
+                lv13,
+            )
             gv1: R.Tuple(R.Tensor((), dtype="int64")) = (lv5,)
             R.output(gv, gv1)
         return (gv, gv1)
-    # fmt: on
 
     assert_structural_equal(sgd, sgd_expected)
 
@@ -117,10 +131,23 @@ def test_momentum_sgd_simple():
     y = relax.Var("y", R.Tensor((3,), "float32"))
     msgd = MomentumSGD([x, y], 0.01, 0.9).get_function()
 
-    # fmt: off
     @R.function
-    def msgd_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), optim_states: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))):
-        # block 0
+    def msgd_expected(
+        params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        optim_states: R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ) -> R.Tuple(
+        R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ):
         with R.dataflow():
             lv: R.Tensor((3, 3), dtype="float32") = params[0]
             lv1: R.Tensor((3,), dtype="float32") = params[1]
@@ -138,11 +165,17 @@ def test_momentum_sgd_simple():
             lv13: R.Tensor((3,), dtype="float32") = R.add(lv12, lv3)
             lv14: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv13)
             lv15: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv14)
-            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv11, lv15)
-            gv1: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv7, lv9, lv13)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (
+                lv11,
+                lv15,
+            )
+            gv1: R.Tuple(
+                R.Tensor((), dtype="int64"),
+                R.Tensor((3, 3), dtype="float32"),
+                R.Tensor((3,), dtype="float32"),
+            ) = (lv7, lv9, lv13)
             R.output(gv, gv1)
         return (gv, gv1)
-    # fmt: on
 
     assert_structural_equal(msgd, msgd_expected)
 
@@ -154,10 +187,23 @@ def test_momentum_sgd_complex():
     y = relax.Var("y", R.Tensor((3,), "float32"))
     msgd = MomentumSGD([x, y], lr, mom, damp, wd, nest).get_function()
 
-    # fmt: off
     @R.function
-    def msgd_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), optim_states: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))):
-        # block 0
+    def msgd_expected(
+        params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        optim_states: R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ) -> R.Tuple(
+        R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ):
         with R.dataflow():
             lv: R.Tensor((3, 3), dtype="float32") = params[0]
             lv1: R.Tensor((3,), dtype="float32") = params[1]
@@ -181,11 +227,17 @@ def test_momentum_sgd_complex():
             lv19: R.Tensor((3,), dtype="float32") = R.add(lv17, lv18)
             lv20: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv19)
             lv21: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv20)
-            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv14, lv21)
-            gv1: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv7, lv12, lv19)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (
+                lv14,
+                lv21,
+            )
+            gv1: R.Tuple(
+                R.Tensor((), dtype="int64"),
+                R.Tensor((3, 3), dtype="float32"),
+                R.Tensor((3,), dtype="float32"),
+            ) = (lv7, lv12, lv19)
             R.output(gv, gv1)
         return (gv, gv1)
-    # fmt: on
 
     assert_structural_equal(msgd, msgd_expected)
 
@@ -197,10 +249,23 @@ def test_momentum_sgd_nesterov():
     y = relax.Var("y", R.Tensor((3,), "float32"))
     msgd = MomentumSGD([x, y], lr, mom, damp, wd, nest).get_function()
 
-    # fmt: off
     @R.function
-    def msgd_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), optim_states: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))):
-        # block 0
+    def msgd_expected(
+        params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        optim_states: R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ) -> R.Tuple(
+        R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ):
         with R.dataflow():
             lv: R.Tensor((3, 3), dtype="float32") = params[0]
             lv1: R.Tensor((3,), dtype="float32") = params[1]
@@ -228,11 +293,17 @@ def test_momentum_sgd_nesterov():
             lv23: R.Tensor((3,), dtype="float32") = R.add(lv18, lv22)
             lv24: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv23)
             lv25: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv24)
-            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv16, lv25)
-            gv1: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv7, lv12, lv21)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (
+                lv16,
+                lv25,
+            )
+            gv1: R.Tuple(
+                R.Tensor((), dtype="int64"),
+                R.Tensor((3, 3), dtype="float32"),
+                R.Tensor((3,), dtype="float32"),
+            ) = (lv7, lv12, lv21)
             R.output(gv, gv1)
         return (gv, gv1)
-    # fmt: on
 
     assert_structural_equal(msgd, msgd_expected)
 
@@ -242,10 +313,31 @@ def test_adam_simple():
     y = relax.Var("y", R.Tensor((3,), "float32"))
     adam = Adam([x, y], 0.01).get_function()
 
-    # fmt: off
     @R.function
-    def adam_expected(params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), optim_states: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((), dtype="float32"), R.Tensor((), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))) -> R.Tuple(R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")), R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((), dtype="float32"), R.Tensor((), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"))):
-        # block 0
+    def adam_expected(
+        params: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        gradients: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        optim_states: R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((), dtype="float32"),
+            R.Tensor((), dtype="float32"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ) -> R.Tuple(
+        R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")),
+        R.Tuple(
+            R.Tensor((), dtype="int64"),
+            R.Tensor((), dtype="float32"),
+            R.Tensor((), dtype="float32"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+            R.Tensor((3, 3), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ),
+    ):
         with R.dataflow():
             lv: R.Tensor((3, 3), dtype="float32") = params[0]
             lv1: R.Tensor((3,), dtype="float32") = params[1]
@@ -293,11 +385,21 @@ def test_adam_simple():
             lv43: R.Tensor((3,), dtype="float32") = R.divide(lv38, lv42)
             lv44: R.Tensor((3,), dtype="float32") = R.multiply(R.const(0.01, "float32"), lv43)
             lv45: R.Tensor((3,), dtype="float32") = R.subtract(lv1, lv44)
-            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv29, lv45)
-            gv1: R.Tuple(R.Tensor((), dtype="int64"), R.Tensor((), dtype="float32"), R.Tensor((), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32"), R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (lv11, lv12, lv13, lv16, lv32, lv20, lv36)
+            gv: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3,), dtype="float32")) = (
+                lv29,
+                lv45,
+            )
+            gv1: R.Tuple(
+                R.Tensor((), dtype="int64"),
+                R.Tensor((), dtype="float32"),
+                R.Tensor((), dtype="float32"),
+                R.Tensor((3, 3), dtype="float32"),
+                R.Tensor((3,), dtype="float32"),
+                R.Tensor((3, 3), dtype="float32"),
+                R.Tensor((3,), dtype="float32"),
+            ) = (lv11, lv12, lv13, lv16, lv32, lv20, lv36)
             R.output(gv, gv1)
         return (gv, gv1)
-    # fmt: on
 
     assert_structural_equal(adam, adam_expected)
 

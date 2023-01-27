@@ -19,6 +19,7 @@ from typing import Callable, List
 
 import numpy as np
 import tvm
+import tvm.testing
 from tvm import relax
 from tvm import IRModule
 from tvm.relax.training.optimizer import Adam, SGD, MomentumSGD
