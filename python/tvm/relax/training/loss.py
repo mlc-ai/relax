@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=redefined-builtin
+# pylint: disable=redefined-builtin, invalid-name
 """Loss functions library for relax."""
 
 from typing import Optional, Union
@@ -104,7 +104,7 @@ class L1Loss(Loss):
     """
 
     def __init__(self, reduction: str = "mean") -> None:
-        super(L1Loss, self).__init__("l1_loss", reduction)
+        super().__init__("l1_loss", reduction)
 
     def __call__(
         self,
@@ -135,7 +135,7 @@ class MSELoss(Loss):
     """
 
     def __init__(self, reduction: str = "mean") -> None:
-        super(MSELoss, self).__init__("mse_loss", reduction)
+        super().__init__("mse_loss", reduction)
 
     def __call__(
         self,
@@ -180,7 +180,7 @@ class CrossEntropyLoss(Loss):
         ignore_index: int = -100,
         weights: Optional[Union[Var, StructInfo]] = None,
     ) -> None:
-        super(CrossEntropyLoss, self).__init__("cross_entropy_loss", reduction)
+        super().__init__("cross_entropy_loss", reduction)
         self.ignore_index = ignore_index
         if weights:
             self.weights = _create_param_var(weights, "weights")
