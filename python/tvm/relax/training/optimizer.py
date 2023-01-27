@@ -87,15 +87,21 @@ class Optimizer:
             if not isinstance(x, Var):
                 raise ValueError(f"Parameter {x} is not a Var")
             if not isinstance(x.struct_info, TensorStructInfo):
-                raise ValueError(f"Only support Tensor parameters, but parameter {x.name_hint} has struct info {x.struct_info}")
+                raise ValueError(
+                    f"Only support Tensor parameters, but parameter {x.name_hint} has struct info {x.struct_info}"
+                )
             data_type = tvm.DataType(x.struct_info.dtype)
             if not data_type.type_code in (tvm.DataTypeCode.BFLOAT, tvm.DataTypeCode.FLOAT):
-                raise ValueError(f"Only support Tensor parameters of floating point dtype, but parameter {x.name_hint} has struct info {x.struct_info}")
+                raise ValueError(
+                    f"Only support Tensor parameters of floating point dtype, but parameter {x.name_hint} has struct info {x.struct_info}"
+                )
             if self._dtype is None:
                 self._dtype = x.struct_info.dtype
             else:
                 if self._dtype != x.struct_info.dtype:
-                    raise ValueError("All parameters should have the same dtype, but parameter {x.name_hint} has dtype {x.struct_info.dtype}, which differs from previous dtype {self._dtype}")
+                    raise ValueError(
+                        "All parameters should have the same dtype, but parameter {x.name_hint} has dtype {x.struct_info.dtype}, which differs from previous dtype {self._dtype}"
+                    )
             if x in params_set:
                 raise ValueError("Parameter {x.name_hint} appears more than once")
             params_set.add(x)
@@ -217,7 +223,9 @@ class SGD(Optimizer):
         weight decay (L2 penalty) (default: 0)
     """
 
-    def __init__(self, param_list: Union[Var, List[Var]], lr: float, weight_decay: Optional[float]=0) -> None:
+    def __init__(
+        self, param_list: Union[Var, List[Var]], lr: float, weight_decay: Optional[float] = 0
+    ) -> None:
         super().__init__(param_list)
         self.lr = float(lr)
         self.weight_decay = float(weight_decay)
@@ -337,7 +345,15 @@ class MomentumSGD(Optimizer):
         enables Nesterov momentum (default: False)
     """
 
-    def __init__(self, param_list: Union[Var, List[Var]], lr: float, momentum: float, dampening: Optional[float]=0, weight_decay: Optional[float]=0, nesterov: Optional[bool]=False) -> None:
+    def __init__(
+        self,
+        param_list: Union[Var, List[Var]],
+        lr: float,
+        momentum: float,
+        dampening: Optional[float] = 0,
+        weight_decay: Optional[float] = 0,
+        nesterov: Optional[bool] = False,
+    ) -> None:
         super().__init__(param_list)
         self.lr = float(lr)
         self.momentum = float(momentum)
@@ -479,7 +495,14 @@ class Adam(Optimizer):
         weight decay (L2 penalty) (default: 0)
     """
 
-    def __init__(self, param_list: Union[Var, List[Var]], lr: float, betas: Optional[Tuple[float, float]]=(0.9, 0.999), eps: Optional[float]=1e-08, weight_decay: Optional[float]=0) -> None:
+    def __init__(
+        self,
+        param_list: Union[Var, List[Var]],
+        lr: float,
+        betas: Optional[Tuple[float, float]] = (0.9, 0.999),
+        eps: Optional[float] = 1e-08,
+        weight_decay: Optional[float] = 0,
+    ) -> None:
         super().__init__(param_list)
         self.lr = float(lr)
         self.beta1 = float(betas[0])
