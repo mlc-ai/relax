@@ -42,7 +42,11 @@ dtype_map = {
 
 
 def generate_tensor_op_common(
-    math_instructions, alignment_constraints, get_tile_descriptions, op_creator
+    math_instructions,
+    alignment_constraints,
+    get_tile_descriptions,
+    layout_constraints,
+    op_creator,
 ):
     """Common kernel generator to be used by archtecture specific generators."""
     ops = []
@@ -55,7 +59,7 @@ def generate_tensor_op_common(
             math_inst.element_accumulator,
         ]
 
-        out = op_creator(tile_descriptions, data_type, alignment_constraints)
+        out = op_creator(tile_descriptions, data_type, alignment_constraints, layout_constraints)
 
         ops.extend(out)
 
@@ -66,6 +70,9 @@ def generate_sm75_tensor_op_1688(
     out_dtype,
     arg0_dtype,
     arg1_dtype,
+    out_layout,
+    arg0_layout,
+    arg1_layout,
     op_creator,
     check_align,
     _,
@@ -137,8 +144,13 @@ def generate_sm75_tensor_op_1688(
             for threadblock_shape, stages, warp_count, min_cc, max_cc in tile_descriptions
         ]
 
+    layout_constraints = [arg0_layout, arg1_layout, out_layout]
     return generate_tensor_op_common(
-        math_instructions, alignment_constraints, get_tile_descriptions, op_creator
+        math_instructions,
+        alignment_constraints,
+        get_tile_descriptions,
+        layout_constraints,
+        op_creator,
     )
 
 
@@ -146,6 +158,9 @@ def generate_sm80_tensor_op_16816(
     out_dtype,
     arg0_dtype,
     arg1_dtype,
+    out_layout,
+    arg0_layout,
+    arg1_layout,
     op_creator,
     check_align,
     use_3xtf32=True,
@@ -257,6 +272,9 @@ def generate_sm80_tensor_op_16816(
             out_dtype,
             arg0_dtype,
             arg1_dtype,
+            out_layout,
+            arg0_layout,
+            arg1_layout,
             op_creator,
             check_align,
             False,
@@ -268,8 +286,13 @@ def generate_sm80_tensor_op_16816(
         sm75_kernels = []
 
     if len(alignment_constraints) > 0:
+        layout_constraints = [arg0_layout, arg1_layout, out_layout]
         sm80_kernels = generate_tensor_op_common(
-            math_instructions, alignment_constraints, get_tile_descriptions, op_creator
+            math_instructions,
+            alignment_constraints,
+            get_tile_descriptions,
+            layout_constraints,
+            op_creator,
         )
     else:
         sm80_kernels = []
@@ -299,6 +322,8 @@ EPILOGUE_MAP = {
     "cutlass.dense_bias_gelu_fp16": (EpilogueFunctor.LinearCombinationGelu, False),
     "cutlass.dense_bias_gelu_fp32": (EpilogueFunctor.LinearCombinationGelu, False),
     "cutlass.batch_matmul": (EpilogueFunctor.LinearCombination, False),
+    "cutlass.batch_matmul_bias": (EpilogueFunctor.LinearCombinationBias, True),
+    "cutlass.batch_matmul_bias_relu": (EpilogueFunctor.LinearCombinationRelu, True),
     "cutlass.conv2d_bias_hardswish": (EpilogueFunctor.LinearCombinationHardSwish, False),
     "cutlass.conv2d_bias_silu": (EpilogueFunctor.LinearCombinationSilu, False),
     "cutlass.conv2d_bias_sigmoid": (EpilogueFunctor.LinearCombinationSigmoid, False),
