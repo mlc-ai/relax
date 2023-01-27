@@ -21,6 +21,76 @@ from tvm.script import relax as R, tir as T
 import tvm.testing
 
 
+def test_abs():
+    # fmt: off
+    @tvm.script.ir_module
+    class Abs:
+        @R.function
+        def main(x: R.Tensor((2, 3), "float32")) -> R.Tensor((2, 3), "float32"):
+            gv: R.Tensor((2, 3), "float32") = R.abs(x)
+            return gv
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((2, 3), dtype="float32")) -> R.Tensor((2, 3), dtype="float32"):
+            gv = R.call_tir(abs, (x,), R.Tensor((2, 3), dtype="float32"))
+            return gv
+
+        @T.prim_func
+        def abs(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3)), "float32"], compute: T.Buffer[(T.int64(2), T.int64(3)), "float32"],):
+            T.func_attr({"tir.noalias": True})
+            for i0, i1 in T.grid(T.int64(2), T.int64(3)):
+                with T.block("compute"):
+                    v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[v_i0, v_i1])
+                    T.writes(compute[v_i0, v_i1])
+                    compute[v_i0, v_i1] = T.fabs(rxplaceholder[v_i0, v_i1], dtype="float32")
+    # fmt: on
+
+    mod = LegalizeOps()(Abs)
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_abs_symbolic():
+    # fmt: off
+    @tvm.script.ir_module
+    class Abs:
+        @R.function
+        def main(x: R.Tensor(("m", "n"), "float32")) -> R.Tensor(("m", "n"), "float32"):
+            m = T.var("int64")
+            n = T.var("int64")
+            gv: R.Tensor((m, n), "float32") = R.abs(x)
+            return gv
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor(("m", "n"), dtype="float32")) -> R.Tensor(("m", "n"), dtype="float32"):
+            m = T.var("int64")
+            n = T.var("int64")
+            gv = R.call_tir(abs, (x,), R.Tensor((m, n), dtype="float32"))
+            return gv
+
+        @T.prim_func
+        def abs(var_rxplaceholder: T.handle, var_compute: T.handle):
+            T.func_attr({"tir.noalias": True})
+            m = T.var("int64")
+            n = T.var("int64")
+            rxplaceholder = T.match_buffer(var_rxplaceholder, [m, n], dtype="float32")
+            compute = T.match_buffer(var_compute, [m, n], dtype="float32")
+            for i0, i1 in T.grid(m, n):
+                with T.block("compute"):
+                    v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(rxplaceholder[v_i0, v_i1])
+                    T.writes(compute[v_i0, v_i1])
+                    compute[v_i0, v_i1] = T.fabs(rxplaceholder[v_i0, v_i1], dtype="float32")
+    # fmt: on
+
+    mod = LegalizeOps()(Abs)
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_cos():
     # fmt: off
     @tvm.script.ir_module
