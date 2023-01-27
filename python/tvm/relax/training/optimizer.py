@@ -17,7 +17,7 @@
 """Provide abstraction for defining optimizers and a set of common optimizers."""
 
 from decimal import Decimal
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np  # type: ignore
 
@@ -32,6 +32,8 @@ from tvm.relax import Var, Function
 class Optimizer:
     """Relax training optimizer. This class could generate relax Functions for optimizing specified
     parameters, and store the states used in the optimization process, such as momentum.
+
+    See `@property state` for details about the state of the optimizer.
 
     Parameters
     ----------
@@ -118,12 +120,12 @@ class Optimizer:
         return self._state
 
     @state.setter
-    def state(self, value: tvm.runtime.container.ADT) -> None:
+    def state(self, new_value: tvm.runtime.container.ADT) -> None:
         """Setter of state.
 
         If `state` property is overloaded, `state` setter must be overloaded at the same time.
         """
-        self._state = value
+        self._state = new_value
 
     def get_function(self) -> Function:
         """In any implementation of Optimizer, we will use blockbuilder to build an optimizer
@@ -239,8 +241,8 @@ class SGD(Optimizer):
         return self._state
 
     @state.setter
-    def state(self, value: tvm.runtime.container.ADT) -> None:
-        self._state = value
+    def state(self, new_value: tvm.runtime.container.ADT) -> None:
+        self._state = new_value
 
     def get_function(self) -> Function:
         plist = self._param_list
@@ -368,7 +370,7 @@ class MomentumSGD(Optimizer):
         return self._state
 
     @state.setter
-    def state(self, new_value):
+    def state(self, new_value: tvm.runtime.container.ADT) -> None:
         self._state = new_value
 
     def get_function(self) -> Function:
@@ -456,6 +458,13 @@ class Adam(Optimizer):
 
     Parameters
     ----------
+    params : Union[Var, List[Var]]
+        The parameter or the list of parameters to optimize.
+
+        Parameters should all be Vars of floating point Tensors, including float32, float64,
+        float16, etc. Currently, all parameters should have the same dtype, and that dtype
+        will be used as the dtype of the optimizer states.
+
     lr : float
         learning rate
 
@@ -470,7 +479,7 @@ class Adam(Optimizer):
         weight decay (L2 penalty) (default: 0)
     """
 
-    def __init__(self, param_list, lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0):
+    def __init__(self, param_list: Union[Var, List[Var]], lr: float, betas: Optional[Tuple[float, float]]=(0.9, 0.999), eps: Optional[float]=1e-08, weight_decay: Optional[float]=0) -> None:
         super().__init__(param_list)
         self.lr = float(lr)
         self.beta1 = float(betas[0])
@@ -479,7 +488,7 @@ class Adam(Optimizer):
         self.weight_decay = float(weight_decay)
 
     @property
-    def state(self):
+    def state(self) -> tvm.runtime.container.ADT:
         """The state of Adam is
 
         .. code-block:: python
@@ -515,8 +524,8 @@ class Adam(Optimizer):
         return self._state
 
     @state.setter
-    def state(self, value):
-        self._state = value
+    def state(self, new_value: tvm.runtime.container.ADT) -> None:
+        self._state = new_value
 
     def get_function(self) -> Function:
         plist = self._param_list
