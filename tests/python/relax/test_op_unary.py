@@ -78,7 +78,7 @@ unary_arith_op, require_float_dtype = tvm.testing.parameters(
     (relax.op.sign, False),
     (relax.op.sin, True),
     (relax.op.sinh, True),
-    (relax.op.square, True),
+    (relax.op.square, False),
     (relax.op.sqrt, True),
     (relax.op.tan, True),
     (relax.op.tanh, True),

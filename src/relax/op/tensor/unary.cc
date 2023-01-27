@@ -48,16 +48,16 @@ RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(sigmoid, /*require_float_dtype=*/true);
 RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(sign, /*require_float_dtype=*/false);
 RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(sin, /*require_float_dtype=*/true);
 RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(sinh, /*require_float_dtype=*/true);
-RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(square, /*require_float_dtype=*/true);
+RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(square, /*require_float_dtype=*/false);
 RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(sqrt, /*require_float_dtype=*/true);
 RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(tan, /*require_float_dtype=*/true);
 RELAX_REGISTER_UNARY_ARITH_OP_AND_IMPL(tanh, /*require_float_dtype=*/true);
 
 /***************** Check operators *****************/
 
-RELAX_REGISTER_UNARY_CHECK_OP_AND_IMPL(isfinite, /*require_float_dtype=*/false);
-RELAX_REGISTER_UNARY_CHECK_OP_AND_IMPL(isinf, /*require_float_dtype=*/false);
-RELAX_REGISTER_UNARY_CHECK_OP_AND_IMPL(isnan, /*require_float_dtype=*/false);
+RELAX_REGISTER_UNARY_CHECK_OP_AND_IMPL(isfinite);
+RELAX_REGISTER_UNARY_CHECK_OP_AND_IMPL(isinf);
+RELAX_REGISTER_UNARY_CHECK_OP_AND_IMPL(isnan);
 
 }  // namespace relax
 }  // namespace tvm

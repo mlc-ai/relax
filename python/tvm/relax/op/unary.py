@@ -19,6 +19,8 @@
 from . import _ffi_api
 from ..expr import Expr
 
+###################### Arithmetic operators ######################
+
 
 def abs(x: Expr) -> Expr:
     """Compute element-wise absolute value of the input data.
@@ -248,54 +250,6 @@ def floor(x: Expr) -> Expr:
     return _ffi_api.floor(x)  # type: ignore
 
 
-def isfinite(x: Expr) -> Expr:
-    """Check if input value is finite.
-
-    Parameters
-    ----------
-    x : relax.Expr
-        The input data
-
-    Returns
-    -------
-    result : relax.Expr
-        The computed result.
-    """
-    return _ffi_api.isfinite(x)  # type: ignore
-
-
-def isinf(x: Expr) -> Expr:
-    """Check if input value is infinite.
-
-    Parameters
-    ----------
-    x : relax.Expr
-        The input data
-
-    Returns
-    -------
-    result : relax.Expr
-        The computed result.
-    """
-    return _ffi_api.isinf(x)  # type: ignore
-
-
-def isnan(x: Expr) -> Expr:
-    """Check if input value is Nan.
-
-    Parameters
-    ----------
-    x : relax.Expr
-        The input data
-
-    Returns
-    -------
-    result : relax.Expr
-        The computed result.
-    """
-    return _ffi_api.isnan(x)  # type: ignore
-
-
 def log(x: Expr) -> Expr:
     """Compute element-wise natural logarithm of the input data.
 
@@ -498,3 +452,54 @@ def tanh(x: Expr) -> Expr:
     The input tensor is required to have float dtype
     """
     return _ffi_api.tanh(x)  # type: ignore
+
+
+###################### Check operators ######################
+
+
+def isfinite(x: Expr) -> Expr:
+    """Check if input value is finite.
+
+    Parameters
+    ----------
+    x : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.isfinite(x)  # type: ignore
+
+
+def isinf(x: Expr) -> Expr:
+    """Check if input value is infinite.
+
+    Parameters
+    ----------
+    x : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.isinf(x)  # type: ignore
+
+
+def isnan(x: Expr) -> Expr:
+    """Check if input value is Nan.
+
+    Parameters
+    ----------
+    x : relax.Expr
+        The input data
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    return _ffi_api.isnan(x)  # type: ignore
