@@ -14,7 +14,6 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-import pytest
 import tvm.testing
 from tvm import relax
 from tvm.ir.base import assert_structural_equal
@@ -34,7 +33,6 @@ def forward(
     return out
 
 
-@pytest.mark.skip("Waiting for the operator of R.abs")
 def test_l1_loss():
     N = 3
     C = 5
@@ -42,10 +40,41 @@ def test_l1_loss():
     targets = relax.TensorStructInfo((N, C), "float32")
     l1_loss = relax.training.L1Loss()(predictions, targets)
 
+    # fmt: off
+    @R.function
+    def expected(predictions: R.Tensor((3, 5), dtype="float32"), targets: R.Tensor((3, 5), dtype="float32")) -> R.Tensor((), dtype="float32"):
+        R.func_attr({"global_symbol": "l1_loss"})
+        with R.dataflow():
+            lv: R.Tensor((3, 5), dtype="float32") = R.subtract(predictions, targets)
+            lv1: R.Tensor((3, 5), dtype="float32") = R.abs(lv)
+            gv: R.Tensor((), dtype="float32") = R.mean(lv1, axis=None, keepdims=False)
+            R.output(gv)
+        return gv
+    # fmt: on
 
-@pytest.mark.skip("Waiting for the operator of R.abs")
+    assert_structural_equal(l1_loss, expected)
+
+
 def test_l1_loss_append():
-    pass
+    s = forward.ret_struct_info
+    l1_loss = relax.training.L1Loss(reduction="sum")(s, s)
+    forward_with_loss = relax.training.utils.append_loss(forward, l1_loss)
+
+    # fmt: off
+    @R.function
+    def expected(x: R.Tensor((2, 4), dtype="float32"), w: R.Tensor((4, 4), dtype="float32"), b: R.Tensor((2, 4), dtype="float32"), targets: R.Tensor((2, 4), dtype="float32")) -> R.Tensor((), dtype="float32"):
+        # block 0
+        with R.dataflow():
+            lv: R.Tensor((2, 4), dtype="float32") = R.matmul(x, w, out_dtype="")
+            out: R.Tensor((2, 4), dtype="float32") = R.add(lv, b)
+            lv1: R.Tensor((2, 4), dtype="float32") = R.subtract(out, targets)
+            lv11: R.Tensor((2, 4), dtype="float32") = R.abs(lv1)
+            gv: R.Tensor((), dtype="float32") = R.sum(lv11, axis=None, keepdims=False)
+            R.output(gv)
+        return gv
+    # fmt: on
+
+    assert_structural_equal(forward_with_loss, expected)
 
 
 def test_mse_loss():
@@ -64,8 +93,7 @@ def test_mse_loss():
         with R.dataflow():
             lv: R.Tensor((3, 5), dtype="float32") = R.subtract(predictions, targets)
             lv1: R.Tensor((3, 5), dtype="float32") = R.multiply(lv, lv)
-            lv2: R.Tensor((5,), dtype="float32") = R.mean(lv1, axis=[0], keepdims=False)
-            gv: R.Tensor((), dtype="float32") = R.sum(lv2, axis=None, keepdims=False)
+            gv: R.Tensor((), dtype="float32") = R.mean(lv1, axis=None, keepdims=False)
             R.output(gv)
         return gv
     # fmt: on

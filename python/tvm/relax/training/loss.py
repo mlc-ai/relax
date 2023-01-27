@@ -21,7 +21,7 @@ from typing import Any, List, Optional, Union
 from tvm import relax
 from ..expr import Expr, Var, Function, StructInfo
 
-from ..op import sum, mean, subtract, multiply
+from ..op import abs, sum, mean, subtract, multiply
 from ..op.nn import log_softmax, nll_loss
 
 
@@ -81,7 +81,7 @@ class Loss:
         if self.reduction == "sum":
             expr = sum(expr)
         elif self.reduction == "mean":
-            expr = sum(mean(expr, axis=0))
+            expr = mean(expr)
         else:
             assert self.reduction == "none"
         return expr
@@ -111,7 +111,7 @@ class L1Loss(Loss):
 
         with bb.function(self.loss_name, [predictions, targets]):
             with bb.dataflow():
-                lv = abs(subtract(predictions, targets))  # TODO: R.abs
+                lv = abs(subtract(predictions, targets))
                 loss = bb.emit_output(self._with_reduction(lv))
             bb.emit_func_output(loss)
 
