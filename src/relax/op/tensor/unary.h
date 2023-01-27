@@ -47,7 +47,7 @@ namespace relax {
 
 #define RELAX_REGISTER_UNARY_CHECK_OP_AND_IMPL(OpName)                 \
   RELAX_REGISTER_UNARY_OP_AND_IMPL(OpName).set_attr<FInferStructInfo>( \
-      "FInferStructInfo", InferStructInfoUnaryCheck<false>)
+      "FInferStructInfo", InferStructInfoUnaryCheck)  // require_float_dtype=false for check op
 
 /***************** Arithmetic operators *****************/
 

@@ -126,11 +126,7 @@ StructInfo InferStructInfoUnaryArith(const Call& call, const BlockBuilder& ctx) 
       call, ctx, [](const TensorStructInfo& input_sinfo) { return input_sinfo->dtype; });
 }
 
-template <bool require_float_dtype>
-StructInfo InferStructInfoUnaryCheck(const Call& call, const BlockBuilder& ctx) {
-  return InferStructInfoUnary<require_float_dtype>(
-      call, ctx, [](const TensorStructInfo& input_sinfo) { return DataType::Bool(); });
-}
+StructInfo InferStructInfoUnaryCheck(const Call& call, const BlockBuilder& ctx);
 
 /*!
  * \brief Layout infer util for unary elementwise ops. It will simply take the layout of the input.

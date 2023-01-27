@@ -117,6 +117,11 @@ std::vector<int> NormalizeAxes(const Call& call, const BlockBuilder& ctx, int nd
   return axes_non_neg;
 }
 
+StructInfo InferStructInfoUnaryCheck(const Call& call, const BlockBuilder& ctx) {
+  return InferStructInfoUnary<false>(
+      call, ctx, [](const TensorStructInfo& input_sinfo) { return DataType::Bool(); });
+}
+
 InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
                                         const VarLayoutMap& var_layout_map) {
