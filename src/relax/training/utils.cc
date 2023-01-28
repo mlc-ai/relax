@@ -32,7 +32,7 @@ class AppendLossMutator : public ExprMutator {
     Array<BindingBlock> blocks;
     for (int i = 0; i < static_cast<int>(seq_expr->blocks.size()); ++i) {
       CHECK(seq_expr->blocks[i].as<DataflowBlockNode>())
-          << "All blocks in original functions should be Dataflow Block";
+          << "All blocks in original functions should be Dataflow Block.";
       if (i < static_cast<int>(seq_expr->blocks.size()) - 1) {
         blocks.push_back(seq_expr->blocks[i]);
       } else {
@@ -60,10 +60,10 @@ class AppendLossMutator : public ExprMutator {
     }
 
     // emit blocks for loss function part.
-    for (BindingBlock block : loss_body_->blocks) {
+    for (const BindingBlock& block : loss_body_->blocks) {
       CHECK(block.as<DataflowBlockNode>())
-          << "All blocks in loss functions should be Dataflow Block";
-      for (Binding binding : block->bindings) {
+          << "All blocks in loss functions should be Dataflow Block.";
+      for (const Binding& binding : block->bindings) {
         this->VisitBinding(binding);
       }
     }
@@ -80,8 +80,8 @@ class AppendLossMutator : public ExprMutator {
   // remap orignal dataflow var
   // TODO(chaofan): a better way to check whether new_ret_var should be dataflow
   void RemapToDataflow(SeqExpr body) {
-    for (BindingBlock block : body->blocks) {
-      for (Binding binding : block->bindings) {
+    for (const BindingBlock& block : body->blocks) {
+      for (const Binding& binding : block->bindings) {
         const auto* binding_node = binding.as<VarBindingNode>();
         if (binding_node && !binding_node->var->IsInstance<DataflowVarNode>()) {
           Var new_binding_var = DataflowVar(
@@ -126,15 +126,17 @@ class AppendLossMutator : public ExprMutator {
 
 /*!
  * \brief Local helper to append a specified loss function after the original function.
- * \param orig_func The function to be appended.
+ * \param orig_func The function to be appended to.
  * \param loss_func The loss function.
  * \return The result function after appended.
  */
 Function AppendLoss(Function orig_func, Function loss_func) {
   CHECK(orig_func->body->IsInstance<SeqExprNode>())
-      << "the body of the original function is not SeqExpr.";
+      << "The body of the original function is expected to be a SeqExpr, but got"
+      << orig_func->body->GetTypeKey();
   CHECK(loss_func->body->IsInstance<SeqExprNode>())
-      << "the body of the loss function is not SeqExpr.";
+      << "The body of the loss function is expected to be a SeqExpr, but got"
+      << loss_func->body->GetTypeKey();
 
   auto param_copied_func = CopyWithNewParams(orig_func);
   auto seq_expr = Downcast<SeqExpr>(param_copied_func->body);
@@ -145,7 +147,7 @@ Function AppendLoss(Function orig_func, Function loss_func) {
   if (orig_func->ret_struct_info.as<TupleStructInfoNode>()) {
     const auto* tuple_node = seq_expr->body.as<TupleNode>();
     ICHECK(tuple_node != nullptr);
-    for (Expr field : tuple_node->fields) {
+    for (const Expr& field : tuple_node->fields) {
       mutator.orig_rets.push_back(mutator.VisitExpr(field));
     }
   } else {
@@ -154,11 +156,13 @@ Function AppendLoss(Function orig_func, Function loss_func) {
 
   CHECK(loss_func->params.size() >= mutator.orig_rets.size())
       << "The number of return values of original functions should be greater than the number of "
-         "parameters of loss function";
+         "parameters of loss function. Got "
+      << mutator.orig_rets.size() << " > " << loss_func->params.size();
 
   auto new_params = mutator.RemapLossParams(loss_func->params, param_copied_func->params);
   Expr new_body = mutator.VisitExpr(seq_expr);
-  return Function(new_params, new_body, loss_func->ret_struct_info, param_copied_func->attrs);
+  return Function(std::move(new_params), std::move(new_body), loss_func->ret_struct_info,
+                  param_copied_func->attrs);
 }
 
 TVM_REGISTER_GLOBAL("relax.training.AppendLoss").set_body_typed(AppendLoss);

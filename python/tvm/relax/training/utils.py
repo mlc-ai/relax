@@ -37,25 +37,38 @@ def append_loss(orig_func: Function, loss_func: Function) -> Function:
 
     .. code-block:: python
         # Before.
-            @R.function
-            def orig(x, y):
-                out = x + y
-                return out
+        @R.function
+        def orig(x: R.Tensor((2, 4), "float32"), y: R.Tensor((2, 4), "float32")):
+            with R.dataflow():
+                out = R.add(x, y)
+                R.output(out)
+            return out
 
-            @R.function
-            def loss(predictions, labels):
-                return R.sum((predictions - labels)^2)
+        @R.function
+        def loss(predictions: R.Tensor((2, 4), "float32"), labels: R.Tensor((2, 4), "float32")):
+            with R.dataflow():
+                lv = R.subtract(predictions, labels)
+                lv1 = R.multiply(lv, lv)
+                gv = R.sum(lv1)
+                R.output(gv)
+            return gv
 
         # After.
-            @R.function
-            def orig(x, y, labels):
-                out = x + y
-                return R.sum((out - labels)^2)
+        @R.function
+        def expected(x: R.Tensor((2, 4), "float32"), y: R.Tensor((2, 4), "float32"),
+                    labels: R.Tensor((2, 4), "float32")) -> R.Tensor((), "float32"):
+            with R.dataflow():
+                out: R.Tensor((2, 4), "float32") = R.add(x, y)
+                lv: R.Tensor((2, 4), "float32") = R.subtract(out, labels)
+                lv1: R.Tensor((2, 4), "float32") = R.multiply(lv, lv)
+                gv: R.Tensor((), "float32") = R.sum(lv1)
+                R.output(gv)
+            return gv
 
     Parameters
     ----------
     orig_func : Function
-        The function to be appended.
+        The function to be appended to.
 
     loss_func : Function
         The loss function.

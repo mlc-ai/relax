@@ -17,7 +17,7 @@
 # pylint: disable=redefined-builtin, invalid-name
 """Loss functions library for relax."""
 
-from typing import Optional, Union
+from typing import Optional, Union, Literal
 from tvm import relax
 from ..expr import Expr, Var, Function, StructInfo
 
@@ -28,22 +28,23 @@ from ..op.nn import log_softmax, nll_loss
 __all__ = ["L1Loss", "MSELoss", "CrossEntropyLoss"]
 
 
-def _create_param_var(param: Union[Var, StructInfo], param_name) -> Var:
+def _create_param_var(param: Union[Var, StructInfo], param_name: str) -> Var:
     if isinstance(param, StructInfo):
         param = Var(param_name, param)
-    assert isinstance(param, Var)
+    if not isinstance(param, Var):
+        raise TypeError("The type of param should be Var or StructInfo, but got " + type(param))
     return Var(param.name_hint, param.struct_info)
 
 
 class Loss:
-    """Base class of all loss.
+    r"""Base class of all loss.
 
     Parameters
     ----------
     loss_name : str
         The name of the loss function.
 
-    reduction : str
+    reduction : Literal["mean", "sum", "none"]
         The reduction method to apply to output. Can be "mean", "sum" or "none".
 
         none : no reduction will be applied,
@@ -51,10 +52,7 @@ class Loss:
         sum : the output will be summed.
     """
 
-    reduction: str
-    loss_name: str
-
-    def __init__(self, loss_name: str, reduction: str = "mean") -> None:
+    def __init__(self, loss_name: str, reduction: Literal["mean", "sum", "none"] = "mean") -> None:
         self.loss_name = loss_name
         self.reduction = reduction
 
@@ -63,7 +61,7 @@ class Loss:
         if self.reduction not in valid_reductions:
             raise ValueError("Reduction can only be one of these values: ", valid_reductions)
 
-    def _with_reduction(self, expr: Expr):
+    def _with_reduction(self, expr: Expr) -> Expr:
         """Add a reduction to the final loss.
 
         Parameters
@@ -81,15 +79,19 @@ class Loss:
 
 
 class L1Loss(Loss):
-    """Mean element-wise absolute value difference.
+    r"""Mean element-wise absolute value difference.
 
     Parameters
     ----------
-    reduction : str
-        See the doc of Loss.
+    reduction : Literal["mean", "sum", "none"]
+        The reduction method to apply to output. Can be "mean", "sum" or "none".
+
+        none : no reduction will be applied,
+        mean : the sum of the output will be divided by the batch_size,
+        sum : the output will be summed.
     """
 
-    def __init__(self, reduction: str = "mean") -> None:
+    def __init__(self, reduction: Literal["mean", "sum", "none"] = "mean") -> None:
         super().__init__("l1_loss", reduction)
 
     def __call__(
@@ -126,15 +128,19 @@ class L1Loss(Loss):
 
 
 class MSELoss(Loss):
-    """Measures the element-wise mean squared error.
+    r"""Measures the element-wise mean squared error.
 
     Parameters
     ----------
-    reduction : str
-        See the doc of Loss.
+    reduction : Literal["mean", "sum", "none"]
+        The reduction method to apply to output. Can be "mean", "sum" or "none".
+
+        none : no reduction will be applied,
+        mean : the sum of the output will be divided by the batch_size,
+        sum : the output will be summed.
     """
 
-    def __init__(self, reduction: str = "mean") -> None:
+    def __init__(self, reduction: Literal["mean", "sum", "none"] = "mean") -> None:
         super().__init__("mse_loss", reduction)
 
     def __call__(
@@ -172,12 +178,16 @@ class MSELoss(Loss):
 
 
 class CrossEntropyLoss(Loss):
-    """CrossEntropyLoss. It is a combination of a log_softmax computation and a nll_loss.
+    r"""CrossEntropyLoss. It is a combination of a log_softmax computation and a nll_loss.
 
     Parameters
     ----------
-    reduction : str
-        See the doc of Loss.
+    reduction : Literal["mean", "sum", "none"]
+        The reduction method to apply to output. Can be "mean", "sum" or "none".
+
+        none : no reduction will be applied,
+        mean : the sum of the output will be divided by the batch_size,
+        sum : the output will be summed.
 
     ignore_index : int
         Specifies a target value that is ignored and does not contribute to the input gradient.
@@ -187,7 +197,7 @@ class CrossEntropyLoss(Loss):
 
     def __init__(
         self,
-        reduction: str = "mean",
+        reduction: Literal["mean", "sum", "none"] = "mean",
         ignore_index: int = -100,
     ) -> None:
         super().__init__("cross_entropy_loss", reduction)

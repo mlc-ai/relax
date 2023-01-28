@@ -17,18 +17,18 @@
 import tvm.testing
 from tvm import relax
 from tvm.ir.base import assert_structural_equal
-from tvm.script.parser import relax as R
+from tvm.script import relax as R
 
 
 @R.function
 def forward(
-    x: R.Tensor((2, 4), dtype="float32"),
-    w: R.Tensor((4, 4), dtype="float32"),
-    b: R.Tensor((2, 4), dtype="float32"),
-) -> R.Tensor((2, 4), dtype="float32"):
+    x: R.Tensor((2, 4), "float32"),
+    w: R.Tensor((4, 4), "float32"),
+    b: R.Tensor((2, 4), "float32"),
+) -> R.Tensor((2, 4), "float32"):
     with R.dataflow():
-        lv: R.Tensor((2, 4), dtype="float32") = R.matmul(x, w)
-        out: R.Tensor((2, 4), dtype="float32") = R.add(lv, b)
+        lv: R.Tensor((2, 4), "float32") = R.matmul(x, w)
+        out: R.Tensor((2, 4), "float32") = R.add(lv, b)
         R.output(out)
     return out
 
@@ -40,17 +40,17 @@ def test_l1_loss():
     targets = relax.TensorStructInfo((N, C), "float32")
     l1_loss = relax.training.L1Loss()
 
-    # fmt: off
     @R.function
-    def expected(predictions: R.Tensor((3, 5), dtype="float32"), targets: R.Tensor((3, 5), dtype="float32")) -> R.Tensor((), dtype="float32"):
+    def expected(
+        predictions: R.Tensor((3, 5), "float32"), targets: R.Tensor((3, 5), "float32")
+    ) -> R.Tensor((), "float32"):
         R.func_attr({"global_symbol": "l1_loss"})
         with R.dataflow():
-            lv: R.Tensor((3, 5), dtype="float32") = R.subtract(predictions, targets)
-            lv1: R.Tensor((3, 5), dtype="float32") = R.abs(lv)
-            gv: R.Tensor((), dtype="float32") = R.mean(lv1, axis=None, keepdims=False)
+            lv: R.Tensor((3, 5), "float32") = R.subtract(predictions, targets)
+            lv1: R.Tensor((3, 5), "float32") = R.abs(lv)
+            gv: R.Tensor((), "float32") = R.mean(lv1, axis=None, keepdims=False)
             R.output(gv)
         return gv
-    # fmt: on
 
     assert_structural_equal(l1_loss(predictions, targets), expected)
 
@@ -60,19 +60,22 @@ def test_l1_loss_append():
     l1_loss = relax.training.L1Loss(reduction="sum")
     forward_with_loss = relax.training.utils.append_loss(forward, l1_loss(s, s))
 
-    # fmt: off
     @R.function
-    def expected(x: R.Tensor((2, 4), dtype="float32"), w: R.Tensor((4, 4), dtype="float32"), b: R.Tensor((2, 4), dtype="float32"), targets: R.Tensor((2, 4), dtype="float32")) -> R.Tensor((), dtype="float32"):
+    def expected(
+        x: R.Tensor((2, 4), "float32"),
+        w: R.Tensor((4, 4), "float32"),
+        b: R.Tensor((2, 4), "float32"),
+        targets: R.Tensor((2, 4), "float32"),
+    ) -> R.Tensor((), "float32"):
         # block 0
         with R.dataflow():
-            lv: R.Tensor((2, 4), dtype="float32") = R.matmul(x, w, out_dtype="")
-            out: R.Tensor((2, 4), dtype="float32") = R.add(lv, b)
-            lv1: R.Tensor((2, 4), dtype="float32") = R.subtract(out, targets)
-            lv11: R.Tensor((2, 4), dtype="float32") = R.abs(lv1)
-            gv: R.Tensor((), dtype="float32") = R.sum(lv11, axis=None, keepdims=False)
+            lv: R.Tensor((2, 4), "float32") = R.matmul(x, w, out_dtype="")
+            out: R.Tensor((2, 4), "float32") = R.add(lv, b)
+            lv1: R.Tensor((2, 4), "float32") = R.subtract(out, targets)
+            lv11: R.Tensor((2, 4), "float32") = R.abs(lv1)
+            gv: R.Tensor((), "float32") = R.sum(lv11, axis=None, keepdims=False)
             R.output(gv)
         return gv
-    # fmt: on
 
     assert_structural_equal(forward_with_loss, expected)
 
@@ -84,19 +87,19 @@ def test_mse_loss():
     targets = relax.TensorStructInfo((N, C), "float32")
     mse_loss = relax.training.MSELoss()
 
-    # fmt: off
     @R.function
-    def expected(predictions: R.Tensor((3, 5), dtype="float32"), targets: R.Tensor((3, 5), dtype="float32")) -> R.Tensor((), dtype="float32"):
+    def expected(
+        predictions: R.Tensor((3, 5), "float32"), targets: R.Tensor((3, 5), "float32")
+    ) -> R.Tensor((), "float32"):
         # function attr dict
         R.func_attr({"global_symbol": "mse_loss"})
         # block 0
         with R.dataflow():
-            lv: R.Tensor((3, 5), dtype="float32") = R.subtract(predictions, targets)
-            lv1: R.Tensor((3, 5), dtype="float32") = R.multiply(lv, lv)
-            gv: R.Tensor((), dtype="float32") = R.mean(lv1, axis=None, keepdims=False)
+            lv: R.Tensor((3, 5), "float32") = R.subtract(predictions, targets)
+            lv1: R.Tensor((3, 5), "float32") = R.multiply(lv, lv)
+            gv: R.Tensor((), "float32") = R.mean(lv1, axis=None, keepdims=False)
             R.output(gv)
         return gv
-    # fmt: on
 
     assert_structural_equal(mse_loss(predictions, targets), expected)
 
@@ -106,19 +109,22 @@ def test_mse_loss_append():
     mse_loss = relax.training.MSELoss(reduction="sum")
     forward_with_loss = relax.training.utils.append_loss(forward, mse_loss(s, s))
 
-    # fmt: off
     @R.function
-    def expected(x: R.Tensor((2, 4), dtype="float32"), w: R.Tensor((4, 4), dtype="float32"), b: R.Tensor((2, 4), dtype="float32"), targets: R.Tensor((2, 4), dtype="float32")) -> R.Tensor((), dtype="float32"):
+    def expected(
+        x: R.Tensor((2, 4), "float32"),
+        w: R.Tensor((4, 4), "float32"),
+        b: R.Tensor((2, 4), "float32"),
+        targets: R.Tensor((2, 4), "float32"),
+    ) -> R.Tensor((), "float32"):
         # block 0
         with R.dataflow():
-            lv: R.Tensor((2, 4), dtype="float32") = R.matmul(x, w, out_dtype="")
-            out: R.Tensor((2, 4), dtype="float32") = R.add(lv, b)
-            lv1: R.Tensor((2, 4), dtype="float32") = R.subtract(out, targets)
-            lv11: R.Tensor((2, 4), dtype="float32") = R.multiply(lv1, lv1)
-            gv: R.Tensor((), dtype="float32") = R.sum(lv11, axis=None, keepdims=False)
+            lv: R.Tensor((2, 4), "float32") = R.matmul(x, w, out_dtype="")
+            out: R.Tensor((2, 4), "float32") = R.add(lv, b)
+            lv1: R.Tensor((2, 4), "float32") = R.subtract(out, targets)
+            lv11: R.Tensor((2, 4), "float32") = R.multiply(lv1, lv1)
+            gv: R.Tensor((), "float32") = R.sum(lv11, axis=None, keepdims=False)
             R.output(gv)
         return gv
-    # fmt: on
 
     assert_structural_equal(forward_with_loss, expected)
 
@@ -131,18 +137,22 @@ def test_cross_entropy_loss():
     weights = relax.TensorStructInfo((C,), "float32")
     cross_entropy_loss = relax.training.CrossEntropyLoss(reduction="sum", ignore_index=1)
 
-    # fmt: off
     @R.function
-    def expected(predictions: R.Tensor((3, 5), dtype="float32"), targets: R.Tensor((3,), dtype="int64"), weights: R.Tensor((5,), dtype="float32")) -> R.Tensor((), dtype="float32"):
+    def expected(
+        predictions: R.Tensor((3, 5), "float32"),
+        targets: R.Tensor((3,), "int64"),
+        weights: R.Tensor((5,), "float32"),
+    ) -> R.Tensor((), "float32"):
         # function attr dict
         R.func_attr({"global_symbol": "cross_entropy_loss"})
         # block 0
         with R.dataflow():
-            lv: R.Tensor((3, 5), dtype="float32") = R.nn.log_softmax(predictions, axis=-1)
-            gv: R.Tensor((), dtype="float32") = R.nn.nll_loss(lv, targets, weights, reduction="sum", ignore_index=1)
+            lv: R.Tensor((3, 5), "float32") = R.nn.log_softmax(predictions, axis=-1)
+            gv: R.Tensor((), "float32") = R.nn.nll_loss(
+                lv, targets, weights, reduction="sum", ignore_index=1
+            )
             R.output(gv)
         return gv
-    # fmt: on
 
     assert_structural_equal(cross_entropy_loss(predictions, targets, weights), expected)
 
@@ -154,18 +164,20 @@ def test_cross_entropy_loss_without_weights():
     targets = relax.TensorStructInfo((N,), "int64")
     cross_entropy_loss = relax.training.CrossEntropyLoss()
 
-    # fmt: off
     @R.function
-    def expected(predictions: R.Tensor((3, 5), dtype="float32"), targets: R.Tensor((3,), dtype="int64")) -> R.Tensor((), dtype="float32"):
+    def expected(
+        predictions: R.Tensor((3, 5), "float32"), targets: R.Tensor((3,), "int64")
+    ) -> R.Tensor((), "float32"):
         # function attr dict
         R.func_attr({"global_symbol": "cross_entropy_loss"})
         # block 0
         with R.dataflow():
-            lv: R.Tensor((3, 5), dtype="float32") = R.nn.log_softmax(predictions, axis=-1)
-            gv: R.Tensor((), dtype="float32") = R.nn.nll_loss(lv, targets, reduction="mean", ignore_index=-100)
+            lv: R.Tensor((3, 5), "float32") = R.nn.log_softmax(predictions, axis=-1)
+            gv: R.Tensor((), "float32") = R.nn.nll_loss(
+                lv, targets, reduction="mean", ignore_index=-100
+            )
             R.output(gv)
         return gv
-    # fmt: on
 
     assert_structural_equal(cross_entropy_loss(predictions, targets), expected)
 
@@ -181,18 +193,24 @@ def test_cross_entropy_loss_append():
         forward, cross_entropy_loss(s, targets, weights)
     )
 
-    # fmt: off
     @R.function
-    def expected(x: R.Tensor((2, 4), dtype="float32"), w: R.Tensor((4, 4), dtype="float32"), b: R.Tensor((2, 4), dtype="float32"), targets: R.Tensor((2,), dtype="int64"), weights: R.Tensor((4,), dtype="float32")) -> R.Tensor((), dtype="float32"):
+    def expected(
+        x: R.Tensor((2, 4), "float32"),
+        w: R.Tensor((4, 4), "float32"),
+        b: R.Tensor((2, 4), "float32"),
+        targets: R.Tensor((2,), "int64"),
+        weights: R.Tensor((4,), "float32"),
+    ) -> R.Tensor((), "float32"):
         # block 0
         with R.dataflow():
-            lv: R.Tensor((2, 4), dtype="float32") = R.matmul(x, w, out_dtype="")
-            out: R.Tensor((2, 4), dtype="float32") = R.add(lv, b)
-            lv1: R.Tensor((2, 4), dtype="float32") = R.nn.log_softmax(out, axis=-1)
-            gv: R.Tensor((), dtype="float32") = R.nn.nll_loss(lv1, targets, weights, reduction="sum", ignore_index=1)
+            lv: R.Tensor((2, 4), "float32") = R.matmul(x, w, out_dtype="")
+            out: R.Tensor((2, 4), "float32") = R.add(lv, b)
+            lv1: R.Tensor((2, 4), "float32") = R.nn.log_softmax(out, axis=-1)
+            gv: R.Tensor((), "float32") = R.nn.nll_loss(
+                lv1, targets, weights, reduction="sum", ignore_index=1
+            )
             R.output(gv)
         return gv
-    # fmt: on
 
     assert_structural_equal(forward_with_loss, expected)
 

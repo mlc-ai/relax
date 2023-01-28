@@ -17,7 +17,7 @@
 import tvm.testing
 from tvm import relax
 from tvm.ir.base import assert_structural_equal
-from tvm.script.parser import relax as R
+from tvm.script import relax as R
 
 
 def test_append_loss_basic_extend():

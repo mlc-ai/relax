@@ -18,8 +18,8 @@
  */
 
 /*!
- * \file tvm/relax/utils.h
- * \brief Utility classes and functions for working with the Relax IR.
+ * \file tvm/relax/training/utils.h
+ * \brief Utility classes and functions for relax training.
  */
 #ifndef TVM_RELAX_TRAINING_UTILS_H_
 #define TVM_RELAX_TRAINING_UTILS_H_
@@ -38,11 +38,11 @@ namespace relax {
  * 2. This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in
  * some sense.
  *
- * \param orig_func The function to be appended.
+ * \param orig_func The function to be appended to.
  * \param loss_func The loss function.
  * \return The result function after appended.
  */
-TVM_DLL Function AppendLoss(Function orig_func, Function loss_func);
+Function AppendLoss(Function orig_func, Function loss_func);
 
 }  // namespace relax
 }  // namespace tvm
