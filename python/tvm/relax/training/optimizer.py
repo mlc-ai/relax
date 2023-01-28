@@ -17,7 +17,7 @@
 """Provide abstraction for defining optimizers and a set of common optimizers."""
 
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np  # type: ignore
 
@@ -221,7 +221,7 @@ class Optimizer:
         return self
 
     def __call__(
-        self, params_ADT: tvm.runtime.container.ADT, grads_ADT: tvm.runtime.container.ADT
+        self, params_adt: tvm.runtime.container.ADT, grads_adt: tvm.runtime.container.ADT
     ) -> tvm.runtime.container.ADT:
         """Optimization process. This function takes an ADT tuple of the input parameters and an ADT
         tuple of the gradients of the input parameters, and returns an ADT tuple of parameters
@@ -234,10 +234,10 @@ class Optimizer:
 
         Parameters
         ----------
-        params_ADT : tvm.runtime.container.ADT
+        params_adt : tvm.runtime.container.ADT
             An ADT tuple of the input parameters. A TVM runtime object.
 
-        grads_ADT : tvm.runtime.container.ADT
+        grads_adt : tvm.runtime.container.ADT
             An ADT tuple of the gradients of the input parameters. A TVM runtime object.
         """
         if self._vm_module is None:
@@ -246,10 +246,11 @@ class Optimizer:
                     "The vm configs of the optimizer is not set. Please call set_vm_config first"
                 )
             mod = tvm.IRModule({self.name: self.get_function()})
-            lowered_mod = LegalizeOps()(mod)
-            ex = rx.vm.build(lowered_mod, self._target)
-            self._vm_module = rx.VirtualMachine(ex, self._device)
-        new_params, self.state = self._vm_module[self.name](params_ADT, grads_ADT, self.state)
+            # pylint: disable=not-callable
+            lowered_mod = LegalizeOps()(mod)  # type: ignore
+            executable = rx.vm.build(lowered_mod, self._target)
+            self._vm_module = rx.VirtualMachine(executable, self._device)
+        new_params, self.state = self._vm_module[self.name](params_adt, grads_adt, self.state)
         return new_params
 
 
@@ -531,7 +532,7 @@ class Adam(Optimizer):
             num_steps_new = num_steps + 1
 
             param_tuple_new = []
-            state_tuple_new = [None] * len(state_tuple)  # type: ignore
+            state_tuple_new = [None] * len(state_tuple)
             state_tuple_new[0] = num_steps_new
             state_tuple_new[1] = state_tuple[1] * betas[0]
             state_tuple_new[2] = state_tuple[2] * betas[1]
