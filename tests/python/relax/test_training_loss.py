@@ -38,7 +38,7 @@ def test_l1_loss():
     C = 5
     predictions = relax.TensorStructInfo((N, C), "float32")
     targets = relax.TensorStructInfo((N, C), "float32")
-    l1_loss = relax.training.L1Loss()(predictions, targets)
+    l1_loss = relax.training.L1Loss()
 
     # fmt: off
     @R.function
@@ -52,13 +52,13 @@ def test_l1_loss():
         return gv
     # fmt: on
 
-    assert_structural_equal(l1_loss, expected)
+    assert_structural_equal(l1_loss(predictions, targets), expected)
 
 
 def test_l1_loss_append():
     s = forward.ret_struct_info
-    l1_loss = relax.training.L1Loss(reduction="sum")(s, s)
-    forward_with_loss = relax.training.utils.append_loss(forward, l1_loss)
+    l1_loss = relax.training.L1Loss(reduction="sum")
+    forward_with_loss = relax.training.utils.append_loss(forward, l1_loss(s, s))
 
     # fmt: off
     @R.function
@@ -82,7 +82,7 @@ def test_mse_loss():
     C = 5
     predictions = relax.TensorStructInfo((N, C), "float32")
     targets = relax.TensorStructInfo((N, C), "float32")
-    mse_loss = relax.training.MSELoss()(predictions, targets)
+    mse_loss = relax.training.MSELoss()
 
     # fmt: off
     @R.function
@@ -98,13 +98,13 @@ def test_mse_loss():
         return gv
     # fmt: on
 
-    assert_structural_equal(mse_loss, expected)
+    assert_structural_equal(mse_loss(predictions, targets), expected)
 
 
 def test_mse_loss_append():
     s = forward.ret_struct_info
-    mse_loss = relax.training.MSELoss(reduction="sum")(s, s)
-    forward_with_loss = relax.training.utils.append_loss(forward, mse_loss)
+    mse_loss = relax.training.MSELoss(reduction="sum")
+    forward_with_loss = relax.training.utils.append_loss(forward, mse_loss(s, s))
 
     # fmt: off
     @R.function
@@ -129,9 +129,7 @@ def test_cross_entropy_loss():
     predictions = relax.TensorStructInfo((N, C), "float32")
     targets = relax.TensorStructInfo((N,), "int64")
     weights = relax.TensorStructInfo((C,), "float32")
-    cross_entropy_loss = relax.training.CrossEntropyLoss(
-        reduction="sum", ignore_index=1, weights=weights
-    )(predictions, targets)
+    cross_entropy_loss = relax.training.CrossEntropyLoss(reduction="sum", ignore_index=1)
 
     # fmt: off
     @R.function
@@ -146,7 +144,7 @@ def test_cross_entropy_loss():
         return gv
     # fmt: on
 
-    assert_structural_equal(cross_entropy_loss, expected)
+    assert_structural_equal(cross_entropy_loss(predictions, targets, weights), expected)
 
 
 def test_cross_entropy_loss_without_weights():
@@ -154,7 +152,7 @@ def test_cross_entropy_loss_without_weights():
     C = 5
     predictions = relax.TensorStructInfo((N, C), "float32")
     targets = relax.TensorStructInfo((N,), "int64")
-    cross_entropy_loss = relax.training.CrossEntropyLoss()(predictions, targets)
+    cross_entropy_loss = relax.training.CrossEntropyLoss()
 
     # fmt: off
     @R.function
@@ -169,7 +167,7 @@ def test_cross_entropy_loss_without_weights():
         return gv
     # fmt: on
 
-    assert_structural_equal(cross_entropy_loss, expected)
+    assert_structural_equal(cross_entropy_loss(predictions, targets), expected)
 
 
 def test_cross_entropy_loss_append():
@@ -178,10 +176,10 @@ def test_cross_entropy_loss_append():
     C = s.shape[1]
     targets = relax.TensorStructInfo((N,), "int64")
     weights = relax.TensorStructInfo((C,), "float32")
-    cross_entropy_loss = relax.training.CrossEntropyLoss(
-        reduction="sum", ignore_index=1, weights=weights
-    )(s, targets)
-    forward_with_loss = relax.training.utils.append_loss(forward, cross_entropy_loss)
+    cross_entropy_loss = relax.training.CrossEntropyLoss(reduction="sum", ignore_index=1)
+    forward_with_loss = relax.training.utils.append_loss(
+        forward, cross_entropy_loss(s, targets, weights)
+    )
 
     # fmt: off
     @R.function

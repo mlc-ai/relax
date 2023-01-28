@@ -32,7 +32,7 @@ def _create_param_var(param: Union[Var, StructInfo], param_name) -> Var:
     if isinstance(param, StructInfo):
         param = Var(param_name, param)
     assert isinstance(param, Var)
-    return param
+    return Var(param.name_hint, param.struct_info)
 
 
 class Loss:
@@ -179,9 +179,6 @@ class CrossEntropyLoss(Loss):
     reduction : str
         See the doc of Loss.
 
-    weights : Optional[Union[Var, StructInfo]]
-        a manual rescaling weight given to each class. It has to be a Tensor of size C.
-
     ignore_index : int
         Specifies a target value that is ignored and does not contribute to the input gradient.
     """
@@ -192,19 +189,15 @@ class CrossEntropyLoss(Loss):
         self,
         reduction: str = "mean",
         ignore_index: int = -100,
-        weights: Optional[Union[Var, StructInfo]] = None,
     ) -> None:
         super().__init__("cross_entropy_loss", reduction)
         self.ignore_index = ignore_index
-        if weights:
-            self.weights = _create_param_var(weights, "weights")
-        else:
-            self.weights = None
 
     def __call__(
         self,
         predictions: Union[Var, StructInfo],
         targets: Union[Var, StructInfo],
+        weights: Optional[Union[Var, StructInfo]] = None,
     ) -> Function:
         """Get the relax function of CrossEntropyLoss. If the parameters are
         struct info, it will create corresponding variables.
@@ -213,8 +206,12 @@ class CrossEntropyLoss(Loss):
         ----------
         predictions : Union[Var, StructInfo]
             The predictions of the model in the calculation of loss.
+
         targets : Union[Var, StructInfo]
             The ground truth in the calculation of loss.
+
+        weights : Optional[Union[Var, StructInfo]]
+            a manual rescaling weight given to each class. It has to be a Tensor of size C.
 
         Returns
         ----------
@@ -226,14 +223,15 @@ class CrossEntropyLoss(Loss):
         targets = _create_param_var(targets, "targets")
 
         arg_list = [predictions, targets]
-        if self.weights:
-            arg_list.append(self.weights)
+        if weights:
+            weights = _create_param_var(weights, "weights")
+            arg_list.append(weights)
 
         with bb.function(self.loss_name, arg_list):
             with bb.dataflow():
                 logits = bb.emit(log_softmax(predictions))
                 loss = bb.emit_output(
-                    nll_loss(logits, targets, self.weights, self.reduction, self.ignore_index)
+                    nll_loss(logits, targets, weights, self.reduction, self.ignore_index)
                 )
             bb.emit_func_output(loss)
 
