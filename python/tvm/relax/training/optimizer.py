@@ -17,18 +17,19 @@
 """Provide abstraction for defining optimizers and a set of common optimizers."""
 
 from decimal import Decimal
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np  # type: ignore
 
 import tvm
 from tvm import relax as rx
 from tvm.relax.struct_info import TensorStructInfo
+from tvm.relax.transform.legalize_ops import LegalizeOps
 from tvm.runtime.container import tuple_object
 from tvm.relax.op import add, subtract, multiply, divide, sqrt
 from tvm.relax import Var, Function
 
-
+# TODO(chaofan, yixin): Migrate key logics to C++
 class Optimizer:
     """Relax training optimizer. This class could generate relax Functions for optimizing specified
     parameters, and store the states used in the optimization process, such as momentum.
@@ -37,6 +38,9 @@ class Optimizer:
 
     Parameters
     ----------
+    name : str
+        The name of the optimizer function. This parameter is provided by subclasses.
+
     params : Union[Var, List[Var]]
         The parameter or the list of parameters to optimize.
 
@@ -50,35 +54,41 @@ class Optimizer:
     For detailed examples, please see the tutorial.
 
     .. code-block:: python
-        # Generate the optimizer function.
+        # Initialize the optimizer.
         # x is the relax Var we want to optimize
         opt = relax.optimizer.SGD(x, 0.1)
-        mod["SGD"] = opt.get_function()
 
         # Backward process
-        # vm is the module after legalization and building.
-        # vm["main_adjoint"] is the backward function. See also relax.transform.Gradient.
-        # param_tuple is the tuple of input parameters, label is the input that do not need
-        # optimization
-        loss, param_gradient = vm["main_adjoint"](*param_tuple, label)
+        # adjoint_function is a runtime function that takes TVM runtime objects as input and output
+        # It accepts parameters and other inputs, returns loss and gradients of the parameters
+        # See also relax.transform.Gradient.
+        loss, param_gradient = adjoint_function(*param_tuple, label)
 
-        # Update parameters and optimizer states
-        # vm["SGD"] is the optimizer function
-        # opt.state is the state of the optimizer
-        param_tuple, opt.state = vm["SGD"](param_tuple, param_gradient, opt.state)
+        # Optimization process
+        param_tuple = opt(param_tuple, param_gradient)
     """
 
+    name: str
     _param_list: List[Var]
     _state: tvm.runtime.container.ADT
     _dtype: str
 
-    def __init__(self, params: Union[Var, List[Var]]) -> None:
+    # these attributes are for the building and running process of the optimizer function
+    _vm_module: rx.VirtualMachine
+    _target: Union[str, tvm.target.Target]
+    _device: Union[tvm.runtime.Device, List[tvm.runtime.Device]]
+
+    def __init__(self, name: str, params: Union[Var, List[Var]]) -> None:
         if not isinstance(params, list):
             params = [params]
         self._state = None
         self._dtype = None
         self._check_params_and_dtype(params)
         self._param_list = params
+        self.name = name
+        self._vm_module = None
+        self._target = None
+        self._device = None
 
     def _check_params_and_dtype(self, params: List[Var]) -> None:
         """Check params is legal and set the dtype of the optimizer."""
@@ -138,8 +148,8 @@ class Optimizer:
         self._state = new_value
 
     def get_function(self) -> Function:
-        """In any implementation of Optimizer, we will use blockbuilder to build an optimizer
-        function that executes the update of parameters and the optimizer state.
+        """We will use blockbuilder in get_function() to build an optimizer function that executes
+        the update of parameters and the optimizer state.
 
         The optimizer function will take in a tuple of parameters, a tuple of gradients of
         parameters, and a tuple of optimizer states. It will return a tuple of updated parameters,
@@ -158,27 +168,89 @@ class Optimizer:
         .. code-block:: python
             @R.function
             def SGD(
-                params: R.Tuple(R.Tensor((3, 3), "float32")),
-                gradients: R.Tuple(R.Tensor((3, 3), "float32")),
+                params: R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3,), "float32")),
+                gradients: R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3,), "float32")),
                 optim_states: R.Tuple(R.Tensor((), "int64")),
             ) -> R.Tuple(
-                R.Tuple(R.Tensor((3, 3), "float32")), R.Tuple(R.Tensor((), "int64"))
+                R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3,), "float32")),
+                R.Tuple(R.Tensor((), "int64")),
             ):
                 with R.dataflow():
-                    x: R.Tensor((3, 3), "float32") = params[0]
-                    x_grad: R.Tensor((3, 3), "float32") = gradients[0]
                     num_steps: R.Tensor((), "int64") = optim_states[0]
                     num_steps_new: R.Tensor((), "int64") = R.add(num_steps, R.const(1, "int64"))
-                    x_grad_lr: R.Tensor((3, 3), "float32") = R.multiply(
-                        R.const(0.1, "float32"), x_grad
+                    x: R.Tensor((3, 3), "float32") = params[0]
+                    x_grad: R.Tensor((3, 3), "float32") = gradients[0]
+                    lv: R.Tensor((3, 3), "float32") = R.multiply(R.const(0.01, "float32"), x_grad)
+                    x_new: R.Tensor((3, 3), "float32") = R.subtract(x, lv)
+                    y: R.Tensor((3,), "float32") = params[1]
+                    y_grad: R.Tensor((3,), "float32") = gradients[1]
+                    lv1: R.Tensor((3,), "float32") = R.multiply(R.const(0.01, "float32"), y_grad)
+                    y_new: R.Tensor((3,), "float32") = R.subtract(y, lv1)
+                    params_new: R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3,), "float32")) = (
+                        x_new,
+                        y_new,
                     )
-                    x_new: R.Tensor((3, 3), "float32") = R.subtract(x, x_grad_lr)
-                    params_new: R.Tuple(R.Tensor((3, 3), "float32")) = (x_new,)
                     optim_states_new: R.Tuple(R.Tensor((), "int64")) = (num_steps_new,)
                     R.output(params_new, optim_states_new)
                 return (params_new, optim_states_new)
         """
         raise NotImplementedError()
+
+    def set_vm_config(
+        self,
+        target: Union[str, tvm.target.Target],
+        device: Union[tvm.runtime.Device, List[tvm.runtime.Device]],
+    ) -> "Optimizer":
+        """Set the building and virtual machine configs of the optimizer function.
+
+        Parameters
+        ----------
+        target : Union[str, tvm.target.Target]
+            The target of building the module containing the optimizer function.
+
+        device : Union[tvm.runtime.Device, List[tvm.runtime.Device]]
+            The device to deploy the module containing the optimizer function.
+
+        Returns
+        -------
+        self : Optimizer
+            Returns the optimizer itself.
+        """
+        self._target = target
+        self._device = device
+        return self
+
+    def __call__(
+        self, params_ADT: tvm.runtime.container.ADT, grads_ADT: tvm.runtime.container.ADT
+    ) -> tvm.runtime.container.ADT:
+        """Optimization process. This function takes an ADT tuple of the input parameters and an ADT
+        tuple of the gradients of the input parameters, and returns an ADT tuple of parameters
+        after a step op optimization. This is equilvant to `optimizer.step()` in most deep learning
+        frameworks.
+
+        This function will build a module containing the optimizer function when called for the
+        first time. Before this function is called, you should call `set_vm_config()` to set the
+        building and vm configs first.
+
+        Parameters
+        ----------
+        params_ADT : tvm.runtime.container.ADT
+            An ADT tuple of the input parameters. A TVM runtime object.
+
+        grads_ADT : tvm.runtime.container.ADT
+            An ADT tuple of the gradients of the input parameters. A TVM runtime object.
+        """
+        if self._vm_module is None:
+            if self._target is None or self._device is None:
+                raise RuntimeError(
+                    "The vm configs of the optimizer is not set. Please call set_vm_config first"
+                )
+            mod = tvm.IRModule({self.name: self.get_function()})
+            lowered_mod = LegalizeOps()(mod)
+            ex = rx.vm.build(lowered_mod, self._target)
+            self._vm_module = rx.VirtualMachine(ex, self._device)
+        new_params, self.state = self._vm_module[self.name](params_ADT, grads_ADT, self.state)
+        return new_params
 
 
 # TODO(chaofan, yixin): Support symbolic shapes
@@ -200,14 +272,14 @@ class SGD(Optimizer):
 
     .. code-block:: python
         def SGD(param_tuple, grad_tuple, state_tuple):
-            # lr and weight_decay are float constant hyperparameters
             num_steps = state_tuple[0]
-            state_tuple[0] = num_steps + 1
+            param_tuple_new, state_tuple_new = [], []
+            state_tuple_new.append(num_steps + 1)
             for i in range(len(param_tuple)):
                 param = param_tuple[i]
                 grad = grad_tuple[i]
-                param_tuple[i] = param - lr * (grad + weight_decay * param)
-            return param_tuple, state_tuple
+                param_tuple_new.append(param - lr * (grad + weight_decay * param))
+            return param_tuple_new, state_tuple_new
 
     Parameters
     ----------
@@ -228,7 +300,7 @@ class SGD(Optimizer):
     def __init__(
         self, param_list: Union[Var, List[Var]], lr: float, weight_decay: float = 0
     ) -> None:
-        super().__init__(param_list)
+        super().__init__("SGD", param_list)
         self.lr = float(lr)
         self.weight_decay = float(weight_decay)
 
@@ -270,28 +342,30 @@ class SGD(Optimizer):
         one = rx.const(1, "int64")
 
         builder = rx.BlockBuilder()
-        with builder.function("SGD", [param_var, grad_var, state_var]):
+        with builder.function(self.name, [param_var, grad_var, state_var]):
             with builder.dataflow():
-                # get variables in tuples
-                param_list = [builder.emit(rx.TupleGetItem(param_var, i)) for i in range(len_param)]
-                grad_list = [builder.emit(rx.TupleGetItem(grad_var, i)) for i in range(len_param)]
-                state_list = [builder.emit(rx.TupleGetItem(state_var, 0))]
-
                 param_list_new, state_list_new = [], []
-                # computation logic
-                state_list_new.append(builder.emit(add(state_list[0], one)))
+
+                # handle num_steps
+                num_steps = builder.emit(rx.TupleGetItem(state_var, 0), "num_steps")
+                num_steps_new = builder.emit(add(num_steps, one), "num_steps_new")
+                state_list_new.append(num_steps_new)
+
+                # computation logics
                 for i in range(len_param):
-                    p, g = param_list[i], grad_list[i]
+                    name = self._param_list[i].name_hint
+                    p = builder.emit(rx.TupleGetItem(param_var, i), name)
+                    g = builder.emit(rx.TupleGetItem(grad_var, i), name + "_grad")
                     if self.weight_decay:
-                        g = builder.emit(add(multiply(weight_decay, p), g))
-                    p_new = builder.emit(subtract(p, multiply(lr, g)))
+                        g = builder.emit(add(multiply(weight_decay, p), g), name + "_grad_new")
+                    p_new = builder.emit(subtract(p, multiply(lr, g)), name + "_new")
                     param_list_new.append(p_new)
 
                 # handle return values
-                gv0 = builder.emit_output(rx.Tuple(param_list_new))
-                gv1 = builder.emit_output(rx.Tuple(state_list_new))
-            builder.emit_func_output((gv0, gv1))
-        return builder.get()["SGD"]
+                params_new = builder.emit_output(rx.Tuple(param_list_new), "params_new")
+                optim_states_new = builder.emit_output(rx.Tuple(state_list_new), "optim_states_new")
+            builder.emit_func_output((params_new, optim_states_new))
+        return builder.get()[self.name]
 
 
 class MomentumSGD(Optimizer):
@@ -302,10 +376,9 @@ class MomentumSGD(Optimizer):
 
     .. code-block:: python
         def MomentumSGD(param_tuple, grad_tuple, state_tuple):
-            # lr, momentum, weight_decay and dampening are float constant hyperparameters
-            # nesterov is a boolean constant hyperparameter
             num_steps = state_tuple[0]
-            state_tuple[0] = num_steps + 1
+            param_tuple_new, state_tuple_new = [], []
+            state_tuple_new.append(num_steps + 1)
 
             for i in range(len(param_tuple)):
                 param = param_tuple[i]
@@ -317,10 +390,10 @@ class MomentumSGD(Optimizer):
                     param = param - (grad + momentum * velocity) * lr
                 else:
                     param = param - velocity * lr
-                param_tuple[i] = param
-                state_tuple[i + 1] = velocity
+                param_tuple_new.append(param)
+                state_tuple_new.append(velocity)
 
-            return param_tuple, state_tuple
+            return param_tuple_new, state_tuple_new
 
     Parameters
     ----------
@@ -356,7 +429,7 @@ class MomentumSGD(Optimizer):
         weight_decay: float = 0,
         nesterov: bool = False,
     ) -> None:
-        super().__init__(param_list)
+        super().__init__("MomentumSGD", param_list)
         self.lr = float(lr)
         self.momentum = float(momentum)
         self.weight_decay = float(weight_decay)
@@ -412,35 +485,39 @@ class MomentumSGD(Optimizer):
         one = rx.const(1, "int64")
 
         builder = rx.BlockBuilder()
-        with builder.function("MomentumSGD", [param_var, grad_var, state_var]):
+        with builder.function(self.name, [param_var, grad_var, state_var]):
             with builder.dataflow():
-                # get variables in tuples
-                param_list = [builder.emit(rx.TupleGetItem(param_var, i)) for i in range(len_param)]
-                grad_list = [builder.emit(rx.TupleGetItem(grad_var, i)) for i in range(len_param)]
-                state_list = [
-                    builder.emit(rx.TupleGetItem(state_var, i)) for i in range(len_param + 1)
-                ]
-
                 param_list_new, state_list_new = [], []
-                state_list_new.append(builder.emit(add(state_list[0], one)))
+
+                # handle num_steps
+                num_steps = builder.emit(rx.TupleGetItem(state_var, 0), "num_steps")
+                num_steps_new = builder.emit(add(num_steps, one), "num_steps_new")
+                state_list_new.append(num_steps_new)
+
+                # computation logics
                 for i in range(len_param):
-                    p, g, v = param_list[i], grad_list[i], state_list[i + 1]
+                    name = self._param_list[i].name_hint
+                    p = builder.emit(rx.TupleGetItem(param_var, i), name)
+                    g = builder.emit(rx.TupleGetItem(grad_var, i), name + "_grad")
+                    v = builder.emit(rx.TupleGetItem(state_var, i + 1), name + "_v")
                     if self.weight_decay:
-                        g = builder.emit(add(multiply(weight_decay, p), g))
+                        g = builder.emit(add(multiply(weight_decay, p), g), name + "_grad_new")
                     damp_g = multiply(dampening_inv, g) if self.dampening else g
-                    v_new = builder.emit(add(multiply(momentum, v), damp_g))
+                    v_new = builder.emit(add(multiply(momentum, v), damp_g), name + "_v_new")
                     g_new = (
-                        builder.emit(add(g, multiply(momentum, v_new))) if self.nesterov else v_new
+                        builder.emit(add(g, multiply(momentum, v_new)), name + "_g_nest")
+                        if self.nesterov
+                        else v_new
                     )
-                    p_new = builder.emit(subtract(p, multiply(lr, g_new)))
+                    p_new = builder.emit(subtract(p, multiply(lr, g_new)), name + "_new")
                     param_list_new.append(p_new)
                     state_list_new.append(v_new)
 
                 # handle return values
-                gv0 = builder.emit_output(rx.Tuple(param_list_new))
-                gv1 = builder.emit_output(rx.Tuple(state_list_new))
-            builder.emit_func_output((gv0, gv1))
-        return builder.get()["MomentumSGD"]
+                params_new = builder.emit_output(rx.Tuple(param_list_new), "params_new")
+                optim_states_new = builder.emit_output(rx.Tuple(state_list_new), "optim_states_new")
+            builder.emit_func_output((params_new, optim_states_new))
+        return builder.get()[self.name]
 
 
 class Adam(Optimizer):
@@ -450,12 +527,14 @@ class Adam(Optimizer):
 
     .. code-block:: python
         def Adam(param_tuple, grad_tuple, state_tuple):
-            # lr, eps and weight_decay are float constant hyperparameters
-            # betas is a tuple of two float constant hyperparameters
-            state_tuple[0] += 1
-            state_tuple[1] *= betas[0]
-            state_tuple[2] *= betas[1]
             num_steps = state_tuple[0]
+            num_steps_new = num_steps + 1
+
+            param_tuple_new = []
+            state_tuple_new = [None] * len(state_tuple)  # type: ignore
+            state_tuple_new[0] = num_steps_new
+            state_tuple_new[1] = state_tuple[1] * betas[0]
+            state_tuple_new[2] = state_tuple[2] * betas[1]
 
             for i in range(len(param_tuple)):
                 param = param_tuple[i]
@@ -465,14 +544,14 @@ class Adam(Optimizer):
                 grad = grad + weight_decay * param
                 m = betas[0] * m + (1 - betas[0]) * grad
                 v = betas[1] * v + (1 - betas[1]) * grad * grad
-                m_hat = m / (1 - betas[0] ** num_steps)
-                v_hat = v / (1 - betas[1] ** num_steps)
+                m_hat = m / (1 - betas[0] ** num_steps_new)
+                v_hat = v / (1 - betas[1] ** num_steps_new)
                 param = param - lr * m_hat / (np.sqrt(v_hat) + eps)
-                param_tuple[i] = param
-                state_tuple[i + 3] = m
-                state_tuple[i + 3 + len(param_tuple)] = v
+                param_tuple_new.append(param)
+                state_tuple_new[i + 3] = m
+                state_tuple_new[i + 3 + len(param_tuple)] = v
 
-            return param_tuple, state_tuple
+            return param_tuple_new, state_tuple_new
 
     Parameters
     ----------
@@ -505,7 +584,7 @@ class Adam(Optimizer):
         eps: float = 1e-08,
         weight_decay: float = 0,
     ) -> None:
-        super().__init__(param_list)
+        super().__init__("Adam", param_list)
         self.lr = float(lr)
         self.beta1 = float(betas[0])
         self.beta2 = float(betas[1])
@@ -585,44 +664,56 @@ class Adam(Optimizer):
         one_float = rx.const(1, dtype)
 
         builder = rx.BlockBuilder()
-        with builder.function("Adam", [param_var, grad_var, state_var]):
+        with builder.function(self.name, [param_var, grad_var, state_var]):
             with builder.dataflow():
-                # get variables in tuples
-                param_list = [builder.emit(rx.TupleGetItem(param_var, i)) for i in range(len_param)]
-                grad_list = [builder.emit(rx.TupleGetItem(grad_var, i)) for i in range(len_param)]
-                state_list = [
-                    builder.emit(rx.TupleGetItem(state_var, i)) for i in range(len_param * 2 + 3)
-                ]
-
                 param_list_new = []
-                state_list_new = [None] * len(state_list)  # type: List[Optional[Var]]
-                state_list_new[0] = builder.emit(add(state_list[0], one_int))
-                state_list_new[1] = builder.emit(multiply(state_list[1], beta1))
-                state_list_new[2] = builder.emit(multiply(state_list[2], beta2))
+                state_list_new = [None] * (len_param * 2 + 3)  # type: List[Optional[Var]]
 
+                # handle num_steps
+                num_steps = builder.emit(rx.TupleGetItem(state_var, 0), "num_steps")
+                num_steps_new = builder.emit(add(num_steps, one_int), "num_steps_new")
+                state_list_new[0] = num_steps_new
+                beta1_prod = builder.emit(
+                    multiply(rx.TupleGetItem(state_var, 1), beta1), "beta1_prod"
+                )
+                beta2_prod = builder.emit(
+                    multiply(rx.TupleGetItem(state_var, 2), beta2), "beta2_prod"
+                )
+                state_list_new[1] = beta1_prod
+                state_list_new[2] = beta2_prod
+
+                # computation logics
                 for i in range(len_param):
-                    p, g, m, v = (
-                        param_list[i],
-                        grad_list[i],
-                        state_list[i + 3],
-                        state_list[i + 3 + len_param],
+                    name = self._param_list[i].name_hint
+                    p = builder.emit(rx.TupleGetItem(param_var, i), name)
+                    g = builder.emit(rx.TupleGetItem(grad_var, i), name + "_grad")
+                    m = builder.emit(rx.TupleGetItem(state_var, i + 3), name + "_m")
+                    v = builder.emit(rx.TupleGetItem(state_var, i + 3 + len_param), name + "_v")
+                    if self.weight_decay:
+                        g = builder.emit(add(multiply(weight_decay, p), g), name + "_grad_new")
+                    m_new = builder.emit(
+                        add(multiply(beta1, m), multiply(beta1_inv, g)), name + "_m_new"
                     )
-                    g = builder.emit(add(multiply(weight_decay, p), g)) if self.weight_decay else g
-                    m_new = builder.emit(add(multiply(beta1, m), multiply(beta1_inv, g)))
                     v_new = builder.emit(
-                        add(multiply(beta2, v), multiply(beta2_inv, multiply(g, g)))
+                        add(multiply(beta2, v), multiply(beta2_inv, multiply(g, g))),
+                        name + "_v_new",
                     )
-                    m_hat = builder.emit(divide(m_new, subtract(one_float, state_list_new[1])))
-                    v_hat = builder.emit(divide(v_new, subtract(one_float, state_list_new[2])))
+                    m_hat = builder.emit(
+                        divide(m_new, subtract(one_float, state_list_new[1])), name + "_m_hat"
+                    )
+                    v_hat = builder.emit(
+                        divide(v_new, subtract(one_float, state_list_new[2])), name + "_v_hat"
+                    )
                     p_new = builder.emit(
-                        subtract(p, multiply(lr, divide(m_hat, add(sqrt(v_hat), eps))))
+                        subtract(p, multiply(lr, divide(m_hat, add(sqrt(v_hat), eps)))),
+                        name + "_new",
                     )
                     param_list_new.append(p_new)
                     state_list_new[i + 3] = m_new
                     state_list_new[i + 3 + len_param] = v_new
 
                 # handle return values
-                gv0 = builder.emit_output(rx.Tuple(param_list_new))
-                gv1 = builder.emit_output(rx.Tuple(state_list_new))
-            builder.emit_func_output((gv0, gv1))
-        return builder.get()["Adam"]
+                params_new = builder.emit_output(rx.Tuple(param_list_new), "params_new")
+                optim_states_new = builder.emit_output(rx.Tuple(state_list_new), "optim_states_new")
+            builder.emit_func_output((params_new, optim_states_new))
+        return builder.get()[self.name]

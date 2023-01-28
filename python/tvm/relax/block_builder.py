@@ -363,7 +363,7 @@ class BlockBuilder(Object):
         """
         return DataflowScope(self)
 
-    def emit(self, expr: Expr) -> Var:
+    def emit(self, expr: Expr, name_hint: str = "") -> Var:
         """Emit an expr.
         This infers the shape and type of the expr, create a variable,
         and bind the expr to the variable.
@@ -373,12 +373,15 @@ class BlockBuilder(Object):
         expr : tvm.relax.Expr
             The Expr to be emitted.
 
+        name_hint : str
+            Name hint for the bound variable.
+
         Returns
         -------
         ret : tvm.relax.Var
             A newly created variable that gets bound to the input expr.
         """
-        return _ffi_api.BlockBuilderEmit(self, expr)  # type: ignore
+        return _ffi_api.BlockBuilderEmit(self, expr, name_hint)  # type: ignore
 
     def call_te(self, func: Callable, *args: Any, **kwargs: Any) -> Expr:
         """Generate a call node according to the te function.
@@ -581,7 +584,7 @@ class BlockBuilder(Object):
         """
         return self.emit(self.call_te(func, *args, **kwargs))
 
-    def match_cast(self, value: Expr, struct_info: StructInfo) -> Var:
+    def match_cast(self, value: Expr, struct_info: StructInfo, name_hint: str = "") -> Var:
         """Emit a MatchCast.
 
         Parameters
@@ -592,20 +595,26 @@ class BlockBuilder(Object):
         struct_info : StructInfo
             The struct info to be matched.
 
+        name_hint : str
+            Name hint for the bound variable.
+
         Returns
         -------
         ret : tvm.relax.Var
             A newly created variable that get bounds to be the casted result.
         """
-        return _ffi_api.BlockBuilderEmitMatchCast(self, value, struct_info)  # type: ignore
+        return _ffi_api.BlockBuilderEmitMatchCast(self, value, struct_info, name_hint)  # type: ignore
 
-    def emit_output(self, output: Union[Expr, Tuple, List[Expr]]) -> Var:
+    def emit_output(self, output: Union[Expr, Tuple, List[Expr]], name_hint: str = "") -> Var:
         """Emit output for the current dataflow block or function.
 
         Parameters
         ----------
         output : Expr | Tuple | List[Expr]
             The output of the current block/function.
+
+        name_hint : str
+            Name hint for the bound variable.
 
         Returns
         -------
@@ -614,7 +623,7 @@ class BlockBuilder(Object):
         """
         if isinstance(output, (list, tuple)):
             output = Tuple(output)
-        return _ffi_api.BlockBuilderEmitOutput(self, output)  # type: ignore
+        return _ffi_api.BlockBuilderEmitOutput(self, output, name_hint)  # type: ignore
 
     def emit_func_output(
         self,
