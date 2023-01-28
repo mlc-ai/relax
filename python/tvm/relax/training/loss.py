@@ -17,15 +17,18 @@
 # pylint: disable=redefined-builtin, invalid-name
 """Loss functions library for relax."""
 
-from typing import Optional, Union, Literal
+from typing import Optional, Union
+
+# isort: off
+from typing_extensions import Literal
+
+# isort: on
+
 from tvm import relax
 from ..expr import Expr, Var, Function, StructInfo
 
 from ..op import abs, sum, mean, subtract, multiply
 from ..op.nn import log_softmax, nll_loss
-
-
-__all__ = ["L1Loss", "MSELoss", "CrossEntropyLoss"]
 
 
 def _create_param_var(param: Union[Var, StructInfo], param_name: str) -> Var:
@@ -36,7 +39,7 @@ def _create_param_var(param: Union[Var, StructInfo], param_name: str) -> Var:
     return Var(param.name_hint, param.struct_info)
 
 
-class Loss:
+class _Loss:
     r"""Base class of all loss.
 
     Parameters
@@ -78,7 +81,7 @@ class Loss:
         return expr
 
 
-class L1Loss(Loss):
+class L1Loss(_Loss):
     r"""Mean element-wise absolute value difference.
 
     Parameters
@@ -127,7 +130,7 @@ class L1Loss(Loss):
         return bb.get()[self.loss_name].with_attr("global_symbol", self.loss_name)
 
 
-class MSELoss(Loss):
+class MSELoss(_Loss):
     r"""Measures the element-wise mean squared error.
 
     Parameters
@@ -177,7 +180,7 @@ class MSELoss(Loss):
         return bb.get()[self.loss_name].with_attr("global_symbol", self.loss_name)
 
 
-class CrossEntropyLoss(Loss):
+class CrossEntropyLoss(_Loss):
     r"""CrossEntropyLoss. It is a combination of a log_softmax computation and a nll_loss.
 
     Parameters
