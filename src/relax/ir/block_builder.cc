@@ -900,18 +900,19 @@ TVM_REGISTER_GLOBAL("relax.BlockBuilderEndBlock")
 TVM_REGISTER_GLOBAL("relax.BlockBuilderNormalize")
     .set_body_method<BlockBuilder>(&BlockBuilderNode::Normalize);
 
-TVM_REGISTER_GLOBAL("relax.BlockBuilderEmit").set_body_typed([](BlockBuilder builder, Expr expr) {
-  return builder->Emit(expr);
-});
+TVM_REGISTER_GLOBAL("relax.BlockBuilderEmit")
+    .set_body_typed([](BlockBuilder builder, Expr expr, String name_hint) {
+      return builder->Emit(expr, name_hint);
+    });
 
 TVM_REGISTER_GLOBAL("relax.BlockBuilderEmitMatchCast")
-    .set_body_typed([](BlockBuilder builder, Expr value, StructInfo struct_info) {
-      return builder->EmitMatchCast(value, struct_info);
+    .set_body_typed([](BlockBuilder builder, Expr value, StructInfo struct_info, String name_hint) {
+      return builder->EmitMatchCast(value, struct_info, name_hint);
     });
 
 TVM_REGISTER_GLOBAL("relax.BlockBuilderEmitOutput")
-    .set_body_typed([](BlockBuilder builder, const Expr& output) {
-      return builder->EmitOutput(output);
+    .set_body_typed([](BlockBuilder builder, const Expr& output, String name_hint) {
+      return builder->EmitOutput(output, name_hint);
     });
 
 TVM_REGISTER_GLOBAL("relax.BlockBuilderEmitNormalized")
