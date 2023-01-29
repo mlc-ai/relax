@@ -23,10 +23,10 @@ import tvm.testing
 from tvm import relax
 from tvm import IRModule
 from tvm.relax.training.optimizer import Adam, SGD, MomentumSGD
+from tvm.relax.transform import LegalizeOps
+from tvm.runtime.container import tuple_object
 from tvm.script.parser import relax as R
 from tvm.testing import assert_allclose
-from tvm.runtime.container import tuple_object
-from tvm.relax.transform import LegalizeOps
 
 
 def _legalize_and_build(mod: IRModule, target, dev):
@@ -85,8 +85,13 @@ def _test_optimizer(target, dev, np_func, opt_type, *args, **kwargs):
     _assert_allclose_nested(_tvm_to_numpy(opt.state), expected_state)
 
 
-@tvm.testing.parametrize_targets("llvm")
-def test_sgd(target, dev):
+lr, weight_decay = tvm.testing.parameters(
+    (0.01, 0),
+    (0.01, 0.02),
+)
+
+
+def test_sgd(target, dev, lr, weight_decay):
     def np_func(param_tuple, grad_tuple, state_tuple):
         num_steps = state_tuple[0]
         param_tuple_new, state_tuple_new = [], []
@@ -97,14 +102,17 @@ def test_sgd(target, dev):
             param_tuple_new.append(param - lr * (grad + weight_decay * param))
         return param_tuple_new, state_tuple_new
 
-    lr, weight_decay = 0.01, 0
-    _test_optimizer(target, dev, np_func, SGD, lr)
-    lr, weight_decay = 0.01, 0.02
     _test_optimizer(target, dev, np_func, SGD, lr, weight_decay)
 
 
-@tvm.testing.parametrize_targets("llvm")
-def test_momentum_sgd(target, dev):
+lr, momentum, dampening, weight_decay, nesterov = tvm.testing.parameters(
+    (0.01, 0.9, 0, 0, False),
+    (0.01, 0.9, 0.85, 0.02, False),
+    (0.01, 0.9, 0.85, 0.02, True),
+)
+
+
+def test_momentum_sgd(target, dev, lr, momentum, dampening, weight_decay, nesterov):
     def np_func(param_tuple, grad_tuple, state_tuple):
         num_steps = state_tuple[0]
         param_tuple_new, state_tuple_new = [], []
@@ -125,22 +133,18 @@ def test_momentum_sgd(target, dev):
 
         return param_tuple_new, state_tuple_new
 
-    lr, momentum, dampening, weight_decay, nesterov = 0.01, 0.9, 0, 0, False
-    _test_optimizer(
-        target, dev, np_func, MomentumSGD, lr, momentum, dampening, weight_decay, nesterov
-    )
-    lr, momentum, dampening, weight_decay, nesterov = 0.01, 0.9, 0.85, 0.02, False
-    _test_optimizer(
-        target, dev, np_func, MomentumSGD, lr, momentum, dampening, weight_decay, nesterov
-    )
-    lr, momentum, dampening, weight_decay, nesterov = 0.01, 0.9, 0.85, 0.02, True
     _test_optimizer(
         target, dev, np_func, MomentumSGD, lr, momentum, dampening, weight_decay, nesterov
     )
 
 
-@tvm.testing.parametrize_targets("llvm")
-def test_adam(target, dev):
+lr, betas, eps, weight_decay = tvm.testing.parameters(
+    (0.01, (0.9, 0.999), 1e-08, 0),
+    (0.01, (0.8, 0.85), 1e-07, 0.1),
+)
+
+
+def test_adam(target, dev, lr, betas, eps, weight_decay):
     def np_func(param_tuple, grad_tuple, state_tuple):
         num_steps = state_tuple[0]
         num_steps_new = num_steps + 1
@@ -168,9 +172,6 @@ def test_adam(target, dev):
 
         return param_tuple_new, state_tuple_new
 
-    lr, betas, eps, weight_decay = 0.01, (0.9, 0.999), 1e-08, 0
-    _test_optimizer(target, dev, np_func, Adam, lr, betas, eps, weight_decay)
-    lr, betas, eps, weight_decay = 0.01, (0.8, 0.85), 1e-07, 0.1
     _test_optimizer(target, dev, np_func, Adam, lr, betas, eps, weight_decay)
 
 

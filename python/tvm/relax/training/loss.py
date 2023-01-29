@@ -76,7 +76,7 @@ class _Loss:
             expr = sum(expr)
         elif self._reduction == "mean":
             expr = mean(expr)
-        else:
+        elif self._reduction != "none":
             raise ValueError("Reduction can only be one of these values: ", self._valid_reductions)
         return expr
 
