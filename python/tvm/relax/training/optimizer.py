@@ -22,12 +22,14 @@ from typing import List, Optional, Tuple, Union
 import numpy as np  # type: ignore
 
 import tvm
-from tvm import relax as rx
-from tvm.relax.struct_info import TensorStructInfo
-from tvm.relax.transform.legalize_ops import LegalizeOps
 from tvm.runtime.container import tuple_object
-from tvm.relax.op import add, subtract, multiply, divide, sqrt
-from tvm.relax import Var, Function
+
+from ..vm import VirtualMachine, build
+from ..block_builder import BlockBuilder
+from ..struct_info import TensorStructInfo, TupleStructInfo
+from ..transform.legalize_ops import LegalizeOps
+from ..op import add, subtract, multiply, divide, sqrt
+from ..expr import const, Var, Function, TupleGetItem, Tuple as RxTuple
 
 # TODO(chaofan, yixin): Migrate key logics to C++
 class Optimizer:
@@ -74,7 +76,7 @@ class Optimizer:
     _dtype: str
 
     # these attributes are for the building and running process of the optimizer function
-    _vm_module: rx.VirtualMachine
+    _vm_module: VirtualMachine
     _target: Union[str, tvm.target.Target]
     _device: Union[tvm.runtime.Device, List[tvm.runtime.Device]]
 
@@ -248,8 +250,8 @@ class Optimizer:
             mod = tvm.IRModule({self.name: self.get_function()})
             # pylint: disable=not-callable
             lowered_mod = LegalizeOps()(mod)  # type: ignore
-            executable = rx.vm.build(lowered_mod, self._target)
-            self._vm_module = rx.VirtualMachine(executable, self._device)
+            executable = build(lowered_mod, self._target)
+            self._vm_module = VirtualMachine(executable, self._device)
         new_params, self.state = self._vm_module[self.name](params_adt, grads_adt, self.state)
         return new_params
 
@@ -333,38 +335,38 @@ class SGD(Optimizer):
         dtype = self._dtype
 
         # input variables
-        param_var = Var("params", rx.TupleStructInfo([p.struct_info for p in plist]))
-        grad_var = Var("gradients", rx.TupleStructInfo([p.struct_info for p in plist]))
-        state_var = Var("optim_states", rx.TupleStructInfo([rx.TensorStructInfo((), "int64")]))
+        param_var = Var("params", TupleStructInfo([p.struct_info for p in plist]))
+        grad_var = Var("gradients", TupleStructInfo([p.struct_info for p in plist]))
+        state_var = Var("optim_states", TupleStructInfo([TensorStructInfo((), "int64")]))
 
         # constants
-        lr = rx.const(self.lr, dtype)
-        weight_decay = rx.const(self.weight_decay, dtype)
-        one = rx.const(1, "int64")
+        lr = const(self.lr, dtype)
+        weight_decay = const(self.weight_decay, dtype)
+        one = const(1, "int64")
 
-        builder = rx.BlockBuilder()
+        builder = BlockBuilder()
         with builder.function(self.name, [param_var, grad_var, state_var]):
             with builder.dataflow():
                 param_list_new, state_list_new = [], []
 
                 # handle num_steps
-                num_steps = builder.emit(rx.TupleGetItem(state_var, 0), "num_steps")
+                num_steps = builder.emit(TupleGetItem(state_var, 0), "num_steps")
                 num_steps_new = builder.emit(add(num_steps, one), "num_steps_new")
                 state_list_new.append(num_steps_new)
 
                 # computation logics
                 for i in range(len_param):
                     name = self._param_list[i].name_hint
-                    p = builder.emit(rx.TupleGetItem(param_var, i), name)
-                    g = builder.emit(rx.TupleGetItem(grad_var, i), name + "_grad")
+                    p = builder.emit(TupleGetItem(param_var, i), name)
+                    g = builder.emit(TupleGetItem(grad_var, i), name + "_grad")
                     if self.weight_decay:
                         g = builder.emit(add(multiply(weight_decay, p), g), name + "_grad_new")
                     p_new = builder.emit(subtract(p, multiply(lr, g)), name + "_new")
                     param_list_new.append(p_new)
 
                 # handle return values
-                params_new = builder.emit_output(rx.Tuple(param_list_new), "params_new")
-                optim_states_new = builder.emit_output(rx.Tuple(state_list_new), "optim_states_new")
+                params_new = builder.emit_output(RxTuple(param_list_new), "params_new")
+                optim_states_new = builder.emit_output(RxTuple(state_list_new), "optim_states_new")
             builder.emit_func_output((params_new, optim_states_new))
         return builder.get()[self.name]
 
@@ -471,36 +473,36 @@ class MomentumSGD(Optimizer):
         dtype = self._dtype
 
         # input variables
-        param_var = Var("params", rx.TupleStructInfo([p.struct_info for p in plist]))
-        grad_var = Var("gradients", rx.TupleStructInfo([p.struct_info for p in plist]))
+        param_var = Var("params", TupleStructInfo([p.struct_info for p in plist]))
+        grad_var = Var("gradients", TupleStructInfo([p.struct_info for p in plist]))
         state_var = Var(
             "optim_states",
-            rx.TupleStructInfo([rx.TensorStructInfo((), "int64"), *(p.struct_info for p in plist)]),
+            TupleStructInfo([TensorStructInfo((), "int64"), *(p.struct_info for p in plist)]),
         )
 
         # constants
-        lr = rx.const(self.lr, dtype)
-        momentum = rx.const(self.momentum, dtype)
-        weight_decay = rx.const(self.weight_decay, dtype)
-        dampening_inv = rx.const(_high_precision_subtract(1, self.dampening), dtype)
-        one = rx.const(1, "int64")
+        lr = const(self.lr, dtype)
+        momentum = const(self.momentum, dtype)
+        weight_decay = const(self.weight_decay, dtype)
+        dampening_inv = const(_high_precision_subtract(1, self.dampening), dtype)
+        one = const(1, "int64")
 
-        builder = rx.BlockBuilder()
+        builder = BlockBuilder()
         with builder.function(self.name, [param_var, grad_var, state_var]):
             with builder.dataflow():
                 param_list_new, state_list_new = [], []
 
                 # handle num_steps
-                num_steps = builder.emit(rx.TupleGetItem(state_var, 0), "num_steps")
+                num_steps = builder.emit(TupleGetItem(state_var, 0), "num_steps")
                 num_steps_new = builder.emit(add(num_steps, one), "num_steps_new")
                 state_list_new.append(num_steps_new)
 
                 # computation logics
                 for i in range(len_param):
                     name = self._param_list[i].name_hint
-                    p = builder.emit(rx.TupleGetItem(param_var, i), name)
-                    g = builder.emit(rx.TupleGetItem(grad_var, i), name + "_grad")
-                    v = builder.emit(rx.TupleGetItem(state_var, i + 1), name + "_v")
+                    p = builder.emit(TupleGetItem(param_var, i), name)
+                    g = builder.emit(TupleGetItem(grad_var, i), name + "_grad")
+                    v = builder.emit(TupleGetItem(state_var, i + 1), name + "_v")
                     if self.weight_decay:
                         g = builder.emit(add(multiply(weight_decay, p), g), name + "_grad_new")
                     damp_g = multiply(dampening_inv, g) if self.dampening else g
@@ -515,8 +517,8 @@ class MomentumSGD(Optimizer):
                     state_list_new.append(v_new)
 
                 # handle return values
-                params_new = builder.emit_output(rx.Tuple(param_list_new), "params_new")
-                optim_states_new = builder.emit_output(rx.Tuple(state_list_new), "optim_states_new")
+                params_new = builder.emit_output(RxTuple(param_list_new), "params_new")
+                optim_states_new = builder.emit_output(RxTuple(state_list_new), "optim_states_new")
             builder.emit_func_output((params_new, optim_states_new))
         return builder.get()[self.name]
 
@@ -638,15 +640,15 @@ class Adam(Optimizer):
         dtype = self._dtype
 
         # input variables
-        param_var = Var("params", rx.TupleStructInfo([p.struct_info for p in plist]))
-        grad_var = Var("gradients", rx.TupleStructInfo([p.struct_info for p in plist]))
+        param_var = Var("params", TupleStructInfo([p.struct_info for p in plist]))
+        grad_var = Var("gradients", TupleStructInfo([p.struct_info for p in plist]))
         state_var = Var(
             "optim_states",
-            rx.TupleStructInfo(
+            TupleStructInfo(
                 [
-                    rx.TensorStructInfo((), "int64"),
-                    rx.TensorStructInfo((), dtype),
-                    rx.TensorStructInfo((), dtype),
+                    TensorStructInfo((), "int64"),
+                    TensorStructInfo((), dtype),
+                    TensorStructInfo((), dtype),
                     *(p.struct_info for p in plist),
                     *(p.struct_info for p in plist),
                 ]
@@ -654,42 +656,38 @@ class Adam(Optimizer):
         )
 
         # constants
-        lr = rx.const(self.lr, dtype)
-        beta1 = rx.const(self.beta1, dtype)
-        beta2 = rx.const(self.beta2, dtype)
-        beta1_inv = rx.const(_high_precision_subtract(1, self.beta1), dtype)
-        beta2_inv = rx.const(_high_precision_subtract(1, self.beta2), dtype)
-        eps = rx.const(self.eps, dtype)
-        weight_decay = rx.const(self.weight_decay, dtype)
-        one_int = rx.const(1, "int64")
-        one_float = rx.const(1, dtype)
+        lr = const(self.lr, dtype)
+        beta1 = const(self.beta1, dtype)
+        beta2 = const(self.beta2, dtype)
+        beta1_inv = const(_high_precision_subtract(1, self.beta1), dtype)
+        beta2_inv = const(_high_precision_subtract(1, self.beta2), dtype)
+        eps = const(self.eps, dtype)
+        weight_decay = const(self.weight_decay, dtype)
+        one_int = const(1, "int64")
+        one_float = const(1, dtype)
 
-        builder = rx.BlockBuilder()
+        builder = BlockBuilder()
         with builder.function(self.name, [param_var, grad_var, state_var]):
             with builder.dataflow():
                 param_list_new = []
                 state_list_new = [None] * (len_param * 2 + 3)  # type: List[Optional[Var]]
 
                 # handle num_steps
-                num_steps = builder.emit(rx.TupleGetItem(state_var, 0), "num_steps")
+                num_steps = builder.emit(TupleGetItem(state_var, 0), "num_steps")
                 num_steps_new = builder.emit(add(num_steps, one_int), "num_steps_new")
                 state_list_new[0] = num_steps_new
-                beta1_prod = builder.emit(
-                    multiply(rx.TupleGetItem(state_var, 1), beta1), "beta1_prod"
-                )
-                beta2_prod = builder.emit(
-                    multiply(rx.TupleGetItem(state_var, 2), beta2), "beta2_prod"
-                )
+                beta1_prod = builder.emit(multiply(TupleGetItem(state_var, 1), beta1), "beta1_prod")
+                beta2_prod = builder.emit(multiply(TupleGetItem(state_var, 2), beta2), "beta2_prod")
                 state_list_new[1] = beta1_prod
                 state_list_new[2] = beta2_prod
 
                 # computation logics
                 for i in range(len_param):
                     name = self._param_list[i].name_hint
-                    p = builder.emit(rx.TupleGetItem(param_var, i), name)
-                    g = builder.emit(rx.TupleGetItem(grad_var, i), name + "_grad")
-                    m = builder.emit(rx.TupleGetItem(state_var, i + 3), name + "_m")
-                    v = builder.emit(rx.TupleGetItem(state_var, i + 3 + len_param), name + "_v")
+                    p = builder.emit(TupleGetItem(param_var, i), name)
+                    g = builder.emit(TupleGetItem(grad_var, i), name + "_grad")
+                    m = builder.emit(TupleGetItem(state_var, i + 3), name + "_m")
+                    v = builder.emit(TupleGetItem(state_var, i + 3 + len_param), name + "_v")
                     if self.weight_decay:
                         g = builder.emit(add(multiply(weight_decay, p), g), name + "_grad_new")
                     m_new = builder.emit(
@@ -714,7 +712,7 @@ class Adam(Optimizer):
                     state_list_new[i + 3 + len_param] = v_new
 
                 # handle return values
-                params_new = builder.emit_output(rx.Tuple(param_list_new), "params_new")
-                optim_states_new = builder.emit_output(rx.Tuple(state_list_new), "optim_states_new")
+                params_new = builder.emit_output(RxTuple(param_list_new), "params_new")
+                optim_states_new = builder.emit_output(RxTuple(state_list_new), "optim_states_new")
             builder.emit_func_output((params_new, optim_states_new))
         return builder.get()[self.name]

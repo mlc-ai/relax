@@ -24,7 +24,7 @@ from typing_extensions import Literal
 
 # isort: on
 
-from tvm import relax
+from ..block_builder import BlockBuilder
 from ..expr import Expr, Var, Function, StructInfo
 
 from ..op import abs, sum, mean, subtract, multiply
@@ -116,7 +116,7 @@ class L1Loss(_Loss):
         ----------
         The relax function of L1Loss with the loss name as its global symbol.
         """
-        bb = relax.BlockBuilder()
+        bb = BlockBuilder()
 
         predictions = _create_param_var(predictions, "predictions")
         targets = _create_param_var(targets, "targets")
@@ -165,7 +165,7 @@ class MSELoss(_Loss):
         ----------
         The relax function of MSELoss with the loss name as its global symbol.
         """
-        bb = relax.BlockBuilder()
+        bb = BlockBuilder()
 
         predictions = _create_param_var(predictions, "predictions")
         targets = _create_param_var(targets, "targets")
@@ -230,7 +230,7 @@ class CrossEntropyLoss(_Loss):
         ----------
         The relax function of CrossEntropyLoss with the loss name as its global symbol.
         """
-        bb = relax.BlockBuilder()
+        bb = BlockBuilder()
 
         predictions = _create_param_var(predictions, "predictions")
         targets = _create_param_var(targets, "targets")
