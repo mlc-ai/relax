@@ -86,3 +86,6 @@ from .struct_info import (
     TupleStructInfo,
     FuncStructInfo,
 )
+
+# Training utils
+from .training import optimizer
