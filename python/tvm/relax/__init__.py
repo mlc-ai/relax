@@ -89,7 +89,4 @@ from .struct_info import (
 )
 
 # Training utils
-from .training import (
-    optimizer,
-    loss,
-)
+from .training import loss, optimizer

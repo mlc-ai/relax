@@ -55,14 +55,14 @@ class _Loss:
         sum : the output will be summed.
     """
 
+    _valid_reductions = ["mean", "sum", "none"]
+
     def __init__(self, loss_name: str, reduction: Literal["mean", "sum", "none"] = "mean") -> None:
-        self.loss_name = loss_name
-        self.reduction = reduction
+        self._loss_name = loss_name
+        self._reduction = reduction
 
-        valid_reductions = ["mean", "sum", "none"]
-
-        if self.reduction not in valid_reductions:
-            raise ValueError("Reduction can only be one of these values: ", valid_reductions)
+        if self._reduction not in self._valid_reductions:
+            raise ValueError("Reduction can only be one of these values: ", self._valid_reductions)
 
     def _with_reduction(self, expr: Expr) -> Expr:
         """Add a reduction to the final loss.
@@ -72,12 +72,12 @@ class _Loss:
         expr : Expr
             The loss expr.
         """
-        if self.reduction == "sum":
+        if self._reduction == "sum":
             expr = sum(expr)
-        elif self.reduction == "mean":
+        elif self._reduction == "mean":
             expr = mean(expr)
         else:
-            assert self.reduction == "none"
+            raise ValueError("Reduction can only be one of these values: ", self._valid_reductions)
         return expr
 
 
@@ -121,13 +121,13 @@ class L1Loss(_Loss):
         predictions = _create_param_var(predictions, "predictions")
         targets = _create_param_var(targets, "targets")
 
-        with bb.function(self.loss_name, [predictions, targets]):
+        with bb.function(self._loss_name, [predictions, targets]):
             with bb.dataflow():
                 lv = abs(subtract(predictions, targets))
                 loss = bb.emit_output(self._with_reduction(lv))
             bb.emit_func_output(loss)
 
-        return bb.get()[self.loss_name].with_attr("global_symbol", self.loss_name)
+        return bb.get()[self._loss_name].with_attr("global_symbol", self._loss_name)
 
 
 class MSELoss(_Loss):
@@ -170,14 +170,14 @@ class MSELoss(_Loss):
         predictions = _create_param_var(predictions, "predictions")
         targets = _create_param_var(targets, "targets")
 
-        with bb.function(self.loss_name, [predictions, targets]):
+        with bb.function(self._loss_name, [predictions, targets]):
             with bb.dataflow():
                 lv = subtract(predictions, targets)
                 lv = multiply(lv, lv)
                 loss = bb.emit_output(self._with_reduction(lv))
             bb.emit_func_output(loss)
 
-        return bb.get()[self.loss_name].with_attr("global_symbol", self.loss_name)
+        return bb.get()[self._loss_name].with_attr("global_symbol", self._loss_name)
 
 
 class CrossEntropyLoss(_Loss):
@@ -240,12 +240,12 @@ class CrossEntropyLoss(_Loss):
             weights = _create_param_var(weights, "weights")
             arg_list.append(weights)
 
-        with bb.function(self.loss_name, arg_list):
+        with bb.function(self._loss_name, arg_list):
             with bb.dataflow():
                 logits = bb.emit(log_softmax(predictions))
                 loss = bb.emit_output(
-                    nll_loss(logits, targets, weights, self.reduction, self.ignore_index)
+                    nll_loss(logits, targets, weights, self._reduction, self.ignore_index)
                 )
             bb.emit_func_output(loss)
 
-        return bb.get()[self.loss_name].with_attr("global_symbol", self.loss_name)
+        return bb.get()[self._loss_name].with_attr("global_symbol", self._loss_name)
