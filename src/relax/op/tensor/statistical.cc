@@ -115,8 +115,8 @@ InferLayoutOutput InferLayoutStatistical(const Call& call,
     }
   }
 
-  Layout exisiting_layout = GetLayout(var_layout_map, call->args[0]);
-  String new_axis_str = TransposeStrLike(axis_str, InitialLayout(ndim), exisiting_layout);
+  LayoutDecision exisiting_layout = GetLayoutDecision(var_layout_map, call->args[0]);
+  String new_axis_str = TransposeStrLike(axis_str, InitialLayout(ndim), exisiting_layout->layout);
   Array<Integer> new_axis;
   for (size_t i = 0; i < new_axis_str.size(); ++i) {
     if (new_axis_str.at(i) == '1') {

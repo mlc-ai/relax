@@ -203,6 +203,12 @@ class VarReplacer : public ExprMutator {
     return it == var_remap_.end() ? var : it->second;
   }
 
+  Expr VisitExpr_(const DataflowVarNode* op) final {
+    Var var = GetRef<Var>(op);
+    auto it = var_remap_.find(var->vid);
+    return it == var_remap_.end() ? var : it->second;
+  }
+
   const VarMap& var_remap_;
 };
 

@@ -1037,5 +1037,51 @@ def test_conv2d_unknown_dim():
     tvm.ir.assert_structural_equal(mod, conv2d_unknown_dim)
 
 
+@tvm.script.ir_module
+class binary_broadcast:
+    @R.function
+    def main(
+        x: R.Tensor((2, 3, 28, 28), dtype="float32"),
+        w: R.Tensor((4, 3, 3, 3), dtype="float32"),
+        bias: R.Tensor((26, 26), dtype="float32"),
+    ) -> R.Tensor((2, 4, 26, 26), dtype="float32"):
+        # block 0
+        gv: R.Tensor((2, 28, 28, 3), dtype="float32") = R.permute_dims(x, axes=[0, 2, 3, 1])
+        gv1: R.Tensor((4, 3, 3, 3), dtype="float32") = R.permute_dims(w, axes=[0, 2, 3, 1])
+        gv2: R.Tensor((2, 26, 26, 4), dtype="float32") = R.nn.conv2d(
+            gv,
+            gv1,
+            strides=[1, 1],
+            padding=[0, 0, 0, 0],
+            dilation=[1, 1],
+            groups=1,
+            data_layout="NHWC",
+            kernel_layout="OHWI",
+            out_layout="NHWC",
+            out_dtype="float32",
+        )
+        gv21: R.Tensor((2, 4, 26, 26), dtype="float32") = R.permute_dims(gv2, axes=[0, 3, 1, 2])
+        gv22: R.Tensor((2, 4, 26, 26), dtype="float32") = R.add(gv21, bias)
+        return gv22
+
+
+def test_binary_broadcast():
+    @I.ir_module
+    class Conv2dAddBroadcast:
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), "float32"),
+            w: R.Tensor((4, 3, 3, 3), "float32"),
+            bias: R.Tensor((26, 26), "float32"),
+        ) -> R.Tensor(None, "float32", ndim=4):
+            gv: R.Tensor((2, 4, 26, 26), "float32") = R.nn.conv2d(x, w, out_dtype="float32")
+            gv2: R.Tensor((2, 4, 26, 26), "float32") = R.add(gv, bias)
+            return gv2
+
+    mod = ConvertLayout({"relax.nn.conv2d": ["NHWC", "OHWI"]})(Conv2dAddBroadcast)
+    print(mod.script())
+    tvm.ir.assert_structural_equal(mod, binary_broadcast)
+
+
 if __name__ == "__main__":
     tvm.testing.main()

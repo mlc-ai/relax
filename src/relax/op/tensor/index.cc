@@ -195,10 +195,10 @@ InferLayoutOutput InferLayoutStridedSlice(const Call& call,
   const auto* tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[0]);
   ICHECK(tensor_sinfo != nullptr) << "Invalid Call";
   ICHECK(!tensor_sinfo->IsUnknownNdim()) << "Only support known ndim";
-  Layout existing_layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision existing_layout = GetLayoutDecision(var_layout_map, call->args[0]);
   std::vector<Integer> new_axes;
   for (const auto& axis : attrs->axes) {
-    new_axes.push_back(FindAxis(existing_layout, axis->value));
+    new_axes.push_back(FindAxis(existing_layout->layout, axis->value));
   }
   ObjectPtr<StridedSliceAttrs> new_attrs = make_object<StridedSliceAttrs>(*attrs);
   new_attrs->axes = std::move(new_axes);
@@ -210,6 +210,7 @@ TVM_REGISTER_OP("relax.strided_slice")
     .set_num_inputs(1)
     .add_argument("x", "Tensor", "The source tensor to be sliced.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoStridedSlice)
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
     .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutStridedSlice);
 
 }  // namespace relax

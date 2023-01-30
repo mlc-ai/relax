@@ -142,7 +142,7 @@ InferLayoutOutput InferLayoutConv2d(const Call& call,
   const auto* attrs = call->attrs.as<Conv2DAttrs>();
   ICHECK(attrs) << "Invalid Call";
 
-  Layout data_layout, weight_layout, output_layout;
+  LayoutDecision data_layout, weight_layout, output_layout;
   ObjectPtr<Conv2DAttrs> new_attrs = make_object<Conv2DAttrs>(*attrs);
 
   if (it != desired_layouts.end()) {
@@ -164,15 +164,15 @@ InferLayoutOutput InferLayoutConv2d(const Call& call,
   } else {
     // We don't have a desired layout for conv2d.
     // We can just propagate the layout from the input.
-    data_layout = GetLayout(var_layout_map, call->args[0]);
-    weight_layout = GetLayout(var_layout_map, call->args[1]);
+    data_layout = GetLayoutDecision(var_layout_map, call->args[0]);
+    weight_layout = GetLayoutDecision(var_layout_map, call->args[1]);
     output_layout = data_layout;
     new_attrs->data_layout =
-        TransposeLike(attrs->data_layout, InitialLayout(4), data_layout).name();
+        TransposeLike(attrs->data_layout, InitialLayout(4), data_layout->layout).name();
     new_attrs->kernel_layout =
-        TransposeLike(attrs->kernel_layout, InitialLayout(4), weight_layout).name();
+        TransposeLike(attrs->kernel_layout, InitialLayout(4), weight_layout->layout).name();
     new_attrs->out_layout =
-        TransposeLike(attrs->out_layout, InitialLayout(4), output_layout).name();
+        TransposeLike(attrs->out_layout, InitialLayout(4), output_layout->layout).name();
   }
   return InferLayoutOutput({data_layout, weight_layout}, {output_layout}, Attrs(new_attrs));
 }
