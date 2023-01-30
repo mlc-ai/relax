@@ -14,8 +14,9 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import pytest
 import tvm.testing
-from tvm import relax
+from tvm import relax, TVMError
 from tvm.ir.base import assert_structural_equal
 from tvm.script import relax as R
 
@@ -76,7 +77,6 @@ def test_append_loss_extra_params():
     def expected(
         x: R.Tensor((3, 3), dtype="float32"), arg3: R.Tensor((3, 3), dtype="float32")
     ) -> R.Tensor(None, dtype="float32", ndim=2):
-        # block 0
         with R.dataflow():
             gv0: R.Tensor((), dtype="float32") = R.sum(x, axis=None, keepdims=False)
             gv1: R.Tensor((3, 3), dtype="float32") = R.add(x, x)
@@ -101,7 +101,7 @@ def test_append_loss_nested_tuple():
     @R.function
     def loss(
         arg1: R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((), dtype="float32")),
-        arg2: R.Tensor((), dtype="float32"),
+        arg2: R.Tensor((3, 3), dtype="float32"),
     ):
         with R.dataflow():
             arg10 = arg1[0]
@@ -129,6 +129,26 @@ def test_append_loss_nested_tuple():
 
     after = relax.training.utils.append_loss(orig, loss)
     assert_structural_equal(after, expected)
+
+
+def test_append_loss_wrong_struct_info():
+    @R.function
+    def orig(x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3, 3), dtype="float32")):
+        with R.dataflow():
+            gv0 = R.sum(x)
+            gv1 = R.sum(y)
+            R.output(gv0, gv1)
+        return gv0, gv1
+
+    @R.function
+    def loss(arg1: R.Tensor((), dtype="float64"), arg2: R.Tensor((), dtype="float64")):
+        with R.dataflow():
+            gv0 = R.add(arg1, arg2)
+            R.output(gv0)
+        return gv0
+
+    with pytest.raises(TVMError):
+        after = relax.training.utils.append_loss(orig, loss)
 
 
 if __name__ == "__main__":

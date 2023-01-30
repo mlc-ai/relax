@@ -95,21 +95,27 @@ class AppendLossMutator : public ExprMutator {
   Array<Var> RemapLossParams(const Array<Var>& loss_func_params, Array<Var> new_params) {
     for (int i = 0; i < static_cast<int>(loss_func_params.size()); ++i) {
       Var loss_param = loss_func_params[i];
-      if (i < static_cast<int>(orig_rets.size())) {
-        // map return value to loss param
+      auto loss_param_sinfo = GetStructInfo(loss_param);
+
+      if (i < static_cast<int>(orig_rets.size())) {  // map return value to loss param
+        auto orig_ret_sinfo = GetStructInfo(orig_rets[i]);
+        ICHECK(StructuralEqual()(orig_ret_sinfo, loss_param_sinfo))
+            << "The struct info of the " << i
+            << "-th return value of orig func is: " << orig_ret_sinfo
+            << " while the corresponding struct info of parameter of loss function is "
+            << loss_param_sinfo << ", which is different.";
+
         if (const auto* var_node = orig_rets[i].as<VarNode>()) {
           ICHECK(orig_rets[i].as<DataflowVarNode>());
           orig_rets_var_.push_back(NullOpt);
           this->var_remap_[loss_param->vid] = GetRef<Var>(var_node);
         } else {
-          Var new_ret_var =
-              DataflowVar(/*name_hint=*/"ret_" + std::to_string(i), GetStructInfo(orig_rets[i]));
+          Var new_ret_var = DataflowVar(/*name_hint=*/"ret_" + std::to_string(i), orig_ret_sinfo);
           orig_rets_var_.push_back(new_ret_var);
           this->var_remap_[loss_param->vid] = new_ret_var;
         }
-      } else {
-        // append to the param list
-        Var new_loss_param = Var(loss_param->vid, GetStructInfo(loss_param), loss_param->span);
+      } else {  // append to the param list
+        Var new_loss_param = Var(loss_param->vid, loss_param_sinfo, loss_param->span);
         this->var_remap_[loss_param->vid] = new_loss_param;
         new_params.push_back(new_loss_param);
       }
