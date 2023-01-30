@@ -64,6 +64,7 @@ def _assert_run_result_same(tvm_func: Callable, np_func: Callable, np_inputs: Li
     _assert_allclose_nested(result, expected)
 
 
+@tvm.testing.parametrize_targets("llvm")
 def _test_optimizer(target, dev, np_func, opt_type, *args, **kwargs):
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
@@ -91,6 +92,7 @@ lr, weight_decay = tvm.testing.parameters(
 )
 
 
+@tvm.testing.parametrize_targets("llvm")
 def test_sgd(target, dev, lr, weight_decay):
     def np_func(param_tuple, grad_tuple, state_tuple):
         num_steps = state_tuple[0]
@@ -112,6 +114,7 @@ lr, momentum, dampening, weight_decay, nesterov = tvm.testing.parameters(
 )
 
 
+@tvm.testing.parametrize_targets("llvm")
 def test_momentum_sgd(target, dev, lr, momentum, dampening, weight_decay, nesterov):
     def np_func(param_tuple, grad_tuple, state_tuple):
         num_steps = state_tuple[0]
@@ -144,6 +147,7 @@ lr, betas, eps, weight_decay = tvm.testing.parameters(
 )
 
 
+@tvm.testing.parametrize_targets("llvm")
 def test_adam(target, dev, lr, betas, eps, weight_decay):
     def np_func(param_tuple, grad_tuple, state_tuple):
         num_steps = state_tuple[0]
