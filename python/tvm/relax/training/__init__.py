@@ -18,6 +18,4 @@
 
 from . import optimizer
 from . import utils
-
-# loss functions
-from .loss import L1Loss, MSELoss, CrossEntropyLoss
+from . import loss

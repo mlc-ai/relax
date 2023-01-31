@@ -34,12 +34,10 @@ namespace relax {
 
 /*!
  * \brief Local helper to append a specified loss function after the original function.
- *
- * Notice:
+ * \note
  * 1. This uitl is dedicated to loss functions, not for general purposes.
  * 2. This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in
  * some sense.
- *
  * \param orig_func The function to be appended to.
  * \param loss_func The loss function.
  * \return The result function after appended.

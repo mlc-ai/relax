@@ -38,13 +38,12 @@ def test_l1_loss():
     C = 5
     predictions = relax.TensorStructInfo((N, C), "float32")
     targets = relax.TensorStructInfo((N, C), "float32")
-    l1_loss = relax.training.L1Loss()
+    l1_loss = relax.training.loss.L1Loss()
 
     @R.function
     def expected(
         predictions: R.Tensor((3, 5), "float32"), targets: R.Tensor((3, 5), "float32")
     ) -> R.Tensor((), "float32"):
-        R.func_attr({"global_symbol": "l1_loss"})
         with R.dataflow():
             lv: R.Tensor((3, 5), "float32") = R.subtract(predictions, targets)
             lv1: R.Tensor((3, 5), "float32") = R.abs(lv)
@@ -57,7 +56,7 @@ def test_l1_loss():
 
 def test_l1_loss_append():
     s = forward.ret_struct_info
-    l1_loss = relax.training.L1Loss(reduction="sum")
+    l1_loss = relax.training.loss.L1Loss(reduction="sum")
     forward_with_loss = relax.training.utils.append_loss(forward, l1_loss(s, s))
 
     @R.function
@@ -67,7 +66,6 @@ def test_l1_loss_append():
         b: R.Tensor((2, 4), "float32"),
         targets: R.Tensor((2, 4), "float32"),
     ) -> R.Tensor((), "float32"):
-        # block 0
         with R.dataflow():
             lv: R.Tensor((2, 4), "float32") = R.matmul(x, w, out_dtype="")
             out: R.Tensor((2, 4), "float32") = R.add(lv, b)
@@ -85,15 +83,12 @@ def test_mse_loss():
     C = 5
     predictions = relax.TensorStructInfo((N, C), "float32")
     targets = relax.TensorStructInfo((N, C), "float32")
-    mse_loss = relax.training.MSELoss()
+    mse_loss = relax.training.loss.MSELoss()
 
     @R.function
     def expected(
         predictions: R.Tensor((3, 5), "float32"), targets: R.Tensor((3, 5), "float32")
     ) -> R.Tensor((), "float32"):
-        # function attr dict
-        R.func_attr({"global_symbol": "mse_loss"})
-        # block 0
         with R.dataflow():
             lv: R.Tensor((3, 5), "float32") = R.subtract(predictions, targets)
             lv1: R.Tensor((3, 5), "float32") = R.multiply(lv, lv)
@@ -106,7 +101,7 @@ def test_mse_loss():
 
 def test_mse_loss_append():
     s = forward.ret_struct_info
-    mse_loss = relax.training.MSELoss(reduction="sum")
+    mse_loss = relax.training.loss.MSELoss(reduction="sum")
     forward_with_loss = relax.training.utils.append_loss(forward, mse_loss(s, s))
 
     @R.function
@@ -116,7 +111,6 @@ def test_mse_loss_append():
         b: R.Tensor((2, 4), "float32"),
         targets: R.Tensor((2, 4), "float32"),
     ) -> R.Tensor((), "float32"):
-        # block 0
         with R.dataflow():
             lv: R.Tensor((2, 4), "float32") = R.matmul(x, w, out_dtype="")
             out: R.Tensor((2, 4), "float32") = R.add(lv, b)
@@ -135,7 +129,7 @@ def test_cross_entropy_loss():
     predictions = relax.TensorStructInfo((N, C), "float32")
     targets = relax.TensorStructInfo((N,), "int64")
     weights = relax.TensorStructInfo((C,), "float32")
-    cross_entropy_loss = relax.training.CrossEntropyLoss(reduction="sum", ignore_index=1)
+    cross_entropy_loss = relax.training.loss.CrossEntropyLoss(reduction="sum", ignore_index=1)
 
     @R.function
     def expected(
@@ -143,9 +137,6 @@ def test_cross_entropy_loss():
         targets: R.Tensor((3,), "int64"),
         weights: R.Tensor((5,), "float32"),
     ) -> R.Tensor((), "float32"):
-        # function attr dict
-        R.func_attr({"global_symbol": "cross_entropy_loss"})
-        # block 0
         with R.dataflow():
             lv: R.Tensor((3, 5), "float32") = R.nn.log_softmax(predictions, axis=-1)
             gv: R.Tensor((), "float32") = R.nn.nll_loss(
@@ -162,15 +153,12 @@ def test_cross_entropy_loss_without_weights():
     C = 5
     predictions = relax.TensorStructInfo((N, C), "float32")
     targets = relax.TensorStructInfo((N,), "int64")
-    cross_entropy_loss = relax.training.CrossEntropyLoss()
+    cross_entropy_loss = relax.training.loss.CrossEntropyLoss()
 
     @R.function
     def expected(
         predictions: R.Tensor((3, 5), "float32"), targets: R.Tensor((3,), "int64")
     ) -> R.Tensor((), "float32"):
-        # function attr dict
-        R.func_attr({"global_symbol": "cross_entropy_loss"})
-        # block 0
         with R.dataflow():
             lv: R.Tensor((3, 5), "float32") = R.nn.log_softmax(predictions, axis=-1)
             gv: R.Tensor((), "float32") = R.nn.nll_loss(
@@ -188,7 +176,7 @@ def test_cross_entropy_loss_append():
     C = s.shape[1]
     targets = relax.TensorStructInfo((N,), "int64")
     weights = relax.TensorStructInfo((C,), "float32")
-    cross_entropy_loss = relax.training.CrossEntropyLoss(reduction="sum", ignore_index=1)
+    cross_entropy_loss = relax.training.loss.CrossEntropyLoss(reduction="sum", ignore_index=1)
     forward_with_loss = relax.training.utils.append_loss(
         forward, cross_entropy_loss(s, targets, weights)
     )
@@ -201,7 +189,6 @@ def test_cross_entropy_loss_append():
         targets: R.Tensor((2,), "int64"),
         weights: R.Tensor((4,), "float32"),
     ) -> R.Tensor((), "float32"):
-        # block 0
         with R.dataflow():
             lv: R.Tensor((2, 4), "float32") = R.matmul(x, w, out_dtype="")
             out: R.Tensor((2, 4), "float32") = R.add(lv, b)

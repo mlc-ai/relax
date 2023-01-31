@@ -39,7 +39,7 @@ def _create_param_var(param: Union[Var, StructInfo], param_name: str) -> Var:
     return Var(param.name_hint, param.struct_info)
 
 
-class _Loss:
+class Loss:
     r"""Base class of all loss.
 
     Parameters
@@ -81,7 +81,7 @@ class _Loss:
         return expr
 
 
-class L1Loss(_Loss):
+class L1Loss(Loss):
     r"""Mean element-wise absolute value difference.
 
     Parameters
@@ -127,10 +127,10 @@ class L1Loss(_Loss):
                 loss = bb.emit_output(self._with_reduction(lv))
             bb.emit_func_output(loss)
 
-        return bb.get()[self._loss_name].with_attr("global_symbol", self._loss_name)
+        return bb.get()[self._loss_name]
 
 
-class MSELoss(_Loss):
+class MSELoss(Loss):
     r"""Measures the element-wise mean squared error.
 
     Parameters
@@ -177,10 +177,10 @@ class MSELoss(_Loss):
                 loss = bb.emit_output(self._with_reduction(lv))
             bb.emit_func_output(loss)
 
-        return bb.get()[self._loss_name].with_attr("global_symbol", self._loss_name)
+        return bb.get()[self._loss_name]
 
 
-class CrossEntropyLoss(_Loss):
+class CrossEntropyLoss(Loss):
     r"""CrossEntropyLoss. It is a combination of a log_softmax computation and a nll_loss.
 
     Parameters
@@ -248,4 +248,4 @@ class CrossEntropyLoss(_Loss):
                 )
             bb.emit_func_output(loss)
 
-        return bb.get()[self._loss_name].with_attr("global_symbol", self._loss_name)
+        return bb.get()[self._loss_name]

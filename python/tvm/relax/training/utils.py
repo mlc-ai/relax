@@ -28,42 +28,45 @@ def append_loss(orig_func: Function, loss_func: Function) -> Function:
     those arguments of loss_func which are not mapped to some return values, they will be lifted
     and appended to the argument list of result function.
 
-    Notice:
+    Note
+    -------
     1. This uitl is dedicated to loss functions, not for general purposes.
     2. This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in
     some sense.
 
-    Example:
+    Example
+    -------
+    >>> @R.function
+    ... def orig(x: R.Tensor((2, 4), "float32"), y: R.Tensor((2, 4), "float32")):
+    ...     with R.dataflow():
+    ...         out = R.add(x, y)
+    ...         R.output(out)
+    ...     return out
 
-    .. code-block:: python
-        # Before.
-        @R.function
-        def orig(x: R.Tensor((2, 4), "float32"), y: R.Tensor((2, 4), "float32")):
-            with R.dataflow():
-                out = R.add(x, y)
-                R.output(out)
-            return out
+    >>> @R.function
+    ... def loss(predictions: R.Tensor((2, 4), "float32"), labels: R.Tensor((2, 4), "float32")):
+    ...     with R.dataflow():
+    ...         lv = R.subtract(predictions, labels)
+    ...         lv1 = R.multiply(lv, lv)
+    ...         gv = R.sum(lv1)
+    ...         R.output(gv)
+    ...     return gv
 
-        @R.function
-        def loss(predictions: R.Tensor((2, 4), "float32"), labels: R.Tensor((2, 4), "float32")):
-            with R.dataflow():
-                lv = R.subtract(predictions, labels)
-                lv1 = R.multiply(lv, lv)
-                gv = R.sum(lv1)
-                R.output(gv)
-            return gv
+    >>> expected = append_loss(orig, loss)
+    >>> print(expected)
 
-        # After.
-        @R.function
-        def expected(x: R.Tensor((2, 4), "float32"), y: R.Tensor((2, 4), "float32"),
-                    labels: R.Tensor((2, 4), "float32")) -> R.Tensor((), "float32"):
-            with R.dataflow():
-                out: R.Tensor((2, 4), "float32") = R.add(x, y)
-                lv: R.Tensor((2, 4), "float32") = R.subtract(out, labels)
-                lv1: R.Tensor((2, 4), "float32") = R.multiply(lv, lv)
-                gv: R.Tensor((), "float32") = R.sum(lv1)
-                R.output(gv)
-            return gv
+    Will get
+
+    >>> @R.function
+    ... def expected(x: R.Tensor((2, 4), "float32"), y: R.Tensor((2, 4), "float32"),
+    ...             labels: R.Tensor((2, 4), "float32")) -> R.Tensor((), "float32"):
+    ...     with R.dataflow():
+    ...         out: R.Tensor((2, 4), "float32") = R.add(x, y)
+    ...         lv: R.Tensor((2, 4), "float32") = R.subtract(out, labels)
+    ...         lv1: R.Tensor((2, 4), "float32") = R.multiply(lv, lv)
+    ...         gv: R.Tensor((), "float32") = R.sum(lv1)
+    ...         R.output(gv)
+    ...     return gv
 
     Parameters
     ----------
