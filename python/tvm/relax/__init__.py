@@ -27,6 +27,7 @@ from . import transform
 from . import expr_functor
 from . import struct_info
 from . import utils
+from . import training
 
 # Expr
 
@@ -90,4 +91,4 @@ from .struct_info import (
 from .pipeline import get_pipeline
 
 # Training utils
-from .training import optimizer
+from .training import loss, optimizer
