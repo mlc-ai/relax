@@ -20,7 +20,7 @@ from typing import Union
 from tvm import DataType
 
 from . import _ffi_api
-from ..expr import Constant, Expr
+from ..expr import Expr
 
 
 def astype(x: Expr, dtype: Union[str, DataType]) -> Expr:
@@ -59,5 +59,4 @@ def wrap_param(data: Expr, dtype: Union[str, DataType] = "float32") -> Expr:
     result : relax.Expr
         The casted result.
     """
-    assert isinstance(data, Constant)
     return _ffi_api.wrap_param(data, dtype)  # type: ignore

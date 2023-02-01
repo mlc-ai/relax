@@ -112,7 +112,8 @@ TVM_REGISTER_OP("relax.broadcast_to")
     .set_num_inputs(2)
     .add_argument("x", "Tensor", "The input tensor.")
     .add_argument("shape", "Shape", "The target shape.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoBroadcastTo);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoBroadcastTo)
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
 
 /* relax.concat */
 TVM_REGISTER_NODE_TYPE(ConcatAttrs);
@@ -300,14 +301,14 @@ InferLayoutOutput InferLayoutConcat(const Call& call,
   ICHECK(nlayout.NestedArray()[0].IsLeaf());
 
   int n_tensor = nlayout.NestedArray().size();
-  Layout layout = nlayout.NestedArray()[0].LeafValue();
+  LayoutDecision layout = nlayout.NestedArray()[0].LeafValue();
   Array<NLayout> input_layouts, output_layouts;
   for (int i = 0; i < n_tensor; ++i) {
     input_layouts.push_back(layout);
   }
   output_layouts.push_back(layout);
   ObjectPtr<ConcatAttrs> new_attrs = make_object<ConcatAttrs>(*attrs);
-  new_attrs->axis = Integer(FindAxis(layout, attrs->axis.value_or(0)->value));
+  new_attrs->axis = Integer(FindAxis(layout->layout, attrs->axis.value_or(0)->value));
   return InferLayoutOutput({NLayout(input_layouts)}, output_layouts, Attrs(new_attrs));
 }
 
@@ -381,7 +382,7 @@ InferLayoutOutput InferLayoutExpandDims(const Call& call,
   ICHECK(tensor_sinfo != nullptr) << "Invalid Call";
   ICHECK(!tensor_sinfo->IsUnknownNdim()) << "Only support static ndim for now";
 
-  Layout existing_layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision existing_layout = GetLayoutDecision(var_layout_map, call->args[0]);
   int ndim = tensor_sinfo->ndim;
   int n_new_dim = attrs->axis.size();
   int output_ndim = ndim + n_new_dim;
@@ -395,7 +396,7 @@ InferLayoutOutput InferLayoutExpandDims(const Call& call,
       new_layout.push_back('A' + i);
     }
   }
-  new_layout = TransposeStrLike(new_layout, InitialLayout(ndim), existing_layout);
+  new_layout = TransposeStrLike(new_layout, InitialLayout(ndim), existing_layout->layout);
   std::string output_layout;
   for (int i = 0, j = 0; i < output_ndim; ++i) {
     if (is_new_dim[i]) {
@@ -404,7 +405,8 @@ InferLayoutOutput InferLayoutExpandDims(const Call& call,
       output_layout.push_back(new_layout.at(j++));
     }
   }
-  return InferLayoutOutput({existing_layout}, {Layout(output_layout)}, Attrs(call->attrs));
+  return InferLayoutOutput({existing_layout}, {LayoutDecision(Layout(output_layout))},
+                           Attrs(call->attrs));
 }
 
 TVM_REGISTER_OP("relax.expand_dims")
@@ -412,6 +414,7 @@ TVM_REGISTER_OP("relax.expand_dims")
     .set_attrs_type<ExpandDimsAttrs>()
     .add_argument("x", "Tensor", "The input tensor.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoExpandDims)
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
     .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutExpandDims);
 
 // Helper function for flatten and reshape.
@@ -452,7 +455,8 @@ StructInfo InferStructInfoFlatten(const Call& call, const BlockBuilder& ctx) {
 TVM_REGISTER_OP("relax.flatten")
     .set_num_inputs(1)
     .add_argument("x", "Tensor", "The input tensor.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoFlatten);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoFlatten)
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
 
 /* relax.layout_transform */
 TVM_REGISTER_NODE_TYPE(LayoutTransformAttrs);
@@ -612,7 +616,7 @@ InferLayoutOutput InferLayoutPermuteDims(const Call& call,
   ICHECK(!tensor_sinfo->IsUnknownNdim()) << "Only support static ndim for now";
   int ndim = tensor_sinfo->ndim;
 
-  Layout existing_layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision existing_layout = GetLayoutDecision(var_layout_map, call->args[0]);
   Array<Integer> order;
   if (attrs->axes.defined()) {
     order = attrs->axes.value();
@@ -626,14 +630,15 @@ InferLayoutOutput InferLayoutPermuteDims(const Call& call,
   for (const auto& axis : order) {
     order_str.push_back(axis->value + 'A');
   }
-  String new_axes = TransposeStrLike(InitialLayout(ndim).name(), existing_layout, order_str);
+  String new_axes =
+      TransposeStrLike(InitialLayout(ndim).name(), existing_layout->layout, order_str);
   Array<Integer> new_order;
   for (size_t i = 0; i < new_axes.size(); ++i) {
     new_order.push_back(Integer(new_axes.at(i) - 'A'));
   }
   ObjectPtr<PermuteDimsAttrs> new_attrs = make_object<PermuteDimsAttrs>(*attrs);
   new_attrs->axes = new_order;
-  return InferLayoutOutput({existing_layout}, {InitialLayout(ndim)}, Attrs(new_attrs));
+  return InferLayoutOutput({existing_layout}, {InitialLayoutDecision(ndim)}, Attrs(new_attrs));
 }
 
 TVM_REGISTER_OP("relax.permute_dims")
@@ -641,6 +646,7 @@ TVM_REGISTER_OP("relax.permute_dims")
     .set_num_inputs(1)
     .add_argument("x", "Tensor", "The input tensor.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoPermuteDims)
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
     .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutPermuteDims);
 
 /* relax.reshape */
@@ -759,7 +765,8 @@ TVM_REGISTER_OP("relax.reshape")
     .set_num_inputs(2)
     .add_argument("x", "Tensor", "The input tensor.")
     .add_argument("shape", "Shape", "The input new shape.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoReshape);
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoReshape)
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
 
 /* relax.split */
 TVM_REGISTER_NODE_TYPE(SplitAttrs);
@@ -877,9 +884,9 @@ InferLayoutOutput InferLayoutSplit(const Call& call,
   ICHECK(tensor_sinfo != nullptr) << "Invalid Call";
   ICHECK(!tensor_sinfo->IsUnknownNdim()) << "Only support known ndim";
 
-  Layout existing_layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision existing_layout = GetLayoutDecision(var_layout_map, call->args[0]);
   ObjectPtr<SplitAttrs> new_attrs = make_object<SplitAttrs>(*attrs);
-  new_attrs->axis = FindAxis(existing_layout, attrs->axis);
+  new_attrs->axis = FindAxis(existing_layout->layout, attrs->axis);
   StructInfo out_sinfo = InferStructInfoSplit(call, BlockBuilder::Create(IRModule()));
   const auto* out_tuple = out_sinfo.as<TupleStructInfoNode>();
   ICHECK(out_tuple != nullptr) << "Invalid Call";
@@ -1028,8 +1035,8 @@ InferLayoutOutput InferLayoutSqueeze(const Call& call,
     }
   }
 
-  Layout existing_layout = GetLayout(var_layout_map, call->args[0]);
-  String new_axis_str = TransposeStrLike(axis_str, InitialLayout(ndim), existing_layout);
+  LayoutDecision existing_layout = GetLayoutDecision(var_layout_map, call->args[0]);
+  String new_axis_str = TransposeStrLike(axis_str, InitialLayout(ndim), existing_layout->layout);
   Array<Integer> new_axis;
   for (size_t i = 0; i < new_axis_str.size(); ++i) {
     if (new_axis_str.at(i) == '1') {
@@ -1042,7 +1049,8 @@ InferLayoutOutput InferLayoutSqueeze(const Call& call,
 
   ObjectPtr<SqueezeAttrs> new_attrs = make_object<SqueezeAttrs>(*attrs);
   new_attrs->axis = new_axis;
-  return InferLayoutOutput({existing_layout}, {Layout(output_layout)}, Attrs(new_attrs));
+  return InferLayoutOutput({existing_layout}, {LayoutDecision(Layout(output_layout))},
+                           Attrs(new_attrs));
 }
 
 TVM_REGISTER_OP("relax.squeeze")
@@ -1050,6 +1058,7 @@ TVM_REGISTER_OP("relax.squeeze")
     .set_attrs_type<SqueezeAttrs>()
     .add_argument("x", "Tensor", "The input tensor.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoSqueeze)
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow)
     .set_attr<FRelaxInferLayout>("FRelaxInferLayout", InferLayoutSqueeze);
 
 void CheckCollapseShape(const Call& call, const BlockBuilder& ctx,

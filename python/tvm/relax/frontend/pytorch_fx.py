@@ -37,7 +37,6 @@ class TorchFXImporter:
 
         self.env: Dict[fx.node.Node, relax.Expr] = {}
         self.params: Dict[torch.Tensor, relax.Constant] = {}
-        self.params_transpose: Dict[torch.Tensor, relax.Constant] = {}
         self.named_modules: Dict[str, torch.Module] = None
         self.block_builder: relax.BlockBuilder = None
         self.create_convert_map()
@@ -74,6 +73,7 @@ class TorchFXImporter:
 
     @staticmethod
     def _convert_torch_tensor_to_relax(tensor: torch.Tensor) -> relax.Var:
+        tensor = tensor.detach().cpu()
         shape = tensor.data.shape
         dtype = TorchFXImporter._convert_data_type(str(tensor.data.dtype))
         return relax.const(tensor.data.numpy(), relax.TensorStructInfo(shape, dtype))
@@ -287,12 +287,7 @@ class TorchFXImporter:
     def _linear(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         module = self.named_modules[node.target]
-        if module.weight not in self.params_transpose:
-            self.params_transpose[module.weight] = self._convert_torch_tensor_to_relax(
-                module.weight.T
-            )
-
-        weight_T = self.params_transpose[module.weight]
+        weight_T = relax.op.permute_dims(self.params[module.weight], [1, 0])
         dense = self._matmul_impl(x, weight_T)
 
         if module.bias is None:
@@ -324,12 +319,8 @@ class TorchFXImporter:
             return conv2d
 
         bias = self.params[module.bias]
-        if len(bias.data.shape) == 1:
-            bias_data = bias.data.numpy().reshape(1, -1, 1, 1)
-            reshaped_bias = relax.const(
-                bias_data, relax.TensorStructInfo(bias_data.shape, bias.data.dtype)
-            )
-            bias = self.params[module.bias] = reshaped_bias
+        assert len(self.shape_of(bias)) == 1
+        bias = relax.op.reshape(bias, (1, -1, 1, 1))
 
         return self.block_builder.emit(relax.op.add(conv2d, bias))
 
@@ -709,22 +700,26 @@ class TorchFXImporter:
             input_var = relax.Var(name, relax.TensorStructInfo(shape, dtype))
             inputs[name] = input_var
 
-        # Translate model parameters.
-        for _, param in model.named_parameters():
-            shape = param.data.shape
-            dtype = self._convert_data_type(str(param.data.dtype))
-            if dtype in ("float32", "float16"):
-                self.params[param] = relax.const(
-                    param.data.cpu().numpy(), relax.TensorStructInfo(shape, dtype)
-                )
-            else:
-                raise ValueError("Unsupported data type for model parameters: %s" % dtype)
-
         # Initialize the block builder with a function and a dataflow block.
         self.block_builder = relax.BlockBuilder()
         with self.block_builder.function(name="main", params=list(inputs.values())):
             output = None
             with self.block_builder.dataflow():
+                # Translate model parameters.
+                for _, param in model.named_parameters():
+                    shape = param.data.shape
+                    dtype = self._convert_data_type(str(param.data.dtype))
+                    if dtype in ("float32", "float16"):
+                        self.params[param] = relax.const(
+                            param.data.cpu().numpy(), relax.TensorStructInfo(shape, dtype)
+                        )
+                        if dtype != "float32":
+                            self.params[param] = self.block_builder.emit(
+                                relax.op.wrap_param(self.params[param], "float32")
+                            )
+                    else:
+                        raise ValueError("Unsupported data type for model parameters: %s" % dtype)
+                # Translate the model.
                 for node in graph.nodes:
                     if node.op == "placeholder":
                         assert node.name in inputs, "The function input {} is not found".format(

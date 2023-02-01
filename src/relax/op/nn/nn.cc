@@ -69,9 +69,9 @@ InferLayoutOutput InferLayoutSoftmax(const Call& call,
   const auto* attrs = call->attrs.as<SoftmaxAttrs>();
   ICHECK(attrs) << "Invalid Call";
 
-  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision layout = GetLayoutDecision(var_layout_map, call->args[0]);
   ObjectPtr<SoftmaxAttrs> new_attrs = make_object<SoftmaxAttrs>(*attrs);
-  new_attrs->axis = FindAxis(layout, attrs->axis);
+  new_attrs->axis = FindAxis(layout->layout, attrs->axis);
   return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
 }
 
@@ -211,14 +211,14 @@ InferLayoutOutput InferLayoutBatchNorm(const Call& call,
     const auto* tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[i]);
     ICHECK(tensor_sinfo != nullptr) << "Invalid Call";
     ICHECK(!tensor_sinfo->IsUnknownNdim()) << "Only support known ndim";
-    initial_layouts.push_back(InitialLayout(tensor_sinfo->ndim));
+    initial_layouts.push_back(InitialLayoutDecision(tensor_sinfo->ndim));
   }
   const auto* attrs = call->attrs.as<BatchNormAttrs>();
   ICHECK(attrs) << "Invalid Call";
 
-  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision layout = GetLayoutDecision(var_layout_map, call->args[0]);
   ObjectPtr<BatchNormAttrs> new_attrs = make_object<BatchNormAttrs>(*attrs);
-  new_attrs->axis = FindAxis(layout, attrs->axis);
+  new_attrs->axis = FindAxis(layout->layout, attrs->axis);
   return InferLayoutOutput(
       {layout, initial_layouts[1], initial_layouts[2], initial_layouts[3], initial_layouts[4]},
       {{layout, initial_layouts[3], initial_layouts[4]}}, Attrs(new_attrs));
@@ -272,16 +272,16 @@ InferLayoutOutput InferLayoutLayerNorm(const Call& call,
     const auto* tensor_sinfo = GetStructInfoAs<TensorStructInfoNode>(call->args[i]);
     ICHECK(tensor_sinfo != nullptr) << "Invalid Call";
     ICHECK(!tensor_sinfo->IsUnknownNdim()) << "Only support known ndim";
-    initial_layouts.push_back(InitialLayout(tensor_sinfo->ndim));
+    initial_layouts.push_back(InitialLayoutDecision(tensor_sinfo->ndim));
   }
   const auto* attrs = call->attrs.as<LayerNormAttrs>();
   ICHECK(attrs) << "Invalid Call";
 
-  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision layout = GetLayoutDecision(var_layout_map, call->args[0]);
   ObjectPtr<LayerNormAttrs> new_attrs = make_object<LayerNormAttrs>(*attrs);
   std::vector<Integer> new_axis;
   for (const auto& axis : attrs->axes) {
-    new_axis.push_back(FindAxis(layout, axis->value));
+    new_axis.push_back(FindAxis(layout->layout, axis->value));
   }
   new_attrs->axes = std::move(new_axis);
   return InferLayoutOutput({layout, initial_layouts[1], initial_layouts[2]}, {layout},

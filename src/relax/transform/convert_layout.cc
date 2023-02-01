@@ -82,9 +82,9 @@ class LayoutConvertMutator : public ExprMutator {
  private:
   Array<Integer> LayoutToIntegers(const Layout& layout) {
     Array<Integer> ret;
-    Layout src = InitialLayout(layout.ndim());
+    LayoutDecision src = InitialLayoutDecision(layout.ndim());
     for (size_t i = 0; i < layout.ndim(); ++i) {
-      ret.push_back(Integer(src.IndexOf(layout[i])));
+      ret.push_back(Integer(src->layout.IndexOf(layout[i])));
     }
     return ret;
   }
@@ -94,14 +94,16 @@ class LayoutConvertMutator : public ExprMutator {
       NLayout from = layouts[0], to = layouts[1];
       if (NLayoutEqual()(from, to)) return expr;
       // If not both from and to are dynamic, then none of them can be dynamic.
-      ICHECK(!NLayoutEqual()(from, Layout("")) && !NLayoutEqual()(to, Layout("")))
+      ICHECK(!NLayoutEqual()(from, LayoutDecision::InitUnknownDim()) &&
+             !NLayoutEqual()(to, LayoutDecision::InitUnknownDim()))
           << "Cannot convert when exactly one of the layouts is dynamic";
       const auto* tensor = GetStructInfoAs<TensorStructInfoNode>(expr);
       ICHECK(tensor != nullptr) << "Expect a tensor, but got: " << expr;
-      Layout axes = TransposeLike(InitialLayout(tensor->ndim), from.LeafValue(), to.LeafValue());
+      Layout axes = TransposeLike(InitialLayoutDecision(tensor->ndim)->layout,
+                                  from.LeafValue()->layout, to.LeafValue()->layout);
       return permute_dims(expr, LayoutToIntegers(axes));
     };
-    return TransformTupleLeaf<Layout>(
+    return TransformTupleLeaf<LayoutDecision>(
         VarReplacer::Replace(expr, var_remap_),
         std::array<NLayout, 2>({GetNLayout(var_layout_map_, expr), to}), fvisitleaf);
   }
@@ -144,8 +146,10 @@ class LayoutConvertMutator : public ExprMutator {
 
   bool HasUnknownDimTensor(const NLayout& nlayout) {
     bool find = false;
-    auto fvisit = [&](const Layout& layout) { find = find | (NLayoutEqual()(layout, Layout(""))); };
-    ForEachLeaf<Layout>(nlayout, fvisit);
+    auto fvisit = [&](const LayoutDecision& layout) {
+      find = find | (NLayoutEqual()(layout, LayoutDecision::InitUnknownDim()));
+    };
+    ForEachLeaf<LayoutDecision>(nlayout, fvisit);
     return find;
   }
 
@@ -189,7 +193,7 @@ class LayoutConvertMutator : public ExprMutator {
         if (IsNestedTensor(arg)) {
           input_layout.push_back(InitialNLayout(arg));
         } else {
-          input_layout.push_back(Layout::Undef());
+          input_layout.push_back(LayoutDecision::InitUnknownDim());
         }
       }
       Array<Expr> new_args = RewriteArgs(call_node->args, std::move(input_layout));
@@ -219,7 +223,7 @@ class LayoutConvertMutator : public ExprMutator {
         // Use the current realized layout to group the tuple;
         input_layout.push_back(GetNLayout(var_layout_map_, field));
       } else {
-        input_layout.push_back(Layout::Undef());
+        input_layout.push_back(LayoutDecision::InitUnknownDim());
       }
     }
     Array<Expr> new_fields = RewriteArgs(val->fields, std::move(input_layout));

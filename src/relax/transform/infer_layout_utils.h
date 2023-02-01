@@ -52,13 +52,53 @@ namespace tvm {
 namespace relax {
 
 using tir::Layout;
-using NLayout = NestedMsg<Layout>;
+
+/*!
+ * \brief A layout decision node that holds the layout decision of the tensor.
+ * \param layout The layout of the tensor.
+ */
+class LayoutDecisionNode : public Object {
+ public:
+  /*! \brief The layout decision of the tensor. */
+  Layout layout;
+  /*! \brief Whether the dim of tensor is unknown. */
+  bool is_unknown_dim = false;
+
+  void VisitAttrs(tvm::AttrVisitor* v) { v->Visit("layout", &layout); }
+
+  TVM_DECLARE_BASE_OBJECT_INFO(LayoutDecisionNode, Object);
+
+  static constexpr const char* _type_key = "relax.transform.LayoutDecision";
+};
+
+class LayoutDecision : public ObjectRef {
+ public:
+  LayoutDecision(Layout layout, bool is_unknown_dim = false) {  // NOLINT(*)
+    auto n = make_object<LayoutDecisionNode>();
+    n->layout = std::move(layout);
+    n->is_unknown_dim = is_unknown_dim;
+    data_ = n;
+  }
+
+  static LayoutDecision InitUnknownDim() { return LayoutDecision(Layout::Undef(), true); }
+
+  inline std::string name() const {
+    if (operator->()->is_unknown_dim) {
+      return "unknown_dim";
+    }
+    return operator->()->layout.name();
+  }
+
+  TVM_DEFINE_OBJECT_REF_METHODS(LayoutDecision, ObjectRef, LayoutDecisionNode);
+};
+
+using NLayout = NestedMsg<LayoutDecision>;
 
 /*!
  * \brief An output structure to hold results from FInferCorrectLayout calls.
- * \tparam input_layouts Inferred input layouts.
- * \tparam output_layouts Inferred output layouts.
- * \tparam new_attrs Updated attributes consistent with inferred layouts.
+ * \param input_layouts Inferred input layouts.
+ * \param output_layouts Inferred output layouts.
+ * \param new_attrs Updated attributes consistent with inferred layouts.
  */
 class InferLayoutOutputNode : public Object {
  public:
@@ -79,7 +119,8 @@ class InferLayoutOutputNode : public Object {
 
 class InferLayoutOutput : public ObjectRef {
  public:
-  InferLayoutOutput(Array<NLayout> input_layouts, Array<NLayout> output_layouts, Attrs new_attrs) {
+  explicit InferLayoutOutput(Array<NLayout> input_layouts, Array<NLayout> output_layouts,
+                             Attrs new_attrs) {
     auto n = make_object<InferLayoutOutputNode>();
     n->input_layouts = std::move(input_layouts);
     n->output_layouts = std::move(output_layouts);
@@ -91,12 +132,11 @@ class InferLayoutOutput : public ObjectRef {
 
 struct NLayoutEqual {
   bool operator()(const NLayout& a, const NLayout& b) const {
-    auto layout_equal = [](const Layout& a, const Layout& b) {
+    auto layout_equal = [](const LayoutDecision& a, const LayoutDecision& b) {
       if (a.defined() && b.defined()) {
-        return a.same_as(b) || a.name() == b.name();
-      } else {
-        return a.defined() == b.defined();
+        return a.name() == b.name();
       }
+      return a.defined() == b.defined();
     };
     return Equal(a, b, layout_equal);
   }
@@ -122,21 +162,28 @@ using FRelaxInferLayout = runtime::TypedPackedFunc<InferLayoutOutput(
 Layout InitialLayout(int ndim);
 
 /*!
- * \brief Initialize a nested layout given the struct info.
+ * \brief Initialize a layout decision given the number of dimensions.
+ * \param ndim The number of dimensions.
+ * \return The initialized layout decision.
+ */
+LayoutDecision InitialLayoutDecision(int ndim);
+
+/*!
+ * \brief Initialize a nested layout decision given the struct info.
  * \param sinfo The sinfo.
- * \return The initialized nested layout.
+ * \return The initialized nested layout decision.
  */
 NLayout InitialNLayout(const StructInfo& sinfo);
 
 /*!
- * \brief Initialize a nested layout given expression
+ * \brief Initialize a nested layout decision given expression
  * \param sinfo The expr
- * \return The initialized nested layout.
+ * \return The initialized nested layout decision.
  */
 NLayout InitialNLayout(const Expr& expr);
 
 /*!
- * \brief Transpose the input layout like the src layout to the dst layout.
+ * \brief Transpose the input layout  like the src layout to the dst layout.
  * \param input The input layout.
  * \param src The source layout.
  * \param dst The destination layout.
@@ -163,18 +210,18 @@ String TransposeStrLike(const String& input, const Layout& src, const Layout& ds
 int FindAxis(const Layout& dst, int axis);
 
 /*!
- * \brief Get the layout of the expr. The expr must be a Tensor.
+ * \brief Get the layout decision of the expr. The expr must be a Tensor.
  * \param var_layout_map The layout of the variables.
  * \param arg The expr.
- * \return The layout of the expr.
+ * \return The layout decision of the expr.
  */
-Layout GetLayout(const VarLayoutMap& var_layout_map, const Expr& arg);
+LayoutDecision GetLayoutDecision(const VarLayoutMap& var_layout_map, const Expr& arg);
 
 /*!
- * \brief Get the nested layout of the expr. The expr must be a nested Tensor.
+ * \brief Get the nested layout decision of the expr. The expr must be a nested Tensor.
  * \param var_layout_map The layout of the variables.
  * \param arg The expr.
- * \return The nested layout of the expr.
+ * \return The nested layout decision of the expr.
  */
 NLayout GetNLayout(const VarLayoutMap& var_layout_map, const Expr& arg);
 
@@ -185,6 +232,14 @@ NLayout GetNLayout(const VarLayoutMap& var_layout_map, const Expr& arg);
  * \return True if the op is not in the desired layout.
  */
 bool NoDesiredLayout(const Call& call, const Map<String, Array<String>>& desired_layouts);
+
+/*!
+ * \brief Let a tensor with ndim to follow the src layout decision.
+ * \param src The source layout decision.
+ * \param dst_ndim The number of dimensions of the tensor.
+ * \return The layout decision of the tensor.
+ */
+LayoutDecision FollowDecision(const LayoutDecision& src, int dst_ndim);
 
 }  // namespace relax
 }  // namespace tvm

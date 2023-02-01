@@ -51,25 +51,36 @@ int FindAxis(const Layout& dst, int axis) {
 }
 
 Layout InitialLayout(int ndim) {
-  if (ndim == kUnknownNDim) {
-    return Layout("");
-  }
   ICHECK(ndim > 0 && ndim <= 26) << "Only support up to 26 dimensions";
+  return Layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ").SubLayout(0, ndim);
+}
+
+LayoutDecision InitialLayoutDecision(int ndim) {
+  if (ndim == kUnknownNDim) {
+    return LayoutDecision::InitUnknownDim();
+  }
+  ICHECK(ndim >= 0 && ndim <= 26) << "Only support up to 26 dimensions";
   return Layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ").SubLayout(0, ndim);
 }
 
 NLayout InitialNLayout(const StructInfo& sinfo) {
   auto fmapleaf = [&](const StructInfo& sinfo) -> NLayout {
     if (const auto* tensor_sinfo = sinfo.as<TensorStructInfoNode>()) {
-      return NLayout(InitialLayout(tensor_sinfo->ndim));
+      return NLayout(InitialLayoutDecision(tensor_sinfo->ndim));
     }
     LOG(FATAL) << "Cannot get layout for " << sinfo;
-    return Layout::Undef();
+    return LayoutDecision::InitUnknownDim();
   };
-  return MapToNestedMsg<Layout>(sinfo, fmapleaf);
+  return MapToNestedMsg<LayoutDecision>(sinfo, fmapleaf);
 }
 
 NLayout InitialNLayout(const Expr& expr) { return InitialNLayout(GetStructInfo(expr)); }
+
+LayoutDecision GetLayoutDecision(const VarLayoutMap& var_layout_map, const Expr& arg) {
+  NLayout nlayout = GetNLayout(var_layout_map, arg);
+  ICHECK(nlayout.IsLeaf()) << "Cannot get layout for " << arg;
+  return nlayout.LeafValue();
+}
 
 NLayout GetNLayout(const VarLayoutMap& var_layout_map, const Expr& arg) {
   auto fmapleaf = [&](const Expr& expr) -> NLayout {
@@ -79,18 +90,12 @@ NLayout GetNLayout(const VarLayoutMap& var_layout_map, const Expr& arg) {
         return (*it).second;
       }
     } else if (const auto* constant = expr.as<ConstantNode>()) {
-      return InitialLayout(constant->data.Shape().size());
+      return InitialLayoutDecision(constant->data.Shape().size());
     }
     LOG(FATAL) << "Cannot get layout for " << expr;
-    return Layout::Undef();
+    return LayoutDecision::InitUnknownDim();
   };
-  return MapToNestedMsg<Layout>(arg, fmapleaf);
-}
-
-Layout GetLayout(const VarLayoutMap& var_layout_map, const Expr& arg) {
-  NLayout nlayout = GetNLayout(var_layout_map, arg);
-  ICHECK(nlayout.IsLeaf()) << "Cannot get layout for " << arg;
-  return nlayout.LeafValue();
+  return MapToNestedMsg<LayoutDecision>(arg, fmapleaf);
 }
 
 bool NoDesiredLayout(const Call& call, const Map<String, Array<String>>& desired_layouts) {
@@ -98,6 +103,21 @@ bool NoDesiredLayout(const Call& call, const Map<String, Array<String>>& desired
   if (op_node == nullptr) return false;
   const auto& it = desired_layouts.find(op_node->name);
   return it == desired_layouts.end();
+}
+
+LayoutDecision FollowDecision(const LayoutDecision& src, int dst_ndim) {
+  int src_ndim = src->layout.ndim();
+  // broadcast case
+  if (src_ndim == dst_ndim) {
+    return src;
+  } else {
+    ICHECK_LT(src_ndim, dst_ndim) << "Cannot broadcast from " << src_ndim << " to " << dst_ndim;
+    std::string layout = InitialLayout(dst_ndim - src_ndim).name();
+    for (int i = 0; i < src_ndim; ++i) {
+      layout.push_back(src->layout.name()[i] + dst_ndim - src_ndim);
+    }
+    return LayoutDecision(Layout(layout));
+  }
 }
 
 }  // namespace relax
