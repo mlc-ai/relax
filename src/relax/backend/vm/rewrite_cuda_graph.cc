@@ -48,6 +48,7 @@ class OutputCollector : public ExprVisitor {
     VisitExpr(seq->body);
   }
 
+ private:
   std::unordered_set<const VarNode*> outputs_;
   bool is_visiting_output_ = true;
 };
@@ -290,6 +291,7 @@ class StaticRegionExtractor : public ExprVisitor {
     scope_.graph = DependencyGraph();
   }
 
+ private:
   IRModule mod_;
   std::unordered_set<const VarNode*> outputs_;
   ScopeInfo scope_;
