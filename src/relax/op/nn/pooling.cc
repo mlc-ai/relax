@@ -120,10 +120,10 @@ InferLayoutOutput InferLayoutMaxPool2d(const Call& call,
   const auto* attrs = call->attrs.as<MaxPool2DAttrs>();
   ICHECK(attrs) << "Invalid Call";
 
-  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision layout = GetLayoutDecision(var_layout_map, call->args[0]);
   ObjectPtr<MaxPool2DAttrs> new_attrs = make_object<MaxPool2DAttrs>(*attrs);
-  new_attrs->layout = TransposeLike(attrs->layout, InitialLayout(4), layout).name();
-  new_attrs->out_layout = TransposeLike(attrs->out_layout, InitialLayout(4), layout).name();
+  new_attrs->layout = TransposeLike(attrs->layout, InitialLayout(4), layout->layout).name();
+  new_attrs->out_layout = TransposeLike(attrs->out_layout, InitialLayout(4), layout->layout).name();
   return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
 }
 
@@ -203,10 +203,10 @@ InferLayoutOutput InferLayoutAdaptiveAvgPool2D(const Call& call,
   const auto* attrs = call->attrs.as<AdaptivePool2DAttrs>();
   ICHECK(attrs) << "Invalid Call";
 
-  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision layout = GetLayoutDecision(var_layout_map, call->args[0]);
   ObjectPtr<AdaptivePool2DAttrs> new_attrs = make_object<AdaptivePool2DAttrs>(*attrs);
-  new_attrs->layout = TransposeLike(attrs->layout, InitialLayout(4), layout).name();
-  new_attrs->out_layout = TransposeLike(attrs->out_layout, InitialLayout(4), layout).name();
+  new_attrs->layout = TransposeLike(attrs->layout, InitialLayout(4), layout->layout).name();
+  new_attrs->out_layout = TransposeLike(attrs->out_layout, InitialLayout(4), layout->layout).name();
   return InferLayoutOutput({layout}, {layout}, Attrs(new_attrs));
 }
 

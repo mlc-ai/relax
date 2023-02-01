@@ -725,13 +725,12 @@ class SplitMutator : public ExprMutator {
       for (int p : arg_partition[0]) {
         args1.push_back(GetCallTIRArgs(call->args[1])[p]);
       }
-      ShapeExpr shape1(func1->buffer_map[func1->params.back()]->shape);
       // replace the function in the module with the library kernel
       GlobalVar gv1 = builder_->AddFunction(func1, "library_primfunc");
       builder_->UpdateFunction(gv1, CodegenWithLibrary(func1.get(), gv1->name_hint));
       tir::Buffer intermediate_buffer = func1->buffer_map.at(func1->params.back());
       DataType dtype = intermediate_buffer->dtype;
-      Call call1(call_tir_op_, {gv1, Tuple(args1), shape1}, call->attrs,
+      Call call1(call_tir_op_, {gv1, Tuple(args1)}, call->attrs,
                  {TensorStructInfo(ShapeExpr(intermediate_buffer->shape), dtype)});
       Var call_var1 = builder_->Emit(call1);
       // emit the second call to the rest of the function
@@ -741,7 +740,7 @@ class SplitMutator : public ExprMutator {
         args2.push_back(GetCallTIRArgs(call->args[1])[p]);
       }
       GlobalVar gv2 = builder_->AddFunction(func2, "unfused_epilogue");
-      Call call2(call_tir_op_, {gv2, Tuple(args2), call->args[2]}, call->attrs, call->sinfo_args);
+      Call call2(call_tir_op_, {gv2, Tuple(args2)}, call->attrs, call->sinfo_args);
       builder_->UpdateFunction(gv, WithoutAttr(func, "global_symbol"));
       return call2;
     }

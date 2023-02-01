@@ -95,11 +95,11 @@ InferLayoutOutput InferLayoutEwiseFMA(const Call& call,
                                       const VarLayoutMap& var_layout_map) {
   ICHECK(NoDesiredLayout(call, desired_layouts));
 
-  Layout layout0 = GetLayout(var_layout_map, call->args[0]);
-  Layout layout1 = GetLayout(var_layout_map, call->args[1]);
-  Layout layout2 = GetLayout(var_layout_map, call->args[2]);
-  Layout layout = layout0;
-  if (layout1.Equals(layout2)) {
+  LayoutDecision layout0 = GetLayoutDecision(var_layout_map, call->args[0]);
+  LayoutDecision layout1 = GetLayoutDecision(var_layout_map, call->args[1]);
+  LayoutDecision layout2 = GetLayoutDecision(var_layout_map, call->args[2]);
+  LayoutDecision layout = layout0;
+  if (NLayoutEqual()(layout1, layout2)) {
     layout = layout1;
   }
   return InferLayoutOutput({layout, layout, layout}, {layout}, Attrs(call->attrs));

@@ -1725,5 +1725,94 @@ def test_view():
     verify_model(View(), input_info, {}, expected1)
 
 
+@tvm.testing.requires_gpu
+def test_mixed_precision():
+    import torch
+    from torch.nn import Module
+
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    # nn.Linear
+    class Dense1(Module):
+        def __init__(self):
+            super().__init__()
+            self.linear = torch.nn.Linear(10, 7, bias=True)
+
+        def forward(self, input):
+            return self.linear(input)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            input_1: R.Tensor((1, 3, 10, 10), dtype="float32"),
+            w1: R.Tensor((7, 10), dtype="float16"),
+            w2: R.Tensor((1, 7), dtype="float16"),
+        ) -> R.Tensor((1, 3, 10, 7), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((7, 10), dtype="float32") = R.wrap_param(w1, dtype="float32")
+                lv1: R.Tensor((7,), dtype="float32") = R.wrap_param(w2, dtype="float32")
+                lv2: R.Tensor((10, 7), dtype="float32") = R.permute_dims(lv, axes=None)
+                lv3: R.Tensor((1, 3, 10, 7), dtype="float32") = R.matmul(
+                    input_1, lv2, out_dtype="float32"
+                )
+                lv4: R.Tensor((1, 3, 10, 7), dtype="float32") = R.add(lv3, lv1)
+                gv: R.Tensor((1, 3, 10, 7), dtype="float32") = lv4
+                R.output(gv)
+            return gv
+
+    input_info = [([1, 3, 10, 10], "float32")]
+    model = Dense1().half()
+    binding = {"w1": model.linear.weight.numpy(), "w2": model.linear.bias.numpy()}
+    verify_model(model, input_info, binding, expected1)
+
+    # nn.Conv2d
+    class Conv2D1(Module):
+        def __init__(self):
+            super().__init__()
+            self.conv = torch.nn.Conv2d(3, 6, 7, bias=True)
+
+        def forward(self, input):
+            return self.conv(input)
+
+    @tvm.script.ir_module
+    class expected2:
+        @R.function
+        def main(
+            input_1: R.Tensor((1, 3, 10, 10), dtype="float32"),
+            w1: R.Tensor((6, 3, 7, 7), dtype="float32"),
+            w2: R.Tensor((6,), dtype="float32"),
+        ) -> R.Tensor((1, 6, 4, 4), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((6, 3, 7, 7), dtype="float32") = R.wrap_param(w1, dtype="float32")
+                lv1: R.Tensor((6,), dtype="float32") = R.wrap_param(w2, dtype="float32")
+                lv2: R.Tensor((1, 6, 4, 4), dtype="float32") = R.nn.conv2d(
+                    input_1,
+                    lv,
+                    strides=[1, 1],
+                    padding=[0, 0, 0, 0],
+                    dilation=[1, 1],
+                    groups=1,
+                    data_layout="NCHW",
+                    kernel_layout="OIHW",
+                    out_layout="NCHW",
+                    out_dtype="float32",
+                )
+                lv3: R.Tensor((1, 6, 1, 1), dtype="float32") = R.reshape(lv1, (1, 6, 1, 1))
+                lv4: R.Tensor((1, 6, 4, 4), dtype="float32") = R.add(lv2, lv3)
+                gv: R.Tensor((1, 6, 4, 4), dtype="float32") = lv4
+                R.output(gv)
+            return gv
+
+    input_info = [([1, 3, 10, 10], "float32")]
+
+    model = Conv2D1().half()
+    binding = {"w1": model.conv.weight.numpy(), "w2": model.conv.bias.numpy()}
+    verify_model(model, input_info, binding, expected2)
+
+
 if __name__ == "__main__":
     tvm.testing.main()

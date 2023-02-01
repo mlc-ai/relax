@@ -121,7 +121,7 @@ InferLayoutOutput InferLayoutUnaryEwise(const Call& call,
                                         const Map<String, Array<String>>& desired_layouts,
                                         const VarLayoutMap& var_layout_map) {
   ICHECK(NoDesiredLayout(call, desired_layouts));
-  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision layout = GetLayoutDecision(var_layout_map, call->args[0]);
   return InferLayoutOutput({layout}, {layout}, Attrs(call->attrs));
 }
 

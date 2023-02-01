@@ -145,12 +145,16 @@ class DTypeDecisionCollector : public ExprVisitor {
 
   // merge the message for all vars in the expr list
   void RequireArgsToType(Array<Expr> args, DataType to) {
+    std::vector<Expr> arg_arr;
     std::vector<NType> to_arr;
     for (const Expr& arg : args) {
-      // Note that this implicitly requires all arg to be nested tensors.
-      to_arr.push_back(NTypeFrom(arg, to));
+      if (IsNestedTensor(arg)) {
+        // only require the nested tensor args
+        arg_arr.push_back(arg);
+        to_arr.push_back(NTypeFrom(arg, to));
+      }
     }
-    RequireArgsToType(args, to_arr);
+    RequireArgsToType(std::move(arg_arr), std::move(to_arr));
   }
 
   void VisitVars_(const VarNode* op) {
@@ -280,7 +284,11 @@ class ToMixedPrecisionRewriter : public ExprMutator {
     // If cur_realize is not rewritten, we don't need to emit a new var
     if (!rewrite.same_as(cur_realize)) {
       // Emit a new var, and update the var remap
-      var_remap_[var->vid] = builder_->Emit(rewrite);
+      if (!var->IsInstance<DataflowVarNode>() && builder_->CurrentBlockIsDataFlow()) {
+        var_remap_[var->vid] = builder_->EmitOutput(rewrite);
+      } else {
+        var_remap_[var->vid] = builder_->Emit(rewrite);
+      }
     }
   }
 
@@ -312,7 +320,7 @@ class ToMixedPrecisionRewriter : public ExprMutator {
     }
 
     // Override here to realize the params, and build a binding block
-    builder_->BeginBindingBlock();
+    builder_->BeginDataflowBlock();
     for (const auto& param : op->params) {
       RealizeVarDef(param);
     }
@@ -337,29 +345,6 @@ class ToMixedPrecisionRewriter : public ExprMutator {
       return Function(params, body, op->ret_struct_info, op->attrs);
     }
     return ExprMutator::VisitExpr_(op);
-  }
-
-  // Detect if all the args are realized to fp16
-  bool AllFp16Available(const Array<Expr>& args) {
-    // TODO(@bohan): implements a tuple visitor that accepts a leaf handler to replace this logic
-    for (const Expr& arg : args) {
-      // arg is either a var or a constant or a tuple
-      if (const auto* var_node = arg.as<VarNode>()) {
-        // arg is a var
-        Var realized = GetRealized(GetRef<Var>(var_node));
-        NType realized_sinfo = NTypeFrom(realized);
-        NType realized_fp16 = NTypeFrom(realized, fp16_);
-        if (!NTypeEqual()(realized_fp16, realized_sinfo)) {
-          return false;
-        }
-      } else if (const auto* tuple_node = arg.as<TupleNode>()) {
-        if (!AllFp16Available(tuple_node->fields)) {
-          return false;
-        }
-      }
-      // constant can always be casted, so we don't need to check it
-    }
-    return true;
   }
 
   void VisitBinding_(const VarBindingNode* binding, const CallNode* call_node) override {
