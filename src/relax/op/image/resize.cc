@@ -109,10 +109,10 @@ InferLayoutOutput InferLayoutResize2d(const Call& call,
   const auto* attrs = call->attrs.as<Resize2DAttrs>();
   ICHECK(attrs) << "Invalid Call";
 
-  Layout layout = GetLayout(var_layout_map, call->args[0]);
+  LayoutDecision layout = GetLayoutDecision(var_layout_map, call->args[0]);
   ObjectPtr<Resize2DAttrs> new_attrs = make_object<Resize2DAttrs>(*attrs);
-  new_attrs->layout = TransposeLike(attrs->layout, InitialLayout(4), layout).name();
-  return InferLayoutOutput({layout, Layout::Undef()}, {layout}, Attrs(new_attrs));
+  new_attrs->layout = TransposeLike(attrs->layout, InitialLayout(4), layout->layout).name();
+  return InferLayoutOutput({layout, LayoutDecision(Layout::Undef())}, {layout}, Attrs(new_attrs));
 }
 
 TVM_REGISTER_OP("relax.image.resize2d")

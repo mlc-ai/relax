@@ -77,6 +77,7 @@ OP_PATTERN_ATTR_LIST = {
 
 def cutlass_codegen_with_match_results(match_results: List[MatchResult]):
     """generate cutlass code with match results"""
+    assert len(match_results) > 0
     # add shape into attr
     if match_results[0].pattern in DENSE_LIST:
         A_dense, B_dense, C_dense = match_results[0].matched_buffers
@@ -93,7 +94,7 @@ def cutlass_codegen_with_match_results(match_results: List[MatchResult]):
         attr["m"] = m
         attr["n"] = n
         attr["k"] = k
-    elif match_results[1].pattern in CONV2D_LIST:
+    elif len(match_results) >= 1 and match_results[1].pattern in CONV2D_LIST:
         A_conv2d, B_conv2d, C_conv2d = match_results[1].matched_buffers
         d = A_conv2d.shape
         w = B_conv2d.shape
