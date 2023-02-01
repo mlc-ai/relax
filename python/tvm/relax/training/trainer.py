@@ -14,21 +14,20 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=not-callable, invalid-name
+"""Unified Trainer API for relax training."""
 
-from typing import Union, List, Type, Optional
+from typing import Union, List, Type, Optional, Any, Dict
+import numpy as np  # type: ignore
 
 import tvm
-from tvm import relax, TVMError
+from tvm import TVMError
 from tvm.ir.module import IRModule
-from tvm.ir.op import Op
 from tvm.runtime.container import tuple_object
-
-
-import numpy as np
-import math
+from tvm.runtime.ndarray import NDArray
 
 from ..transform import LegalizeOps, Gradient
-from .loss import _Loss
+from .loss import Loss
 from .utils import append_loss
 from .optimizer import Optimizer
 from ..struct_info import TensorStructInfo
@@ -37,19 +36,34 @@ from ..analysis import well_formed
 
 
 class Trainer:
-    """Simple wrapper for relax training.
+    r"""Unified wrapper for relax training.
+
+    Usage: Initialize it first, do some settings and then train.
+
+    Parameters
+    ----------
+    backbone : IRModule
+        Backbone of the module to be trained. It should be a relax module with a function
+        whose name is `func_name`.
+
+    parameters_indices : Union[int, List[int]],
+        The indices of parameters in the input list of the function.
+
+    func_name : str
+        The name of the forward function. The function should return a single Tensor
+        which is the output of the module.
 
     Examples
     --------
-    Initialize it first, do some settings and then train.
 
-    .. code-block:: python
-        trainer = Trainer(backbone=MLP, func_name="main", parameters_indices=range(1, 5))
-        trainer.prepare("relax.nn.softmax_cross_entropy", SGD(None, 0.01))
-        trainer.set_vm_config(target="llvm", device=tvm.cpu())
-        trainer.setup()
-        trainer.rand_init_params()
-        trainer.train(epoch=10, loader=loader, data_hook=_hook, show_detail=True)
+    >>> trainer = Trainer(MLP, [1, 2], "main")
+    >>> trainer.set_loss(MSELoss(reduction="sum"), pred_sinfo, pred_sinfo)
+    >>> trainer.set_vm_config(target="llvm")
+    >>> trainer.set_optimizer(optim_type=SGD, lr=0.001).setup()
+    >>> trainer.setup()
+    >>> trainer.rand_init_params()
+    >>> trainer.forward(*fwd_inputs)
+    >>> trainer.backward(*bwd_inputs)
     """
 
     def __init__(
@@ -58,86 +72,80 @@ class Trainer:
         parameters_indices: Union[int, List[int]],
         func_name: str = "main",
     ) -> None:
-        """Default initializer for relax.training.Trainer.
-
-        Parameters
-        ----------
-        backbone: IRModule
-            Backbone of the training module. It should be a relax module with a function
-            whose name is `func_name`
-
-        parameters_indices:
-            The indices of parameters in the input list of the function.
-
-        func_name: str
-            The name of the target function. The function should return the output of the module.
-        """
-
         # Parameter
         if isinstance(parameters_indices, int):
             parameters_indices = [parameters_indices]
         self._parameters_indices = list(parameters_indices)
-        self._parameters_buffer = []
-        self._parameters_name_to_pos = {}
+        self._parameters_buffer: List[NDArray] = []
+        self._parameters_name_to_pos: Dict[str, int] = {}
 
         # Configs
-        self._loss_config = None
-        self._optim_config = None
-        self._vm_config = None
+        self._loss_config: Optional[Dict[str, Any]] = None
+        self._optim_config: Optional[Dict[str, Any]] = None
+        self._vm_config: Optional[Dict[str, Any]] = None
 
         # Constructor
         self._backbone = backbone
         self._func_name = func_name
+        self._check_backbone_validity()
 
         # Build
         self._train_func_name = ""
-        self._optimizer = None
-        self._vm = None
-        self._mod = None
+        self._optimizer: Optional[Optimizer] = None
+        self._vm: Optional[VirtualMachine] = None
+        self._mod: Optional[IRModule] = None
 
-    def set_loss(self, loss: _Loss, *call_args) -> "Trainer":
+    def set_loss(self, loss: Loss, *call_args: List[TensorStructInfo]) -> "Trainer":
         """Specify the loss function.
 
         Parameters
         ----------
-        loss : _Loss
-            The loss function. It will be extended to the backbone using
-            relax.training.utils.append_loss automatically.
+        loss : Loss
+            The loss function. It will be appended to the backbone function using
+            relax.training.utils.append_loss.
 
-        *call_args:
-            The struct info of all arguments of loss function.
+        call_args : List[TensorStructInfo]
+            The struct info a.k.a. the arguments to call the loss function.
 
         Returns
-        ----------
+        -------
         self : Trainer
             Return itself to support fluent interface style.
         """
         self._loss_config = {"loss": loss, "call_args": call_args}
         return self
 
-    def set_optimizer(self, optim_type: Type[Optimizer], *args, **kwargs) -> "Trainer":
+    def set_optimizer(
+        self, optim_type: Type[Optimizer], *init_args: List[Any], **init_kwargs: Dict[str, Any]
+    ) -> "Trainer":
         """Specify the optimizer for training.
 
         Parameters
         ----------
-        optim_type: Type[Optimizer]
+        optim_type : Type[Optimizer]
             The specified optimizer class.
 
-        *args, **kwargs:
-            Arguments passed to the optimize constructor.
+        init_args : List[Any]
+            Positional arguments passed to the optimize constructor.
 
-        Note
-        ----------
-        The Trainer will set param_list and dtype of the optimzer automatically. So you only need
-        to pass the rest arguments to it.
-
+        init_kwargs : Dict[str, Any]
+            Keyword arguments passed to the optimize constructor.
 
         Returns
-        ----------
+        -------
         self : Trainer
             Return itself to support fluent interface style.
+
+        Notes
+        -----
+        The Trainer will set param_list of the optimzer automatically. So you only need
+        to pass the rest arguments to it.
         """
-        self._optim_config = {"optim_type": optim_type, "args": args, "kwargs": kwargs}
+        self._optim_config = {
+            "optim_type": optim_type,
+            "init_args": init_args,
+            "init_kwargs": init_kwargs,
+        }
         return self
 
     def set_vm_config(
@@ -153,14 +161,14 @@ class Trainer:
         target : Union[str, tvm.target.Target]
             The target to run all modules on.
 
-        device: Union[Device, List[Device]]
+        device : Union[Device, List[Device]]
             The device, or devices on which to execute the VM code.
 
-        memory_cfg: Optional[str]
+        memory_cfg : Optional[str]
             The allocator behavior to use for the VM.
 
         Returns
-        ----------
+        -------
         self : Trainer
             Return itself to support fluent interface style.
         """
@@ -175,7 +183,7 @@ class Trainer:
         4. Build Optimizer and VM.
 
         Returns
-        ----------
+        -------
         self : Trainer
             Return itself to support fluent interface style.
         """
@@ -235,8 +243,8 @@ class Trainer:
             raise TVMError("Setup Error: Please call `set_optimizer` first before you setup.")
         self._optimizer = self._optim_config["optim_type"](
             param_list=param_list,
-            *self._optim_config["args"],
-            **self._optim_config["kwargs"],
+            *self._optim_config["init_args"],
+            **self._optim_config["init_kwargs"],
         )
         self._optimizer.set_vm_config(self._vm_config["target"], self._vm_config["device"])
 
@@ -247,10 +255,10 @@ class Trainer:
         if not well_formed(self._backbone):
             raise ValueError("Backbone Invalid: The backbone is not well formed.")
         ret_sinfo = self._backbone[self._func_name].body.body.struct_info
-        if not isintance(ret_sinfo, TensorStructInfo):
+        if not isinstance(ret_sinfo, TensorStructInfo):
             raise ValueError(
-                "Backbone Invalid: The backbone function is expected to have a single Tensor \
-                return value, which serves as the prediction result of the module. But got ",
+                "Backbone Invalid: The backbone function is expected to have a single Tensor "
+                "return value, which serves as the prediction result of the module. But got ",
                 ret_sinfo,
             )
 
@@ -258,44 +266,93 @@ class Trainer:
         if self._vm is None:
             raise TVMError("Please setup the trainer first. Use `trainer.setup()`.")
 
+    @property
+    def optimizer(self) -> Optimizer:
+        """Return the built optimizer.
+
+        Returns
+        -------
+        ret : Optimizer
+            The built optimizer.
+        """
+        self._check_setup()
+        return self._optimizer
+
+    @property
+    def mod(self) -> IRModule:
+        """Return the differentiated IRModule.
+
+        Returns
+        -------
+        ret : IRModule
+            The differentiated IRModule.
+        """
+        self._check_setup()
+        return self._mod
+
+    @property
+    def vm(self) -> VirtualMachine:
+        """Return the relax virtual machine of the module.
+
+        Returns
+        -------
+        ret : VirtualMachine
+            The relax virtual machine.
+        """
+        self._check_setup()
+        return self._vm
+
     def rand_init_params(self) -> "Trainer":
         """Randomly initialize parameters using np.random.uniform.
 
         Returns
-        ----------
+        -------
         self : Trainer
             Return itself to support fluent interface style.
         """
         self._check_setup()
         self._parameters_buffer = [
             tvm.nd.array(
-                math.sqrt(6.0 / np.sum(v.shape))
+                np.sqrt(6.0 / np.sum(v.shape))
                 * np.random.uniform(-1.0, 1.0, v.shape).astype(np.dtype(v.dtype))
             )
             for v in self._parameters_buffer
         ]
+        return self
 
-    def load_params(self, extern_param_dict: dict) -> "Trainer":
+    def load_params(self, extern_param_dict: Dict[str, Union[np.ndarray, NDArray]]) -> "Trainer":
         """Load parameters from a dict.
         The key of the dict should be the same with the parameter name in backbone.
 
         Parameters
         ----------
-        extern_param_dict : dict
+        extern_param_dict : Dict[str, Union[np.ndarray, NDArray]]
             The external parameters dict: param_name -> param_value. The param name should
             be the same as the name hint of corresponding relax Var.
 
         Returns
-        ----------
+        -------
         self : Trainer
             Return itself to support fluent interface style.
         """
         self._check_setup()
-        for key in extern_param_dict:
-            self._parameters_buffer[self._parameters_name_to_pos[key]] = tvm.nd.array(
-                extern_param_dict[key]
-            )
+        for key, val in extern_param_dict.items():
+            self._parameters_buffer[self._parameters_name_to_pos[key]] = tvm.nd.array(val)
         return self
+
+    def export_params(self) -> Dict[str, NDArray]:
+        """Export parameters to a dict (parameter name -> NDArray).
+
+        Returns
+        -------
+        exported_dict : Dict[str, NDArray]
+            The exported dictionary of parameters.
+        """
+        self._check_setup()
+        ret: Dict[str, NDArray] = {}
+        for key, pos in self._parameters_name_to_pos.items():
+            ret[key] = self._parameters_buffer[pos]
+        return ret
 
     def _prepare_inputs(self, func_name, inputs):
         ptr_inputs = 0
@@ -312,44 +369,44 @@ class Trainer:
                 ptr_inputs += 1
         return to_vm
 
-    def forward(self, *inputs: "Unpack[np.array]"):
+    def forward(self, *inputs: List[Union[np.ndarray, NDArray]]) -> NDArray:
         """Forward process.
 
         Parameters
         ----------
-        *inputs: Unpack[np.array]
+        inputs: List[Union[np.ndarray, NDArray]]
             The necessary inputs of the module.
 
         Returns
-        ----------
-        output : np.array
+        -------
+        output : NDArray
             The output result of the forward process. Only support single return value now.
 
-        Note
-        ----------
+        Notes
+        -----
         You don't need to provide parameters of the module in `inputs`. Instead, the trainer
         will maintain them interally. The inputs should be given in the order of the function
         argument list with skipping all parameters.
         """
         self._check_setup()
-        return self._vm[self._func_name](*self._prepare_inputs(self._func_name, inputs)).numpy()
+        return self._vm[self._func_name](*self._prepare_inputs(self._func_name, inputs))
 
-    def backward(self, *inputs: "Unpack[np.array]"):
+    def backward(self, *inputs: List[Union[np.ndarray, NDArray]]) -> NDArray:
         """Backward. It will calculate the gradient of each parameter and
         update them using optimizer.
 
         Parameters
         ----------
-        *inputs: Unpack[np.array]
+        inputs: List[Union[np.ndarray, NDArray]]
             The necessary inputs of the module.
 
         Returns
-        ----------
-        loss : np.array
-            The loss.
+        -------
+        loss : NDArray
+            The loss stored in Numpy array.
 
-        Note
-        ----------
+        Notes
+        -----
         You don't need to provide parameters of the module in `inputs`. Instead, the trainer
         will maintain them interally. The inputs should be given in the order of the function
         argument list with skipping all parameters.
@@ -358,14 +415,6 @@ class Trainer:
         loss, grads = self._vm[self._train_func_name](
             *self._prepare_inputs(self._train_func_name, inputs)
         )
-        if len(grads) != len(self._parameters_buffer):
-            raise TVMError(
-                "Internal error: the number of gradients is not matched with the number of parameters."
-            )
         new_params = self._optimizer(tuple_object(self._parameters_buffer), grads)
-        if len(new_params) != len(self._parameters_buffer):
-            raise TVMError(
-                "Internal error: the number of new params is not matched with the number of parameters."
-            )
         self._parameters_buffer = [new_params[i] for i in range(len(new_params))]
-        return loss.numpy()
+        return loss
