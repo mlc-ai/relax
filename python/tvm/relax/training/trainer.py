@@ -210,7 +210,7 @@ class Trainer:
         )(self._backbone)
         self._train_func_name = forward_with_loss_name + "_adjoint"
 
-        lowered_mod = LegalizeOps()(self._mod)
+        lowered_mod = LegalizeOps()(self._mod)  # type: ignore
 
         # Step 3: Allocate Buffer for Parameters.
         def _convert_from_tvm_shape(tvm_shape):
