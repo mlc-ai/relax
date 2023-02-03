@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=not-callable, invalid-name
+# pylint: disable=not-callable,invalid-name,unused-argument
 """Unified Trainer API for relax training."""
 
 from typing import Union, List, Type, Optional, Any, Dict
@@ -202,7 +202,7 @@ class Trainer:
         backbone[self._predict_fn] = backbone[self._predict_fn].with_attr(
             setup_trainer_pass.PARAMS_NUM_ATTR_KEY, params_num
         )
-        self._mod = setup_trainer_pass(backbone)
+        self._mod = setup_trainer_pass(backbone)  # type: ignore
         self._vm: Optional[VirtualMachine] = None
         self._optim_state = self._mod[self._update_params_fn].attrs[
             setup_trainer_pass.OPTIM_STATE_ATTR_KEY
@@ -215,7 +215,6 @@ class Trainer:
         def _convert_from_tvm_shape(tvm_shape):
             return [int(dim) for dim in tvm_shape]
 
-        param_list = []
         self._parameters_buffer = []
         for i, param in enumerate(self._mod[setup_trainer_pass.ADJOINT_FUNC_NAME].params):
             if i < params_num:
@@ -234,7 +233,7 @@ class Trainer:
         target: Union[str, tvm.target.Target],
         device: Union[tvm.runtime.Device, List[tvm.runtime.Device]] = tvm.cpu(0),
         memory_cfg: Optional[str] = None,
-    ) -> "Trainer":
+    ):
         """Specify the following vm config: target, device, memory_cfg.
 
         Parameters
@@ -247,11 +246,6 @@ class Trainer:
 
         memory_cfg : Optional[str]
             The allocator behavior to use for the VM.
-
-        Returns
-        -------
-        self : Trainer
-            Return itself to support fluent interface style.
         """
         ex = build(self._mod, target=target)
         self._vm = VirtualMachine(ex, device=device, memory_cfg=memory_cfg)
@@ -366,8 +360,8 @@ class Trainer:
         return self._vm[self._predict_fn](*self._prepare_inputs(self._predict_fn, inputs))
 
     def update_params(self, *inputs: List[Union[np.ndarray, NDArray]]) -> NDArray:
-        """Calculate loss and update parameters. It will calculate the gradient of each parameter and
-        update them using optimizer.
+        """Calculate loss and update parameters. It will calculate the gradient of each
+        parameter and update them using optimizer.
 
         Parameters
         ----------
