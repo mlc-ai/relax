@@ -92,7 +92,7 @@ class SetupTrainer:
             The loss function. It will be appended to the backbone function using
             relax.training.utils.append_loss.
 
-        call_args : TensorStructInfo
+        *call_args : TensorStructInfo
             The struct info a.k.a. the arguments to call the loss function.
 
         Returns
@@ -113,10 +113,10 @@ class SetupTrainer:
         optim_type : Type[Optimizer]
             The specified optimizer class.
 
-        init_args : Any
+        *init_args : Any
             Positional arguments passed to the optimize constructor.
 
-        init_kwargs : Any
+        **init_kwargs : Any
             Keyword arguments passed to the optimize constructor.
 
         Returns
@@ -352,7 +352,7 @@ class Trainer:
 
         Parameters
         ----------
-        inputs : Union[np.ndarray, NDArray]
+        *inputs : Union[np.ndarray, NDArray]
             The necessary inputs of the module.
 
         Returns
@@ -375,7 +375,7 @@ class Trainer:
 
         Parameters
         ----------
-        inputs : Union[np.ndarray, NDArray]
+        *inputs : Union[np.ndarray, NDArray]
             The necessary inputs of the module.
 
         Returns
