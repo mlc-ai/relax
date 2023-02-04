@@ -23,9 +23,11 @@ from tvm.script.parser import relax as R, tir as T
 
 
 def verify_model(torch_model, input_info, binding, expected):
-    from tvm.relax.frontend import from_pytorch
+    from torch import fx
+    from tvm.relax.frontend.torch import from_fx
 
-    mod = from_pytorch(torch_model, input_info)
+    graph_model = fx.symbolic_trace(torch_model)
+    mod = from_fx(graph_model, input_info)
     binding = {k: tvm.nd.array(v) for k, v in binding.items()}
     expected = relax.transform.BindParams("main", binding)(expected)
     tvm.ir.assert_structural_equal(mod, expected)
@@ -106,7 +108,7 @@ def test_conv():
                 R.output(gv)
             return gv
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     model = Conv2D1()
     binding = {"w1": model.conv.weight.numpy(), "w2": model.conv.bias.numpy()}
@@ -178,7 +180,7 @@ def test_linear():
                 R.output(gv)
             return gv
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     model = Dense1()
     binding = {"w1": model.linear.weight.numpy(), "w2": model.linear.bias.numpy()}
@@ -214,7 +216,7 @@ def test_linear():
 
     verify_model(
         MatMul1(),
-        {"x": ([10, 10], "float32"), "y": ([10, 10], "float32")},
+        [([10, 10], "float32"), ([10, 10], "float32")],
         {},
         expected3,
     )
@@ -252,7 +254,7 @@ def test_relu():
                 R.output(gv)
             return gv
 
-    input_info = {"input_1": ([10, 10], "float32")}
+    input_info = [([10, 10], "float32")]
     verify_model(ReLU0(), input_info, {}, expected)
     verify_model(ReLU1(), input_info, {}, expected)
 
@@ -283,7 +285,7 @@ def test_relu6():
                 R.output(gv)
             return gv
 
-    input_info = {"input_1": ([10, 10], "float32")}
+    input_info = [([10, 10], "float32")]
     verify_model(ReLU6(), input_info, {}, expected)
 
 
@@ -295,7 +297,7 @@ def test_maxpool2d():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class MaxPool2d(Module):
         def __init__(self):
@@ -397,7 +399,7 @@ def test_adaptive_avgpool2d():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class AdaptiveAvgPool2d0(Module):
         def __init__(self):
@@ -438,7 +440,7 @@ def test_flatten():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Flatten(Module):
         def __init__(self):
@@ -475,7 +477,7 @@ def test_batchnorm2d():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class BatchNorm2d(Module):
         def __init__(self):
@@ -535,7 +537,7 @@ def test_embedding():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([4], "int64")}
+    input_info = [([4], "int64")]
 
     class Embedding(Module):
         def __init__(self):
@@ -572,7 +574,7 @@ def test_dropout():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Dropout(Module):
         def __init__(self):
@@ -605,7 +607,7 @@ def test_layernorm():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class LayerNorm(Module):
         def __init__(self):
@@ -654,7 +656,7 @@ def test_silu():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class SiLU(Module):
         def __init__(self):
@@ -688,7 +690,7 @@ def test_groupnorm():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class GroupNorm(Module):
         def __init__(self):
@@ -748,7 +750,7 @@ def test_softmax():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Softmax(Module):
         def __init__(self):
@@ -782,8 +784,8 @@ def test_binary():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info1 = {"lhs": ([1, 3, 10, 10], "float32"), "rhs": ([1, 3, 10, 10], "float32")}
-    input_info2 = {"lhs": ([1, 3, 10, 10], "float32")}
+    input_info1 = [([1, 3, 10, 10], "float32"), ([1, 3, 10, 10], "float32")]
+    input_info2 = [([1, 3, 10, 10], "float32")]
     # Add
     class Add1(Module):
         def forward(self, lhs, rhs):
@@ -979,6 +981,45 @@ def test_binary():
     verify_model(FloorDiv1(), input_info1, {}, expected9)
     verify_model(FloorDiv2(), input_info2, {}, expected10)
 
+    # LT
+    class LT1(Module):
+        def forward(self, lhs, rhs):
+            return lhs < rhs
+
+    @tvm.script.ir_module
+    class expected11:
+        @R.function
+        def main(
+            lhs_1: R.Tensor((1, 3, 10, 10), dtype="float32"),
+            rhs_1: R.Tensor((1, 3, 10, 10), dtype="float32"),
+        ) -> R.Tensor((1, 3, 10, 10), dtype="bool"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 3, 10, 10), dtype="bool") = R.less(lhs_1, rhs_1)
+                gv: R.Tensor((1, 3, 10, 10), dtype="bool") = lv
+                R.output(gv)
+            return gv
+
+    class LT2(Module):
+        def forward(self, lhs):
+            return lhs < 1.0
+
+    @tvm.script.ir_module
+    class expected12:
+        @R.function
+        def main(
+            lhs_1: R.Tensor((1, 3, 10, 10), dtype="float32"),
+        ) -> R.Tensor((1, 3, 10, 10), dtype="bool"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 3, 10, 10), dtype="bool") = R.less(lhs_1, R.const(1.0))
+                gv: R.Tensor((1, 3, 10, 10), dtype="bool") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(LT1(), input_info1, {}, expected11)
+    verify_model(LT2(), input_info2, {}, expected12)
+
 
 @tvm.testing.requires_gpu
 def test_size():
@@ -988,7 +1029,7 @@ def test_size():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Size(Module):
         def forward(self, input):
@@ -1015,7 +1056,7 @@ def test_unsqueeze():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Unsqueeze1(Module):
         def forward(self, input):
@@ -1063,7 +1104,7 @@ def test_getattr():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class GetAttr1(Module):
         def forward(self, input):
@@ -1090,7 +1131,7 @@ def test_getitem():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"x": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Slice1(Module):
         def forward(self, x):
@@ -1127,7 +1168,7 @@ def test_unary():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     # sin
     class Sin(Module):
@@ -1198,7 +1239,7 @@ def test_gelu():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Gelu(Module):
         def forward(self, input):
@@ -1223,12 +1264,13 @@ def test_gelu():
 @tvm.testing.requires_gpu
 def test_clamp():
     import torch
+    from torch import fx
     from torch.nn import Module
 
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Clamp(Module):
         def forward(self, input):
@@ -1249,7 +1291,7 @@ def test_clamp():
 
     verify_model(Clamp(), input_info, {}, expected1)
 
-    from tvm.relax.frontend import from_pytorch
+    from tvm.relax.frontend.torch import from_fx
 
     with pytest.raises(
         ValueError, match="TVM only supports constant max value for torch.clamp/clip"
@@ -1259,7 +1301,8 @@ def test_clamp():
             def forward(self, input):
                 return torch.clamp(input, min=0.5, max=None)
 
-        from_pytorch(Clamp_Error(), input_info)
+        gm = fx.symbolic_trace(Clamp_Error())
+        from_fx(gm, input_info)
 
     with pytest.raises(
         ValueError, match="TVM only supports constant min value for torch.clamp/clip"
@@ -1269,7 +1312,8 @@ def test_clamp():
             def forward(self, input):
                 return torch.clamp(input, min=input, max=input)
 
-        from_pytorch(Clamp_Error(), input_info)
+        gm = fx.symbolic_trace(Clamp_Error())
+        from_fx(gm, input_info)
 
 
 @tvm.testing.requires_gpu
@@ -1280,7 +1324,7 @@ def test_interpolate():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Interpolate(Module):
         def forward(self, input):
@@ -1322,11 +1366,11 @@ def test_addmm():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {
-        "x1": ([10, 10], "float32"),
-        "x2": ([10, 10], "float32"),
-        "x3": ([10, 10], "float32"),
-    }
+    input_info = [
+        ([10, 10], "float32"),
+        ([10, 10], "float32"),
+        ([10, 10], "float32"),
+    ]
 
     class Addmm(Module):
         def forward(self, x1, x2, x3):
@@ -1359,7 +1403,7 @@ def test_split():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     class Split(Module):
         def forward(self, input):
@@ -1401,7 +1445,7 @@ def test_tril():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"input_1": ([10, 10], "float32")}
+    input_info = [([10, 10], "float32")]
 
     class Tril(Module):
         def forward(self, input):
@@ -1431,7 +1475,7 @@ def test_new_ones():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"x": ([1, 2, 3], "float32")}
+    input_info = [([1, 2, 3], "float32")]
 
     class NewOnes(Module):
         def forward(self, x):
@@ -1461,7 +1505,7 @@ def test_expand():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"x": ([1, 2, 3, 4], "float32")}
+    input_info = [([1, 2, 3, 4], "float32")]
 
     class Expand(Module):
         def forward(self, x):
@@ -1484,6 +1528,37 @@ def test_expand():
 
 
 @tvm.testing.requires_gpu
+def test_reduce():
+    import torch
+    from torch.nn import Module
+
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = [([1, 2, 3, 4], "float32")]
+
+    # sum
+    class Sum(Module):
+        def forward(self, x):
+            return torch.sum(x, (2, 1))
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            inp_0: R.Tensor((1, 2, 3, 4), dtype="float32")
+        ) -> R.Tensor((1, 4), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 4), dtype="float32") = R.sum(inp_0, axis=[2, 1], keepdims=False)
+                gv: R.Tensor((1, 4), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Sum(), input_info, {}, expected1)
+
+
+@tvm.testing.requires_gpu
 def test_to():
     import torch
     from torch.nn import Module
@@ -1491,7 +1566,7 @@ def test_to():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"x": ([1, 2, 3, 4], "float32")}
+    input_info = [([1, 2, 3, 4], "float32")]
 
     # float
     class ToFloat(Module):
@@ -1542,7 +1617,7 @@ def test_permute():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"x": ([1, 2, 3, 4], "float32")}
+    input_info = [([1, 2, 3, 4], "float32")]
 
     class Permute(Module):
         def forward(self, x):
@@ -1572,7 +1647,7 @@ def test_reshape():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"x": ([1, 2, 3, 4], "float32")}
+    input_info = [([1, 2, 3, 4], "float32")]
 
     class Reshape(Module):
         def forward(self, x):
@@ -1600,7 +1675,7 @@ def test_transpose():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"x": ([1, 2, 3, 4], "float32")}
+    input_info = [([1, 2, 3, 4], "float32")]
 
     class Transpose(Module):
         def forward(self, x):
@@ -1630,7 +1705,7 @@ def test_view():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
-    input_info = {"x": ([1, 2, 3, 4], "float32")}
+    input_info = [([1, 2, 3, 4], "float32")]
 
     class View(Module):
         def forward(self, x):
@@ -1688,7 +1763,7 @@ def test_mixed_precision():
                 R.output(gv)
             return gv
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
     model = Dense1().half()
     binding = {"w1": model.linear.weight.numpy(), "w2": model.linear.bias.numpy()}
     verify_model(model, input_info, binding, expected1)
@@ -1732,7 +1807,7 @@ def test_mixed_precision():
                 R.output(gv)
             return gv
 
-    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+    input_info = [([1, 3, 10, 10], "float32")]
 
     model = Conv2D1().half()
     binding = {"w1": model.conv.weight.numpy(), "w2": model.conv.bias.numpy()}

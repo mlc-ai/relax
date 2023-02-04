@@ -718,7 +718,7 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
 }
 
 
-@tvm.transform.module_pass(opt_level=3, name="LegalizeOps")
+@tvm.transform.module_pass(opt_level=0, name="LegalizeOps")
 class LegalizeOps:
     """Legalize high-level operator calls in Relax functions to call_tir
     with corresponding low-level TIR PrimFuncs.
