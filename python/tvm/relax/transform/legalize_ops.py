@@ -836,11 +836,12 @@ class LegalizeOps:
                 if call.op.name in self.legalize_map:
                     try:
                         return self.legalize_map[call.op.name](self.builder_, call)
-                    except Exception as e:
+                    except Exception as e:  # pylint: disable=broad-except
                         logging.warning(
-                            f"An error occurred during legalization op `{call.op.name}`. This op is skipped."
+                            "An error occurred during legalization op %s. This op is skipped.",
+                            call.op.name,
                         )
-                        logging.debug(f"Error message: {e}")
+                        logging.debug("Error message: %s", str(e))
                         return call
                 if call.op.name != "relax.call_tir":
                     logging.warning("No legalization func for %s is found.", call.op.name)

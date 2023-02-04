@@ -18,7 +18,7 @@
 # pylint: disable=invalid-name, inconsistent-return-statements, unidiomatic-typecheck
 # pylint: disable=import-outside-toplevel
 """PyTorch FX frontend of Relax."""
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, Mapping, Tuple, Union
 from functools import reduce
 
 import tvm
@@ -604,8 +604,9 @@ class TorchFXImporter:
 
     def create_convert_map(self):
         from torch import nn
+        from torch import fx
 
-        self.convert_map = {
+        self.convert_map: Mapping[Union[nn.Module, str], Callable[[fx.node.Node], relax.Var]] = {
             # call_module
             nn.Linear: self._linear,
             nn.Conv2d: self._conv2d,
