@@ -616,6 +616,13 @@ def _image_resize2d(bb: BlockBuilder, call: Call) -> Expr:
     )
 
 
+##################### Common #####################
+
+
+def _call_topi(te_func: TEFunc) -> LegalizeFunc:
+    return lambda bb, call: bb.call_te(te_func, *call.args)
+
+
 ##########################################################
 
 
@@ -635,6 +642,7 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.sin": _unary(topi.sin),
     "relax.sqrt": _unary(topi.sqrt),
     "relax.tanh": _unary(topi.tanh),
+    "relax.clip": _call_topi(topi.clip),
     "relax.add": _binary(topi.add),
     "relax.divide": _binary(topi.divide),
     "relax.floor_divide": _binary(topi.floor_divide),
@@ -826,15 +834,16 @@ class LegalizeOps:
 
             def _convert_op(self, call: Call) -> Expr:
                 if call.op.name in self.legalize_map:
-                    # We only transform the op calls with known shape values
-                    if not all(
-                        [has_known_shape_value(arg.struct_info) for arg in call.args]
-                    ) or not has_known_shape_value(call.struct_info):
+                    try:
+                        return self.legalize_map[call.op.name](self.builder_, call)
+                    except Exception as e:
+                        logging.warning(
+                            f"An error occurred during legalization op `{call.op.name}`. This op is skipped."
+                        )
+                        logging.debug(f"Error message: {e}")
                         return call
-                    return self.legalize_map[call.op.name](self.builder_, call)
-
                 if call.op.name != "relax.call_tir":
-                    logging.info("No legalization func for %s is found.", call.op.name)
+                    logging.warning("No legalization func for %s is found.", call.op.name)
                 return call
 
             def transform(self) -> IRModule:

@@ -18,7 +18,7 @@
 # pylint: disable=invalid-name, inconsistent-return-statements, unidiomatic-typecheck
 # pylint: disable=import-outside-toplevel
 """PyTorch FX frontend of Relax."""
-from typing import Dict, Tuple
+from typing import Callable, Dict, Tuple
 from functools import reduce
 
 import tvm
@@ -168,6 +168,22 @@ class TorchFXImporter:
         if isinstance(lhs, relax.Var) or isinstance(rhs, relax.Var):
             return self._call_binary_op(relax.op.divide, lhs, rhs)
         return lhs / rhs
+
+    def _clamp(self, node: fx.node.Node) -> relax.Expr:
+        args = self.retrieve_args(node)
+        a_min = node.kwargs["min"]
+        a_max = node.kwargs["max"]
+        if not isinstance(a_min, (int, float)):
+            raise ValueError(
+                f"TVM only supports constant min value for torch.clamp/clip, "
+                f"but got {a_min} with type {type(a_min)}"
+            )
+        if not isinstance(a_max, (int, float)):
+            raise ValueError(
+                f"TVM only supports constant max value for torch.clamp/clip, "
+                f"but got {a_max} with type {type(a_max)}"
+            )
+        return self.block_builder.emit(relax.op.clip(args[0], a_min, a_max))
 
     ########## Creation ##########
 
@@ -355,13 +371,22 @@ class TorchFXImporter:
             )
         )
 
-    def _adaptive_avg_pool2d(self, node: fx.node.Node) -> relax.Var:
-        module = self.named_modules[node.target]
-        x = self.env[node.args[0]]
+    def _adaptive_avg_pool2d(self, is_module: bool) -> Callable:
+        from torch import fx
 
-        return self.block_builder.emit(
-            relax.op.nn.adaptive_avg_pool2d(x, module.output_size, layout="NCHW")
-        )
+        def _impl(node: fx.node.Node) -> relax.Var:
+            if is_module:
+                module = self.named_modules[node.target]
+                x = self.env[node.args[0]]
+                output_size = module.output_size
+            else:
+                x = self.env[node.args[0]]
+                output_size = node.args[1]
+            return self.block_builder.emit(
+                relax.op.nn.adaptive_avg_pool2d(x, output_size, layout="NCHW")
+            )
+
+        return _impl
 
     def _softmax(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -585,9 +610,12 @@ class TorchFXImporter:
             nn.Linear: self._linear,
             nn.Conv2d: self._conv2d,
             nn.MaxPool2d: self._max_pool2d,
-            nn.AdaptiveAvgPool2d: self._adaptive_avg_pool2d,
+            nn.AdaptiveAvgPool2d: self._adaptive_avg_pool2d(is_module=True),
             nn.Softmax: self._softmax,
             nn.ReLU: lambda node: self.block_builder.emit(relax.op.nn.relu(self.env[node.args[0]])),
+            nn.ReLU6: lambda node: self.block_builder.emit(
+                relax.op.clip(self.env[node.args[0]], 0, 6)
+            ),
             nn.SiLU: lambda node: self.block_builder.emit(relax.op.nn.silu(self.env[node.args[0]])),
             nn.Flatten: self._flatten,
             nn.BatchNorm2d: self._batch_norm_2d,
@@ -623,12 +651,15 @@ class TorchFXImporter:
             ),
             "view": self._reshape,
             "softmax": self._softmax,
+            "clamp": self._clamp,
+            "relu": lambda node: self.block_builder.emit(relax.op.nn.relu(self.env[node.args[0]])),
             "gelu": lambda node: self.block_builder.emit(relax.op.nn.gelu(self.env[node.args[0]])),
             "interpolate": self._interpolate,
             "size": self._size,
             "getattr": self._getattr,
             "getitem": self._getitem,
             "contiguous": lambda node: self.env[node.args[0]],
+            "adaptive_avg_pool2d": self._adaptive_avg_pool2d(is_module=False),
         }
 
     def from_pytorch(

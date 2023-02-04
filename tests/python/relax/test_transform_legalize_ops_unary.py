@@ -16,9 +16,10 @@
 # under the License.
 
 import tvm
-from tvm.relax.transform import LegalizeOps
-from tvm.script import relax as R, tir as T
 import tvm.testing
+from tvm.relax.transform import LegalizeOps
+from tvm.script import relax as R
+from tvm.script import tir as T
 
 
 def test_abs():
@@ -648,6 +649,43 @@ def test_tanh_symbolic():
     # fmt: on
 
     mod = LegalizeOps()(Tanh)
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
+def test_clip_symbolic():
+    @tvm.script.ir_module
+    class Clip:
+        @R.function
+        def main(x: R.Tensor(("m", "n"), "float32")) -> R.Tensor(("m", "n"), "float32"):
+            m = T.var("int64")
+            n = T.var("int64")
+            gv: R.Tensor((m, n), "float32") = R.clip(x, 5, 8)
+            return gv
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor(("m", "n"), dtype="float32")) -> R.Tensor(("m", "n"), dtype="float32"):
+            m = T.var("int64")
+            n = T.var("int64")
+            gv = R.call_tir(clip, (x,), out_sinfo=R.Tensor((m, n), dtype="float32"))
+            return gv
+
+        @T.prim_func
+        def clip(var_rxplaceholder: T.handle, var_compute: T.handle):
+            T.func_attr({"tir.noalias": True})
+            m = T.var("int64")
+            n = T.var("int64")
+            rxplaceholder = T.match_buffer(var_rxplaceholder, [m, n], dtype="float32")
+            compute = T.match_buffer(var_compute, [m, n], dtype="float32")
+            for i0, i1 in T.grid(m, n):
+                with T.block("compute"):
+                    v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+                    compute[v_i0, v_i1] = T.max(
+                        T.min(rxplaceholder[v_i0, v_i1], T.float32(8)), T.float32(5)
+                    )
+
+    mod = LegalizeOps()(Clip)
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
