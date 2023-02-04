@@ -287,14 +287,9 @@ class TorchFXImporter:
     def _linear(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         module = self.named_modules[node.target]
-        weight_T = relax.op.permute_dims(self.params[module.weight], [1, 0])
-        dense = self._matmul_impl(x, weight_T)
-
-        if module.bias is None:
-            return dense
-
-        bias = self.params[module.bias]
-        return self.block_builder.emit(relax.op.add(dense, bias))
+        weight = self.params[module.weight]
+        bias = None if module.bias is None else self.params[module.bias]
+        return self.block_builder.emit(relax.op.linear(x, weight, bias, "float32"))
 
     def _conv2d(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
