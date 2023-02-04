@@ -37,7 +37,27 @@ from ..analysis import well_formed
 
 @tvm.transform.module_pass(opt_level=3, name="SetupTrainer")
 class SetupTrainer:
-    """Setup a module."""
+    """Transform a NN backbone module to a complete, legalized trainer module.
+
+    This pass should be used after setting the loss and the optimizer. The transformed module
+    will contains the following functions:
+    - `predict`: Predicts the result. It is provided in the input module.
+    - `loss`: Calculates the specified loss between the prediction results and the ground truth.
+    - `loss_adjoint`: Calculates the loss and the adjoints of parameters.
+    - `update_params`: Takes the parameters, the adjoints of parameters and the optimizer state as
+    the inputs and returns updated parameters and new optimizer state. It contains a func attr named
+    `optim_state` which is the initial state of the specified optimizer.
+
+    Notes
+    -----
+    This transform requires the input module to have the following properties:
+    - The module should contain a function named `predict`.
+    - This prediction function should only return a single Tensor which is the prediction
+    result of the backbone.
+    - This prediction function should have a func attr `params_num`, which indicates that
+    the first `params_num` inputs are the parameters (which will be gradiented and trained)
+    of the NN module.
+    """
 
     PREDICT_FUNC_NAME: str = "predict"
     LOSS_FUNC_NAME: str = "loss"
@@ -106,7 +126,7 @@ class SetupTrainer:
 
         Notes
         -----
-        SetupTrainer will set param_list of the optimzer automatically. So you only need
+        SetupTrainer will set `param_list` of the optimzer automatically. So you only need
         to pass the rest initial arguments to it.
         """
         self._optim_config = {
@@ -157,34 +177,37 @@ class SetupTrainer:
 
 
 class Trainer:
-    r"""Unified wrapper for relax training.
-
-    Usage: Initialize it first, do some settings and then train.
+    r"""Unified wrapper for relax training. It uses SetupTrainer to setup the backbone and
+    then compiles/builds/runs the module. Also it maintains the parameters internally.
 
     Parameters
     ----------
     backbone : IRModule
         Backbone of the module to be trained. It should be a relax module with a function
-        whose name is `func_name`.
+        which has name `predict` and returns a single Tensor.
 
-    parameters_indices : Union[int, List[int]],
-        The indices of parameters in the input list of the function.
+    params_num : int,
+        The numer of parameters. The first `params_num` inputs of the prediction function
+        will be regarded as the parameters. It will be annotated into the prediction function
+        as the value of func attr `update_params`.
 
-    func_name : str
-        The name of the forward function. The function should return a single Tensor
-        which is the output of the module.
+    setup_trainer_pass : SetupTrainer
+        The configured SetupTrainer pass.
 
     Examples
     --------
-
-    >>> trainer = Trainer(MLP, [1, 2], "main")
-    >>> trainer.set_loss(MSELoss(reduction="sum"), pred_sinfo, pred_sinfo)
-    >>> trainer.set_vm_config(target="llvm")
-    >>> trainer.set_optimizer(optim_type=SGD, lr=0.001).setup()
-    >>> trainer.setup()
+    >>> setup_trainer = SetupTrainer()
+    >>> setup_trainer.set_loss(MSELoss(reduction="sum"), pred_sinfo, pred_sinfo)
+    >>> setup_trainer.set_optimizer(optim_type=SGD, lr=0.001)
+    >>> trainer = Trainer(MLP, 2, "main")
+    >>> trainer.build(target="llvm")
     >>> trainer.rand_init_params()
-    >>> trainer.forward(*fwd_inputs)
-    >>> trainer.backward(*bwd_inputs)
+    >>> trainer.predict(*predict_inputs)
+    >>> trainer.update_params(*update_params_inputs)
+
+    Notes
+    -----
+    The user should first build it then execute it.
     """
 
     def __init__(
@@ -234,7 +257,7 @@ class Trainer:
         device: Union[tvm.runtime.Device, List[tvm.runtime.Device]] = tvm.cpu(0),
         memory_cfg: Optional[str] = None,
     ):
-        """Specify the following vm config: target, device, memory_cfg.
+        """Build and compile the module.
 
         Parameters
         ----------
@@ -256,18 +279,18 @@ class Trainer:
 
     @property
     def mod(self) -> IRModule:
-        """Return the differentiated IRModule.
+        """Return the IRModule transformed by the setup trainer pass.
 
         Returns
         -------
         ret : IRModule
-            The differentiated IRModule.
+            The IRModule transformed by the setup trainer pass.
         """
         return self._mod
 
     @property
     def vm(self) -> VirtualMachine:
-        """Return the relax virtual machine of the module.
+        """Return the relax virtual machine of the module. Should first build the trainer.
 
         Returns
         -------
@@ -277,14 +300,8 @@ class Trainer:
         self._check_build()
         return self._vm
 
-    def rand_init_params(self) -> "Trainer":
-        """Randomly initialize parameters using np.random.uniform.
-
-        Returns
-        -------
-        self : Trainer
-            Return itself to support fluent interface style.
-        """
+    def rand_init_params(self):
+        """Randomly initialize parameters using np.random.uniform."""
         self._parameters_buffer = [
             tvm.nd.array(
                 np.sqrt(6.0 / np.sum(v.shape))
@@ -292,9 +309,8 @@ class Trainer:
             )
             for v in self._parameters_buffer
         ]
-        return self
 
-    def load_params(self, extern_param_dict: Dict[str, Union[np.ndarray, NDArray]]) -> "Trainer":
+    def load_params(self, extern_param_dict: Dict[str, Union[np.ndarray, NDArray]]):
         """Load parameters from a dict.
         The key of the dict should be the same with the parameter name in backbone.
 
@@ -303,15 +319,9 @@ class Trainer:
         extern_param_dict : Dict[str, Union[np.ndarray, NDArray]]
             The external parameters dict: param_name -> param_value. The param name should
             be the same as the name hint of corresponding relax Var.
-
-        Returns
-        -------
-        self : Trainer
-            Return itself to support fluent interface style.
         """
         for key, val in extern_param_dict.items():
             self._parameters_buffer[self._parameters_name_to_pos[key]] = tvm.nd.array(val)
-        return self
 
     def export_params(self) -> Dict[str, NDArray]:
         """Export parameters to a dict (parameter name -> NDArray).
@@ -337,12 +347,12 @@ class Trainer:
             to_vm.append(tvm.nd.array(inputs[i]))
         return to_vm
 
-    def predict(self, *inputs: List[Union[np.ndarray, NDArray]]) -> NDArray:
-        """Predict.
+    def predict(self, *inputs: Union[np.ndarray, NDArray]) -> NDArray:
+        """Call the `predict` function and return the prediction result of the backbone.
 
         Parameters
         ----------
-        inputs: List[Union[np.ndarray, NDArray]]
+        inputs : Union[np.ndarray, NDArray]
             The necessary inputs of the module.
 
         Returns
@@ -359,13 +369,13 @@ class Trainer:
         self._check_build()
         return self._vm[self._predict_fn](*self._prepare_inputs(self._predict_fn, inputs))
 
-    def update_params(self, *inputs: List[Union[np.ndarray, NDArray]]) -> NDArray:
-        """Calculate loss and update parameters. It will calculate the gradient of each
-        parameter and update them using optimizer.
+    def update_params(self, *inputs: Union[np.ndarray, NDArray]) -> NDArray:
+        """Calculate loss and update parameters. It will calculate the gradients of parameters
+        and update them using `update_params` function.
 
         Parameters
         ----------
-        inputs: List[Union[np.ndarray, NDArray]]
+        inputs : Union[np.ndarray, NDArray]
             The necessary inputs of the module.
 
         Returns
