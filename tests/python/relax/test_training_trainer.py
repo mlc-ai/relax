@@ -21,9 +21,10 @@ import numpy as np
 from tvm import relax, TVMError
 from tvm.ir.base import assert_structural_equal
 from tvm.script.parser import ir as I, relax as R, tir as T
+from tvm.relax.training import SetupTrainer
 from tvm.relax.training.optimizer import SGD
 from tvm.relax.training.loss import MSELoss
-from tvm.relax.training.trainer import SetupTrainer, Trainer
+from tvm.relax.training.trainer import Trainer
 
 
 def _get_backbone():

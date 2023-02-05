@@ -20,3 +20,5 @@ from . import optimizer
 from . import trainer
 from . import utils
 from . import loss
+
+from .setup_trainer import SetupTrainer
