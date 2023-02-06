@@ -144,7 +144,7 @@ def test_linear():
         ) -> R.Tensor((1, 3, 10, 7), dtype="float32"):
             # block 0
             with R.dataflow():
-                lv: R.Tensor((10, 7), dtype="float32") = R.permute_dims(w1, axes=[1, 0])
+                lv: R.Tensor((10, 7), dtype="float32") = R.permute_dims(w1, axes=None)
                 lv1: R.Tensor((1, 3, 10, 7), dtype="float32") = R.matmul(
                     input_1, lv, out_dtype="float32"
                 )
@@ -170,7 +170,7 @@ def test_linear():
         ) -> R.Tensor((1, 3, 10, 7), dtype="float32"):
             # block 0
             with R.dataflow():
-                lv: R.Tensor((10, 7), dtype="float32") = R.permute_dims(w1, axes=[1, 0])
+                lv: R.Tensor((10, 7), dtype="float32") = R.permute_dims(w1, axes=None)
                 lv1: R.Tensor((1, 3, 10, 7), dtype="float32") = R.matmul(
                     input_1, lv, out_dtype="float32"
                 )
@@ -1679,7 +1679,7 @@ def test_mixed_precision():
             with R.dataflow():
                 lv: R.Tensor((7, 10), dtype="float32") = R.wrap_param(w1, dtype="float32")
                 lv1: R.Tensor((7,), dtype="float32") = R.wrap_param(w2, dtype="float32")
-                lv2: R.Tensor((10, 7), dtype="float32") = R.permute_dims(lv, axes=[1, 0])
+                lv2: R.Tensor((10, 7), dtype="float32") = R.permute_dims(lv, axes=None)
                 lv3: R.Tensor((1, 3, 10, 7), dtype="float32") = R.matmul(
                     input_1, lv2, out_dtype="float32"
                 )
