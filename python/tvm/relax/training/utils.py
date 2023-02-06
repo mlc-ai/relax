@@ -77,7 +77,7 @@ def append_loss(orig_func: Function, loss_func: Function) -> Function:
 
     Notes
     -----
-    1. This uitl is dedicated to loss functions, not for general purposes.
+    1. This util is dedicated to loss functions, not for general purposes.
     2. This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in
     some sense.
     """

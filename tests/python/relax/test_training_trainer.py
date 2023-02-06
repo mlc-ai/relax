@@ -68,7 +68,7 @@ def test_execute(target, dev):
 
     trainer = Trainer(backbone, params_num, setup_trainer)
     trainer.build(target, dev)
-    trainer.rand_init_params()
+    trainer.xaiver_uniform_init_params()
 
     dataset = _make_dataset()
     last_loss = np.inf
@@ -89,7 +89,7 @@ def test_load_export_params(target, dev):
 
     trainer = Trainer(backbone, params_num, setup_trainer)
     trainer.build(target, dev)
-    trainer.rand_init_params()
+    trainer.xaiver_uniform_init_params()
 
     dataset = _make_dataset()
     for i, data in enumerate(dataset):

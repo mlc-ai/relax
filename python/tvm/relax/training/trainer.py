@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=not-callable,invalid-name,unused-argument
+# pylint: disable=invalid-name
 """Unified Trainer API for relax training."""
 
 from typing import Union, List, Optional, Dict
@@ -55,7 +55,7 @@ class Trainer:
     >>> setup_trainer.set_optimizer(optim_type=SGD, lr=0.001)
     >>> trainer = Trainer(MLP, 2, "main")
     >>> trainer.build(target="llvm")
-    >>> trainer.rand_init_params()
+    >>> trainer.xaiver_uniform_init_params()
     >>> trainer.predict(*predict_inputs)
     >>> trainer.update_params(*update_params_inputs)
 
@@ -154,8 +154,9 @@ class Trainer:
         self._check_build()
         return self._vm
 
-    def rand_init_params(self):
-        """Randomly initialize parameters using np.random.uniform."""
+    def xaiver_uniform_init_params(self):
+        """Randomly initialize parameters using the method described in `Understanding the difficulty
+        of training deep feedforward neural networks` - Glorot, X. & Bengio, Y. (2010)."""
         self._parameters_buffer = [
             tvm.nd.array(
                 np.sqrt(6.0 / np.sum(v.shape))

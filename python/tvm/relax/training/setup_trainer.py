@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=not-callable,unused-argument
+# pylint: disable=not-callable, unused-argument
 """Setup Trainer Pass."""
 from typing import Type, Optional, Any, Dict
 
