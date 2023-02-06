@@ -62,6 +62,8 @@ def has_known_shape_value(sinfo: struct_info.StructInfo) -> bool:
         return sinfo.values is not None
     elif isinstance(sinfo, struct_info.TupleStructInfo):
         return all([has_known_shape_value(field_sinfo) for field_sinfo in sinfo.fields])
+    elif isinstance(sinfo, struct_info.PrimStructInfo):
+        return True
     else:
         return False
 
@@ -834,15 +836,12 @@ class LegalizeOps:
 
             def _convert_op(self, call: Call) -> Expr:
                 if call.op.name in self.legalize_map:
-                    try:
-                        return self.legalize_map[call.op.name](self.builder_, call)
-                    except Exception as e:  # pylint: disable=broad-except
-                        logging.warning(
-                            "An error occurred during legalization op %s. This op is skipped.",
-                            call.op.name,
-                        )
-                        logging.debug("Error message: %s", str(e))
+                    # We only transform the op calls with known shape values
+                    if not all(
+                        [has_known_shape_value(arg.struct_info) for arg in call.args]
+                    ) or not has_known_shape_value(call.struct_info):
                         return call
+                    return self.legalize_map[call.op.name](self.builder_, call)
                 if call.op.name != "relax.call_tir":
                     logging.warning("No legalization func for %s is found.", call.op.name)
                 return call
