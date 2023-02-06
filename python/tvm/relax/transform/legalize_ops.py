@@ -62,6 +62,8 @@ def has_known_shape_value(sinfo: struct_info.StructInfo) -> bool:
         return sinfo.values is not None
     elif isinstance(sinfo, struct_info.TupleStructInfo):
         return all([has_known_shape_value(field_sinfo) for field_sinfo in sinfo.fields])
+    elif isinstance(sinfo, struct_info.PrimStructInfo):
+        return True
     else:
         return False
 
@@ -616,6 +618,13 @@ def _image_resize2d(bb: BlockBuilder, call: Call) -> Expr:
     )
 
 
+##################### Common #####################
+
+
+def _call_topi(te_func: TEFunc) -> LegalizeFunc:
+    return lambda bb, call: bb.call_te(te_func, *call.args)
+
+
 ##########################################################
 
 
@@ -635,6 +644,7 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.sin": _unary(topi.sin),
     "relax.sqrt": _unary(topi.sqrt),
     "relax.tanh": _unary(topi.tanh),
+    "relax.clip": _call_topi(topi.clip),
     "relax.add": _binary(topi.add),
     "relax.divide": _binary(topi.divide),
     "relax.floor_divide": _binary(topi.floor_divide),
@@ -832,9 +842,8 @@ class LegalizeOps:
                     ) or not has_known_shape_value(call.struct_info):
                         return call
                     return self.legalize_map[call.op.name](self.builder_, call)
-
                 if call.op.name != "relax.call_tir":
-                    logging.info("No legalization func for %s is found.", call.op.name)
+                    logging.warning("No legalization func for %s is found.", call.op.name)
                 return call
 
             def transform(self) -> IRModule:

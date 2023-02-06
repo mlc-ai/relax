@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import pytest
 import tvm
 from tvm import relax
 import tvm.testing
@@ -226,13 +227,17 @@ def test_relu():
 
     torch.set_grad_enabled(False)
 
-    class ReLU(Module):
+    class ReLU0(Module):
         def __init__(self):
             super().__init__()
             self.relu = torch.nn.ReLU()
 
         def forward(self, input):
             return self.relu(input)
+
+    class ReLU1(Module):
+        def forward(self, input):
+            return torch.nn.functional.relu(input)
 
     @tvm.script.ir_module
     class expected:
@@ -248,7 +253,38 @@ def test_relu():
             return gv
 
     input_info = {"input_1": ([10, 10], "float32")}
-    verify_model(ReLU(), input_info, {}, expected)
+    verify_model(ReLU0(), input_info, {}, expected)
+    verify_model(ReLU1(), input_info, {}, expected)
+
+
+@tvm.testing.requires_gpu
+def test_relu6():
+    import torch
+    from torch.nn import Module
+
+    torch.set_grad_enabled(False)
+
+    class ReLU6(Module):
+        def __init__(self):
+            super().__init__()
+            self.relu6 = torch.nn.ReLU6()
+
+        def forward(self, input):
+            return self.relu6(input)
+
+    @tvm.script.ir_module
+    class expected:
+        @R.function
+        def main(input: R.Tensor((10, 10), dtype="float32")) -> R.Tensor((10, 10), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((10, 10), dtype="float32") = R.clip(input, 0, 6)
+                gv: R.Tensor((10, 10), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    input_info = {"input_1": ([10, 10], "float32")}
+    verify_model(ReLU6(), input_info, {}, expected)
 
 
 @tvm.testing.requires_gpu
@@ -363,13 +399,17 @@ def test_adaptive_avgpool2d():
 
     input_info = {"input_1": ([1, 3, 10, 10], "float32")}
 
-    class AdaptiveAvgPool2d(Module):
+    class AdaptiveAvgPool2d0(Module):
         def __init__(self):
             super().__init__()
             self.pool = torch.nn.AdaptiveAvgPool2d([10, 10])
 
         def forward(self, input):
             return self.pool(input)
+
+    class AdaptiveAvgPool2d1(Module):
+        def forward(self, input):
+            return torch.nn.functional.adaptive_avg_pool2d(input, [10, 10])
 
     @tvm.script.ir_module
     class expected1:
@@ -386,7 +426,8 @@ def test_adaptive_avgpool2d():
                 R.output(gv)
             return gv
 
-    verify_model(AdaptiveAvgPool2d(), input_info, {}, expected1)
+    verify_model(AdaptiveAvgPool2d0(), input_info, {}, expected1)
+    verify_model(AdaptiveAvgPool2d1(), input_info, {}, expected1)
 
 
 @tvm.testing.requires_gpu
@@ -1177,6 +1218,58 @@ def test_gelu():
             return gv
 
     verify_model(Gelu(), input_info, {}, expected1)
+
+
+@tvm.testing.requires_gpu
+def test_clamp():
+    import torch
+    from torch.nn import Module
+
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+
+    class Clamp(Module):
+        def forward(self, input):
+            return torch.clamp(input, min=0.1, max=0.5)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            input_1: R.Tensor((1, 3, 10, 10), dtype="float32")
+        ) -> R.Tensor((1, 3, 10, 10), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 3, 10, 10), dtype="float32") = R.clip(input_1, 0.1, 0.5)
+                gv: R.Tensor((1, 3, 10, 10), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Clamp(), input_info, {}, expected1)
+
+    from tvm.relax.frontend import from_pytorch
+
+    with pytest.raises(
+        ValueError, match="TVM only supports constant max value for torch.clamp/clip"
+    ):
+
+        class Clamp_Error(Module):
+            def forward(self, input):
+                return torch.clamp(input, min=0.5, max=None)
+
+        from_pytorch(Clamp_Error(), input_info)
+
+    with pytest.raises(
+        ValueError, match="TVM only supports constant min value for torch.clamp/clip"
+    ):
+
+        class Clamp_Error(Module):
+            def forward(self, input):
+                return torch.clamp(input, min=input, max=input)
+
+        from_pytorch(Clamp_Error(), input_info)
 
 
 @tvm.testing.requires_gpu
