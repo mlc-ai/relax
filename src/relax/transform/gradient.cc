@@ -412,7 +412,8 @@ class GradientMutator : private ExprMutator {
  * \param require_grads The relax variables whose adjoints are needed.
  * \return The module after transformation.
  */
-IRModule Gradient(const IRModule& mod, const String& func_name, Optional<Array<Var>> require_grads) {
+IRModule Gradient(const IRModule& mod, const String& func_name,
+                  Optional<Array<Var>> require_grads) {
   auto* func = mod->Lookup(func_name).as<FunctionNode>();
   CHECK(func) << func_name << "is not a Relax Function";
 

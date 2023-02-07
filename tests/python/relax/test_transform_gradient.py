@@ -265,9 +265,7 @@ def test_default_require_grads():
             return (gv, (x_adjoint,))
     # fmt: on
 
-    After2 = relax.transform.Gradient(
-        "main", require_grads=Before["main"].params[0]
-    )(Before)
+    After2 = relax.transform.Gradient("main", require_grads=Before["main"].params[0])(Before)
     assert_structural_equal(After2["main_adjoint"], Expected2["main_adjoint"])
 
 
@@ -930,7 +928,7 @@ def test_report_error():
                     T.writes(rxplaceholder_red[()])
                     with T.init():
                         rxplaceholder_red[()] = T.float32(0)
-                    rxplaceholder_red[()] = (rxplaceholder_red[()] + rxplaceholder[v_k0, v_k1])
+                    rxplaceholder_red[()] = rxplaceholder_red[()] + rxplaceholder[v_k0, v_k1]
 
     # no such function
     with pytest.raises(ValueError):
