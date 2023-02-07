@@ -98,7 +98,8 @@ class Optimizer:
         self.dtype = None
 
     def init(self, params: Union[Var, List[Var]]) -> "Optimizer":
-        """Set the parameters, determine the dtype, and build the initial state for the optimizer.
+        """Set the parameters, determine the dtype, and construct the initial state for the
+        optimizer.
 
         Parameters
         ----------
@@ -162,8 +163,8 @@ class Optimizer:
             raise RuntimeError("Please call init() for the optimizer before calling get_function()")
 
     def get_function(self) -> Function:
-        """Use blockbuilder to build an optimizer function that executes updates of the parameters
-        and the optimizer state.
+        """Use blockbuilder to construct an optimizer function that executes updates of the
+        parameters and the optimizer state.
 
         The optimizer function will take in a tuple of parameters, a tuple of gradients of
         parameters, and a tuple of optimizer states. It will return a tuple of updated parameters,
@@ -255,7 +256,8 @@ class SGD(Optimizer):
         self.weight_decay = float(weight_decay)
 
     def init(self, params: Union[Var, List[Var]]) -> "SGD":
-        """Set the parameters, determine the dtype, and build the initial state for the optimizer.
+        """Set the parameters, determine the dtype, and construct the initial state for the
+        optimizer.
 
         The state of SGD is `(num_steps,)`.
 
@@ -285,8 +287,8 @@ class SGD(Optimizer):
         return self
 
     def get_function(self) -> Function:
-        """Use blockbuilder to build an optimizer function that executes updates of the parameters
-        and the optimizer state. `init()` should be called before `get_function()`.
+        """Use blockbuilder to construct an optimizer function that executes updates of the
+        parameters and the optimizer state. `init()` should be called before `get_function()`.
 
         Returns
         -------
@@ -397,7 +399,8 @@ class MomentumSGD(Optimizer):
         self.nesterov = nesterov
 
     def init(self, params: Union[Var, List[Var]]) -> "MomentumSGD":
-        """Set the parameters, determine the dtype, and build the initial state for the optimizer.
+        """Set the parameters, determine the dtype, and construct the initial state for the
+        optimizer.
 
         The state of MomentumSGD is
         `(num_steps, velocity_of_param_0, ..., velocity_of_param_n-1)`.
@@ -433,8 +436,8 @@ class MomentumSGD(Optimizer):
         return self
 
     def get_function(self) -> Function:
-        """Use blockbuilder to build an optimizer function that executes updates of the parameters
-        and the optimizer state. `init()` should be called before `get_function()`.
+        """Use blockbuilder to construct an optimizer function that executes updates of the
+        parameters and the optimizer state. `init()` should be called before `get_function()`.
 
         Returns
         -------
@@ -561,7 +564,8 @@ class Adam(Optimizer):
         self.weight_decay = float(weight_decay)
 
     def init(self, params: Union[Var, List[Var]]) -> "Adam":
-        """Set the parameters, determine the dtype, and build the initial state for the optimizer.
+        """Set the parameters, determine the dtype, and construct the initial state for the
+        optimizer.
 
         The state of Adam is
 
@@ -612,8 +616,8 @@ class Adam(Optimizer):
         return self
 
     def get_function(self) -> Function:
-        """Use blockbuilder to build an optimizer function that executes updates of the parameters
-        and the optimizer state. `init()` should be called before `get_function()`.
+        """Use blockbuilder to construct an optimizer function that executes updates of the
+        parameters and the optimizer state. `init()` should be called before `get_function()`.
 
         Returns
         -------
