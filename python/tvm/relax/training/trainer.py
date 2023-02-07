@@ -53,7 +53,7 @@ class Trainer:
     >>> setup_trainer = SetupTrainer()
     >>> setup_trainer.set_loss(MSELoss(reduction="sum"), pred_sinfo, pred_sinfo)
     >>> setup_trainer.set_optimizer(optim_type=SGD, lr=0.001)
-    >>> trainer = Trainer(MLP, 2, "main")
+    >>> trainer = Trainer(MLP, 2, setup_trainer)
     >>> trainer.build(target="llvm")
     >>> trainer.xaiver_uniform_init_params()
     >>> trainer.predict(*predict_inputs)
@@ -155,8 +155,9 @@ class Trainer:
         return self._vm
 
     def xaiver_uniform_init_params(self):
-        """Randomly initialize parameters using the method described in `Understanding the difficulty
-        of training deep feedforward neural networks` - Glorot, X. & Bengio, Y. (2010)."""
+        """Randomly initialize parameters using the method described in `Understanding the
+        difficulty of training deep feedforward neural networks` - Glorot, X. & Bengio, Y.
+        (2010)."""
         self._parameters_buffer = [
             tvm.nd.array(
                 np.sqrt(6.0 / np.sum(v.shape))

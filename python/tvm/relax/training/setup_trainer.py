@@ -70,7 +70,7 @@ class SetupTrainer:
     def _check_backbone_validity(cls, mod: IRModule):
         if not well_formed(mod):
             raise ValueError("Backbone Invalid: The backbone is not well formed.")
-        ret_sinfo = mod[cls.PREDICT_FUNC_NAME].body.body.struct_info
+        ret_sinfo = mod[cls.PREDICT_FUNC_NAME].struct_info.ret
         if not isinstance(ret_sinfo, TensorStructInfo):
             raise ValueError(
                 "Backbone Invalid: The predict function is expected to have a single Tensor "
