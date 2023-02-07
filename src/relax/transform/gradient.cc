@@ -298,9 +298,9 @@ class BackwardBindingGenerator : private ExprVisitor {
 
 class GradientMutator : private ExprMutator {
  public:
-  static IRModule Transform(IRModule mod, GlobalVar gvar, Array<Var> require_grads) {
-    Function old_func = Downcast<Function>(mod->Lookup(gvar));
-    CheckRequireGrads(require_grads, old_func->params, gvar->name_hint);
+  static IRModule Transform(IRModule mod, String func_name, Array<Var> require_grads) {
+    Function old_func = Downcast<Function>(mod->Lookup(func_name));
+    CheckRequireGrads(require_grads, old_func->params, func_name);
 
     Function new_func = CopyWithNewVars(old_func);
     // map the parameter list into new params
@@ -314,7 +314,7 @@ class GradientMutator : private ExprMutator {
     Function new_func_transformed = Downcast<Function>(mutator.VisitExpr(new_func));
 
     IRModule new_module = GetRef<IRModule>(mod.CopyOnWrite());
-    new_module->Add(GlobalVar(gvar->name_hint + "_adjoint"), new_func_transformed);
+    new_module->Add(GlobalVar(func_name + "_adjoint"), new_func_transformed);
     return new_module;
   }
 
@@ -408,27 +408,28 @@ class GradientMutator : private ExprMutator {
 /*!
  * \brief This is the internal function of tvm::relax::transform::Gradient.
  * \param mod The module
- * \param gvar The GlobalVar of the specified function
+ * \param func_name The name of the specified function
  * \param require_grads The relax variables whose adjoints are needed.
  * \return The module after transformation.
  */
-IRModule Gradient(const IRModule& mod, const GlobalVar& gvar, Optional<Array<Var>> require_grads) {
-  auto* func = mod->Lookup(gvar).as<FunctionNode>();
-  CHECK(func) << "Relax function " << gvar->name_hint << " is not found";
+IRModule Gradient(const IRModule& mod, const String& func_name,
+                  Optional<Array<Var>> require_grads) {
+  auto* func = mod->Lookup(func_name).as<FunctionNode>();
+  CHECK(func) << func_name << "is not a Relax Function";
 
   if (!require_grads.defined()) {
     // when require_grads is not specified, it would be set to all params of the function
     require_grads = func->params;
   }
 
-  return GradientMutator::Transform(mod, gvar, require_grads.value());
+  return GradientMutator::Transform(mod, func_name, require_grads.value());
 }
 
 namespace transform {
 
-Pass Gradient(GlobalVar global_var, Optional<Array<Var>> require_grads) {
+Pass Gradient(String func_name, Optional<Array<Var>> require_grads) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
-      [=](IRModule mod, PassContext pc) { return relax::Gradient(mod, global_var, require_grads); };
+      [=](IRModule mod, PassContext pc) { return relax::Gradient(mod, func_name, require_grads); };
   return CreateModulePass(/*pass_function=*/pass_func,
                           /*opt_level=*/0,
                           /*pass_name=*/"Gradient",

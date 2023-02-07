@@ -67,7 +67,7 @@ def _assert_run_result_same(tvm_func: Callable, np_func: Callable, np_inputs: Li
 def _test_optimizer(target, dev, np_func, opt_type, *args, **kwargs):
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
-    opt = opt_type([x, y], *args, **kwargs)
+    opt = opt_type(*args, **kwargs).init([x, y])
     mod = IRModule.from_expr(opt.get_function())
     tvm_func = _legalize_and_build(mod, target, dev)["main"]
 
@@ -76,13 +76,6 @@ def _test_optimizer(target, dev, np_func, opt_type, *args, **kwargs):
     state_arr = _tvm_to_numpy(opt.state)
 
     _assert_run_result_same(tvm_func, np_func, [param_arr, grad_arr, state_arr])
-
-    # test the step function
-    opt.set_vm_config(target, dev)
-    result_params = _tvm_to_numpy(opt(_numpy_to_tvm(param_arr), _numpy_to_tvm(grad_arr)))
-    expected_params, expected_state = np_func(param_arr, grad_arr, state_arr)
-    _assert_allclose_nested(result_params, expected_params)
-    _assert_allclose_nested(_tvm_to_numpy(opt.state), expected_state)
 
 
 lr, weight_decay = tvm.testing.parameters(

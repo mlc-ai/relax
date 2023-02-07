@@ -23,31 +23,45 @@ import numpy as np  # type: ignore
 
 import tvm
 
-from ..vm import VirtualMachine, build
 from ..block_builder import BlockBuilder
 from ..struct_info import TensorStructInfo, TupleStructInfo
-from ..transform.legalize_ops import LegalizeOps
 from ..op import add, subtract, multiply, divide, sqrt
 from ..expr import const, Var, Function, TupleGetItem, Tuple as RxTuple
+
 
 # TODO(chaofan, yixin): Migrate key logics to C++
 class Optimizer:
     """Relax training optimizer. This class could generate relax Functions for optimizing specified
     parameters, and store the states used in the optimization process, such as momentum.
 
-    See `@property state` for details about the state of the optimizer.
-
     Parameters
     ----------
     name : str
         The name of the optimizer function. This parameter is provided by subclasses.
 
-    params : Union[Var, List[Var]]
-        The parameter or the list of parameters to optimize.
+    Attributes
+    ----------
+    dtype : str
+        The only dtype of the optimizer. It will be used as the dtype of the optimizer states,
+        and the dtype of necessary constants, such as the learning rate. Will be set in `init()`.
 
-        Parameters should all be Vars of floating point Tensors, including float32, float64,
-        float16, etc. Currently, all parameters should have the same dtype, and that dtype
-        will be used as the dtype of the optimizer states.
+    name : str
+        The name of the optimizer.
+
+    param_list : List[Var]
+        The list of variables to optimize. Will be set in `init()`.
+
+    state : tvm.ir.Array
+        `state` is an runtime Array representing the state of the optimizer. Will be set in
+        `init()`.
+
+        The states of the optimizer can store necessary information in the optimization process at
+        runtime, such as the number of steps, the momentum in momentum SGD, etc.
+
+        `opt.state` should be used as the last argument of the function that is got through
+        `get_function()`, and its new value is returned as the last return value of that function.
+
+        See examples for more details.
 
     Examples
     --------
@@ -55,45 +69,74 @@ class Optimizer:
     For detailed examples, please see the tutorial.
 
     .. code-block:: python
-        # Initialize the optimizer.
-        # x is the relax Var we want to optimize
-        opt = relax.optimizer.SGD(x, 0.1)
+        # Construct the optimizer
+        opt = relax.optimizer.SGD(0.1)
 
-        # Backward process
-        # adjoint_function is a runtime function that takes TVM runtime objects as input and output
-        # It accepts parameters and other inputs, returns loss and gradients of the parameters
-        # See also relax.transform.Gradient.
-        loss, param_gradient = adjoint_function(*param_tuple, label)
+        # Initialize the parameter list, the dtype and the optimizer state
+        # x is the relax Var we want to optimize
+        opt.init(x)
+
+        # The above two lines is equivalent to one line:
+        opt = relax.optimizer.SGD(0.1).init(x)
+
+        # Get the optimizer function
+        # mod is an IRModule constructed earlier
+        mod["SGD"] = opt.get_function()
+
+        # Legalize and build mod
+        lowered_mod = LegalizeOps()(mod)
+        ex = relax.vm.build(lowered_mod, target="llvm")
+        vm = relax.VirtualMachine(ex, tvm.cpu())
 
         # Optimization process
-        param_tuple = opt(param_tuple, param_gradient)
+        # param_tuple is a runtime tuple of parameters
+        # param_gradient is a runtime tuple of the gradient of the parameters in param_tuple,
+        # respectively
+        # param_gradient can be gained by the automatic differentiation pass. Please see
+        # `relax.transform.Gradient`
+        param_tuple, opt.state = vm["SGD"](param_tuple, param_gradient, opt.state)
     """
 
+    dtype: str
     name: str
-    _param_list: List[Var]
-    _state: tvm.ir.Array
-    _dtype: str
+    param_list: List[Var]
+    state: tvm.ir.Array
 
-    # these attributes are for the building and running process of the optimizer function
-    _vm_module: VirtualMachine
-    _target: Union[str, tvm.target.Target]
-    _device: Union[tvm.runtime.Device, List[tvm.runtime.Device]]
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.param_list = None
+        self.state = None
+        self.dtype = None
 
-    def __init__(self, name: str, params: Union[Var, List[Var]]) -> None:
+    def init(self, params: Union[Var, List[Var]]) -> "Optimizer":
+        """Set the parameters, determine the dtype, and construct the initial state for the
+        optimizer.
+
+        Parameters
+        ----------
+        params : Union[Var, List[Var]]
+            The parameter or the list of parameters to optimize.
+
+            Parameters should all be Vars of floating point Tensors, including float32, float64,
+            float16, etc. Currently, all parameters should have the same dtype, and that dtype
+            will be used as the dtype of the optimizer states.
+
+        Returns
+        -------
+        self : Optimizer
+            The optimizer itself.
+        """
         if not isinstance(params, list):
             params = [params]
-        self._state = None
-        self._dtype = None
-        self._check_params_and_dtype(params)
-        self._param_list = params
-        self.name = name
-        self._vm_module = None
-        self._target = None
-        self._device = None
+        self._set_params_and_dtype(params)
+        # State should be initialized in any implementation of optimizer.
+        self.state = None
+        return self
 
-    def _check_params_and_dtype(self, params: List[Var]) -> None:
-        """Check params is legal and set the dtype of the optimizer."""
+    def _set_params_and_dtype(self, params: List[Var]) -> None:
+        """Check params is legal and set the param_list and dtype of the optimizer."""
         params_set = set()
+        dtype = None
         for x in params:
             if not isinstance(x, Var):
                 raise ValueError(f"Parameter {x} is not a Var")
@@ -108,49 +151,31 @@ class Optimizer:
                     f"Optimizers only support Tensor parameters of floating point dtype, but dtype "
                     f"of {x.name_hint} is {x.struct_info.dtype}"
                 )
-            if self._dtype is None:
-                self._dtype = x.struct_info.dtype
+            if dtype is None:
+                dtype = x.struct_info.dtype
             else:
-                if self._dtype != x.struct_info.dtype:
+                if dtype != x.struct_info.dtype:
                     raise ValueError(
                         f"All parameters should have the same dtype, but parameter {x.name_hint} "
                         f"has dtype {x.struct_info.dtype}, which differs from the previous dtype "
-                        f"{self._dtype}"
+                        f"{dtype}"
                     )
             if x in params_set:
                 raise ValueError(f"Parameter {x.name_hint} appears more than once")
             params_set.add(x)
+        self.param_list = params
+        self.dtype = dtype
 
-    @property
-    def state(self) -> tvm.ir.Array:
-        """Return the state of the optimizer.
-
-        The states of the optimizer can store information useful in the optimization process, such
-        as the number of steps, the momentum in momentum SGD, etc.
-
-        `opt.state` should be used as the last argument of the function that is got through
-        `get_function()`, and its new value is returned as the last return value of that function.
-
-        The state of an optimizer will be constructed when `opt.state` is called for the first time.
-
-        Returns
-        -------
-        res : tvm.ir.Array
-            An Array representing the state of the optimizer.
+    def _check_init(self):
+        """Check that the optimizer is initialized. This method should be called at the start of
+        get_function().
         """
-        return self._state
-
-    @state.setter
-    def state(self, new_value: tvm.ir.Array) -> None:
-        """Setter of state.
-
-        If `state` property is overloaded, `state` setter must be overloaded at the same time.
-        """
-        self._state = new_value
+        if self.param_list is None or self.state is None or self.dtype is None:
+            raise RuntimeError("Please call init() for the optimizer before calling get_function()")
 
     def get_function(self) -> Function:
-        """We will use blockbuilder in get_function() to build an optimizer function that executes
-        the update of parameters and the optimizer state.
+        """Use blockbuilder to construct an optimizer function that executes updates of the
+        parameters and the optimizer state.
 
         The optimizer function will take in a tuple of parameters, a tuple of gradients of
         parameters, and a tuple of optimizer states. It will return a tuple of updated parameters,
@@ -195,61 +220,8 @@ class Optimizer:
                     R.output(params_new, optim_states_new)
                 return (params_new, optim_states_new)
         """
+        self._check_init()
         raise NotImplementedError()
-
-    def set_vm_config(
-        self,
-        target: Union[str, tvm.target.Target],
-        device: Union[tvm.runtime.Device, List[tvm.runtime.Device]],
-    ) -> "Optimizer":
-        """Set the building and virtual machine configs of the optimizer function.
-
-        Parameters
-        ----------
-        target : Union[str, tvm.target.Target]
-            The target of building the module containing the optimizer function.
-
-        device : Union[tvm.runtime.Device, List[tvm.runtime.Device]]
-            The device to deploy the module containing the optimizer function.
-
-        Returns
-        -------
-        self : Optimizer
-            Returns the optimizer itself.
-        """
-        self._target = target
-        self._device = device
-        return self
-
-    def __call__(self, params_arr: tvm.ir.Array, grads_arr: tvm.ir.Array) -> tvm.ir.Array:
-        """Optimization process. This function takes an Array of the input parameters and an Array
-        of the gradients of the input parameters, and returns an Array of parameters after a step op
-        optimization. This is equivalent to `optimizer.step()` in most deep learning frameworks.
-
-        This function will build a module containing the optimizer function when called for the
-        first time. Before this function is called, you should call `set_vm_config()` to set the
-        building and vm configs first.
-
-        Parameters
-        ----------
-        params_arr : tvm.ir.Array
-            An Array of the input parameters. A TVM runtime object.
-
-        grads_arr : tvm.ir.Array
-            An Array of the gradients of the input parameters. A TVM runtime object.
-        """
-        if self._vm_module is None:
-            if self._target is None or self._device is None:
-                raise RuntimeError(
-                    "The vm configs of the optimizer is not set. Please call set_vm_config first"
-                )
-            mod = tvm.IRModule({self.name: self.get_function()})
-            # pylint: disable=not-callable
-            lowered_mod = LegalizeOps()(mod)  # type: ignore
-            executable = build(lowered_mod, self._target)
-            self._vm_module = VirtualMachine(executable, self._device)
-        new_params, self.state = self._vm_module[self.name](params_arr, grads_arr, self.state)
-        return new_params
 
 
 # TODO(chaofan, yixin): Support symbolic shapes
@@ -259,7 +231,7 @@ def _get_shape_as_int_list(var: Var) -> List[int]:
 
 # We need to subtract on hyperparameters, but do not want to introduce floating point error.
 # Floating point error would lead to a few problems, such as making assert_structural_equal not
-# passed in unit tests
+# pass in unit tests
 def _high_precision_subtract(lhs: float, rhs: float) -> float:
     return float(Decimal(str(lhs)) - Decimal(str(rhs)))
 
@@ -267,7 +239,7 @@ def _high_precision_subtract(lhs: float, rhs: float) -> float:
 class SGD(Optimizer):
     """Implements stochastic gradient descent.
 
-    The returned function is equivalent to the following numpy code:
+    The returned function of `get_function()` is equivalent to the following numpy code:
 
     .. code-block:: python
         def SGD(param_tuple, grad_tuple, state_tuple):
@@ -282,13 +254,6 @@ class SGD(Optimizer):
 
     Parameters
     ----------
-    params : Union[Var, List[Var]]
-        The parameter or the list of parameters to optimize.
-
-        Parameters should all be Vars of floating point Tensors, including float32, float64,
-        float16, etc. Currently, all parameters should have the same dtype, and that dtype
-        will be used as the dtype of the optimizer states.
-
     lr : float
         learning rate
 
@@ -296,38 +261,54 @@ class SGD(Optimizer):
         weight decay (L2 penalty) (default: 0)
     """
 
-    def __init__(
-        self, param_list: Union[Var, List[Var]], lr: float, weight_decay: float = 0
-    ) -> None:
-        super().__init__("SGD", param_list)
+    def __init__(self, lr: float, weight_decay: float = 0) -> None:
+        super().__init__("SGD")
         self.lr = float(lr)
         self.weight_decay = float(weight_decay)
 
-    @property
-    def state(self) -> tvm.ir.Array:
-        """The state of SGD is `(num_steps,)`.
+    def init(self, params: Union[Var, List[Var]]) -> "SGD":
+        """Set the parameters, determine the dtype, and construct the initial state for the
+        optimizer.
+
+        The state of SGD is `(num_steps,)`.
+
+        Parameters
+        ----------
+        params : Union[Var, List[Var]]
+            The parameter or the list of parameters to optimize.
+
+            Parameters should all be Vars of floating point Tensors, including float32, float64,
+            float16, etc. Currently, all parameters should have the same dtype, and that dtype
+            will be used as the dtype of the optimizer states.
 
         Returns
         -------
-        res : tvm.ir.Array
-            The state of SGD.
+        self : SGD
+            The SGD optimizer itself.
         """
-        if self._state is None:
-            self._state = (
-                # num_steps = 0
-                tvm.nd.array(np.zeros((), "int64")),
-            )
-
-        return self._state
-
-    @state.setter
-    def state(self, new_value: tvm.ir.Array) -> None:
-        self._state = new_value
+        if not isinstance(params, list):
+            params = [params]
+        self._set_params_and_dtype(params)
+        self.state = (
+            # num_steps = 0
+            tvm.nd.array(np.zeros((), "int64")),
+        )
+        return self
 
     def get_function(self) -> Function:
-        plist = self._param_list
+        """Use blockbuilder to construct an optimizer function that executes updates of the
+        parameters and the optimizer state. `init()` should be called before `get_function()`.
+
+        Returns
+        -------
+        func : Function
+            The optimizer function.
+        """
+        self._check_init()
+
+        plist = self.param_list
         len_param = len(plist)
-        dtype = self._dtype
+        dtype = self.dtype
 
         # input variables
         param_var = Var("params", TupleStructInfo([p.struct_info for p in plist]))
@@ -351,7 +332,7 @@ class SGD(Optimizer):
 
                 # computation logics
                 for i in range(len_param):
-                    name = self._param_list[i].name_hint
+                    name = self.param_list[i].name_hint
                     p = builder.emit(TupleGetItem(param_var, i), name)
                     g = builder.emit(TupleGetItem(grad_var, i), name + "_grad")
                     if self.weight_decay:
@@ -370,7 +351,7 @@ class MomentumSGD(Optimizer):
     """Implements stochastic gradient descent with momentum. Optionally supports Nesterov
     momentum.
 
-    The returned function is equivalent to the following numpy code:
+    The returned function of `get_function()` is equivalent to the following numpy code:
 
     .. code-block:: python
         def MomentumSGD(param_tuple, grad_tuple, state_tuple):
@@ -395,13 +376,6 @@ class MomentumSGD(Optimizer):
 
     Parameters
     ----------
-    params : Union[Var, List[Var]]
-        The parameter or the list of parameters to optimize.
-
-        Parameters should all be Vars of floating point Tensors, including float32, float64,
-        float16, etc. Currently, all parameters should have the same dtype, and that dtype
-        will be used as the dtype of the optimizer states.
-
     lr : float
         learning rate
 
@@ -420,50 +394,67 @@ class MomentumSGD(Optimizer):
 
     def __init__(
         self,
-        param_list: Union[Var, List[Var]],
         lr: float,
         momentum: float,
         dampening: float = 0,
         weight_decay: float = 0,
         nesterov: bool = False,
     ) -> None:
-        super().__init__("MomentumSGD", param_list)
+        super().__init__("MomentumSGD")
         self.lr = float(lr)
         self.momentum = float(momentum)
         self.weight_decay = float(weight_decay)
         self.dampening = float(dampening)
         self.nesterov = nesterov
 
-    @property
-    def state(self) -> tvm.ir.Array:
-        """The state of momentum SGD is
-        `(num_steps, velocity_of_param_0, ..., velocity_of_param_n-1)`
+    def init(self, params: Union[Var, List[Var]]) -> "MomentumSGD":
+        """Set the parameters, determine the dtype, and construct the initial state for the
+        optimizer.
+
+        The state of MomentumSGD is
+        `(num_steps, velocity_of_param_0, ..., velocity_of_param_n-1)`.
+
+        Parameters
+        ----------
+        params : Union[Var, List[Var]]
+            The parameter or the list of parameters to optimize.
+
+            Parameters should all be Vars of floating point Tensors, including float32, float64,
+            float16, etc. Currently, all parameters should have the same dtype, and that dtype
+            will be used as the dtype of the optimizer states.
 
         Returns
         -------
-        res : tvm.ir.Array
-            The state of momentum SGD.
+        self : MomentumSGD
+            The MomentumSGD optimizer itself.
         """
-        if self._state is None:
-            self._state = (
-                # num_steps = 0
-                tvm.nd.array(np.zeros((), "int64")),
-                # v_{param} is initialized to all zeros
-                *(
-                    tvm.nd.array(np.zeros(_get_shape_as_int_list(p), p.struct_info.dtype))
-                    for p in self._param_list
-                ),
-            )
-        return self._state
-
-    @state.setter
-    def state(self, new_value: tvm.ir.Array) -> None:
-        self._state = new_value
+        if not isinstance(params, list):
+            params = [params]
+        self._set_params_and_dtype(params)
+        self.state = (
+            # num_steps = 0
+            tvm.nd.array(np.zeros((), "int64")),
+            # v_{param} is initialized to all zeros
+            *(
+                tvm.nd.array(np.zeros(_get_shape_as_int_list(p), p.struct_info.dtype))
+                for p in self.param_list
+            ),
+        )
+        return self
 
     def get_function(self) -> Function:
-        plist = self._param_list
+        """Use blockbuilder to construct an optimizer function that executes updates of the
+        parameters and the optimizer state. `init()` should be called before `get_function()`.
+
+        Returns
+        -------
+        func : Function
+            The optimizer function.
+        """
+        self._check_init()
+        plist = self.param_list
         len_param = len(plist)
-        dtype = self._dtype
+        dtype = self.dtype
 
         # input variables
         param_var = Var("params", TupleStructInfo([p.struct_info for p in plist]))
@@ -492,7 +483,7 @@ class MomentumSGD(Optimizer):
 
                 # computation logics
                 for i in range(len_param):
-                    name = self._param_list[i].name_hint
+                    name = self.param_list[i].name_hint
                     p = builder.emit(TupleGetItem(param_var, i), name)
                     g = builder.emit(TupleGetItem(grad_var, i), name + "_grad")
                     v = builder.emit(TupleGetItem(state_var, i + 1), name + "_v")
@@ -519,7 +510,7 @@ class MomentumSGD(Optimizer):
 class Adam(Optimizer):
     """Implements Adam optimization algorithm.
 
-    The returned function is equivalent to the following numpy code:
+    The returned function of `get_function()` is equivalent to the following numpy code:
 
     .. code-block:: python
         def Adam(param_tuple, grad_tuple, state_tuple):
@@ -551,13 +542,6 @@ class Adam(Optimizer):
 
     Parameters
     ----------
-    params : Union[Var, List[Var]]
-        The parameter or the list of parameters to optimize.
-
-        Parameters should all be Vars of floating point Tensors, including float32, float64,
-        float16, etc. Currently, all parameters should have the same dtype, and that dtype
-        will be used as the dtype of the optimizer states.
-
     lr : float
         learning rate
 
@@ -574,61 +558,81 @@ class Adam(Optimizer):
 
     def __init__(
         self,
-        param_list: Union[Var, List[Var]],
         lr: float,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-08,
         weight_decay: float = 0,
     ) -> None:
-        super().__init__("Adam", param_list)
+        super().__init__("Adam")
         self.lr = float(lr)
         self.beta1 = float(betas[0])
         self.beta2 = float(betas[1])
         self.eps = float(eps)
         self.weight_decay = float(weight_decay)
 
-    @property
-    def state(self) -> tvm.ir.Array:
-        """The state of Adam is
+    def init(self, params: Union[Var, List[Var]]) -> "Adam":
+        """Set the parameters, determine the dtype, and construct the initial state for the
+        optimizer.
+
+        The state of Adam is
 
         .. code-block:: python
-            (num_steps, beta_0_prod, # beta0 ** num_steps
-            beta_1_prod, # beta1 ** num_steps
-            first_momentum_of_param_0, ..., first_momentum_of_param_n-1,
-            second_momentum_of_param_0, ..., second_momentum_of_param_n-1)
+            (
+                num_steps,
+                beta_0_prod, # beta0 ** num_steps
+                beta_1_prod, # beta1 ** num_steps
+                first_momentum_of_param_0, ..., first_momentum_of_param_n-1,
+                second_momentum_of_param_0, ..., second_momentum_of_param_n-1
+            )
+
+        Parameters
+        ----------
+        params : Union[Var, List[Var]]
+            The parameter or the list of parameters to optimize.
+
+            Parameters should all be Vars of floating point Tensors, including float32, float64,
+            float16, etc. Currently, all parameters should have the same dtype, and that dtype
+            will be used as the dtype of the optimizer states.
 
         Returns
         -------
-        res : tvm.ir.Array
-            The state of Adam.
+        self : Adam
+            The Adam optimizer itself.
         """
-        if self._state is None:
-            self._state = (
-                # num_steps, beta_0_prod, beta_1_prod
-                tvm.nd.array(np.zeros((), "int64")),
-                tvm.nd.array(np.ones((), self._dtype)),
-                tvm.nd.array(np.ones((), self._dtype)),
-                # first_momentum
-                *(
-                    tvm.nd.array(np.zeros(_get_shape_as_int_list(p), p.struct_info.dtype))
-                    for p in self._param_list
-                ),
-                # second_momentum
-                *(
-                    tvm.nd.array(np.zeros(_get_shape_as_int_list(p), p.struct_info.dtype))
-                    for p in self._param_list
-                ),
-            )
-        return self._state
-
-    @state.setter
-    def state(self, new_value: tvm.ir.Array) -> None:
-        self._state = new_value
+        if not isinstance(params, list):
+            params = [params]
+        self._set_params_and_dtype(params)
+        self.state = (
+            # num_steps, beta_0_prod, beta_1_prod
+            tvm.nd.array(np.zeros((), "int64")),
+            tvm.nd.array(np.ones((), self.dtype)),
+            tvm.nd.array(np.ones((), self.dtype)),
+            # first_momentum
+            *(
+                tvm.nd.array(np.zeros(_get_shape_as_int_list(p), p.struct_info.dtype))
+                for p in self.param_list
+            ),
+            # second_momentum
+            *(
+                tvm.nd.array(np.zeros(_get_shape_as_int_list(p), p.struct_info.dtype))
+                for p in self.param_list
+            ),
+        )
+        return self
 
     def get_function(self) -> Function:
-        plist = self._param_list
+        """Use blockbuilder to construct an optimizer function that executes updates of the
+        parameters and the optimizer state. `init()` should be called before `get_function()`.
+
+        Returns
+        -------
+        func : Function
+            The optimizer function.
+        """
+        self._check_init()
+        plist = self.param_list
         len_param = len(plist)
-        dtype = self._dtype
+        dtype = self.dtype
 
         # input variables
         param_var = Var("params", TupleStructInfo([p.struct_info for p in plist]))
@@ -674,7 +678,7 @@ class Adam(Optimizer):
 
                 # computation logics
                 for i in range(len_param):
-                    name = self._param_list[i].name_hint
+                    name = self.param_list[i].name_hint
                     p = builder.emit(TupleGetItem(param_var, i), name)
                     g = builder.emit(TupleGetItem(grad_var, i), name + "_grad")
                     m = builder.emit(TupleGetItem(state_var, i + 3), name + "_m")

@@ -25,7 +25,7 @@ import numpy as np  # type: ignore
 import tvm.ir
 from tvm.runtime import NDArray
 from . import _ffi_api
-from ..expr import Var, GlobalVar
+from ..expr import Var
 
 
 @tvm._ffi.register_object("relax.FunctionPass")
@@ -469,25 +469,24 @@ def ConvertLayout(desired_layouts: Dict[str, List[str]]) -> tvm.ir.transform.Pas
 
 
 def Gradient(
-    global_var: GlobalVar, require_grads: Optional[Union[Var, List[Var]]] = None
+    func_name: str, require_grads: Optional[Union[Var, List[Var]]] = None
 ) -> tvm.ir.transform.Pass:
     """Reverse-mode automatic differentiation.
 
     Now only supports differentiating one function in the IRModule with one dataflow block
     with respect to the only return value of the function, which needs to be scalar.
 
-    For a given function specified by the input global var, it generates a new function with the
-    name `[name of original function] + "_adjoint"`. The new function computes the adjoints of the
-    specified arguments of the original function with respect to the only one return value of the
-    original function.
+    For a given function specified by the input name, it generates a new function with the name
+    `func_name + "_adjoint"`. The new function computes the adjoints of the specified arguments
+    of the original function with respect to the only one return value of the original function.
 
     For examples, see the MLP examples in tests/python/relax/test_transform_gradient.py and
     tests/python/relax/test_transform_gradient_numeric.py.
 
     Parameters
     ----------
-    global_var : relax.GlobalVar
-        The GlobalVar of the specific function.
+    func_name : str
+        The name of the specific function.
 
     require_grads : Optional[Union[relax.Var, List[relax.Var]]]
         The relax variables whose adjoints is needed. Must be parameters of the given function and
@@ -502,7 +501,7 @@ def Gradient(
     if require_grads is not None and not isinstance(require_grads, list):
         require_grads = [require_grads]
 
-    return _ffi_api.Gradient(global_var, require_grads)  # type: ignore
+    return _ffi_api.Gradient(func_name, require_grads)  # type: ignore
 
 
 def SplitCallTIRByPattern(patterns, fcodegen) -> tvm.ir.transform.Pass:
