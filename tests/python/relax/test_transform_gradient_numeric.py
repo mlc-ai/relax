@@ -25,14 +25,15 @@ from tvm.script.parser import ir as I, relax as R, tir as T
 from tvm.relax.transform import LegalizeOps
 
 
-def _legalize_and_build(mod):
+def _legalize_and_build(mod, target, dev):
     lowered_mod = LegalizeOps()(mod)
-    ex = relax.vm.build(lowered_mod, target="llvm")
-    vm = relax.VirtualMachine(ex, tvm.cpu())
+    ex = relax.vm.build(lowered_mod, target)
+    vm = relax.VirtualMachine(ex, dev)
     return vm
 
 
-def test_manual_gradient():
+@tvm.testing.parametrize_targets("llvm")
+def test_manual_gradient(target, dev):
     # The expression computed is sum((2x - 2y) * (y + z))
     # the gradient of x is broadcast_to(2y + 2z, x.shape)
     # the gradient of y is collapse_sum_to((2x - 4y - 2z), y.shape)
@@ -57,12 +58,12 @@ def test_manual_gradient():
                 R.output(lv6)
             return lv6
 
-    After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    After = relax.transform.Gradient("main")(Before)
 
     args = [rand("float32", 3, 5), rand("float32", 5), rand("float32", 5), rand("float32", 5)]
     args_np = [x.numpy() for x in args]
 
-    vm = _legalize_and_build(After)
+    vm = _legalize_and_build(After, target, dev)
     output, grads = vm["main_adjoint"](*args)
     output_np = np.sum((2 * args_np[0] - 2 * args_np[1]) * (args_np[1] + args_np[2]))
     assert_allclose(output.numpy(), output_np, atol=1e-4)
@@ -77,7 +78,8 @@ def test_manual_gradient():
         assert_allclose(i.numpy(), j, atol=1e-4)
 
 
-def test_mlp_blockbuilder():
+@tvm.testing.parametrize_targets("llvm")
+def test_mlp_blockbuilder(target, dev):
     layers, in_size, out_size, hidden_size, batch_size = 3, 5, 5, 5, 4
 
     input_list = [relax.Var("x", R.Tensor((batch_size, in_size), "float32"))]
@@ -109,7 +111,7 @@ def test_mlp_blockbuilder():
         bb.emit_func_output(gv0)
 
     Before = bb.get()
-    After = relax.transform.Gradient(Before.get_global_var("MLP"), args_list)(Before)
+    After = relax.transform.Gradient("MLP", args_list)(Before)
     # Check numerical gradients equal
     args = []
     for arg in After["MLP_adjoint"].params[:-1]:
@@ -119,8 +121,8 @@ def test_mlp_blockbuilder():
     label /= label.sum(axis=1, keepdims=True)
     args.append(tvm.nd.array(label))
 
-    vm_before = _legalize_and_build(Before)
-    vm_after = _legalize_and_build(After)
+    vm_before = _legalize_and_build(Before, target, dev)
+    vm_after = _legalize_and_build(After, target, dev)
     _, grad = vm_after["MLP_adjoint"](*args)
 
     def func(*inputs):
@@ -130,7 +132,8 @@ def test_mlp_blockbuilder():
     check_numerical_grads(func, [i.numpy() for i in args], [i.numpy() for i in grad])
 
 
-def test_complex():
+@tvm.testing.parametrize_targets("llvm")
+def test_complex(target, dev):
     cst = relax.const(np.ones((6,)), dtype="float32")
     cst1 = relax.const(np.array([0, 0, 0, 1, 0, 0]), dtype="float32")
 
@@ -168,14 +171,14 @@ def test_complex():
                 R.output(gv)
             return gv
 
-    After = relax.transform.Gradient(Before.get_global_var("main"))(Before)
+    After = relax.transform.Gradient("main")(Before)
     args = []
     for arg in After["main_adjoint"].params:
         shape = [int(l) for l in arg.struct_info.shape]
         args.append(rand("float32", *shape))
 
-    vm_before = _legalize_and_build(Before)
-    vm_after = _legalize_and_build(After)
+    vm_before = _legalize_and_build(Before, target, dev)
+    vm_after = _legalize_and_build(After, target, dev)
     _, grad = vm_after["main_adjoint"](*args)
 
     def func(*inputs):

@@ -235,23 +235,22 @@ TVM_DLL Pass ConvertLayout(Map<String, Array<String>> desired_layouts);
 /*!
  * \brief Reverse-mode automatic differentiation.
  *
- * Now only supports differentiating one function in the IRModule with one dataflow block
- * with respect to the only return value of the function, which needs to be scalar.
+ * Now only supports differentiating one function in the IRModule with one dataflow block with
+ * respect to the only return value of the function, which needs to be scalar.
  *
- * For a given function specified by the input global var, it generates a new function with the name
- * `[name of original function] + "_adjoint"`. The new function computes the adjoints of the
- * specified arguments of the original function with respect to the only one return value of the
- * original function.
+ * For a given function specified by the input name, it generates a new function with the name
+ * `func_name + "_adjoint"`. The new function computes the adjoints of the specified arguments of
+ * the original function with respect to the only one return value of the original function.
  *
  * For examples, see the MLP examples in `tests/python/relax/test_transform_gradient.py` and
  * `tests/python/relax/test_transform_gradient_numeric.py`.
  *
- * \param global_var The GlobalVar of the specified function.
+ * \param func_name The name of the specified function.
  * \param require_grads The relax variables whose adjoints are needed. Must be parameters of the
  * given function. If it is not specified, adjoints of all arguments would be computed.
  * \return The Pass.
  */
-TVM_DLL Pass Gradient(GlobalVar global_var, Optional<Array<Var>> require_grads = NullOpt);
+TVM_DLL Pass Gradient(String func_name, Optional<Array<Var>> require_grads = NullOpt);
 
 /*!
  * \brief Split a PrimFunc into 2 parts: the first part is a TIR PrimFunc which is
