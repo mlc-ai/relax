@@ -113,8 +113,7 @@ def test_load_export_params(target, dev):
     )
 
 
-@tvm.testing.parametrize_targets("llvm")
-def test_setting_error(target, dev):
+def test_setting_error():
     backbone, params_num = _get_backbone()
     pred_sinfo = relax.TensorStructInfo((1, 5), "float32")
 

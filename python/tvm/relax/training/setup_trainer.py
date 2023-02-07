@@ -33,8 +33,7 @@ from ..analysis import well_formed
 class SetupTrainer:
     """Transform a NN backbone module to a complete, legalized trainer module.
 
-    This pass should be used after setting the loss and the optimizer. The transformed module
-    will contains the following functions:
+    The transformed module will contains the following functions:
     - `predict`: Predicts the result. It is provided in the input module.
     - `loss`: Calculates the specified loss between the prediction results and the ground truth.
     - `loss_adjoint`: Calculates the loss and the adjoints of parameters.
@@ -95,7 +94,7 @@ class SetupTrainer:
         """Setup the trainer in 3 steps.
         1. Prepare Loss.
         2. Gradient pass.
-        3. Build Optimizer.
+        3. Add Optimizer function.
         4. Legalize operators.
         """
 
