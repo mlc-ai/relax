@@ -49,7 +49,7 @@ class Optimizer:
     name : str
         The name of the optimizer.
 
-    param_list : Optional[List[Var]]
+    param_list : List[Var]
         The list of variables to optimize. Will be set in `init()`.
 
     state : tvm.runtime.container.ADT
@@ -70,11 +70,11 @@ class Optimizer:
     For detailed examples, please see the tutorial.
 
     .. code-block:: python
-        # Initialize the optimizer
-        # x is the relax Var we want to optimize
+        # Construct the optimizer
         opt = relax.optimizer.SGD(0.1)
 
-        # Initialize parameter list, dtype and optimizer state
+        # Initialize the parameter list, the dtype and the optimizer state
+        # x is the relax Var we want to optimize
         opt.init(x)
 
         # The above two lines is equivalent to one line:
@@ -84,14 +84,14 @@ class Optimizer:
         # mod is an IRModule constructed earlier
         mod["SGD"] = opt.get_function()
 
-        # legalize and build mod
+        # Legalize and build mod
         lowered_mod = LegalizeOps()(mod)
         ex = relax.vm.build(lowered_mod, target="llvm")
         vm = relax.VirtualMachine(ex, tvm.cpu())
 
         # Optimization process
         # param_tuple is a runtime tuple of parameters
-        # param_gradient is a runtime tuple of the gradient of parameters in param_tuple,
+        # param_gradient is a runtime tuple of the gradient of the parameters in param_tuple,
         # respectively
         # param_gradient can be gained by the automatic differentiation pass. Please see
         # `relax.transform.Gradient`
