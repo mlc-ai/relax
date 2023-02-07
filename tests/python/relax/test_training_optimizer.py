@@ -32,31 +32,31 @@ def test_optimizer_error():
     x5 = relax.Tuple([x1])
 
     # fine cases
-    SGD(x1, 0.01)
-    SGD([x1], 0.01)
-    assert SGD([x2], 0.01)._dtype == "float64"
+    SGD(0.01).init(x1)
+    SGD(0.01).init([x1])
+    assert SGD(0.01).init([x2]).dtype == "float64"
 
     with pytest.raises(ValueError):
-        SGD([x1, x1], 0.01)
+        SGD(0.01).init([x1, x1])
     with pytest.raises(ValueError):
-        SGD(x5, 0.01)
+        SGD(0.01).init([x1, x2])
     with pytest.raises(ValueError):
-        SGD(x3, 0.01)
+        SGD(0.01).init(x3)
     with pytest.raises(ValueError):
-        SGD(x4, 0.01)
+        SGD(0.01).init(x4)
     with pytest.raises(ValueError):
-        SGD([x1, x2], 0.01)
+        SGD(0.01).init(x5)
     with pytest.raises(
         RuntimeError,
-        match="The vm configs of the optimizer is not set. Please call set_vm_config first",
+        match="Please call init\\(\\) for the optimizer before calling get_function\\(\\)",
     ):
-        SGD(x1, 0.01)(None, None)
+        SGD(0.01).get_function()
 
 
 def test_sgd_simple():
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
-    sgd = SGD([x, y], 0.01).get_function()
+    sgd = SGD(0.01).init([x, y]).get_function()
 
     @R.function
     def sgd_expected(
@@ -93,7 +93,7 @@ def test_sgd_simple():
 def test_sgd_complex():
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
-    sgd = SGD([x, y], 0.01, 0.02).get_function()
+    sgd = SGD(0.01, 0.02).init([x, y]).get_function()
 
     @R.function
     def sgd_expected(
@@ -133,7 +133,7 @@ def test_sgd_complex():
 def test_momentum_sgd_simple():
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
-    msgd = MomentumSGD([x, y], 0.01, 0.9).get_function()
+    msgd = MomentumSGD(0.01, 0.9).init([x, y]).get_function()
 
     @R.function
     def msgd_expected(
@@ -182,7 +182,7 @@ def test_momentum_sgd_complex():
 
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
-    msgd = MomentumSGD([x, y], lr, mom, damp, wd, nest).get_function()
+    msgd = MomentumSGD(lr, mom, damp, wd, nest).init([x, y]).get_function()
 
     @R.function
     def msgd_expected(
@@ -237,7 +237,7 @@ def test_momentum_sgd_nesterov():
 
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
-    msgd = MomentumSGD([x, y], lr, mom, damp, wd, nest).get_function()
+    msgd = MomentumSGD(lr, mom, damp, wd, nest).init([x, y]).get_function()
 
     @R.function
     def msgd_expected(
@@ -294,7 +294,7 @@ def test_momentum_sgd_nesterov():
 def test_adam_simple():
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
-    adam = Adam([x, y], 0.01).get_function()
+    adam = Adam(0.01).init([x, y]).get_function()
 
     @R.function
     def adam_expected(
@@ -391,7 +391,7 @@ def test_adam_simple():
 def test_adam_complex():
     x = relax.Var("x", R.Tensor((3, 3), "float32"))
     y = relax.Var("y", R.Tensor((3,), "float32"))
-    adam = Adam([x, y], 0.01, (0.8, 0.85), 1e-7, 0.1).get_function()
+    adam = Adam(0.01, (0.8, 0.85), 1e-7, 0.1).init([x, y]).get_function()
 
     @R.function
     def adam_expected(
@@ -492,7 +492,7 @@ def test_adam_complex():
 def test_adam_float64():
     x = relax.Var("x", R.Tensor((3, 3), "float64"))
     y = relax.Var("y", R.Tensor((3,), "float64"))
-    adam = Adam([x, y], 0.01, (0.8, 0.85), 1e-7, 0.1).get_function()
+    adam = Adam(0.01, (0.8, 0.85), 1e-7, 0.1).init([x, y]).get_function()
 
     @R.function
     def adam_expected(
