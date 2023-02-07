@@ -29,6 +29,7 @@ from ..struct_info import TensorStructInfo, TupleStructInfo
 from ..op import add, subtract, multiply, divide, sqrt
 from ..expr import const, Var, Function, TupleGetItem, Tuple as RxTuple
 
+
 # TODO(chaofan, yixin): Migrate key logics to C++
 class Optimizer:
     """Relax training optimizer. This class could generate relax Functions for optimizing specified
