@@ -108,7 +108,6 @@ class TransformParamsFinder : public ExprVisitor {
   std::unordered_set<Var, ObjectHash, ObjectEqual> bindings_;
   BlockBuilder builder_;
 
-  Array<Var> inputs;
   Array<Expr> outputs;
   Map<Var, Var> var_remap_;
   std::unordered_map<Var, int, ObjectHash, ObjectEqual> output_to_index_;
