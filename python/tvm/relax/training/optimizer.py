@@ -111,7 +111,7 @@ class Optimizer:
         Returns
         -------
         self : Optimizer
-            The optimizer itself. You can do more operations on the return value.
+            The optimizer itself.
         """
         if not isinstance(params, list):
             params = [params]
@@ -270,7 +270,7 @@ class SGD(Optimizer):
         Returns
         -------
         self : SGD
-            The SGD optimizer itself. You can do more operations on the return value.
+            The SGD optimizer itself.
         """
         if not isinstance(params, list):
             params = [params]
@@ -413,7 +413,7 @@ class MomentumSGD(Optimizer):
         Returns
         -------
         self : MomentumSGD
-            The MomentumSGD optimizer itself. You can do more operations on the return value.
+            The MomentumSGD optimizer itself.
         """
         if not isinstance(params, list):
             params = [params]
@@ -582,7 +582,7 @@ class Adam(Optimizer):
         Returns
         -------
         self : Adam
-            The Adam optimizer itself. You can do more operations on the return value.
+            The Adam optimizer itself.
         """
         if not isinstance(params, list):
             params = [params]
