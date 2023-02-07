@@ -34,8 +34,6 @@ class Optimizer:
     """Relax training optimizer. This class could generate relax Functions for optimizing specified
     parameters, and store the states used in the optimization process, such as momentum.
 
-    See `@property state` for details about the state of the optimizer.
-
     Parameters
     ----------
     name : str
