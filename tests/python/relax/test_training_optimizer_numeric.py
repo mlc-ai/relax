@@ -79,15 +79,6 @@ def _test_optimizer(target, dev, np_func, opt_type, *args, **kwargs):
     _assert_run_result_same(tvm_func, np_func, [param_arr, grad_arr, state_arr])
 
 
-# TODO
-# test the step function
-# opt.set_vm_config(target, dev)
-# result_params = _tvm_to_numpy(opt(_numpy_to_tvm(param_arr), _numpy_to_tvm(grad_arr)))
-# expected_params, expected_state = np_func(param_arr, grad_arr, state_arr)
-# _assert_allclose_nested(result_params, expected_params)
-# _assert_allclose_nested(_tvm_to_numpy(opt.state), expected_state)
-
-
 lr, weight_decay = tvm.testing.parameters(
     (0.01, 0),
     (0.01, 0.02),
