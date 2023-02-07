@@ -62,9 +62,11 @@ def test_execute(target, dev):
     backbone, params_num = _get_backbone()
     pred_sinfo = relax.TensorStructInfo((1, 5), "float32")
 
-    setup_trainer = SetupTrainer()
-    setup_trainer.set_loss(MSELoss(reduction="sum"), pred_sinfo, pred_sinfo)
-    setup_trainer.set_optimizer(optim_type=SGD, lr=0.001)
+    setup_trainer = SetupTrainer(
+        MSELoss(reduction="sum"),
+        SGD(0.001),
+        [pred_sinfo, pred_sinfo],
+    )
 
     trainer = Trainer(backbone, params_num, setup_trainer)
     trainer.build(target, dev)
@@ -83,9 +85,11 @@ def test_load_export_params(target, dev):
     backbone, params_num = _get_backbone()
     pred_sinfo = relax.TensorStructInfo((1, 5), "float32")
 
-    setup_trainer = SetupTrainer()
-    setup_trainer.set_loss(MSELoss(reduction="sum"), pred_sinfo, pred_sinfo)
-    setup_trainer.set_optimizer(optim_type=SGD, lr=0.001)
+    setup_trainer = SetupTrainer(
+        MSELoss(reduction="sum"),
+        SGD(0.001),
+        [pred_sinfo, pred_sinfo],
+    )
 
     trainer = Trainer(backbone, params_num, setup_trainer)
     trainer.build(target, dev)
@@ -114,12 +118,11 @@ def test_setting_error(target, dev):
     backbone, params_num = _get_backbone()
     pred_sinfo = relax.TensorStructInfo((1, 5), "float32")
 
-    setup_trainer = SetupTrainer()
-    with pytest.raises(TVMError):
-        setup_trainer(backbone)
-
-    setup_trainer.set_loss(MSELoss(reduction="sum"), pred_sinfo, pred_sinfo)
-    setup_trainer.set_optimizer(optim_type=SGD, lr=0.001)
+    setup_trainer = SetupTrainer(
+        MSELoss(reduction="sum"),
+        SGD(0.001),
+        [pred_sinfo, pred_sinfo],
+    )
     trainer = Trainer(backbone, params_num, setup_trainer)
 
     with pytest.raises(TVMError):
@@ -149,9 +152,11 @@ def test_invalid_mod():
             return gv, out
 
     pred_sinfo = relax.TensorStructInfo((1, 5), "float32")
-    setup_trainer = SetupTrainer()
-    setup_trainer.set_loss(MSELoss(reduction="sum"), pred_sinfo, pred_sinfo)
-    setup_trainer.set_optimizer(optim_type=SGD, lr=0.001)
+    setup_trainer = SetupTrainer(
+        MSELoss(reduction="sum"),
+        SGD(0.001),
+        [pred_sinfo, pred_sinfo],
+    )
 
     with pytest.raises(ValueError):
         setup_trainer(NotReturnSingleTensor)

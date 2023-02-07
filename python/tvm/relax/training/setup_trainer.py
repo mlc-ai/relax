@@ -16,10 +16,9 @@
 # under the License.
 # pylint: disable=not-callable, unused-argument
 """Setup Trainer Pass."""
-from typing import Type, Optional, Any, Dict
+from typing import List
 
 import tvm
-from tvm import TVMError
 from tvm.ir.module import IRModule
 
 from ..transform import LegalizeOps, Gradient
@@ -43,6 +42,19 @@ class SetupTrainer:
     the inputs and returns updated parameters and new optimizer state. It contains a func attr named
     `optim_state` which is the initial state of the specified optimizer.
 
+    Parameters
+    ----------
+    loss : Loss
+        The loss function. It will be appended to the backbone function using
+        relax.training.utils.append_loss.
+
+    optimizer : Optimizer
+        The optimizer. It will be put as the `update_params` function of the transformed module. The
+        initial state will be put in the func attr `optim_state` of this function.
+
+    loss_args : List[TensorStructInfo]
+        The arguments to call the loss function.
+
     Notes
     -----
     This transform requires the input module to have the following properties:
@@ -62,9 +74,10 @@ class SetupTrainer:
     PARAMS_NUM_ATTR_KEY: str = "params_num"
     OPTIM_STATE_ATTR_KEY: str = "optim_state"
 
-    def __init__(self):
-        self._loss_config: Optional[Dict[str, Any]] = None
-        self._optim_config: Optional[Dict[str, Any]] = None
+    def __init__(self, loss: Loss, optimizer: Optimizer, loss_args: List[TensorStructInfo]):
+        self._loss = loss
+        self._optimizer = optimizer
+        self._loss_args = loss_args
 
     @classmethod
     def _check_backbone_validity(cls, mod: IRModule):
@@ -78,59 +91,6 @@ class SetupTrainer:
                 ret_sinfo,
             )
 
-    def set_loss(self, loss: Loss, *call_args: TensorStructInfo) -> "SetupTrainer":
-        """Specify the loss function.
-
-        Parameters
-        ----------
-        loss : Loss
-            The loss function. It will be appended to the backbone function using
-            relax.training.utils.append_loss.
-
-        *call_args : TensorStructInfo
-            The struct info a.k.a. the arguments to call the loss function.
-
-        Returns
-        -------
-        self : SetupTrainer
-            Return itself to support fluent interface style.
-        """
-        self._loss_config = {"loss": loss, "call_args": call_args}
-        return self
-
-    def set_optimizer(
-        self, optim_type: Type[Optimizer], *init_args: Any, **init_kwargs: Any
-    ) -> "SetupTrainer":
-        """Specify the optimizer for training.
-
-        Parameters
-        ----------
-        optim_type : Type[Optimizer]
-            The specified optimizer class.
-
-        *init_args : Any
-            Positional arguments passed to the optimize constructor.
-
-        **init_kwargs : Any
-            Keyword arguments passed to the optimize constructor.
-
-        Returns
-        -------
-        self : SetupTrainer
-            Return itself to support fluent interface style.
-
-        Notes
-        -----
-        SetupTrainer will set `param_list` of the optimzer automatically. So you only need
-        to pass the rest initial arguments to it.
-        """
-        self._optim_config = {
-            "optim_type": optim_type,
-            "init_args": init_args,
-            "init_kwargs": init_kwargs,
-        }
-        return self
-
     def transform_module(self, mod: IRModule, ctx: tvm.transform.PassContext) -> IRModule:
         """Setup the trainer in 3 steps.
         1. Prepare Loss.
@@ -141,12 +101,9 @@ class SetupTrainer:
 
         self._check_backbone_validity(mod)
         # Step 1: Prepare Loss.
-        if self._loss_config is None:
-            raise TVMError("Setup Error: Please call 'set_loss' first before you transform.")
-
         predict_with_loss = append_loss(
             mod[self.PREDICT_FUNC_NAME],
-            self._loss_config["loss"](*self._loss_config["call_args"]),
+            self._loss(*self._loss_args),  # type: ignore
         )
         mod[self.LOSS_FUNC_NAME] = predict_with_loss
 
@@ -156,15 +113,9 @@ class SetupTrainer:
         mod = Gradient(mod.get_global_var(self.LOSS_FUNC_NAME), require_grads=require_grads)(mod)
 
         # Step 3: Build Optimizer.
-        if self._optim_config is None:
-            raise TVMError("Setup Error: Please call `set_optimizer` first before you setup.")
-        optimizer = self._optim_config["optim_type"](
-            param_list=list(mod[self.ADJOINT_FUNC_NAME].params)[:params_num],
-            *self._optim_config["init_args"],
-            **self._optim_config["init_kwargs"],
-        )
-        mod[self.UPDATE_PARAMS_FUNC_NAME] = optimizer.get_function().with_attr(
-            self.OPTIM_STATE_ATTR_KEY, optimizer.state
+        self._optimizer.init(list(mod[self.ADJOINT_FUNC_NAME].params)[:params_num])
+        mod[self.UPDATE_PARAMS_FUNC_NAME] = self._optimizer.get_function().with_attr(
+            self.OPTIM_STATE_ATTR_KEY, self._optimizer.state
         )
 
         # Step 4: Legalize operators.

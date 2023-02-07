@@ -50,9 +50,12 @@ class Trainer:
 
     Examples
     --------
-    >>> setup_trainer = SetupTrainer()
-    >>> setup_trainer.set_loss(MSELoss(reduction="sum"), pred_sinfo, pred_sinfo)
-    >>> setup_trainer.set_optimizer(optim_type=SGD, lr=0.001)
+    >>> setup_trainer = setup_trainer = SetupTrainer(
+    ...     MSELoss(reduction="sum"),
+    ...     SGD(0.001),
+    ...     [pred_sinfo, pred_sinfo],
+    ... )
+
     >>> trainer = Trainer(MLP, 2, setup_trainer)
     >>> trainer.build(target="llvm")
     >>> trainer.xaiver_uniform_init_params()
