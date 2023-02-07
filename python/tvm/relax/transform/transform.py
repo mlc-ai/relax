@@ -432,6 +432,17 @@ def MetaScheduleTuneIRMod(
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
 
 
+def LiftTransformParams() -> tvm.ir.transform.Pass:
+    """Lift transformations of parameters to a separate function for runtime execution.
+
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass.
+    """
+    return _ffi_api.LiftTransformParams()  # type: ignore
+
+
 def _wrap_class_function_pass(pass_cls, pass_info):
     """Wrap a python class as function pass."""
 
