@@ -565,10 +565,13 @@ class Adam(Optimizer):
         The state of Adam is
 
         .. code-block:: python
-            (num_steps, beta_0_prod, # beta0 ** num_steps
-            beta_1_prod, # beta1 ** num_steps
-            first_momentum_of_param_0, ..., first_momentum_of_param_n-1,
-            second_momentum_of_param_0, ..., second_momentum_of_param_n-1)
+            (
+                num_steps,
+                beta_0_prod, # beta0 ** num_steps
+                beta_1_prod, # beta1 ** num_steps
+                first_momentum_of_param_0, ..., first_momentum_of_param_n-1,
+                second_momentum_of_param_0, ..., second_momentum_of_param_n-1
+            )
 
         Parameters
         ----------
