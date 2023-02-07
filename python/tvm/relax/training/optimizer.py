@@ -77,6 +77,9 @@ class Optimizer:
         # Initialize parameter list, dtype and optimizer state
         opt.init(x)
 
+        # The above two lines is equivalent to one line:
+        opt = relax.optimizer.SGD(0.1).init(x)
+
         # Get the optimizer function
         # mod is an IRModule constructed earlier
         mod["SGD"] = opt.get_function()
