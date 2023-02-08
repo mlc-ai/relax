@@ -109,7 +109,7 @@ class SetupTrainer:
         # Step 2: Gradient pass.
         params_num = int(mod[self.PREDICT_FUNC_NAME].attrs[self.PARAMS_NUM_ATTR_KEY])
         require_grads = mod[self.LOSS_FUNC_NAME].params[:params_num]
-        mod = Gradient(mod.get_global_var(self.LOSS_FUNC_NAME), require_grads=require_grads)(mod)
+        mod = Gradient(self.LOSS_FUNC_NAME, require_grads=require_grads)(mod)
 
         # Step 3: Build Optimizer.
         self._optimizer.init(list(mod[self.ADJOINT_FUNC_NAME].params)[:params_num])
