@@ -24,6 +24,9 @@
 namespace tvm {
 namespace relax {
 
+/*!
+ * \brief Collect bindings that are the output of the funciton.
+ */
 class OutputCollector : public ExprVisitor {
  public:
   static std::unordered_set<const VarNode*> Collect(const Function& func) {
@@ -53,14 +56,25 @@ class OutputCollector : public ExprVisitor {
   bool is_visiting_output_ = true;
 };
 
+/*! \brief A statically executed region of the graph. A statically executed region is a region where
+ * all the tensors are statically allocated and only contains kernel launches (control flow is not
+ * allowed).
+ */
 struct StaticRegion {
+  /*! \brief The function to allocate the tensors and return a tuple of allocated tensors. */
   Function alloc_func;
+  /*! \brief The function that launches a group of kernels where all the inputs are constants or
+   * statically allocated tensors. */
   Function capture_func;
+  /*! \brief The tensor to the index of the elements of the tuple return value. */
   std::vector<std::pair<const VarNode*, int>> alloc_tensor_to_index;
+  /*! \brief The location where the captured graph should be launched. */
   const VarBindingNode* launch_point = nullptr;
+  /*! \brief The bindings in the original function that should be removed after lifting. */
   std::unordered_map<const VarNode*, const VarBindingNode*> bindings;
 };
 
+/*! \brief Extract the static region from the function. */
 class StaticRegionExtractor : public ExprVisitor {
  public:
   static std::unordered_map<const BindingBlockNode*, std::vector<StaticRegion>> Extract(
@@ -72,6 +86,7 @@ class StaticRegionExtractor : public ExprVisitor {
   StaticRegionExtractor(const IRModule& mod, const std::unordered_set<const VarNode*>& outputs)
       : mod_(mod), outputs_(outputs) {}
 
+ private:
   struct DependencyGraph {
     void AddBinding(const VarBindingNode* binding, bool is_alloc_tensor) {
       const auto* var = binding->var.get();
@@ -95,9 +110,10 @@ class StaticRegionExtractor : public ExprVisitor {
     std::unordered_map<const VarNode*, const VarBindingNode*> bindings;
   };
 
+  /*! \brief The information of the current scope. */
   struct ScopeInfo {
-    DependencyGraph graph;
-    std::vector<StaticRegion> static_regions;
+    DependencyGraph graph;  // The dependency graph between bindings of the current scope.
+    std::vector<StaticRegion> static_regions;  // The list of static regions in the current scope.
   };
 
   void VisitBindingBlock_(const BindingBlockNode* block) final {
@@ -106,6 +122,7 @@ class StaticRegionExtractor : public ExprVisitor {
     for (const auto& binding : block->bindings) {
       VisitBinding(binding);
     }
+    // Summarize the detected static regions since we reach the end of the scope.
     SummarizeStaticRegion();
     std::swap(scope, scope_);
     if (scope.static_regions.size()) {
@@ -146,16 +163,21 @@ class StaticRegionExtractor : public ExprVisitor {
         if (!func->IsInstance<tir::PrimFuncNode>()) {
           return;
         }
+
+        std::function<bool(const Expr&)> f_is_arg_static = [&](const Expr& arg) -> bool {
+          if (const auto* var = arg.as<VarNode>()) {
+            return scope_.graph.bindings.count(var);
+          } else if (arg->IsInstance<IntImmNode>() || arg->IsInstance<FloatImmNode>() ||
+                     arg->IsInstance<ConstantNode>()) {
+            return true;
+          } else if (arg->IsInstance<TupleNode>()) {
+            auto tuple = arg.as<TupleNode>();
+            return std::all_of(tuple->fields.begin(), tuple->fields.end(), f_is_arg_static);
+          }
+          return false;
+        };
         bool is_all_args_static =
-            std::all_of(call->args.begin(), call->args.end(), [&](const Expr& arg) -> bool {
-              if (const auto* var = arg.as<VarNode>()) {
-                return scope_.graph.bindings.count(var);
-              } else if (arg->IsInstance<IntImmNode>() || arg->IsInstance<FloatImmNode>() ||
-                         arg->IsInstance<ConstantNode>()) {
-                return true;
-              }
-              return false;
-            });
+            std::all_of(call->args.begin(), call->args.end(), f_is_arg_static);
         if (is_all_args_static) {
           scope_.graph.AddBinding(binding, false);
           for (const Expr& arg : call->args) {
@@ -291,13 +313,14 @@ class StaticRegionExtractor : public ExprVisitor {
     scope_.graph = DependencyGraph();
   }
 
- private:
   IRModule mod_;
   std::unordered_set<const VarNode*> outputs_;
   ScopeInfo scope_;
   std::unordered_map<const BindingBlockNode*, std::vector<StaticRegion>> block_to_static_regions_;
 };
 
+/*! \brief Lift the static regions to separate functions to be run in CUDA graph capture mode.
+ * Replace the original kernel calls with CUDA graph launches. */
 class CUDAGraphRewriter : public ExprMutator {
  public:
   explicit CUDAGraphRewriter(IRModule mod) : ExprMutator(mod) {}

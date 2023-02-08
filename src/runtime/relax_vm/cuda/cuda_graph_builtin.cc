@@ -74,6 +74,12 @@ class CUDAGraphCache : public Object {
 
   static CUDAGraphCache* Get() { return dmlc::ThreadLocalStore<CUDAGraphCache>::Get(); }
 
+  /*! \brief Get the captured states of a cuda graph from the cache or run CUDA graph capture
+   * \param vm The virutal machine.
+   * \param alloc_func () -> Tuple[Tensor0, ..., TensorN]. The function to allocate tensors.
+   * \param capture_func (Tuple[Tensor0, ..., TensorN]) -> (). The function to capture a cuda graph.
+   * \return The cache entry.
+   */
   Entry GetOrCapture(VirtualMachine* vm, const ObjectRef& alloc_func,
                      const ObjectRef& capture_func) {
     if (auto it = entries_.find(capture_func); it != entries_.end()) {
@@ -135,8 +141,8 @@ TVM_REGISTER_GLOBAL("vm.builtin.get_captured_cuda_graph")
     .set_body([](TVMArgs args, TVMRetValue* rv) {
       ICHECK_EQ(args.size(), 3);
       VirtualMachine* vm = VirtualMachine::GetContextPtr(args[0]);
-      ObjectRef alloc_func = args[1];
-      ObjectRef capture_func = args[2];
+      ObjectRef alloc_func = args[1];    // () -> Tuple[Tensor0, ... TensorN]
+      ObjectRef capture_func = args[2];  // (Tuple[Tensor0, ... TensorN]) -> ()
 
       CUDAGraphCache* cache = CUDAGraphCache::Get();
       auto cached = cache->GetOrCapture(vm, alloc_func, capture_func);

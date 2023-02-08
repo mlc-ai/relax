@@ -19,7 +19,6 @@ import tvm
 from tvm import relax
 from tvm.script import tir as T, relax as R
 import tvm.testing
-import tvm.relax.transform.tuning_api.default_functions
 
 
 # fmt: off
