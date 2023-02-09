@@ -15,5 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """
-Frontends for constructing Relax programs, with the model importers
+PyTorch Frontends for constructing Relax programs, with the model importers
 """
+from .fx_translator import from_fx
+from .dynamo import relax_dynamo, dynamo_capture_subgraphs

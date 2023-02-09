@@ -18,7 +18,7 @@
 # pylint: disable=invalid-name, inconsistent-return-statements, unidiomatic-typecheck
 # pylint: disable=import-outside-toplevel
 """PyTorch FX frontend of Relax."""
-from typing import Callable, Dict, Mapping, Tuple, Union
+from typing import Callable, Dict, Mapping, Tuple, Union, List
 from functools import reduce
 
 import tvm
@@ -42,19 +42,6 @@ class TorchFXImporter:
         self.create_convert_map()
 
     ########## Utilities ##########
-
-    @staticmethod
-    def _convert_data_type(input_type):
-        """converts the PyTorch scalar type input_type to a TVM dtype."""
-
-        input_type = input_type.lower()
-        if input_type in ["float", "float32", "torch.float32"]:
-            return "float32"
-        elif input_type in ["float16", "torch.float16"]:
-            return "float16"
-        else:
-            raise NotImplementedError("input_type {} is not handled yet".format(input_type))
-
     @staticmethod
     def _fetch_attr(model, target: str):
         import torch  # type: ignore
@@ -70,6 +57,21 @@ class TorchFXImporter:
         if isinstance(attr_itr, torch.Tensor):
             return TorchFXImporter._convert_torch_tensor_to_relax(attr_itr)
         return attr_itr
+
+    @staticmethod
+    def _convert_data_type(input_type):
+        """converts the PyTorch scalar type input_type to a TVM dtype."""
+        import torch  # type: ignore
+
+        input_type = input_type.lower()
+        if input_type in ["float", "float32", "torch.float32", torch.float32]:
+            return "float32"
+        elif input_type in ["float16", "torch.float16", torch.float16]:
+            return "float16"
+        elif input_type in ["int64", "torch.int64", torch.int64]:
+            return "int64"
+        else:
+            raise NotImplementedError("input_type {} is not handled yet".format(input_type))
 
     @staticmethod
     def _convert_torch_tensor_to_relax(tensor: torch.Tensor) -> relax.Var:
@@ -185,6 +187,12 @@ class TorchFXImporter:
             )
         return self.block_builder.emit(relax.op.clip(args[0], a_min, a_max))
 
+    ########## Compare ##########
+
+    def _lt(self, node: fx.node.Node) -> relax.Expr:
+        lhs, rhs = self.retrieve_args(node)
+        return self._call_binary_op(relax.op.less, lhs, rhs)
+
     ########## Creation ##########
 
     def _tril(self, node: fx.node.Node) -> relax.Var:
@@ -207,6 +215,14 @@ class TorchFXImporter:
                 self_var.struct_info.dtype,
             )
         )
+
+    ########## Statistical ##########
+
+    def _sum(self, node: fx.node.Node) -> relax.Var:
+        args = self.retrieve_args(node)
+        if len(args) == 1:
+            return self.block_builder.emit(relax.op.sum(args[0]))
+        return self.block_builder.emit(relax.op.sum(args[0], args[1]))
 
     ########## DataType ##########
 
@@ -627,9 +643,11 @@ class TorchFXImporter:
             "mul": self._mul,
             "sub": self._sub,
             "sqrt": self._sqrt,
+            "lt": self._lt,
             "truediv": self._truediv,
             "new_ones": self._new_ones,
             "tril": self._tril,
+            "sum": self._sum,
             "float": self._float,
             "half": self._half,
             "type": self._type,
@@ -658,18 +676,16 @@ class TorchFXImporter:
             "adaptive_avg_pool2d": self._adaptive_avg_pool2d(is_module=False),
         }
 
-    def from_pytorch(
-        self, model: torch.nn.Module, input_info: Dict[str, Tuple[Tuple[int], str]]
-    ) -> tvm.IRModule:
-        """Convert a PyTorch model to a Relax program, using torch FX.
+    def from_fx(self, model, input_info: List[Tuple[Tuple[int], str]]) -> tvm.IRModule:
+        """Convert a PyTorch FX GraphModule to a Relax program
 
         Parameters
         ----------
-        model : torch.nn.Module
-            The PyTorch model to convert.
+        model : fx.GraphModule
+            The PyTorch FX GraphModule to convert.
 
-        input_info : Dict[str, Tuple[Tuple[int], str]]
-            A dictionary mapping input names to their shapes and data types.
+        input_info : List[Tuple[Tuple[int], str]]
+            A list of shapes and data types of input tensors.
 
         Returns
         -------
@@ -678,12 +694,17 @@ class TorchFXImporter:
 
         Examples
         --------
-        The following code shows how to use this importer:
+        Users can use the FX tracer or dynamo.export() to extract
+        a fx.GraphModule from a PyTorch model. The following codes show
+        how to convert a PyTorch model to a Relax program.
 
         .. code-block:: python
 
             # Import the importer.
-            from tvm.relax.frontend import from_pytorch
+            import numpy as np
+            import torch
+            from tvm.relax.frontend.torch_fx import from_fx
+            from torch import _dynamo as dynamo
 
             # Define the module
             class MyModule(torch.nn.Module):
@@ -696,10 +717,23 @@ class TorchFXImporter:
 
             # Instantiate the model and create the input info dict.
             torch_model = MyModule()
-            input_info = {"input_1": ((128, 10), "float32")}
+            input_info = [((128, 10), "float32")]
+            input_tensors = [
+                torch.astensor(np.random.randn(*shape).astype(dtype))
+                for shape, dtype in input_info
+            ]
+
+            # Use FX tracer to trace the PyTorch model.
+            graph_module = fx.symbolic_trace(torch_model)
+
+            # Use the dynamo.export() to export the PyTorch model to FX.
+            try:
+                graph_module = dynamo.export(torch_model, *input_tensors)
+            except:
+                raise RuntimeError("Failed to export the PyTorch model to FX.")
 
             # Use the importer to import the PyTorch model to Relax.
-            mod: tvm.IRModule = from_pytorch(torch_model, input_info)
+            mod: tvm.IRModule = from_pytorch(graph_module, input_info)
 
             # Print out the imported model.
             print(mod.script())
@@ -720,16 +754,19 @@ class TorchFXImporter:
 
         self.named_modules = dict(model.named_modules())
 
-        graph: fx.Graph = fx.Tracer().trace(model)
+        graph: fx.Graph = model.graph
         # Create input variables.
-        inputs = {}
-        for name, (shape, dtype) in input_info.items():
-            input_var = relax.Var(name, relax.TensorStructInfo(shape, dtype))
-            inputs[name] = input_var
+        inputs = list()
+        for idx, (shape, dtype) in enumerate(input_info):
+            inputs.append(
+                relax.Var(
+                    f"inp_{idx}", relax.TensorStructInfo(shape, self._convert_data_type(dtype))
+                )
+            )
 
         # Initialize the block builder with a function and a dataflow block.
         self.block_builder = relax.BlockBuilder()
-        with self.block_builder.function(name="main", params=list(inputs.values())):
+        with self.block_builder.function(name="main", params=inputs.copy()):
             output = None
             with self.block_builder.dataflow():
                 # Translate model parameters.
@@ -749,12 +786,11 @@ class TorchFXImporter:
                 # Translate the model.
                 for node in graph.nodes:
                     if node.op == "placeholder":
-                        assert node.name in inputs, "The function input {} is not found".format(
-                            node.name
-                        )
-                        self.env[node] = inputs[node.name]
+                        assert len(inputs) > 0, "Provided inputs is less than actual inputs"
+                        self.env[node] = inputs.pop(0)
                     elif node.op == "output":
-                        output = self.block_builder.emit_output(self.env[node.args[0]])
+                        args = self.retrieve_args(node)
+                        output = self.block_builder.emit_output(args[0])
                         break
                     elif node.op == "get_attr":
                         self.env[node] = TorchFXImporter._fetch_attr(model, node.target)
@@ -783,8 +819,8 @@ class TorchFXImporter:
         return self.block_builder.get()
 
 
-def from_pytorch(model, input_info: Dict[str, Tuple[Tuple[int], str]]) -> tvm.IRModule:
-    """The public interface of PyTorch importer for Relax.
-    See `TorchFXImporter.from_pytorch` for full documentation.
+def from_fx(model, input_info: List[Tuple[Tuple[int], str]]) -> tvm.IRModule:
+    """The public interface of PyTorch FX importer for Relax.
+    See `TorchFXImporter.from_fx` for full documentation.
     """
-    return TorchFXImporter().from_pytorch(model, input_info)
+    return TorchFXImporter().from_fx(model, input_info)
