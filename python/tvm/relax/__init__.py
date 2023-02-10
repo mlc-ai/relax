@@ -88,5 +88,8 @@ from .struct_info import (
     FuncStructInfo,
 )
 
+# pipeline
+from .pipeline import get_pipeline
+
 # Training utils
 from .training import loss, optimizer

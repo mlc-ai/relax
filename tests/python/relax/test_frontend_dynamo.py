@@ -16,18 +16,19 @@
 # under the License.
 import pytest
 
+pytest.importorskip("torch._dynamo")
+
+
 import tvm
 from tvm import relax, meta_schedule as ms, tir
 import tvm.testing
+import torch
+import torch._dynamo as dynamo
+from tvm.relax.frontend.torch import relax_dynamo
 from tvm.script.parser import relax as R, tir as T
 
 
-@pytest.mark.skip(reason="Dynamo is not supported in the CI yet.")
 def test_relax_dynamo():
-    import torch
-    import torch._dynamo as dynamo
-    from tvm.relax.frontend.torch.dynamo import relax_dynamo
-
     class Input1(torch.nn.Module):
         def __init__(self):
             super().__init__()
@@ -113,7 +114,6 @@ def test_relax_dynamo():
     tvm.testing.assert_allclose(opt_model(inp).detach().numpy(), model(inp).detach().numpy())
 
 
-@pytest.mark.skip(reason="Relax is not supported in the CI yet.")
 def test_subgraph_capture():
     import torch
     from tvm.relax.frontend.torch.dynamo import dynamo_capture_subgraphs
