@@ -29,7 +29,7 @@ from ..struct_info import TensorStructInfo
 from ..analysis import well_formed
 
 
-@tvm.transform.module_pass(opt_level=3, name="SetupTrainer")
+@tvm.transform.module_pass(opt_level=0, name="SetupTrainer")
 class SetupTrainer:
     """Transform a NN backbone module to a complete, legalized trainer module.
 
