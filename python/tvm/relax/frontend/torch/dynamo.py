@@ -20,9 +20,9 @@
 # mypy: ignore-errors
 """PyTorch Dynamo backend of Relax."""
 import functools
+from typing import Optional
 
 import tvm
-from tvm import relax, meta_schedule as ms
 from tvm.relax.vm import build as relax_build
 from tvm.relax.frontend.torch.fx_translator import from_fx
 
@@ -34,43 +34,13 @@ def device_from_inputs(example_inputs):
     return None
 
 
-def default_dynamo_pipeline(mod: tvm.ir.IRModule, target: tvm.target.Target) -> tvm.ir.IRModule:
-    """A default pipeline for dynamo.
-
-    Parameters
-    ----------
-    mod : tvm.IRModule
-        The relax module to be transformed.
-
-    target : tvm.target.Target
-        The target to be compiled.
-
-    Returns
-    -------
-    mod : tvm.IRModule
-        The transformed relax module.
-    """
-    mod = tvm.transform.Sequential(
-        [
-            relax.transform.LegalizeOps(),
-            relax.transform.AnnotateTIROpPattern(),
-            relax.transform.FoldConstant(),
-            relax.transform.FuseOps(),
-            relax.transform.FuseTIR(),
-        ]
-    )(mod)
-    if ms.Database.current():
-        mod = relax.transform.MetaScheduleApplyDatabase()(mod)
-    return mod
-
-
-def relax_dynamo(transform=None):
+def relax_dynamo(pipeline: Optional[tvm.transform.Pass] = None):
     """A helper function to create a relax backend.
 
     Parameters
     ----------
-    transform : Optional[Callable[[tvm.IRModule, tvm.target.Target], tvm.IRModule]]
-        The transformation to be applied to the relax module before sent to build.
+    pipeline : Optional[tvm.transform.Pass]
+        The pipeline to be applied to the relax module before sent to build.
 
     Returns
     -------
@@ -111,14 +81,22 @@ def relax_dynamo(transform=None):
             dev = tvm.cpu(0)
             target = tvm.target.Target(llvm_target())
 
-        if transform is None:
-            mod = default_dynamo_pipeline(mod, target=target)
+        # invoke optimization pipeline.
+        if pipeline is None:
+            # get default pipeline
+            seq = tvm.relax.get_pipeline()
+        elif isinstance(pipeline, str):
+            # lookup by name
+            seq = tvm.relax.get_pipeline(pipeline)
         else:
-            mod = transform(mod)
+            seq = pipeline
+
+        mod = mod.with_attr("target", target)
+        mod = seq(mod)
 
         ex = relax_build(mod, target=target)
 
-        vm = relax.vm.VirtualMachine(exec=ex.mod, device=dev)
+        vm = tvm.relax.vm.VirtualMachine(exec=ex.mod, device=dev)
 
         def exec_tvm(*i_args):
             args = [a.contiguous() for a in i_args]
