@@ -40,7 +40,7 @@ def test_transform_params():
             x: R.Tensor((1, 3, 224, 224), "float32"), w1: R.Tensor((3, 16, 3, 3), "float32")
         ) -> R.Tensor((1, 16, 224, 224), "float32"):
             R.func_attr(
-                {"param_begin": 1, "param_end": 2}
+                {"num_input": 1}
             )  # annotate the tensors that are parameters, [begin, end] are range of indices of the function params
             with R.dataflow():
                 w1_transformed = R.call_tir(
