@@ -113,7 +113,7 @@ class L1Loss(Loss):
             The ground truth in the calculation of loss.
 
         Returns
-        ----------
+        -------
         The relax function of L1Loss with the loss name as its global symbol.
         """
         bb = BlockBuilder()
@@ -162,7 +162,7 @@ class MSELoss(Loss):
             The ground truth in the calculation of loss.
 
         Returns
-        ----------
+        -------
         The relax function of MSELoss with the loss name as its global symbol.
         """
         bb = BlockBuilder()
@@ -227,7 +227,7 @@ class CrossEntropyLoss(Loss):
             a manual rescaling weight given to each class. It has to be a Tensor of size C.
 
         Returns
-        ----------
+        -------
         The relax function of CrossEntropyLoss with the loss name as its global symbol.
         """
         bb = BlockBuilder()

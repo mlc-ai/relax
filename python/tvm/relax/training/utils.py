@@ -28,14 +28,21 @@ def append_loss(orig_func: Function, loss_func: Function) -> Function:
     those arguments of loss_func which are not mapped to some return values, they will be lifted
     and appended to the argument list of result function.
 
-    Note
-    -------
-    1. This uitl is dedicated to loss functions, not for general purposes.
-    2. This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in
-    some sense.
+    Parameters
+    ----------
+    orig_func : Function
+        The function to be appended to.
 
-    Example
+    loss_func : Function
+        The loss function.
+
+    Returns
     -------
+    ret : Function
+        The result function.
+
+    Examples
+    --------
     >>> @R.function
     ... def orig(x: R.Tensor((2, 4), "float32"), y: R.Tensor((2, 4), "float32")):
     ...     with R.dataflow():
@@ -68,17 +75,10 @@ def append_loss(orig_func: Function, loss_func: Function) -> Function:
     ...         R.output(gv)
     ...     return gv
 
-    Parameters
-    ----------
-    orig_func : Function
-        The function to be appended to.
-
-    loss_func : Function
-        The loss function.
-
-    Returns
-    -------
-    ret : Function
-        The result function.
+    Notes
+    -----
+    1. This util is dedicated to loss functions, not for general purposes.
+    2. This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in
+    some sense.
     """
     return _ffi_api.AppendLoss(orig_func, loss_func)  # type: ignore
