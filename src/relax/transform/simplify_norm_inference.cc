@@ -47,65 +47,30 @@ Expr ExpandToMatchInput(Expr data, int ndim, Array<Integer> axes) {
   return expand_dims(data, expand_axes);
 }
 
-/*!
- * \brief The common part for unpacking normalization
- * \param dev The Expr of data - mean (may avoid duplicate computation)
- * \param var The Expr of variance
- * \param gamma The Expr of gamma, skip scaling if not defined.
- * \param beta The Expr of beta, skip shifting if not defined.
- * \param axes The axes to reduce.
- * \param eps The epsilon value.
- * \param ndim The ndim of the input data.
- * \param dtype The dtype of the input data.
- * \return The Expr of the unpacked normalization.
- */
-Expr SimplifyCommonNorm(Expr dev, Expr var, Optional<Expr> gamma, Optional<Expr> beta,
-                        Array<Integer> axes, float eps, int ndim, DataType dtype) {
-  // output = (x - mean) / sqrt(var + epsilon) * gamma + beta
-  Expr epsilon = MakeConstantScalar(eps, dtype);
-  Expr sqrt_var = sqrt(add(var, epsilon));
-  Expr out = divide(dev, sqrt_var);
-
-  if (gamma.defined()) {
-    out = multiply(out, ExpandToMatchInput(gamma.value(), ndim, axes));
-  }
-  if (beta.defined()) {
-    out = add(out, ExpandToMatchInput(beta.value(), ndim, axes));
-  }
-  return out;
-}
-
-std::pair<Expr, Expr> ComputeDevVar(Expr data, Array<Integer> axes) {
-  Expr mean_expr = mean(data, axes, /*keepdims=*/true);
-  Expr dev = subtract(data, mean_expr);
-  Expr var = mean(multiply(dev, dev), axes, /*keepdims=*/true);
-  return std::make_pair(dev, var);
-}
-
 Expr SimplifyBatchNorm(const CallNode* call) {
   auto attrs = call->attrs.as<BatchNormAttrs>();
   ICHECK_NOTNULL(attrs);
-  Optional<Expr> gamma = attrs->scale ? call->args[1] : Optional<Expr>(NullOpt);
-  Optional<Expr> beta = attrs->center ? call->args[2] : Optional<Expr>(NullOpt);
-  TensorStructInfo sinfo = MatchTensorStructInfo(call->args[0]);
+
+  Expr data = call->args[0];
+  TensorStructInfo sinfo = MatchTensorStructInfo(data);
+  Expr gamma = call->args[1];
+  Expr beta = call->args[2];
   Expr moving_mean = ExpandToMatchInput(call->args[3], sinfo->ndim, {attrs->axis});
   Expr moving_var = ExpandToMatchInput(call->args[4], sinfo->ndim, {attrs->axis});
-  Expr dev = subtract(call->args[0], moving_mean);
-  return SimplifyCommonNorm(dev, moving_var, gamma, beta, {attrs->axis}, attrs->epsilon,
-                            sinfo->ndim, sinfo->dtype);
-}
 
-Expr SimplifyLayerNorm(const CallNode* call) {
-  auto attrs = call->attrs.as<LayerNormAttrs>();
-  ICHECK_NOTNULL(attrs);
-  Optional<Expr> gamma = attrs->scale ? call->args[1] : Optional<Expr>(NullOpt);
-  Optional<Expr> beta = attrs->center ? call->args[2] : Optional<Expr>(NullOpt);
-  auto res = ComputeDevVar(call->args[0], attrs->axes);
-  const Expr& dev = res.first;
-  const Expr& var = res.second;
-  TensorStructInfo sinfo = MatchTensorStructInfo(call->args[0]);
-  return SimplifyCommonNorm(dev, var, gamma, beta, attrs->axes, attrs->epsilon, sinfo->ndim,
-                            sinfo->dtype);
+  // output = (x - mean) / sqrt(var + epsilon) * gamma + beta
+  Expr epsilon = MakeConstantScalar(static_cast<float>(attrs->epsilon), sinfo->dtype);
+  Expr sqrt_var = sqrt(add(moving_var, epsilon));
+  Expr out = divide(subtract(data, moving_mean), sqrt_var);
+
+  if (attrs->scale) {
+    out = multiply(out, ExpandToMatchInput(gamma, sinfo->ndim, {attrs->axis}));
+  }
+  if (attrs->center) {
+    out = add(out, ExpandToMatchInput(beta, sinfo->ndim, {attrs->axis}));
+  }
+
+  return out;
 }
 
 /*! \brief A mutator to simplify the normalization inference. */
@@ -128,30 +93,14 @@ class NormInferenceSimplifier : public ExprMutator {
     }
   }
 
-  Expr VisitExpr_(const CallNode* call) final {
-    Expr expr = ExprMutator::VisitExpr_(call);
-    call = expr.as<CallNode>();
-    ICHECK_NOTNULL(call);
-
-    static const Op& batch_norm_op = Op::Get("relax.nn.batch_norm");
-    static const Op& layer_norm_op = Op::Get("relax.nn.layer_norm");
-    if (call->op == batch_norm_op) {
+  void VisitBinding_(const VarBindingNode* binding, const CallNode* val) final {
+    ExprMutator::VisitBinding_(binding, val);
+    if (val->op == Op::Get("relax.nn.batch_norm")) {
       // NOTE: we won't directly replace the batch_norm call since
       // the following bindings may depend on the returned moving_mean and moving_var.
       // Instead, we will store the unpacked value in the batch_norm_map_, and replace it
       // at the TupleGetItemNode. And the original batch_norm call will be removed in the
       // follow-up pass `RemoveAllUnused`
-      return expr;
-    } else if (call->op == layer_norm_op) {
-      return SimplifyLayerNorm(call);
-    } else {
-      return expr;
-    }
-  }
-
-  void VisitBinding_(const VarBindingNode* binding, const CallNode* val) final {
-    ExprMutator::VisitBinding_(binding, val);
-    if (val->op == Op::Get("relax.nn.batch_norm")) {
       batch_norm_map_.Set(binding->var, SimplifyBatchNorm(val));
     }
   }

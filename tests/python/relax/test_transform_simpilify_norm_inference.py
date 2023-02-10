@@ -120,6 +120,7 @@ def test_batch_norm_complex():
     ):
         with R.dataflow():
             # bn[1] is used, so we need to keep the original batch_norm
+            # NOTE: It's a rare case, so that we don't optimize it for now
             bn = R.nn.batch_norm(
                 x,
                 gamma,
@@ -144,50 +145,6 @@ def test_batch_norm_complex():
             gv1 = bn[1]
             R.output(out, gv1)
         return out, gv1
-
-    _check(before, expected)
-
-
-def test_layer_norm():
-    @R.function
-    def before(
-        data: R.Tensor((1, 3, 10, 10), dtype="float32"),
-        gamma: R.Tensor((10, 10), dtype="float32"),
-        beta: R.Tensor((10, 10), dtype="float32"),
-    ):
-        with R.dataflow():
-            gv = R.nn.layer_norm(
-                data,
-                gamma,
-                beta,
-                axes=[-2, -1],
-                epsilon=1e-05,
-                center=True,
-                scale=True,
-            )
-            R.output(gv)
-        return gv
-
-    @R.function
-    def expected(
-        x: R.Tensor((1, 3, 10, 10), dtype="float32"),
-        gamma: R.Tensor((10, 10), dtype="float32"),
-        beta: R.Tensor((10, 10), dtype="float32"),
-    ):
-        with R.dataflow():
-            mean = R.mean(x, axis=[-2, -1], keepdims=True)
-            dev = x - mean
-            var = dev * dev
-            var = R.mean(var, axis=[-2, -1], keepdims=True)
-            var_eps = var + R.const(1e-05, "float32")
-            sqrt_var = R.sqrt(var_eps)
-            div = R.divide(dev, sqrt_var)
-            new_gamma = R.expand_dims(gamma, axis=[0, 1])
-            out = div * new_gamma
-            new_beta = R.expand_dims(beta, axis=[0, 1])
-            out = out + new_beta
-            R.output(out)
-        return out
 
     _check(before, expected)
 
