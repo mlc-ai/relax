@@ -286,6 +286,14 @@ TVM_DLL Pass Gradient(String func_name, Optional<Array<Var>> require_grads = Nul
  */
 TVM_DLL Pass SplitCallTIRByPattern(Array<TIRPattern> patterns, FCodegen fcodegen);
 
+/*!
+ * \brief Simplify normalization operators during inference. For example, the result
+ * of a batch norm which is indexed at tuple index 0 will be unpacked into a
+ * number of simplified operators.
+ * \return The Pass.
+ */
+TVM_DLL Pass SimplifyNormInference();
+
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm

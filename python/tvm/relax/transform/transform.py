@@ -517,7 +517,7 @@ def SplitCallTIRByPattern(patterns, fcodegen) -> tvm.ir.transform.Pass:
     Returns
     -------
     ret : tvm.transform.Pass
-        The registered pass for spliting calltir.
+        The registered pass for splitting call_tir.
     """
     return _ffi_api.SplitCallTIRByPattern(patterns, fcodegen)  # type: ignore
 
@@ -531,6 +531,20 @@ def LiftTransformParams() -> tvm.ir.transform.Pass:
         The registered pass.
     """
     return _ffi_api.LiftTransformParams()  # type: ignore
+
+
+def SimplifyNormInference() -> tvm.ir.transform.Pass:
+    """Simplify normalization operators during inference. For example, the result
+    of a batch norm which is indexed at tuple index 0 will be unpacked into a
+    number of simplified operators.
+
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass
+    """
+
+    return _ffi_api.SimplifyNormInference()  # type: ignore
 
 
 def _wrap_class_function_pass(pass_cls, pass_info):

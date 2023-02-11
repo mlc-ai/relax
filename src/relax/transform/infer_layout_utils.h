@@ -45,8 +45,6 @@
 #include <utility>
 #include <vector>
 
-#include "utils.h"
-
 namespace tvm {
 namespace relax {
 
