@@ -28,6 +28,7 @@
 
 #include "../op/tensor/manipulate.h"
 #include "infer_layout_utils.h"
+#include "utils.h"
 
 namespace tvm {
 namespace relax {
