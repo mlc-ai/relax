@@ -289,7 +289,6 @@ class RPCRunner(PyRunner):
         logger.info("RPCRunner: max_workers = %d", max_workers)
         self.pool = PopenPoolExecutor(
             max_workers=max_workers,
-            timeout=rpc_config.session_timeout_sec,
             initializer=initializer,
         )
         self._sanity_check()
