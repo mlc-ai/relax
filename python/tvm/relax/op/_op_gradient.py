@@ -27,8 +27,11 @@ from ...tir import PrimExpr
 from .base import register_gradient
 
 from .unary import (
-    log,
+    cos,
     exp,
+    log,
+    sin,
+    sqrt,
 )
 from .binary import less
 from .statistical import sum
@@ -61,12 +64,23 @@ def _get_shape(expr: Expr) -> ShapeExpr:
     return shape
 
 
+def _get_dtype(expr: Expr) -> str:
+    """Get the dtype from a Tensor expr."""
+    try:
+        dtype = expr.struct_info.dtype
+    except Exception as error:
+        raise TVMError(
+            f"Get the dtype of {expr} failed. Please normalize it first and ensure it is a Tensor."
+        ) from error
+    return dtype
+
+
 def _ones(expr: Expr) -> Expr:
-    return ones(_get_shape(expr), expr.struct_info.dtype)
+    return ones(_get_shape(expr), _get_dtype(expr))
 
 
 def _zeros(expr: Expr) -> Expr:
-    return zeros(_get_shape(expr), expr.struct_info.dtype)
+    return zeros(_get_shape(expr), _get_dtype(expr))
 
 
 def _fit_shape(expr: Expr, expr_shape: ShapeExpr, target: Expr) -> Expr:
@@ -269,7 +283,7 @@ def ones_like_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [zeros_like(orig_call.args[0], orig_call.dtype)]
+    return [zeros_like(orig_call.args[0], orig_call.attrs.dtype)]
 
 
 @register_gradient("relax.full_like")
@@ -279,10 +293,103 @@ def full_like_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [zeros_like(orig_call.args[0], orig_call.dtype)]
+    return [zeros_like(orig_call.args[0], orig_call.attrs.dtype)]
 
 
 ##################### Unary #####################
+
+
+@register_gradient("relax.abs")
+def abs_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of abs.
+
+    Forward Form:
+        y = relax.abs(x)
+
+    Backward:
+        Returns [y_grad * where(x < 0, -1, 1)].
+    """
+    x = orig_call.args[0]
+    x_zeros = _zeros(x)
+    x_ones = _ones(x)
+    return [output_grad * where(less(x, x_zeros), -x_ones, x_ones)]
+
+
+@register_gradient("relax.cos")
+def cos_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of cos.
+
+    Forward Form:
+        y = relax.cos(x)
+
+    Backward:
+        Returns [-y_grad * sin(x)].
+    """
+    return [-output_grad * sin(orig_call.args[0])]
+
+
+@register_gradient("relax.exp")
+def exp_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of exp.
+
+    Forward Form:
+        y = relax.exp(x)
+
+    Backward:
+        Returns [y_grad * y].
+    """
+    return [output_grad * orig_var]
+
+
+@register_gradient("relax.log")
+def log_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of log.
+
+    Forward Form:
+        y = relax.log(x)
+
+    Backward:
+        Returns [y_grad / x].
+    """
+    return [output_grad / orig_call.args[0]]
+
+
+@register_gradient("relax.negative")
+def negative_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of negative.
+
+    Forward Form:
+        y = relax.negative(x)
+
+    Backward:
+        Returns [- y_grad].
+    """
+    return [-output_grad]
 
 
 @register_gradient("relax.sigmoid")
@@ -302,6 +409,44 @@ def sigmoid_grad(
     """
     x_ones = _ones(orig_call.args[0])
     return [output_grad * orig_var * (x_ones - orig_var)]
+
+
+@register_gradient("relax.sin")
+def sin_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of sin.
+
+    Forward Form:
+        y = relax.sin(x)
+
+    Backward:
+        Returns [y_grad * cos(x)].
+    """
+    return [output_grad * cos(orig_call.args[0])]
+
+
+@register_gradient("relax.sqrt")
+def sqrt_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of sqrt.
+
+    Forward Form:
+        y = relax.sqrt(x)
+
+    Backward:
+        Returns [0.5 * y_grad / sqrt(x)].
+    """
+    x = orig_call.args[0]
+    cst = relax.const(0.5, dtype=_get_dtype(x))
+    return [cst * output_grad / sqrt(x)]
 
 
 @register_gradient("relax.tanh")
@@ -561,7 +706,7 @@ def _divide_batch(x: Expr, expr: Expr):
         batch_size = int(x_shape[0])
         # batch_size = take(shape_of(x), relax.const(0, dtype="int32"), axis=0)
         # expr = divide(expr, batch_size)
-        expr = expr / relax.const(batch_size, dtype=expr.struct_info.dtype)
+        expr = expr / relax.const(batch_size, dtype=_get_dtype(expr))
     return expr
 
 
