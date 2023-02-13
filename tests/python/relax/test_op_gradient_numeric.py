@@ -160,6 +160,15 @@ def test_multiply(target, dev):
 
 
 @tvm.testing.parametrize_targets("llvm")
+def test_divide(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    data2_numpy = np.random.randint(1, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.divide, "relax.divide", [data1_numpy, data2_numpy], target, dev, (3, 3)
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
 def test_permute_dims(target, dev):
     data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
     relax_check_gradients(
