@@ -41,5 +41,25 @@ bool IsNestedTensor(const StructInfo& sinfo) {
 
 bool IsNestedTensor(const Expr& expr) { return IsNestedTensor(GetStructInfo(expr)); }
 
+bool KnowAllShapeValues(const StructInfo& sinfo) {
+  if (const auto* tensor_sinfo = sinfo.as<TensorStructInfoNode>()) {
+    return tensor_sinfo->shape.defined() &&
+           tensor_sinfo->shape.value()->IsInstance<ShapeExprNode>();
+  } else if (const auto* shape_sinfo = sinfo.as<ShapeStructInfoNode>()) {
+    return shape_sinfo->values.defined();
+  } else if (const auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
+    for (const auto& field_sinfo : tuple_sinfo->fields) {
+      if (!KnowAllShapeValues(field_sinfo)) {
+        return false;
+      }
+    }
+    return true;
+  } else if (sinfo.as<PrimStructInfoNode>()) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 }  // namespace relax
 }  // namespace tvm
