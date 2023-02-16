@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import tvm
 from tvm import DataType, relax
 from tvm.ir import PrimExpr
-from tvm.relax import Call, Expr, ExternFunc, TupleGetItem, Var, const
+from tvm.relax import Call, Expr, ExternFunc, Tuple as RxTuple, TupleGetItem, Var, const, ShapeExpr
 
 ############################### Operators ###############################
 from tvm.relax.op import (
@@ -88,6 +88,7 @@ from tvm.relax.op import (
     permute_dims,
     print,
     prod,
+    repeat,
     reshape,
     round,
     shape_of,
@@ -106,6 +107,7 @@ from tvm.relax.op import (
     take,
     tan,
     tanh,
+    tile,
     tril,
     triu,
     unique,
@@ -454,6 +456,7 @@ __all__ = [
     "If",
     "Then",
     "TupleGetItem",
+    "ShapeExpr",
     "abs",
     "acos",
     "acosh",
@@ -527,6 +530,7 @@ __all__ = [
     "prim_value",
     "print",
     "prod",
+    "repeat",
     "reshape",
     "round",
     "shape_of",
@@ -546,6 +550,7 @@ __all__ = [
     "take",
     "tan",
     "tanh",
+    "tile",
     "tril",
     "triu",
     "tuple",

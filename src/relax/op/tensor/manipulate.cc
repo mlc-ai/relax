@@ -660,6 +660,7 @@ Expr ConvertNewShapeToExpr(const Expr& data, const ObjectRef& shape) {
                              "Array of PrimExprs. However, the given new shape is "
                           << shape;
   int dim_to_infer = -1;
+  bool has_zero_dim = false;
   PrimExpr new_shape_prod = IntImm(DataType::Int(64), 1);
   for (int i = 0; i < static_cast<int>(array->size()); ++i) {
     const auto* _len = array->at(i).as<PrimExprNode>();
@@ -671,25 +672,27 @@ Expr ConvertNewShapeToExpr(const Expr& data, const ObjectRef& shape) {
                                   "integers. However, the give new shape is "
                                << shape;
     const auto* int_len = len.as<IntImmNode>();
-    if (int_len != nullptr && int_len->value == -1) {
+    if (int_len == nullptr || int_len->value > 0) {
+      // We expect any symbolic not to signal the intent of -1 nor 0, and therefore do no check for
+      // symbolic value here.
+      new_shape_prod *= len;
+    } else if (int_len->value == -1) {
       CHECK_EQ(dim_to_infer, -1) << "Reshape accepts at most one \"-1\" in the new shape. However, "
                                     "there are multiple \"-1\" in the given new shape  "
                                  << shape;
       dim_to_infer = i;
+    } else if (int_len->value == 0) {
+      has_zero_dim = true;
     } else {
-      CHECK(int_len == nullptr || int_len->value > 0)
-          << "Reshape requires all values in the new shape to be positive except a single \"-1\". "
-             "However, the given new shape is "
-          << shape;
-      // We expect any symbolic not to signal the intent of -1, and therefore do no check for
-      // symbolic value here.
-      new_shape_prod = new_shape_prod * len;
+      LOG(FATAL) << "Reshape requires all values in the new shape to be non-negative except a "
+                    "single \"-1\". However, the given new shape is "
+                 << shape;
     }
   }
 
   Array<PrimExpr> array_ref = GetRef<Array<PrimExpr>>(array);
   // When there is no dimension to infer, just return the input array as ShapeExpr.
-  if (dim_to_infer == -1) {
+  if (dim_to_infer == -1 && has_zero_dim == false) {
     return ShapeExpr(array_ref);
   }
 
@@ -709,6 +712,14 @@ Expr ConvertNewShapeToExpr(const Expr& data, const ObjectRef& shape) {
 
   arith::Analyzer analyzer;
   PrimExpr old_shape_prod = ComputeShapeProduct(shape_sinfo->values.value());
+
+  for (int i = 0; i < static_cast<int>(array->size()); ++i) {
+    const auto* int_len = array->at(i).as<IntImmNode>();
+    if (int_len != nullptr && int_len->value == 0) {
+      array_ref.Set(i, shape_sinfo->values.value()[i]);
+      new_shape_prod *= shape_sinfo->values.value()[i];
+    }
+  }
   array_ref.Set(dim_to_infer, analyzer.Simplify(floordiv(old_shape_prod, new_shape_prod)));
   return ShapeExpr(array_ref);
 }
@@ -1190,6 +1201,150 @@ TVM_REGISTER_OP("relax.collapse_sum_to")
     .add_argument("data", "Tensor", "The input tensor.")
     .add_argument("shape", "Shape", "The shape to collapse to.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoCollapseSumTo);
+
+/* relax.repeat */
+TVM_REGISTER_NODE_TYPE(RepeatAttrs);
+
+Expr repeat(Expr data, PrimExpr repeats, Optional<Integer> axis) {
+  auto attrs = make_object<RepeatAttrs>();
+  attrs->repeats = std::move(repeats);
+  attrs->axis = std::move(axis);
+
+  static const Op& op = Op::Get("relax.repeat");
+  return Call(op, {std::move(data)}, Attrs{attrs}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.repeat").set_body_typed(repeat);
+
+StructInfo InferStructInfoRepeat(const Call& call, const BlockBuilder& ctx) {
+  arith::Analyzer* analyzer = ctx->GetAnalyzer();
+  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
+  const auto* attrs = call->attrs.as<RepeatAttrs>();
+  const auto* data_shape = data_sinfo->shape.as<ShapeExprNode>();
+
+  if (attrs->axis.defined() && !data_sinfo->IsUnknownNdim()) {
+    int axis = attrs->axis.value()->value;
+    int ndim = data_sinfo->ndim;
+    if (axis < -ndim || axis >= ndim) {
+      ctx->ReportFatal(
+          Diagnostic::Error(call)
+          << "Repeat requires the input axis belongs range "
+             "[-data.struct_info.ndim, data.struct_info.ndim - 1]. However, the input axis is "
+          << axis << ", while ndim is " << ndim);
+    }
+  }
+
+  if (!attrs->repeats.dtype().is_int() && !attrs->repeats.dtype().is_uint()) {
+    ctx->ReportFatal(
+        Diagnostic::Error(call)
+        << "Repeat requires the input repeats have integer dtype. However, the dtype of repeats is "
+        << attrs->repeats.dtype());
+  }
+
+  if (data_shape == nullptr) {
+    if (attrs->axis.defined()) {
+      if (analyzer->CanProveEqual(attrs->repeats, 1)) {
+        // the shape does not changes
+        return data_sinfo;
+      } else {
+        return TensorStructInfo(data_sinfo->dtype, data_sinfo->ndim);
+      }
+    } else {
+      return TensorStructInfo(data_sinfo->dtype, 1);
+    }
+  }
+
+  if (!attrs->axis.defined()) {
+    PrimExpr new_shape =
+        analyzer->Simplify(ComputeShapeProduct(data_shape->values) * attrs->repeats);
+    return TensorStructInfo(ShapeExpr(Array<PrimExpr>({new_shape})), data_sinfo->dtype);
+  }
+
+  int axis = NormalizeAxis(call, ctx, data_sinfo->ndim, attrs->axis.value()->value);
+  auto shape_array = data_shape->values;
+  shape_array.Set(axis, analyzer->Simplify(shape_array[axis] * attrs->repeats));
+  return TensorStructInfo(ShapeExpr(shape_array), data_sinfo->dtype);
+}
+
+// TODO(relax-team): implement FRelaxInferLayout for repeat
+TVM_REGISTER_OP("relax.repeat")
+    .set_attrs_type<RepeatAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoRepeat)
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
+
+/* relax.tile */
+TVM_REGISTER_NODE_TYPE(TileAttrs);
+
+Expr tile(Expr data, Array<PrimExpr> repeats) {
+  auto attrs = make_object<TileAttrs>();
+  attrs->repeats = std::move(repeats);
+
+  static const Op& op = Op::Get("relax.tile");
+  return Call(op, {std::move(data)}, Attrs{attrs}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.tile").set_body_typed(tile);
+
+StructInfo InferStructInfoTile(const Call& call, const BlockBuilder& ctx) {
+  arith::Analyzer* analyzer = ctx->GetAnalyzer();
+  TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
+  const auto* attrs = call->attrs.as<TileAttrs>();
+  const auto* data_shape = data_sinfo->shape.as<ShapeExprNode>();
+  int l = attrs->repeats.size();
+  int ndim = data_sinfo->ndim;
+
+  for (auto i : attrs->repeats) {
+    if (!i.dtype().is_int() && !i.dtype().is_uint()) {
+      ctx->ReportFatal(
+          Diagnostic::Error(call)
+          << "Repeat requires the input repeats have integer dtype. However, the dtype of element "
+          << i << " in the input repeats has dtype " << i.dtype());
+    }
+  }
+
+  if (data_shape == nullptr) {
+    if (data_sinfo->IsUnknownNdim()) {
+      return TensorStructInfo(data_sinfo->dtype, kUnknownNDim);
+    }
+    if (l > ndim) {
+      return TensorStructInfo(data_sinfo->dtype, l);
+    } else {
+      for (auto i : attrs->repeats) {
+        if (!analyzer->CanProveEqual(i, 1)) {
+          return TensorStructInfo(data_sinfo->dtype, data_sinfo->ndim);
+        }
+      }
+      // if control reaches here, the shape should not be changed
+      return data_sinfo;
+    }
+  }
+
+  int out_ndim = std::max(l, ndim);
+  int l_delta = out_ndim - l;
+  int ndim_delta = out_ndim - ndim;
+  Array<PrimExpr> out_shape;
+  for (int i = 0; i < out_ndim; ++i) {
+    if (i < l_delta) {
+      out_shape.push_back(data_shape->values[i - ndim_delta]);
+    } else if (i < ndim_delta) {
+      out_shape.push_back(attrs->repeats[i - l_delta]);
+    } else {
+      out_shape.push_back(
+          analyzer->Simplify(data_shape->values[i - ndim_delta] * attrs->repeats[i - l_delta]));
+    }
+  }
+  return TensorStructInfo(ShapeExpr(out_shape), data_sinfo->dtype);
+}
+
+// TODO(relax-team): implement FRelaxInferLayout for tile
+TVM_REGISTER_OP("relax.tile")
+    .set_attrs_type<TileAttrs>()
+    .set_num_inputs(1)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoTile)
+    .set_attr<TMixedPrecisionPolicy>("TMixedPrecisionPolicy", MixedPrecisionPolicyKind::kFollow);
 
 }  // namespace relax
 }  // namespace tvm

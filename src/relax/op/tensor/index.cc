@@ -108,6 +108,8 @@ Expr strided_slice(Expr x,                 //
   if (strides.defined()) {
     CHECK_EQ(static_cast<int>(strides.value().size()), n_axis)
         << "StridedSlice requires the number of strides to equal the number of axes.";
+  } else {
+    strides = Array<PrimExpr>(n_axis, IntImm(DataType::Int(64), 1));
   }
 
   // Todo(relax-team): We are going to support dynamic strided slice, where
@@ -134,7 +136,7 @@ Expr strided_slice(Expr x,                 //
   attrs->axes = std::move(axes);
   attrs->begin = begin.Map(f_convert_to_int64);
   attrs->end = end.Map(f_convert_to_int64);
-  attrs->strides = strides.defined() ? strides.value().Map(f_convert_to_int64) : strides;
+  attrs->strides = strides.value().Map(f_convert_to_int64);
 
   static const Op& op = Op::Get("relax.strided_slice");
   return Call(op, {std::move(x)}, Attrs(attrs), {});
@@ -160,9 +162,7 @@ StructInfo InferStructInfoStridedSlice(const Call& call, const BlockBuilder& ctx
   }
 
   int n_axis = axes.size();
-  Array<PrimExpr> strides = attrs->strides.defined()
-                                ? attrs->strides.value()
-                                : Array<PrimExpr>(n_axis, IntImm(DataType::Int(64), 1));
+  Array<PrimExpr> strides = attrs->strides;
   std::vector<int> int_strides;
   int_strides.reserve(n_axis);
   // Only do output shape inference when all the begin/end/stride values are integers.

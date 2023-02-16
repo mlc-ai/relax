@@ -17,15 +17,17 @@
 # pylint: disable=abstract-method,invalid-name,missing-class-docstring
 # pylint: disable=missing-function-docstring,missing-module-docstring,unused-argument
 import logging
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union, Tuple
 
 import tvm
 from tvm import te, tir, topi, relax
+from tvm.ir.expr import PrimExpr
 from tvm.relax import struct_info
 from tvm.ir.module import IRModule
+from tvm.tir.expr import IntImm
 
 from ..analysis import remove_all_unused
-from ..expr import Call, Constant, Expr, Function, ShapeExpr, Tuple, TupleGetItem, Var
+from ..expr import Call, Constant, Expr, Function, ShapeExpr, Tuple as RxTuple, TupleGetItem, Var
 from ..expr_functor import mutator, PyExprMutator
 from ..block_builder import BlockBuilder
 
@@ -40,6 +42,8 @@ TEFunc = Callable[..., te.Tensor]
 # BlockBuilder and the Call to be legalized, and outputs the legalization
 # result Expr.
 LegalizeFunc = Callable[[BlockBuilder, Call], Expr]
+
+PrimExprLike = Union[int, PrimExpr]
 
 
 def has_known_shape_value(sinfo: struct_info.StructInfo) -> bool:
@@ -80,7 +84,7 @@ def try_convert_to_scalar_const(expr: Expr) -> Union[Expr, bool, float, int]:
         The expr to be checked and converted.
 
     Returns
-    --–----
+    -------
     ret : Union[Expr, bool, float, int]
         Return a Python native value (int/float/bool) if the given
         expr is a scalar constant. Or return the input itself
@@ -97,7 +101,6 @@ def _call_topi_without_attr(te_func: TEFunc) -> LegalizeFunc:
     legalization is simply passing its arguments to some TE function.
     """
     return lambda bb, call: bb.call_te(te_func, *call.args)
-
 
 def _binary(te_func: TEFunc) -> LegalizeFunc:
     """A common wrapper util for the legalization of binary operators.
@@ -282,13 +285,15 @@ def _concat(bb: BlockBuilder, call: Call) -> Expr:
     n_field = len(t.struct_info.fields)
     while isinstance(t, Var):
         binding = bb.lookup_binding(t)
-        if not isinstance(binding, (Tuple, Var)):
+        if not isinstance(binding, (RxTuple, Var)):
             break
         t = binding
 
-    assert isinstance(t, (Tuple, Var))
+    assert isinstance(t, (RxTuple, Var))
     fields = (
-        t.fields if isinstance(t, Tuple) else [bb.emit(TupleGetItem(t, i)) for i in range(n_field)]
+        t.fields
+        if isinstance(t, RxTuple)
+        else [bb.emit(TupleGetItem(t, i)) for i in range(n_field)]
     )
     return bb.call_te(
         topi.concatenate, fields, None if call.attrs.axis is None else call.attrs.axis.value
@@ -390,6 +395,41 @@ def _std(bb: BlockBuilder, call: Call) -> Expr:
     )
 
 
+def _repeat(bb: BlockBuilder, call: Call) -> Expr:
+    if not isinstance(call.attrs.repeats, IntImm):
+        logging.info(
+            "TOPI repeat does not support symbolic parameter repeats, and thus cannot be legalized "
+            "by TOPI"
+        )
+        return call
+
+    def te_repeat(data: te.Tensor, repeats: IntImm, axis: Optional[IntImm]):
+        if axis is None:
+            # flatten data
+            out_shape = data.shape[0]
+            for i in data.shape[1:]:
+                out_shape *= i
+            data = topi.reshape(data, (out_shape,))
+            axis = 0
+        # topi only receives int repeats and axis
+        return topi.repeat(data, int(repeats), int(axis))
+
+    return bb.call_te(
+        te_repeat, call.args[0], call.attrs.repeats, call.attrs.axis, primfunc_name_hint="repeat"
+    )
+
+
+def _tile(bb: BlockBuilder, call: Call) -> Expr:
+    if not all(isinstance(i, IntImm) for i in call.attrs.repeats):
+        logging.info(
+            "TOPI tile does not support symbolic parameter repeats, and thus cannot be legalized "
+            "by TOPI"
+        )
+        return call
+
+    return bb.call_te(topi.tile, call.args[0], call.attrs.repeats)
+
+
 def _variance(bb: BlockBuilder, call: Call) -> Expr:
     return bb.call_te(
         _te_variance,
@@ -440,6 +480,51 @@ def _nn_conv2d(bb: BlockBuilder, call: Call) -> Expr:
         kernel_layout=call.attrs.kernel_layout,
         out_dtype=call.attrs.out_dtype if call.attrs.out_dtype != "" else None,
         primfunc_name_hint="conv2d",
+    )
+
+
+def _nn_conv2d_transpose(bb: BlockBuilder, call: Call) -> Expr:
+    if call.attrs.out_layout != call.attrs.data_layout:
+        logging.info(
+            "TOPI conv2d_transpose does not support different input-output "
+            "layouts, and thus cannot be legalized by TOPI"
+        )
+        return call
+    if call.attrs.data_layout != "NCHW" or call.attrs.kernel_layout != "IOHW":
+        logging.info(
+            "TOPI conv2d_transpose does not support input layout other than NCHW, "
+            "and kernel layout other than IOHW, so cannot be legalized by TOPI"
+        )
+        return call
+    dilation = call.attrs.dilation
+    if len(dilation) != 2 or dilation[0] != 1 or dilation[1] != 1:
+        logging.info(
+            "TOPI conv2d_transpose does not support dilations other than 1, "
+            "and thus cannot be legalized by TOPI"
+        )
+        return call
+    output_padding = call.attrs.output_padding
+    if (
+        len(output_padding) != 2
+        or not isinstance(output_padding[0], IntImm)
+        or not isinstance(output_padding[1], IntImm)
+    ):
+        logging.info(
+            "TOPI conv2d_transpose does not support symbolic output padding, "
+            "and thus cannot be legalized by TOPI"
+        )
+        return call
+
+    return bb.call_te(
+        topi.nn.group_conv2d_transpose_nchw,
+        call.args[0],
+        call.args[1],
+        stride=call.attrs.strides,
+        padding=call.attrs.padding,
+        out_dtype=call.struct_info.dtype,
+        output_padding=call.attrs.output_padding,
+        groups=call.attrs.groups,
+        primfunc_name_hint="conv2d_transpose",
     )
 
 
@@ -518,20 +603,6 @@ def _nn_log_softmax(bb: BlockBuilder, call: Call):
     return bb.call_te(topi.nn.log_softmax, call.args[0], call.attrs.axis)
 
 
-def _nn_cross_entropy_without_logits(bb: BlockBuilder, call: Call):
-    def te_cross_entropy_without_logits(x, y):
-        if len(x.shape) > 1:
-            return -topi.sum(topi.log(x) * y) / x.shape[0]
-        return -topi.sum(topi.log(x) * y)
-
-    return bb.call_te(
-        te_cross_entropy_without_logits,
-        call.args[0],
-        call.args[1],
-        primfunc_name_hint="cross_entropy_without_logits",
-    )
-
-
 def _nn_cross_entropy_with_logits(bb: BlockBuilder, call: Call):
     def te_cross_entropy_with_logits(x, y):
         if len(x.shape) > 1:
@@ -578,13 +649,23 @@ def _nn_dropout(bb: BlockBuilder, call: Call) -> Expr:
 
 
 def _nn_nll_loss(bb: BlockBuilder, call: Call) -> Expr:
-    if len(call.args) == 2:
-        # TODO(relax-team): handle optional argument weight of NLLLoss
-        logging.info(
-            "Can not legalize it now, because don't know how to set "
-            "the default value of the optional argument 'weight' of NLLLoss."
+    def nll_loss_without_weight(predictions, targets, reduction, ignore_index):
+        weight = topi.full(
+            (predictions.shape[1] if len(predictions.shape) > 1 else predictions.shape[0],),
+            predictions.dtype,
+            1.0,
         )
-        return call
+        return topi.nn.nll_loss(predictions, targets, weight, reduction, ignore_index)
+
+    if len(call.args) == 2:
+        return bb.call_te(
+            nll_loss_without_weight,
+            call.args[0],
+            call.args[1],
+            reduction=call.attrs.reduction,
+            ignore_index=call.attrs.ignore_index,
+        )
+
     return bb.call_te(
         topi.nn.nll_loss,
         call.args[0],
@@ -670,6 +751,8 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
         topi.collapse_sum, "collapse_sum", is_collapse_sum_like=True
     ),
     "relax.collapse_sum_to": _reshape(topi.collapse_sum, "collapse_sum"),
+    "relax.repeat": _repeat,
+    "relax.tile": _tile,
     # Search
     "relax.where": _call_topi_without_attr(topi.where),
     # Statistical
@@ -682,6 +765,7 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.variance": _variance,
     # Neural network
     "relax.nn.conv2d": _nn_conv2d,
+    "relax.nn.conv2d_transpose": _nn_conv2d_transpose,
     "relax.nn.max_pool2d": _nn_max_pool2d,
     "relax.nn.adaptive_avg_pool2d": _nn_adaptive_max_pool2d,
     "relax.nn.relu": _call_topi_without_attr(topi.nn.relu),
@@ -689,7 +773,6 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.nn.silu": _nn_silu,
     "relax.nn.softmax": _nn_softmax,
     "relax.nn.log_softmax": _nn_log_softmax,
-    "relax.nn.cross_entropy_without_logits": _nn_cross_entropy_without_logits,
     "relax.nn.cross_entropy_with_logits": _nn_cross_entropy_with_logits,
     "relax.nn.batch_norm": _nn_batch_norm,
     "relax.nn.layer_norm": _nn_layer_norm,

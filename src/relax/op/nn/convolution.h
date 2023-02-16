@@ -58,6 +58,12 @@ Expr conv2d(Expr data, Expr weight, Array<IntImm> strides, Array<IntImm> padding
             Array<IntImm> dilation, int groups, String data_layout, String kernel_layout,
             Optional<String> out_layout, DataType out_dtype);
 
+/*! \brief 2D convolution */
+Expr conv2d_transpose(Expr data, Expr weight, Array<IntImm> strides, Array<IntImm> padding,
+                      Array<PrimExpr> output_padding, Array<IntImm> dilation, int groups,
+                      String data_layout, String kernel_layout, Optional<String> out_layout,
+                      DataType out_dtype);
+
 }  // namespace relax
 }  // namespace tvm
 
