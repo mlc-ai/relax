@@ -45,7 +45,7 @@ def test_simple():
             return gv
 
         @R.function
-        def main_adjoint(x: R.Tensor((3, 3), "float32")) -> R.Tuple(R.Tensor(None, "float32", ndim=0),R.Tuple(R.Tensor(None, "float32", ndim=2)),):
+        def main_adjoint(x: R.Tensor((3, 3), "float32")) -> R.Tuple(R.Tensor(None, "float32", ndim=0), R.Tuple(R.Tensor(None, "float32", ndim=2)),):
             with R.dataflow():
                 gv: R.Tensor((), "float32") = R.sum(x, axis=None, keepdims=False)
                 gv_adjoint: R.Tensor((), "float32") = R.ones((), "float32")

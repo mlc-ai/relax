@@ -361,6 +361,13 @@ def _statistical(te_func: TEFunc) -> LegalizeFunc:
     return statistical_call_te
 
 
+def _te_sum(data, axis=None, keepdims=False):
+    # TOPI sum cannot handle 0-dim sum
+    if (data.ndim == 0):
+        return te.compute((), lambda : data())
+    return topi.sum(data, axis, keepdims)
+
+
 def _compute_shape_prod(x: te.Tensor, axis: List[tir.IntImm]) -> tir.PrimExpr:
     shape_prod = tir.const(1, "int32")
     axes = [_axis.value for _axis in axis] if axis is not None else range(0, len(x.shape))
@@ -695,6 +702,99 @@ def _image_resize2d(bb: BlockBuilder, call: Call) -> Expr:
     )
 
 
+##################### Gradient Operators #####################
+
+
+def _grad_nll_loss_backward(bb: BlockBuilder, call: Call) -> Expr:
+    # topi.sum don't support zero-dim x
+    # we add support for that
+    def topi_sum_extend(x):
+        return x if x.ndim == 0 else topi.sum(x)
+
+    def te_nll_loss_backward(output_grad, predictions, targets, weights, reduction, ignore_index):
+        # handle ignore_index
+        if ignore_index >= 0:
+            weights = te.compute(
+                weights.shape,
+                lambda i: tir.Select(i == ignore_index, tir.const(0, weights.dtype), weights(i)),
+                "weights_new",
+            )
+
+        all_weights = te.compute(targets.shape, lambda *i: weights(targets(*i)), "all_weights")
+
+        # handle reduction
+        if reduction == "sum":
+            output_grad = topi.broadcast_to(output_grad, targets.shape)
+        elif reduction == "mean":
+            output_grad = topi.divide(
+                topi.broadcast_to(output_grad, targets.shape), topi_sum_extend(all_weights)
+            )
+
+        # handle no batch
+        if predictions.ndim == 1:
+            return te.compute(
+                predictions.shape,
+                lambda i: tir.Select(
+                    i == targets(), -all_weights() * output_grad(), tir.const(0, predictions.dtype)
+                ),
+                "pred_grad",
+            )
+
+        return te.compute(
+            predictions.shape,
+            lambda *i: tir.Select(
+                i[1] == targets(*i[:1], *i[2:]),
+                -all_weights(*i[:1], *i[2:]) * output_grad(*i[:1], *i[2:]),
+                tir.const(0, predictions.dtype),
+            ),
+            "pred_grad",
+        )
+
+    def te_nll_loss_backward_no_weight(output_grad, predictions, targets, reduction, ignore_index):
+        weight = topi.full(
+            (predictions.shape[1] if len(predictions.shape) > 1 else predictions.shape[0],),
+            predictions.dtype,
+            1.0,
+        )
+        return te_nll_loss_backward(
+            output_grad, predictions, targets, weight, reduction, ignore_index
+        )
+
+    if len(call.args) == 3:
+        return bb.call_te(
+            te_nll_loss_backward_no_weight,
+            *call.args,
+            reduction=call.attrs.reduction,
+            ignore_index=call.attrs.ignore_index,
+        )
+
+    return bb.call_te(
+        te_nll_loss_backward,
+        *call.args,
+        reduction=call.attrs.reduction,
+        ignore_index=call.attrs.ignore_index,
+        primfunc_name_hint="nll_loss_backward",
+    )
+
+
+def _grad_max_pool2d_backward(bb: BlockBuilder, call: Call) -> Expr:
+    if not (len(call.attrs.dilation) == 2 and all(i == 1 for i in call.attrs.dilation)):
+        logging.info("Dilation is not supported in TOPI pool_grad and is not legalized.")
+        return call
+    return bb.call_te(
+        topi.nn.pool_grad,
+        call.args[0],
+        call.args[1],
+        kernel=call.attrs.pool_size,
+        stride=call.attrs.strides,
+        padding=call.attrs.padding,
+        pool_type="max",
+        ceil_mode=call.attrs.ceil_mode,
+        layout=call.attrs.layout,
+        primfunc_name_hint="max_pool2d_backward",
+    )
+
+
 ##########################################################
 
 
@@ -761,7 +861,7 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.min": _statistical(topi.min),
     "relax.prod": _statistical(topi.prod),
     "relax.std": _std,
-    "relax.sum": _statistical(topi.sum),
+    "relax.sum": _statistical(_te_sum),
     "relax.variance": _variance,
     # Neural network
     "relax.nn.conv2d": _nn_conv2d,
@@ -780,6 +880,9 @@ DEFAULT_OP_LEGALIZE_MAP: Dict[str, LegalizeFunc] = {
     "relax.nn.nll_loss": _nn_nll_loss,
     # Image
     "relax.image.resize2d": _image_resize2d,
+    # Gradient
+    "relax.grad.nll_loss_backward": _grad_nll_loss_backward,
+    "relax.grad.max_pool2d_backward": _grad_max_pool2d_backward,
 }
 
 
