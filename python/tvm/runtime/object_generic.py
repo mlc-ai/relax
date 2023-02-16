@@ -17,6 +17,7 @@
 """Common implementation of object generic related logic"""
 # pylint: disable=unused-import, invalid-name
 from numbers import Number, Integral
+from inspect import isfunction
 from tvm._ffi.base import string_types
 from tvm._ffi.runtime_ctypes import ObjectRValueRef
 
@@ -54,6 +55,8 @@ def convert_to_object(value, span=None):
     obj : Object
         The corresponding object value.
     """
+    if isfunction(value):
+        return value
     if isinstance(value, ObjectTypes):
         return value
     if isinstance(value, bool):
