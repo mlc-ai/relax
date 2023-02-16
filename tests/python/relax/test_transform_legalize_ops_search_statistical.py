@@ -287,6 +287,21 @@ def test_sum():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_sum_0_dim():
+    # fmt: off
+    @tvm.script.ir_module
+    class Sum:
+        @R.function
+        def main(x: R.Tensor((), "float32")) -> R.Tensor((), "float32"):
+            gv: R.Tensor((), "float32") = R.sum(x)
+            return gv
+    # fmt: on
+
+    mod = LegalizeOps()(Sum)
+    mod.show(None, False)
+    # tvm.ir.assert_structural_equal(mod, Expected)
+test_sum_0_dim()
+
 def test_sum_symbolic():
     # fmt: off
     @tvm.script.ir_module
@@ -789,5 +804,5 @@ def test_variance_symbolic():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
-if __name__ == "__main__":
-    tvm.testing.main()
+# if __name__ == "__main__":
+#     tvm.testing.main()

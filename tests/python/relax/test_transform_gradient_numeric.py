@@ -21,7 +21,7 @@ from tvm import relax
 from tvm.relay.testing import rand
 from tvm.testing import assert_allclose
 from tvm.testing.utils import check_numerical_grads
-from tvm.script.parser import ir as I, relax as R, tir as T
+from tvm.script.parser import ir as I, relax as R
 from tvm.relax.transform import LegalizeOps
 
 

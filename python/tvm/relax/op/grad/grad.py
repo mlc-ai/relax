@@ -20,9 +20,7 @@ We are trying to keep grad operators as simple as possible, and hope they are on
 gradients for forward operators. The struct_info inference for grad operators just returns the
 struct_info of the input.
 """
-from typing import List, Optional, Tuple, Union
-
-from tvm import DataType
+from typing import Optional, Tuple
 
 from . import _ffi_api
 from ...expr import Expr
