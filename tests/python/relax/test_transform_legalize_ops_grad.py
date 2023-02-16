@@ -197,7 +197,7 @@ def test_nll_loss_backward_no_batch():
                     T.reads(rxplaceholder_2[()], all_weights[()], T_divide[()])
                     T.writes(pred_grad[v_i])
                     pred_grad[v_i] = T.Select(v_i == rxplaceholder_2[()], all_weights[()] * T.float32(-1) * T_divide[()], T.float32(0))
-   # fmt: on
+    # fmt: on
 
     mod = LegalizeOps()(NLLLossBackward)
     tvm.ir.assert_structural_equal(mod, Expected)

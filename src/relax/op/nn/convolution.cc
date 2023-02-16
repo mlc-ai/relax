@@ -228,7 +228,8 @@ Expr conv2d_transpose(Expr data, Expr weight, Array<IntImm> strides, Array<IntIm
   auto attrs = make_object<Conv2DTransposeAttrs>();
   attrs->strides = ConvertIntImmToInt64(strides);
   attrs->padding = ConvertIntImmToInt64(padding);
-  attrs->output_padding = output_padding.Map([](const PrimExpr& i) { return cast(DataType::Int(64), i); });;
+  attrs->output_padding =
+      output_padding.Map([](const PrimExpr& i) { return cast(DataType::Int(64), i); });
   attrs->dilation = ConvertIntImmToInt64(dilation);
   attrs->groups = groups;
   attrs->data_layout = data_layout;

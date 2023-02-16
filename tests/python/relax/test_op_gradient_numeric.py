@@ -24,6 +24,7 @@ from tvm.relax.transform import LegalizeOps
 from tvm.testing.utils import check_numerical_grads
 from tvm.ir.op import Op
 
+
 def relax_check_gradients(
     op_func: Callable,
     op_name: str,

@@ -21,8 +21,8 @@
  * \file gradient_ops.h
  * \brief The functions to make Relax gradient operators.
  */
-#ifndef TVM_RELAX_OP_TENSOR_GRADIENT_H_
-#define TVM_RELAX_OP_TENSOR_GRADIENT_H_
+#ifndef TVM_RELAX_OP_TENSOR_GRAD_H_
+#define TVM_RELAX_OP_TENSOR_GRAD_H_
 
 #include <tvm/relax/attrs/nn.h>
 
@@ -45,4 +45,4 @@ Expr max_pool2d_backward(Expr output_grad, Expr data, Array<IntImm> pool_size,
 }  // namespace relax
 }  // namespace tvm
 
-#endif  // TVM_RELAX_OP_TENSOR_GRADIENT_H_
+#endif  // TVM_RELAX_OP_TENSOR_GRAD_H_

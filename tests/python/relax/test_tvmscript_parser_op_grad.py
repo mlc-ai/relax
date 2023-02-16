@@ -92,8 +92,12 @@ def test_nll_loss_backward_no_weights():
 
 def test_max_pool2d():
     @R.function
-    def foo(output_grad: R.Tensor((3, 2, 6, 5), "float32"), data: R.Tensor((3, 2, 10, 10), "float32")):
-        gv = R.grad.max_pool2d_backward(output_grad, data, (5, 5), (2, 2), (2, 1, 2, 1), (1, 1), True)
+    def foo(
+        output_grad: R.Tensor((3, 2, 6, 5), "float32"), data: R.Tensor((3, 2, 10, 10), "float32")
+    ):
+        gv = R.grad.max_pool2d_backward(
+            output_grad, data, (5, 5), (2, 2), (2, 1, 2, 1), (1, 1), True
+        )
         return gv
 
     output_grad = relax.Var("output_grad", R.Tensor((3, 2, 6, 5), "float32"))

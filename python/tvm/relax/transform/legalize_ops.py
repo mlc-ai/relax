@@ -102,6 +102,7 @@ def _call_topi_without_attr(te_func: TEFunc) -> LegalizeFunc:
     """
     return lambda bb, call: bb.call_te(te_func, *call.args)
 
+
 def _binary(te_func: TEFunc) -> LegalizeFunc:
     """A common wrapper util for the legalization of binary operators.
 
@@ -363,8 +364,8 @@ def _statistical(te_func: TEFunc) -> LegalizeFunc:
 
 def _te_sum(data, axis=None, keepdims=False):
     # TOPI sum cannot handle 0-dim sum
-    if (data.ndim == 0):
-        return te.compute((), lambda : data())
+    if data.ndim == 0:
+        return te.compute((), lambda: data())
     return topi.sum(data, axis, keepdims)
 
 
