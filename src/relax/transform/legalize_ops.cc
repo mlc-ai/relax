@@ -36,7 +36,7 @@ namespace relax {
 // Call registered FTVMLegalize of an op, returns the legalized expression
 class LegalizeMutator : public ExprMutator {
  public:
-  explicit LegalizeMutator(IRModule mod) { mod_ = mod; }
+  explicit LegalizeMutator(const IRModule& mod) : ExprMutator(mod), mod_(std::move(mod)) {}
 
   Expr VisitExpr_(const CallNode* call) final {
     Call visited_call = Downcast<Call>(this->VisitExprPostOrder_(call));
@@ -71,11 +71,10 @@ class LegalizeMutator : public ExprMutator {
   }
 
   IRModule Transform() {
-    for (auto& p : mod_->functions) {
-      Expr func = p.second;
+    for (const auto& [gv, func] : mod_->functions) {
       if (func->IsInstance<FunctionNode>()) {
-        Function transformed_func = RemoveAllUnused(Downcast<Function>(this->VisitExpr(func)));
-        builder_->UpdateFunction(p.first, transformed_func);
+        auto updated_func = RemoveAllUnused(Downcast<Function>(this->VisitExpr(func)));
+        builder_->UpdateFunction(gv, Downcast<BaseFunc>(updated_func));
       }
     }
     return builder_->GetContextIRModule();

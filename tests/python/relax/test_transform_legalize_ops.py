@@ -18,11 +18,12 @@
 import tvm
 from tvm import relax
 from tvm.relax.transform import LegalizeOps
+from tvm.relax.transform.legalize_ops import customize_legalize
 from tvm.script import relax as R, tir as T
 import tvm.testing
 
 
-def test_customize_legalize_map():
+def test_customize_legalize():
     # fmt: off
     @tvm.script.ir_module
     class Add:
@@ -50,12 +51,13 @@ def test_customize_legalize_map():
                     T_add[ax0, ax1, ax2, ax3] = rxplaceholder_1[ax0, ax1, ax2, T.int64(0)] + rxplaceholder[T.int64(0), ax2, ax3]
     # fmt: on
 
+    @customize_legalize("relax.add")
     def customize_legalize_add(bb: relax.BlockBuilder, call: relax.Call):
         from tvm import topi  # pylint: disable=import-outside-toplevel
 
         return bb.call_te(topi.add, call.args[1], call.args[0])
 
-    mod = LegalizeOps({"relax.add": customize_legalize_add})(Add)
+    mod = LegalizeOps()(Add)
     tvm.ir.assert_structural_equal(mod, Expected)
 
 

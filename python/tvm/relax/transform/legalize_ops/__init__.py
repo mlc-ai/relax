@@ -16,6 +16,8 @@
 # under the License.
 # pylint: disable=invalid-name
 """Legalize high-level operator calls in Relax functions to call_tir."""
+from .. import _ffi_api
+
 from .binary import *
 from .creation import *
 from .datatype import *
@@ -28,7 +30,7 @@ from .search import *
 from .statistical import *
 from .unary import *
 
-from .. import _ffi_api
+from .common import customize_legalize
 
 
 def LegalizeOps():
