@@ -14,7 +14,8 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name,missing-module-docstring
+# pylint: disable=invalid-name
+"""Default legalization function for manipulate operators."""
 import logging
 import tvm
 from tvm import topi, tir, relax, te

@@ -14,7 +14,8 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name,missing-module-docstring
+# pylint: disable=invalid-name
+"""Default legalization function for creation operators."""
 from typing import Optional
 from tvm import topi, tir
 from .common import LegalizeFunc, register_legalize, _try_convert_to_scalar_const

@@ -94,7 +94,7 @@ class LegalizeMutator : public ExprMutator {
  private:
   IRModule mod_;
   Optional<Map<String, PackedFunc>> cmap_;
-};  // namespace relax
+};
 
 namespace transform {
 

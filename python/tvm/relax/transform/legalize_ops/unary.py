@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=missing-module-docstring
+"""Default legalization function for unary operators."""
 from tvm import topi
 from .common import _call_topi_without_attr, register_legalize
 

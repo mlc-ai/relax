@@ -14,7 +14,8 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name,missing-module-docstring
+# pylint: disable=invalid-name
+"""Default legalization function for binary operators."""
 from tvm import topi
 from .common import TEFunc, LegalizeFunc, _try_convert_to_scalar_const, register_legalize
 from ...block_builder import BlockBuilder

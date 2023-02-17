@@ -14,7 +14,8 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name,missing-module-docstring,unused-argument
+# pylint: disable=invalid-name,unused-argument
+"""Default legalization function for neural network operators."""
 import logging
 from tvm import topi, tir, te
 from .common import register_legalize, _call_topi_without_attr

@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=missing-module-docstring
+"""Common functionality for legalization."""
 from typing import Callable, Union
 import tvm
 from tvm import te
