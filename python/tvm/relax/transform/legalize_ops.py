@@ -500,11 +500,7 @@ def _nn_conv2d_transpose(bb: BlockBuilder, call: Call) -> Expr:
         )
         return call
     output_padding = call.attrs.output_padding
-    if (
-        len(output_padding) != 2
-        or not isinstance(output_padding[0], IntImm)
-        or not isinstance(output_padding[1], IntImm)
-    ):
+    if len(output_padding) != 2 or not all(isinstance(i, IntImm) for i in output_padding):
         logging.info(
             "TOPI conv2d_transpose does not support symbolic output padding, "
             "and thus cannot be legalized by TOPI"
