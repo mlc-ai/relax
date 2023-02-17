@@ -17,7 +17,7 @@
 # pylint: disable=abstract-method,invalid-name,missing-class-docstring
 # pylint: disable=missing-function-docstring,missing-module-docstring,unused-argument
 import logging
-from typing import Callable, Dict, List, Optional, Union, Tuple
+from typing import Callable, Dict, List, Optional, Union
 
 import tvm
 from tvm import te, tir, topi, relax
@@ -365,7 +365,7 @@ def _statistical(te_func: TEFunc) -> LegalizeFunc:
 def _te_sum(data, axis=None, keepdims=False):
     # TOPI sum cannot handle 0-dim sum
     if data.ndim == 0:
-        return te.compute((), lambda: data())
+        return te.compute((), lambda: data())  # pylint: disable=unnecessary-lambda
     return topi.sum(data, axis, keepdims)
 
 
