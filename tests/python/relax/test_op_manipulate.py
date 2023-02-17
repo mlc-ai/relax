@@ -58,6 +58,7 @@ def test_reshape_infer_struct_info():
     s0 = relax.Var("s", R.Shape((3, 8, 5)))
     s1 = relax.Var("s", R.Shape(ndim=3))
     s2 = relax.Var("s", R.Shape())
+    s3 = relax.ShapeExpr((3, 8, 5))
 
     _check_inference(
         bb, relax.op.reshape(x0, (3, 8, 5)), relax.TensorStructInfo((3, 8, 5), "float32")
@@ -90,6 +91,12 @@ def test_reshape_infer_struct_info():
     _check_inference(bb, relax.op.reshape(x3, s0), relax.TensorStructInfo(s0, dtype=""))
     _check_inference(bb, relax.op.reshape(x4, s0), relax.TensorStructInfo(s0, dtype=""))
     _check_inference(bb, relax.op.reshape(x5, s0), relax.TensorStructInfo(s0, dtype=""))
+    _check_inference(bb, relax.op.reshape(x0, s3), relax.TensorStructInfo(s3, "float32"))
+    _check_inference(bb, relax.op.reshape(x1, s3), relax.TensorStructInfo(s3, "float32"))
+    _check_inference(bb, relax.op.reshape(x2, s3), relax.TensorStructInfo(s3, "float32"))
+    _check_inference(bb, relax.op.reshape(x3, s3), relax.TensorStructInfo(s3, dtype=""))
+    _check_inference(bb, relax.op.reshape(x4, s3), relax.TensorStructInfo(s3, dtype=""))
+    _check_inference(bb, relax.op.reshape(x5, s3), relax.TensorStructInfo(s3, dtype=""))
     _check_inference(bb, relax.op.reshape(x0, s1), relax.TensorStructInfo(s1, "float32"))
     _check_inference(bb, relax.op.reshape(x1, s1), relax.TensorStructInfo(s1, "float32"))
     _check_inference(bb, relax.op.reshape(x2, s1), relax.TensorStructInfo(s1, "float32"))
@@ -113,6 +120,7 @@ def test_reshape_infer_struct_info_shape_symbolic():
     x = relax.Var("x", R.Tensor((a, b, c, d), "float32"))
     s0 = relax.Var("s", R.Shape((c, a, d, b)))
     s1 = relax.Var("s", R.Shape())
+    s2 = relax.ShapeExpr((c, a, d, b))
 
     _check_inference(
         bb, relax.op.reshape(x, (c, a, d, b)), relax.TensorStructInfo((c, a, d, b), "float32")
@@ -151,6 +159,7 @@ def test_reshape_infer_struct_info_shape_symbolic():
     )
     _check_inference(bb, relax.op.reshape(x, s0), relax.TensorStructInfo(s0, "float32"))
     _check_inference(bb, relax.op.reshape(x, s1), relax.TensorStructInfo(s1, "float32"))
+    _check_inference(bb, relax.op.reshape(x, s2), relax.TensorStructInfo(s2, "float32"))
 
 
 def test_reshape_infer_struct_info_shape_var():
