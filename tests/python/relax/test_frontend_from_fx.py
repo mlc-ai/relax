@@ -1815,6 +1815,7 @@ def test_mixed_precision():
     verify_model(model, input_info, binding, expected2)
 
 
+@tvm.testing.requires_gpu
 def test_keep_params():
     import torch
     from torch.nn import Module
