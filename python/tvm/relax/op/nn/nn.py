@@ -18,9 +18,12 @@
 from typing import List, Optional, Tuple, Union
 
 from tvm import DataType
+from tvm.ir.expr import PrimExpr
 
 from . import _ffi_api
 from ...expr import Expr
+
+PrimExprLike = Union[int, PrimExpr]
 
 
 def conv2d(
@@ -112,6 +115,99 @@ def conv2d(
         weight,
         strides,
         padding,
+        dilation,
+        groups,
+        data_layout,
+        kernel_layout,
+        out_layout,
+        out_dtype,
+    )
+
+
+def conv2d_transpose(
+    data: Expr,
+    weight: Expr,
+    strides: Union[int, Tuple[int, int]] = (1, 1),
+    padding: Union[int, Tuple[int, ...]] = (0, 0),
+    output_padding: Union[PrimExprLike, Tuple[PrimExprLike, PrimExprLike]] = (0, 0),
+    dilation: Union[int, Tuple[int, int]] = (1, 1),
+    groups: int = 1,
+    data_layout: str = "NCHW",
+    kernel_layout: str = "IOHW",
+    out_layout: Optional[str] = None,
+    out_dtype: Optional[Union[str, DataType]] = None,
+) -> Expr:
+    r"""Two dimensional transposed convolution operator.
+
+    This operator is intended to be the backward operator of conv2d. It can be used to calculate the
+    gradient of the result of conv2d w.r.t. the input of conv2d.
+
+    The output shape can be determined from the following formula:
+
+    .. code:: python
+
+        out_h = ((in_h - 1) * strides[0] + weight_h - 2 * padding[0] + output_padding[0])
+        out_w = ((in_w - 1) * strides[1] + weight_w - 2 * padding[1] + output_padding[1])
+
+    Parameters
+    ----------
+    data : relax.Expr
+        The input data to the operator.
+
+    weight : relax.Expr
+        The weight expressions.
+
+    strides : Union[int, Tuple[int, int]]
+        The strides of convolution. It is required to have length either 1 or 2.
+
+    padding : Union[int, Tuple[int, ...]]
+        The padding of convolution on both sides of inputs before convolution.
+        It is required to have length either 1, 2 or 4.
+
+    output_padding : Union[PrimExprLike, Tuple[PrimExprLike, ...]], optional
+        Used to disambiguate the output shape.
+
+    dilation : Union[int, Tuple[int, int]]
+        Specifies the dilation rate to be used for dilated convolution.
+        It is required to have length either 1 or 2.
+
+    groups : int
+        Number of groups to split the input into for grouped convolution.
+        The number of input and output channels should be divisible by the number of groups.
+
+    data_layout : str
+        Layout of the input.
+
+    kernel_layout : str
+        Layout of the weight.
+
+    out_layout : Optional[str]
+        Layout of the output. If not specified, it is the same as data_layout
+
+    out_dtype : Optional[Union[str, DataType]]
+        Specifies the output data type for mixed precision conv2d.
+
+    Returns
+    -------
+    result : relax.Expr
+        The computed result.
+    """
+    # TODO: symbolic shape is not fully supported now
+    if isinstance(strides, int):
+        strides = (strides, strides)
+    if isinstance(dilation, int):
+        dilation = (dilation, dilation)
+    if isinstance(padding, int):
+        padding = (padding, padding, padding, padding)
+    if isinstance(output_padding, (PrimExpr, int)):
+        output_padding = (output_padding, output_padding)
+
+    return _ffi_api.conv2d_transpose(  # type: ignore
+        data,
+        weight,
+        strides,
+        padding,
+        output_padding,
         dilation,
         groups,
         data_layout,

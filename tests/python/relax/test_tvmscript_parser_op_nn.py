@@ -52,6 +52,29 @@ def test_conv2d():
     _check(foo, bb.get()["foo"])
 
 
+def test_conv2d_transpose():
+    @R.function
+    def foo(
+        x: R.Tensor((2, 3, 228, 228), "float32"), w: R.Tensor((3, 16, 5, 5), "float32")
+    ) -> R.Tensor((2, 16, 232, 232), "float16"):
+        gv: R.Tensor((2, 16, 232, 232), "float16") = R.nn.conv2d_transpose(
+            x, w, out_dtype="float16"
+        )
+        return gv
+
+    x = relax.Var("x", R.Tensor([2, 3, 228, 228], "float32"))
+    w = relax.Var("w", R.Tensor([3, 16, 5, 5], "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("foo", [x, w]):
+        gv = bb.emit(relax.op.nn.conv2d_transpose(x, w, out_dtype="float16"))
+        bb.emit_func_output(gv)
+
+    _check(foo, bb.get()["foo"])
+
+
+test_conv2d_transpose()
+
+
 def test_max_pool2d():
     @R.function
     def foo(
