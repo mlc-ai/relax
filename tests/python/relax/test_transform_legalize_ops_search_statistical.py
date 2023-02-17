@@ -17,7 +17,7 @@
 
 import tvm
 from tvm.relax.transform import LegalizeOps
-from tvm.script import relax as R, tir as T
+from tvm.script import relax as R, tir as T, ir as I
 import tvm.testing
 
 
@@ -263,24 +263,24 @@ def test_sum():
             gv: R.Tensor((), "float32") = R.sum(x)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((2, 3, 4, 5), "float32")) -> R.Tensor((), "float32"):
-            gv = R.call_tir(sum, (x,), R.Tensor((), dtype="float32"))
+            gv = R.call_tir(_te_sum, (x,), out_sinfo=R.Tensor((), "float32"))
             return gv
 
         @T.prim_func
-        def sum(rxplaceholder: T.Buffer[(T.int64(2), T.int64(3), T.int64(4), T.int64(5)), "float32"], rxplaceholder_red: T.Buffer[(), "float32"]):
+        def _te_sum(rxplaceholder: T.Buffer((T.int64(2), T.int64(3), T.int64(4), T.int64(5)), "float32"), rxplaceholder_red: T.Buffer((), "float32")):
             T.func_attr({"tir.noalias": True})
-            for i0, i1, i2, i3 in T.grid(T.int64(2), T.int64(3), T.int64(4), T.int64(5)):
+            for k0, k1, k2, k3 in T.grid(T.int64(2), T.int64(3), T.int64(4), T.int64(5)):
                 with T.block("rxplaceholder_red"):
-                    k0, k1, k2, k3 = T.axis.remap("RRRR", [i0, i1, i2, i3])
-                    T.reads(rxplaceholder[k0, k1, k2, k3])
+                    v_k0, v_k1, v_k2, v_k3 = T.axis.remap("RRRR", [k0, k1, k2, k3])
+                    T.reads(rxplaceholder[v_k0, v_k1, v_k2, v_k3])
                     T.writes(rxplaceholder_red[()])
                     with T.init():
                         rxplaceholder_red[()] = T.float32(0)
-                    rxplaceholder_red[()] = rxplaceholder_red[()] + rxplaceholder[k0, k1, k2, k3]
+                    rxplaceholder_red[()] = rxplaceholder_red[()] + rxplaceholder[v_k0, v_k1, v_k2, v_k3]
     # fmt: on
 
     mod = LegalizeOps()(Sum)
@@ -295,12 +295,28 @@ def test_sum_0_dim():
         def main(x: R.Tensor((), "float32")) -> R.Tensor((), "float32"):
             gv: R.Tensor((), "float32") = R.sum(x)
             return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((), dtype="float32")) -> R.Tensor((), dtype="float32"):
+            gv = R.call_tir(_te_sum, (x,), out_sinfo=R.Tensor((), dtype="float32"))
+            return gv
+
+        @T.prim_func
+        def _te_sum(rxplaceholder: T.Buffer((), "float32"), compute: T.Buffer((), "float32")):
+            T.func_attr({"tir.noalias": True})
+            # with T.block("root"):
+            with T.block("compute"):
+                vi = T.axis.spatial(1, T.int64(0))
+                T.reads(rxplaceholder[()])
+                T.writes(compute[()])
+                compute[()] = rxplaceholder[()]
     # fmt: on
 
     mod = LegalizeOps()(Sum)
-    mod.show(None, False)
-    # tvm.ir.assert_structural_equal(mod, Expected)
-test_sum_0_dim()
+    tvm.ir.assert_structural_equal(mod, Expected)
+
 
 def test_sum_symbolic():
     # fmt: off
@@ -311,29 +327,34 @@ def test_sum_symbolic():
             gv: R.Tensor((), "float32") = R.sum(x)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
-        def main(x: R.Tensor(("a", "b", "c", "d"), "float32")) -> R.Tensor((), "float32"):
-            gv = R.call_tir(sum, (x,), R.Tensor((), dtype="float32"))
+        def main(x: R.Tensor(("a", "b", "c", "d"), dtype="float32")) -> R.Tensor((), dtype="float32"):
+            a = T.Var("a", "int64")
+            b = T.Var("b", "int64")
+            c = T.Var("c", "int64")
+            d = T.Var("d", "int64")
+            gv = R.call_tir(_te_sum, (x,), out_sinfo=R.Tensor((), dtype="float32"))
             return gv
 
         @T.prim_func
-        def sum(var_rxplaceholder: T.handle, rxplaceholder_red: T.Buffer[(), "float32"]):
+        def _te_sum(var_rxplaceholder: T.handle, rxplaceholder_red: T.Buffer((), "float32")):
             T.func_attr({"tir.noalias": True})
             a = T.var("int64")
             b = T.var("int64")
             c = T.var("int64")
             d = T.var("int64")
-            rxplaceholder = T.match_buffer(var_rxplaceholder, [a, b, c, d], dtype="float32")
-            for i0, i1, i2, i3 in T.grid(a, b, c, d):
+            rxplaceholder = T.match_buffer(var_rxplaceholder, (a, b, c, d))
+            # with T.block("root"):
+            for k0, k1, k2, k3 in T.grid(a, b, c, d):
                 with T.block("rxplaceholder_red"):
-                    k0, k1, k2, k3 = T.axis.remap("RRRR", [i0, i1, i2, i3])
-                    T.reads(rxplaceholder[k0, k1, k2, k3])
+                    v_k0, v_k1, v_k2, v_k3 = T.axis.remap("RRRR", [k0, k1, k2, k3])
+                    T.reads(rxplaceholder[v_k0, v_k1, v_k2, v_k3])
                     T.writes(rxplaceholder_red[()])
                     with T.init():
                         rxplaceholder_red[()] = T.float32(0)
-                    rxplaceholder_red[()] = rxplaceholder_red[()] + rxplaceholder[k0, k1, k2, k3]
+                    rxplaceholder_red[()] = rxplaceholder_red[()] + rxplaceholder[v_k0, v_k1, v_k2, v_k3]
     # fmt: on
 
     mod = LegalizeOps()(Sum)
@@ -804,5 +825,5 @@ def test_variance_symbolic():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
-# if __name__ == "__main__":
-#     tvm.testing.main()
+if __name__ == "__main__":
+    tvm.testing.main()
