@@ -554,37 +554,12 @@ def dropout(data: Expr, rate: float = 0.5) -> Expr:
     return _ffi_api.dropout(data, rate)  # type: ignore
 
 
-def cross_entropy_without_logits(predictions: Expr, labels: Expr) -> Expr:
-    r"""CrossEntropy without logits between the predictions and labels.
+def cross_entropy_with_logits(predictions: Expr, labels: Expr) -> Expr:
+    r"""CrossEntropy with logits between the predictions and labels.
 
     The shape of predictions and labels must be the same. And when ndim >= 2,
     the first dimension is regarded as the batch_size N. In this case the
     computed result will divide by N to perform a mean reduction.
-
-    .. math::
-
-        \text{cross\_entropy\_without\_logits}(x_i, y_i) = \frac{\sum_i -y_i \log x_i}{N}
-
-    Parameters
-    ----------
-    predictions : relax.Expr
-      The predictions.
-
-    labels : relax.Expr
-      The labels (the ground truth values).
-
-    Returns
-    -------
-    result : relax.Expr
-      The computed result.
-    """
-    return _ffi_api.cross_entropy_without_logits(predictions, labels)  # type: ignore
-
-
-def cross_entropy_with_logits(predictions: Expr, labels: Expr) -> Expr:
-    r"""CrossEntropy with logits between the predictions and labels.
-
-    The shape issue is the same with cross_entropy_without_logits.
 
     .. math::
 
@@ -628,7 +603,7 @@ def nll_loss(
       The predictions.
 
     targets : relax.Expr
-      The target value of each prediction.
+      The target value of each prediction. Must be of int dtype.
 
     weights : Optional[relax.Expr]
       The weight of each target value.
