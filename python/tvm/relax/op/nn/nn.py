@@ -557,6 +557,10 @@ def dropout(data: Expr, rate: float = 0.5) -> Expr:
 def cross_entropy_with_logits(predictions: Expr, labels: Expr) -> Expr:
     r"""CrossEntropy with logits between the predictions and labels.
 
+    The shape of predictions and labels must be the same. And when ndim >= 2,
+    the first dimension is regarded as the batch_size N. In this case the
+    computed result will divide by N to perform a mean reduction.
+
     .. math::
 
         \text{cross\_entropy\_with\_logits}(x_i, y_i) = \frac{\sum_i -x_i \cdot y_i}{N}
@@ -599,7 +603,7 @@ def nll_loss(
       The predictions.
 
     targets : relax.Expr
-      The target value of each prediction.
+      The target value of each prediction. Must be of int dtype.
 
     weights : Optional[relax.Expr]
       The weight of each target value.
