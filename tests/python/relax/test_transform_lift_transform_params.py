@@ -217,6 +217,80 @@ def test_tuple():
     tvm.ir.assert_structural_equal(after, Expected)
 
 
+def test_condition():
+    """Test case that the conditional statement can't be lifted"""
+
+    @tvm.script.ir_module
+    class Before:
+        @R.function
+        def main(
+            x: R.Tensor((1, 16, 224, 224), "float32"),
+            w1: R.Tensor((16, 16, 3, 3), "float32"),
+            w2: R.Tensor((16, 16, 3, 3), "float32"),
+            cond: R.Tensor((), "bool"),
+        ) -> R.Tensor((1, 16, 224, 224), "float32"):
+            R.func_attr({"num_input": 1})
+            if cond:
+                w = w1
+            else:
+                w = w2
+            with R.dataflow():
+                conv1 = R.nn.conv2d(x, w, padding=(1, 1), data_layout="NCHW", kernel_layout="OIHW")
+                R.output(conv1)
+            return conv1
+
+    @tvm.script.ir_module
+    class Expected:
+        @R.function
+        def transform_params(
+            params: R.Tuple(
+                R.Tensor((16, 16, 3, 3), dtype="float32"),
+                R.Tensor((16, 16, 3, 3), dtype="float32"),
+                R.Tensor((), dtype="bool"),
+            )
+        ) -> R.Tuple(
+            R.Tensor((16, 16, 3, 3), dtype="float32"),
+            R.Tensor((16, 16, 3, 3), dtype="float32"),
+            R.Tensor((), dtype="bool"),
+        ):
+            with R.dataflow():
+                lv: R.Tensor((16, 16, 3, 3), dtype="float32") = params[0]
+                lv1: R.Tensor((16, 16, 3, 3), dtype="float32") = params[1]
+                lv2: R.Tensor((), dtype="bool") = params[2]
+                gv: R.Tuple(
+                    R.Tensor((16, 16, 3, 3), dtype="float32"),
+                    R.Tensor((16, 16, 3, 3), dtype="float32"),
+                    R.Tensor((), dtype="bool"),
+                ) = (lv, lv1, lv2)
+                R.output(gv)
+            return gv
+
+        @R.function
+        def main(
+            x: R.Tensor((1, 16, 224, 224), "float32"),
+            params: R.Tuple(
+                R.Tensor((16, 16, 3, 3), dtype="float32"),
+                R.Tensor((16, 16, 3, 3), dtype="float32"),
+                R.Tensor((), dtype="bool"),
+            ),
+        ) -> R.Tensor((1, 16, 224, 224), "float32"):
+            gv: R.Tensor((), dtype="bool") = params[2]
+            if gv:
+                gv1: R.Tensor((16, 16, 3, 3), dtype="float32") = params[0]
+                w: R.Tensor((16, 16, 3, 3), dtype="float32") = gv1
+            else:
+                gv2: R.Tensor((16, 16, 3, 3), dtype="float32") = params[1]
+                w: R.Tensor((16, 16, 3, 3), dtype="float32") = gv2
+            with R.dataflow():
+                conv1 = R.nn.conv2d(x, w, padding=(1, 1), data_layout="NCHW", kernel_layout="OIHW")
+                R.output(conv1)
+            return conv1
+
+    mod = Before
+    after = relax.transform.LiftTransformParams()(mod)
+    tvm.ir.assert_structural_equal(after, Expected)
+
+
 def test_e2e():
     """Demonstrate how to compile and optimize with parameters not available at compile time."""
 

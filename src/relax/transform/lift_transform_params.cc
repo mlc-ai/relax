@@ -156,9 +156,18 @@ class LiftTransformParamsPlanner : public ExprVisitor {
   }
 
  private:
+  void VisitBindingBlock_(const DataflowBlockNode* block) final {
+    is_in_dataflow_block_ = true;
+    ExprVisitor::VisitBindingBlock_(block);
+    is_in_dataflow_block_ = false;
+  }
+
   void VisitBinding_(const VarBindingNode* binding) final {
     std::vector<const VarNode*> producers;
     bool can_lift = true;
+    if (!is_in_dataflow_block_) {
+      can_lift = false;
+    }
 
     PostOrderVisit(binding->value, [&](const ObjectRef& obj) {
       if (const VarNode* var = obj.as<VarNode>()) {
@@ -184,6 +193,8 @@ class LiftTransformParamsPlanner : public ExprVisitor {
   std::unordered_set<Var, ObjectPtrHash, ObjectPtrEqual> lifted_bindings_;
   // The builder of the function that transforms the parameters
   TransformParamsFuncBuilder builder_;
+  // Whether we are in a dataflow block
+  bool is_in_dataflow_block_{false};
 };
 
 /*!
