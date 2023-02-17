@@ -50,6 +50,14 @@ using FInferStructInfo =
 using FCallPacked = String;
 
 /*!
+ * \brief Legalizes an expression with another expression. This function will be
+ *  invoked in Legalize pass. It is a target-dependent pass.
+ * \param bb The blockbuilder context.
+ * \param call The original call.
+ */
+using FLegalize = runtime::TypedPackedFunc<Expr(const BlockBuilder& bb, const Call& call)>;
+
+/*!
  * \brief Gradient for a specific op.
  *
  * \param orig_var the original var corresponding to orig_call.

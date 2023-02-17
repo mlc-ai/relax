@@ -18,11 +18,12 @@
 import tvm
 from tvm import relax
 from tvm.relax.transform import LegalizeOps
+from tvm.relax.transform.legalize_ops.common import register_legalize
 from tvm.script import relax as R, tir as T
 import tvm.testing
 
 
-def test_customize_legalize_map():
+def test_customize_legalize():
     # fmt: off
     @tvm.script.ir_module
     class Add:
@@ -120,6 +121,39 @@ def test_legalize_multiple_types_of_call():
 
     After = LegalizeOps()(Before)
     tvm.ir.assert_structural_equal(After, Expected)
+
+
+def test_can_not_legalize():
+    # case 1: does't have legalization
+    add_legalize = tvm.ir.Op.get("relax.add").get_attr("FLegalize")
+    # reset it for test
+    tvm.ir.Op.get("relax.add").reset_attr("FLegalize")
+
+    # fmt: off
+    @tvm.script.ir_module
+    class Before0:
+        @R.function
+        def main(x: R.Tensor((3, 3), "float32")):
+            gv: R.Tensor((3, 3), "float32") = R.add(x, x)
+            return gv
+    # fmt: on
+    After0 = LegalizeOps()(Before0)
+    tvm.ir.assert_structural_equal(After0, Before0)
+
+    register_legalize("relax.add", add_legalize)
+
+    # case 2: don't know all shape
+    s = relax.Var("s", relax.ShapeStructInfo((3, 3)))
+    x = relax.Var("x", relax.TensorStructInfo((3, 3), "float32"))
+    y = relax.Var("y", relax.TensorStructInfo(s, "float32"))
+    bb = relax.BlockBuilder()
+    with bb.function("main", [x, y]):
+        with bb.dataflow():
+            gv = bb.emit_output(R.add(x, y))
+        bb.emit_func_output(gv)
+    Before1 = bb.get()
+    After1 = LegalizeOps()(Before1)
+    tvm.ir.assert_structural_equal(After1, Before1)
 
 
 if __name__ == "__main__":

@@ -79,6 +79,8 @@ def convert_to_object(value, span=None):
         return _ffi_api.Map(*vlist)
     if isinstance(value, ObjectGeneric):
         return value.asobject()
+    if callable(value):
+        return convert_to_tvm_func(value)
     if value is None:
         return None
 

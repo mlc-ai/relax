@@ -14,8 +14,19 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=wildcard-import, redefined-builtin
-"""Relax IR analysis. """
+# pylint: disable=invalid-name
+"""Legalize high-level operator calls in Relax functions to call_tir."""
+from typing import Optional, Dict
+from .. import _ffi_api
 
-from .transform import *
-from .fma_rewrite import *
+from .binary import *
+from .creation import *
+from .datatype import *
+from .image import *
+from .index import *
+from .linear_algebra import *
+from .manipulate import *
+from .nn import *
+from .search import *
+from .statistical import *
+from .unary import *

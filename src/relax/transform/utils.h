@@ -202,6 +202,14 @@ bool IsNestedFloatTensor(const StructInfo& sinfo);
  */
 bool IsNestedFloatTensor(const Expr& expr);
 
+/*!
+ * \brief Check if a given Tensor/Shape/TupleStructInfo contains
+    shapes whose values are all known.
+ * \param sinfo The StructInfo to be checked.
+ * \return true  if the given struct info contains shape values that are all known.
+ */
+bool KnowAllShapeValues(const StructInfo& sinfo);
+
 // TODO(@bohan): implements some postorder function accepts a visitor closure
 class VarReplacer : public ExprMutator {
  public:
