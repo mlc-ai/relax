@@ -18,9 +18,9 @@
  */
 
 /*!
- * \file legalize.cc
- * \brief Converts an expr to another expr. This pass can be used to transform an op based on its
- * shape, dtype or layout to another op or a sequence of ops.
+ * \file tvm/relax/transform/legalize_ops.cc
+ * \brief Legalize high-level operator calls in Relax functions to call_tir
+    with corresponding low-level TIR PrimFuncs.
  */
 
 #include <tvm/relax/analysis.h>
@@ -33,57 +33,58 @@
 namespace tvm {
 namespace relax {
 
-using CustomizeMap = Optional<Map<String, PackedFunc>>;
-
-// Call registered FTVMLegalize of an op, returns the legalized expression
 class LegalizeMutator : public ExprMutator {
  public:
-  explicit LegalizeMutator(const IRModule& mod, const CustomizeMap& cmap)
+  explicit LegalizeMutator(const IRModule& mod, const Optional<Map<String, PackedFunc>>& cmap)
       : ExprMutator(mod), mod_(std::move(mod)), cmap_(std::move(cmap)) {}
 
   Expr VisitExpr_(const CallNode* call) final {
     Call visited_call = Downcast<Call>(this->VisitExprPostOrder_(call));
-    static const auto& legalize_map = Op::GetAttrMap<FRelaxLegalize>("FRelaxLegalize");
+    static const auto& legalize_map = Op::GetAttrMap<FLegalize>("FLegalize");
     static const Op& call_tir_op = Op::Get("relax.call_tir");
+    auto* op_node = visited_call->op.as<OpNode>();
 
-    if (auto* op_node = visited_call->op.as<OpNode>()) {
-      auto op = GetRef<Op>(op_node);
-      FRelaxLegalize flegalize;
-      bool has_legalize = false, know_all_shape = true;
-
-      // Check if it has legalization registered.
-      // Get flegalize from cmap or attribute. Priority: customize > builtin.
-      if (cmap_.defined() && cmap_.value().count(op->name)) {
-        flegalize = cmap_.value()[op->name];
-        has_legalize = true;
-      }
-      if (!legalize_map.count(op)) {
-        if (op != call_tir_op) {
-          LOG(WARNING) << "No legalization func for " << op->name << " is found.";
-        }
-      } else if (!has_legalize) {
-        flegalize = legalize_map[op];
-        has_legalize = true;
-      }
-
-      // Check if all shape values are known
-      for (const auto& arg : visited_call->args) {
-        know_all_shape |= KnowAllShapeValues(GetStructInfo(arg));
-      }
-      know_all_shape |= KnowAllShapeValues(GetStructInfo(visited_call));
-
-      if (has_legalize && know_all_shape) {
-        return flegalize(this->builder_, visited_call);
-      }
+    if (op_node == nullptr) {  // not a OpNode
+      return visited_call;
     }
 
-    return visited_call;
+    if (!std::all_of(visited_call->args.begin(), visited_call->args.end(),
+                     [](Expr arg) { return KnowAllShapeValues(GetStructInfo(arg)); }) ||
+        !KnowAllShapeValues(GetStructInfo(visited_call))) {  // Not all shape values are known
+      return visited_call;
+    }
+
+    auto op = GetRef<Op>(op_node);
+    FLegalize flegalize;
+    bool has_legalize = false;
+
+    // Priority: customize > default.
+    // Check if it has customize legalization registered.
+    if (cmap_.defined() && cmap_.value().count(op->name)) {
+      flegalize = cmap_.value()[op->name];
+      has_legalize = true;
+    }
+    // Check if it has default legalization registered.
+    if (!legalize_map.count(op)) {
+      if (op != call_tir_op) {
+        LOG(WARNING) << "No legalization func for " << op->name << " is found.";
+      }
+    } else if (!has_legalize) {
+      flegalize = legalize_map[op];
+      has_legalize = true;
+    }
+
+    if (has_legalize) {
+      return flegalize(this->builder_, visited_call);
+    } else {
+      return visited_call;  // No legalization.
+    }
   }
 
   IRModule Transform() {
     for (const auto& [gv, func] : mod_->functions) {
       if (func->IsInstance<FunctionNode>()) {
-        auto updated_func = RemoveAllUnused(Downcast<Function>(this->VisitExpr(func)));
+        auto updated_func = Downcast<Function>(this->VisitExpr(func));
         builder_->UpdateFunction(gv, Downcast<BaseFunc>(updated_func));
       }
     }
@@ -92,12 +93,12 @@ class LegalizeMutator : public ExprMutator {
 
  private:
   IRModule mod_;
-  CustomizeMap cmap_;
-};
+  Optional<Map<String, PackedFunc>> cmap_;
+};  // namespace relax
 
 namespace transform {
 
-Pass LegalizeOps(CustomizeMap cmap) {
+Pass LegalizeOps(Optional<Map<String, PackedFunc>> cmap) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
       [=](IRModule mod, PassContext pc) { return LegalizeMutator(mod, cmap).Transform(); };
   return CreateModulePass(/*pass_function=*/pass_func,

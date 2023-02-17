@@ -48,12 +48,8 @@ bool KnowAllShapeValues(const StructInfo& sinfo) {
   } else if (const auto* shape_sinfo = sinfo.as<ShapeStructInfoNode>()) {
     return shape_sinfo->values.defined();
   } else if (const auto* tuple_sinfo = sinfo.as<TupleStructInfoNode>()) {
-    for (const auto& field_sinfo : tuple_sinfo->fields) {
-      if (!KnowAllShapeValues(field_sinfo)) {
-        return false;
-      }
-    }
-    return true;
+    return std::all_of(tuple_sinfo->fields.begin(), tuple_sinfo->fields.end(),
+                       [](StructInfo field_sinfo) { return KnowAllShapeValues(field_sinfo); });
   } else if (sinfo.as<PrimStructInfoNode>()) {
     return true;
   } else {

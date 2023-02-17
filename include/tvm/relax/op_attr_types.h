@@ -55,7 +55,7 @@ using FCallPacked = String;
  * \param bb The blockbuilder context.
  * \param call The original call.
  */
-using FRelaxLegalize = runtime::TypedPackedFunc<Expr(const BlockBuilder& bb, const Call& call)>;
+using FLegalize = runtime::TypedPackedFunc<Expr(const BlockBuilder& bb, const Call& call)>;
 
 /*!
  * \brief Gradient for a specific op.
