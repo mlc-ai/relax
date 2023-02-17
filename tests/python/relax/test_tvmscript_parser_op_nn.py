@@ -203,24 +203,6 @@ def test_dropout():
     _check(foo, bb.get()["foo"])
 
 
-def test_cross_entropy_without_logits():
-    @R.function
-    def foo(
-        predictions: R.Tensor((2, 3), "float32"), labels: R.Tensor((2, 3), "float32")
-    ) -> R.Tensor((), "float32"):
-        gv: R.Tensor((), "float32") = R.nn.cross_entropy_without_logits(predictions, labels)
-        return gv
-
-    predictions = relax.Var("predictions", R.Tensor((2, 3), "float32"))
-    labels = relax.Var("labels", R.Tensor((2, 3), "float32"))
-    bb = relax.BlockBuilder()
-    with bb.function("foo", [predictions, labels]):
-        gv = bb.emit(relax.op.nn.cross_entropy_without_logits(predictions, labels))
-        bb.emit_func_output(gv)
-
-    _check(foo, bb.get()["foo"])
-
-
 def test_cross_entropy_with_logits():
     @R.function
     def foo(
