@@ -139,15 +139,24 @@ def conv2d_transpose(
 ) -> Expr:
     r"""Two dimensional transposed convolution operator.
 
-    This operator is intended to be the backward operator of conv2d. It can be used to calculate the
-    gradient of the result of conv2d w.r.t. the input of conv2d.
+    This operator is intended to be the gradient operator of conv2d. That means, if
 
-    The output shape can be determined from the following formula:
+    `out = conv2d(data, weight, strides, padding, dilation)`,
 
-    .. code:: python
+    The gradient w.r.t. data can be calculated as follows:
 
-        out_h = ((in_h - 1) * strides[0] + weight_h - 2 * padding[0] + output_padding[0])
-        out_w = ((in_w - 1) * strides[1] + weight_w - 2 * padding[1] + output_padding[1])
+    `data_grad = conv2d_transpose(out_grad, weight, strides, padding, output_padding, dilation)`,
+
+    where `output_padding` is a parameter used to determine the output shape.
+
+    The output shape can be explained in the simple case when `data_layout == "NCHW"` and
+    `kernel_layout == "IOHW"`. Suppose `data` has shape `(N, in_channel, in_h, in_w)`, `weight` has
+    shape `(in_channel, out_channel, weight_h, weight_w)`, we need to assure that
+    `in_channel % groups == 0`. The shape of the output will be
+    `(N, out_channel * groups, out_h, out_w)`, where
+
+    - `out_h = ((in_h - 1) * strides[0] + weight_h - 2 * padding[0] + output_padding[0])`
+    - `out_w = ((in_w - 1) * strides[1] + weight_w - 2 * padding[1] + output_padding[1])`
 
     Parameters
     ----------
