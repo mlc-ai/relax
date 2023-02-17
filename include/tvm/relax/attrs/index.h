@@ -43,7 +43,7 @@ struct StridedSliceAttrs : public tvm::AttrsNode<StridedSliceAttrs> {
   Array<Integer> axes;
   Array<PrimExpr> begin;
   Array<PrimExpr> end;
-  Optional<Array<PrimExpr>> strides;
+  Array<PrimExpr> strides;
 
   TVM_DECLARE_ATTRS(StridedSliceAttrs, "relax.attrs.StridedSliceAttrs") {
     TVM_ATTR_FIELD(axes).describe("Axes along which slicing is applied.");
