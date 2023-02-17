@@ -199,13 +199,23 @@ def _nn_dropout(bb: BlockBuilder, call: Call) -> Expr:
 
 @register_legalize("relax.nn.nll_loss")
 def _nn_nll_loss(bb: BlockBuilder, call: Call) -> Expr:
-    if len(call.args) == 2:
-        # TODO(relax-team): handle optional argument weight of NLLLoss
-        logging.info(
-            "Can not legalize it now, because don't know how to set "
-            "the default value of the optional argument 'weight' of NLLLoss."
+    def nll_loss_without_weight(predictions, targets, reduction, ignore_index):
+        weight = topi.full(
+            (predictions.shape[1] if len(predictions.shape) > 1 else predictions.shape[0],),
+            predictions.dtype,
+            1.0,
         )
-        return call
+        return topi.nn.nll_loss(predictions, targets, weight, reduction, ignore_index)
+
+    if len(call.args) == 2:
+        return bb.call_te(
+            nll_loss_without_weight,
+            call.args[0],
+            call.args[1],
+            reduction=call.attrs.reduction,
+            ignore_index=call.attrs.ignore_index,
+        )
+
     return bb.call_te(
         topi.nn.nll_loss,
         call.args[0],

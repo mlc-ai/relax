@@ -1356,6 +1356,27 @@ def test_nll_loss_infer_struct_info_no_weights():
     )
 
 
+def test_nll_loss_infer_struct_info_no_weights_symbolic():
+    N = tir.Var("N", "int64")
+    C = tir.Var("C", "int64")
+    d1 = tir.Var("d", "int64")
+    d2 = tir.Var("d", "int64")
+    bb = relax.BlockBuilder()
+    x = relax.Var("x", R.Tensor((N, C, d1, d2), "float32"))
+    y = relax.Var("y", R.Tensor((N, d1, d2), "int64"))
+
+    _check_inference(
+        bb,
+        relax.op.nn.nll_loss(x, y, reduction="mean"),
+        relax.TensorStructInfo((), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.nll_loss(x, y, reduction="none"),
+        relax.TensorStructInfo((N, d1, d2), "float32"),
+    )
+
+
 def test_nll_loss_infer_struct_info_wrong_input_type():
     bb = relax.BlockBuilder()
     x0 = relax.Var("x", R.Tensor((3, 5, 10, 10), "float32"))

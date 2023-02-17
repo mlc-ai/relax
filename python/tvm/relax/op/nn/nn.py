@@ -593,20 +593,22 @@ def nll_loss(
     `output[n, i_1, i_2, ..., i_k] = -p * w`, where
     - `p = predictions[n, t, i_1, i_2, i_k]`,
     - `t = targets[n, i_1, i_2, ..., i_k]`,
-    - `w = weights[n, i_1, i_2, ..., i_k] if t != ignore_index else 0`
+    - `w = weights[t] if t != ignore_index else 0`
 
     result = reduction(output)
 
     Parameters
     ----------
     predictions : relax.Expr
-      The predictions.
+      The predictions. Should be a `(k+2)-D` Tensor with shape `(N, C, d_1, d_2, ..., d_k)` where C
+      is the number of target classes.
 
     targets : relax.Expr
-      The target value of each prediction. Must be of int dtype.
+      The target value of each prediction. Should be a `(k+1)-D` Tensor with shape
+      `(N, d_1, d_2, ..., d_k)`. Must be of int dtype.
 
     weights : Optional[relax.Expr]
-      The weight of each target value.
+      The weight of each target value. Should be a `1-D` Tensor with shape `(C,)`.
       If not specified, it is treated as if having all ones.
 
     reduction : str
