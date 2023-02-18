@@ -33,7 +33,6 @@ def relax_check_gradients(
     dev: tvm._ffi.runtime_ctypes.Device,
     output_shape: Union[Tuple, List[Tuple]],
     tuple_input: bool = False,
-    ignore_grads: List[int] = [],
     **kwargs,  # attr for operators
 ):
     """Generate module and run it to check numberic gradients."""
@@ -71,7 +70,7 @@ def relax_check_gradients(
                 ret.append(_gen_weights(s, dtype))
             return ret
         else:
-            return np.random.uniform(1, 2, size=shape).astype(dtype)
+            return np.random.uniform(size=shape).astype(dtype)
 
     param_vars = [
         _numpy_to_var(input_numpy, "x_" + str(i)) for i, input_numpy in enumerate(inputs_numpy)
@@ -99,13 +98,7 @@ def relax_check_gradients(
     vm_0 = relax.VirtualMachine(ex_0, dev)
 
     def forward(*inputs):
-        inputs_iter = iter(inputs)
-        inputs_tvm = [
-            _numpy_to_tvm(next(inputs_iter))
-            if i not in ignore_grads
-            else _numpy_to_tvm(inputs_numpy[i])
-            for i in range(len(inputs_numpy))
-        ]
+        inputs_tvm = [_numpy_to_tvm(i) for i in inputs]
         result = vm_0[func_name](*inputs_tvm)
         result_numpy = _tvm_to_numpy(result)
         if isinstance(result_numpy, list):
@@ -135,10 +128,9 @@ def relax_check_gradients(
     vm_1 = relax.VirtualMachine(ex_1, dev)
     inputs_tvm = [_numpy_to_tvm(i) for i in inputs_numpy]
     weights_tvm = _numpy_to_tvm(weights)
-    result = _tvm_to_numpy(vm_1[func_name](*inputs_tvm, weights_tvm))
-    result_filtered = [result[i] for i in range(len(result)) if i not in ignore_grads]
+    result = vm_1[func_name](*inputs_tvm, weights_tvm)
 
-    check_numerical_grads(forward, inputs_numpy, result_filtered)
+    check_numerical_grads(forward, inputs_numpy, _tvm_to_numpy(result))
 
 
 ##################### Binary #####################
