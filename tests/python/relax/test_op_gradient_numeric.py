@@ -134,11 +134,24 @@ def relax_check_gradients(
 
 ##################### Binary #####################
 
-binary_op_func, binary_op_name = tvm.testing.parameters(
+binary_arith_op_func, binary_arith_op_name = tvm.testing.parameters(
     (relax.op.add, "relax.add"),
     (relax.op.subtract, "relax.subtract"),
     (relax.op.multiply, "relax.multiply"),
     (relax.op.divide, "relax.divide"),
+)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_binary_arith(target, dev, binary_arith_op_func, binary_arith_op_name):
+    data1_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
+    data2_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        binary_arith_op_func, binary_arith_op_name, [data1_numpy, data2_numpy], target, dev, (3, 3)
+    )
+
+
+binary_cmp_op_func, binary_cmp_op_name = tvm.testing.parameters(
     (relax.op.equal, "relax.equal"),
     (relax.op.greater, "relax.greater"),
     (relax.op.greater_equal, "relax.greater_equal"),
@@ -149,11 +162,16 @@ binary_op_func, binary_op_name = tvm.testing.parameters(
 
 
 @tvm.testing.parametrize_targets("llvm")
-def test_binary(target, dev, binary_op_func, binary_op_name):
+def test_binary_cmp(target, dev, binary_cmp_op_func, binary_cmp_op_name):
+    # We must assure data1_numpy[i] != data2_numpy[i] for all possible i-s
+    # If data1_numpy[i] == data2_numpy[i], the operator is not differentiable w.r.t. place i
     data1_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
     data2_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
+    delta = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
+    sign = np.random.randint(0, 2, (3, 3)).astype(np.float32) * 2 - 1
+    data2_numpy = data1_numpy + delta * sign
     relax_check_gradients(
-        binary_op_func, binary_op_name, [data1_numpy, data2_numpy], target, dev, (3, 3)
+        binary_cmp_op_func, binary_cmp_op_name, [data1_numpy, data2_numpy], target, dev, (3, 3)
     )
 
 
