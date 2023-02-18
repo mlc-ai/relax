@@ -14,14 +14,15 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+from typing import Callable, Union, Tuple, List
+
 import numpy as np
-import pytest
 import tvm
+import tvm.testing
 from tvm import relax
 from tvm.relax.transform import LegalizeOps
 from tvm.testing.utils import check_numerical_grads
 from tvm.ir.op import Op
-from typing import Callable, Union, Tuple, List
 
 
 def relax_check_gradients(
@@ -32,6 +33,7 @@ def relax_check_gradients(
     dev: tvm._ffi.runtime_ctypes.Device,
     output_shape: Union[Tuple, List[Tuple]],
     tuple_input: bool = False,
+    ignore_grads: List[int] = [],
     **kwargs,  # attr for operators
 ):
     """Generate module and run it to check numberic gradients."""
@@ -46,7 +48,7 @@ def relax_check_gradients(
                 tvm_var = _numpy_to_var(_data, "")
                 struct_infos.append(tvm_var.struct_info)
             return relax.Var(var_name, relax.TupleStructInfo(struct_infos))
-        return relax.Var(var_name, relax.TensorStructInfo(data.shape, "float32"))
+        return relax.Var(var_name, relax.TensorStructInfo(data.shape, str(data.dtype)))
 
     def _numpy_to_tvm(data):
         if isinstance(data, list):
@@ -62,19 +64,19 @@ def relax_check_gradients(
             return [_tvm_to_numpy(i) for i in data]
         return data.numpy()
 
-    def _gen_weights(shape):
+    def _gen_weights(shape, dtype):
         if isinstance(shape, list):
             ret = []
             for s in shape:
-                ret.append(_gen_weights(s))
+                ret.append(_gen_weights(s, dtype))
             return ret
         else:
-            return np.random.uniform(size=shape).astype(np.float32)
+            return np.random.uniform(1, 2, size=shape).astype(dtype)
 
     param_vars = [
         _numpy_to_var(input_numpy, "x_" + str(i)) for i, input_numpy in enumerate(inputs_numpy)
     ]
-    weights = _gen_weights(output_shape)
+    weights = _gen_weights(output_shape, inputs_numpy[0].dtype)
     grad_var = _numpy_to_var(weights, "grad")
 
     # get gradient
@@ -97,7 +99,13 @@ def relax_check_gradients(
     vm_0 = relax.VirtualMachine(ex_0, dev)
 
     def forward(*inputs):
-        inputs_tvm = [_numpy_to_tvm(i) for i in inputs]
+        inputs_iter = iter(inputs)
+        inputs_tvm = [
+            _numpy_to_tvm(next(inputs_iter))
+            if i not in ignore_grads
+            else _numpy_to_tvm(inputs_numpy[i])
+            for i in range(len(inputs_numpy))
+        ]
         result = vm_0[func_name](*inputs_tvm)
         result_numpy = _tvm_to_numpy(result)
         if isinstance(result_numpy, list):
@@ -127,9 +135,10 @@ def relax_check_gradients(
     vm_1 = relax.VirtualMachine(ex_1, dev)
     inputs_tvm = [_numpy_to_tvm(i) for i in inputs_numpy]
     weights_tvm = _numpy_to_tvm(weights)
-    result = vm_1[func_name](*inputs_tvm, weights_tvm)
+    result = _tvm_to_numpy(vm_1[func_name](*inputs_tvm, weights_tvm))
+    result_filtered = [result[i] for i in range(len(result)) if i not in ignore_grads]
 
-    check_numerical_grads(forward, inputs_numpy, _tvm_to_numpy(result))
+    check_numerical_grads(forward, inputs_numpy, result_filtered)
 
 
 ##################### Binary #####################
@@ -166,7 +175,6 @@ def test_binary_cmp(target, dev, binary_cmp_op_func, binary_cmp_op_name):
     # We must assure data1_numpy[i] != data2_numpy[i] for all possible i-s
     # If data1_numpy[i] == data2_numpy[i], the operator is not differentiable w.r.t. place i
     data1_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
-    data2_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
     delta = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
     sign = np.random.randint(0, 2, (3, 3)).astype(np.float32) * 2 - 1
     data2_numpy = data1_numpy + delta * sign
@@ -192,7 +200,7 @@ unary_op_func, unary_op_name, can_be_neg = tvm.testing.parameters(
 
 @tvm.testing.parametrize_targets("llvm")
 def test_unary(target, dev, unary_op_func, unary_op_name, can_be_neg):
-    (low, high) = (-1, 1) if can_be_neg else (0, 1)
+    (low, high) = (-1, 1) if can_be_neg else (0.1, 1)
     data_numpy = np.random.uniform(low, high, (3, 3)).astype(np.float32)
     relax_check_gradients(unary_op_func, unary_op_name, [data_numpy], target, dev, (3, 3))
 
@@ -374,7 +382,9 @@ def test_matmul_5_4(target, dev):
 
 @tvm.testing.parametrize_targets("llvm")
 def test_relu(target, dev):
-    data1_numpy = np.random.uniform(-1, 1, (3, 3)).astype(np.float32)
+    data1_numpy = np.random.uniform(0.2, 1, (3, 3)).astype(np.float32)
+    sign = np.random.randint(0, 2, (3, 3)).astype(np.float32) * 2 - 1
+    data1_numpy *= sign
     relax_check_gradients(relax.op.nn.relu, "relax.nn.relu", [data1_numpy], target, dev, (3, 3))
 
 
