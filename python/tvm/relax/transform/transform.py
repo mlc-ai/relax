@@ -524,7 +524,16 @@ def SplitCallTIRByPattern(patterns, fcodegen) -> tvm.ir.transform.Pass:
 
 
 def LiftTransformParams() -> tvm.ir.transform.Pass:
-    """Lift transformations of parameters to a separate function for runtime execution.
+    """Lift transformation of the parameters of a function.
+
+    When some inputs of the function is marked as 'parameters' (the model weights), this pass
+    identifies the transformation of the parameters and lifts them to a separate function called
+    `transform_params`. `transform_params` takes a tuple of the original parameters as input and
+    returns a tuple of the transformed parameters. The original function will be rewritten to accept
+    a tuple of transformed parameters as input.
+
+    Users are expected to invoke the `transform_params` function in runtime and pass the transformed
+    parameters to the original function as input.
 
     Returns
     -------
