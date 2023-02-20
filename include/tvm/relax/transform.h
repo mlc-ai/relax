@@ -274,7 +274,8 @@ TVM_DLL Pass ConvertLayout(Map<String, Array<String>> desired_layouts);
  * given function. If it is not specified, adjoints of all arguments would be computed.
  * \return The Pass.
  */
-TVM_DLL Pass Gradient(String func_name, Optional<Array<Var>> require_grads = NullOpt);
+TVM_DLL Pass Gradient(String func_name, Optional<Array<Var>> require_grads = NullOpt,
+                      int target_index = 0);
 
 /*!
  * \brief Split a PrimFunc into 2 parts: the first part is a TIR PrimFunc which is

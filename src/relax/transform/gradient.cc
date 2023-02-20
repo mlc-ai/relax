@@ -52,10 +52,13 @@ class BackwardBindingGenerator : private ExprVisitor {
    * \param forward_block The forward DataflowBlock
    * \param require_grads The Var list to differentiate w.r.t.
    * \param target_var The target Var to differentiate
+   * \param orig_return_value The original return value of the function. The new return value is a
+   * 2-tuple, containing the original return value, and a tuple of the adjoints of parameters.
    * \return The return expr of new adjoint function.
    */
   static Expr Generate(const BlockBuilder& builder, const DataflowBlock& forward_block,
-                       const Array<Var>& require_grads, const Var& target_var) {
+                       const Array<Var>& require_grads, const Var& target_var,
+                       const Expr& orig_return_value) {
     BackwardBindingGenerator generator(builder);
 
     // Initialize the adjoint of target_var as ones op. We have already check the target.
@@ -69,7 +72,7 @@ class BackwardBindingGenerator : private ExprVisitor {
       generator.VisitBinding(*it);
     }
 
-    return generator.Epilogue(require_grads, target_var);
+    return generator.Epilogue(require_grads, orig_return_value);
   }
 
  private:
@@ -206,7 +209,7 @@ class BackwardBindingGenerator : private ExprVisitor {
   // Returns the new return value, which would be like:
   // Tuple(original_return_value,
   //       Tuple(adjoint_of_require_grads_1, adjoint_of_require_grads_2, ...))
-  Expr Epilogue(const Array<Var>& require_grads, const Var& target_var) {
+  Expr Epilogue(const Array<Var>& require_grads, const Expr& orig_return_value) {
     // create adjoint variables for inputs, and then bind adjoints
     Array<Expr> out_adjoints;
 
@@ -219,7 +222,7 @@ class BackwardBindingGenerator : private ExprVisitor {
       out_adjoints.push_back(adjoint_var);
     }
 
-    return Tuple({target_var, Tuple(out_adjoints)});
+    return Tuple({orig_return_value, Tuple(out_adjoints)});
   }
 
   static bool IsCallZeros(const Expr& expr) {
@@ -298,7 +301,8 @@ class BackwardBindingGenerator : private ExprVisitor {
 
 class GradientMutator : private ExprMutator {
  public:
-  static IRModule Transform(IRModule mod, String func_name, Array<Var> require_grads) {
+  static IRModule Transform(IRModule mod, String func_name, Array<Var> require_grads,
+                            int target_index) {
     Function old_func = Downcast<Function>(mod->Lookup(func_name));
     CheckRequireGrads(require_grads, old_func->params, func_name);
 
@@ -310,7 +314,7 @@ class GradientMutator : private ExprMutator {
       require_grads.Set(i, new_func->params[idx]);
     }
 
-    GradientMutator mutator(mod, require_grads);
+    GradientMutator mutator(mod, require_grads, target_index);
     Function new_func_transformed = Downcast<Function>(mutator.VisitExpr(new_func));
 
     IRModule new_module = GetRef<IRModule>(mod.CopyOnWrite());
@@ -319,8 +323,8 @@ class GradientMutator : private ExprMutator {
   }
 
  private:
-  GradientMutator(const IRModule& module, const Array<Var>& require_grads)
-      : ExprMutator(module), require_grads_(require_grads) {}
+  GradientMutator(const IRModule& module, const Array<Var>& require_grads, int target_index)
+      : ExprMutator(module), require_grads_(require_grads), target_index_(target_index) {}
 
   Expr VisitExpr_(const FunctionNode* func) final {
     CHECK(func->body->IsInstance<SeqExprNode>())
@@ -341,8 +345,8 @@ class GradientMutator : private ExprMutator {
         << "now only support one dataflow block";
 
     // the return value should be a VarNode, and a scalar
-    CheckTarget(seq_expr->body);
-    this->target_var_ = Downcast<Var>(seq_expr->body);
+    orig_return_expr_ = seq_expr->body;
+    CheckAndSetTarget(seq_expr->body, target_index_);
 
     BindingBlock new_block = this->VisitBindingBlock(seq_expr->blocks[0]);
     return SeqExpr({new_block}, this->return_expr_);
@@ -357,19 +361,45 @@ class GradientMutator : private ExprMutator {
 
     // generate backward bindings and the return value
     return_expr_ = BackwardBindingGenerator::Generate(this->builder_, GetRef<DataflowBlock>(block),
-                                                      this->require_grads_, this->target_var_);
+                                                      this->require_grads_, this->target_var_,
+                                                      orig_return_expr_);
 
     return builder_->EndBlock();
   }
 
-  // check that the target should be a output Var
-  // and a scalar Tensor
-  static void CheckTarget(const Expr& e) {
-    CHECK(e->IsInstance<VarNode>() && !e->IsInstance<DataflowVarNode>())
-        << "The differentiation target must be a output Var";
-    CHECK(IsScalarTensor(e)) << "The differentiation target must be a scalar Tensor, but the "
-                                "StructInfo of the given target "
-                             << e << " is " << GetStructInfo(e);
+  static bool IsFloatTensorSInfo(const StructInfo& sinfo) {
+    auto* tensor_sinfo = sinfo.as<TensorStructInfoNode>();
+    return tensor_sinfo && tensor_sinfo->dtype.is_float();
+  }
+
+  // When the return value is a Var, it is the target;
+  // when the return value is a Tuple, the target is the target_index-th field of the return value
+  // Check that the target should be a Var of scalar tensor struct_info
+  void CheckAndSetTarget(const Expr& e, int target_index) {
+    if (auto* var = e.as<VarNode>()) {
+      CHECK_EQ(target_index, 0) << "When the function has only one return value, target_index can "
+                                   "only be 0. But the target_index specified is "
+                                << target_index;
+      target_var_ = GetRef<Var>(var);
+    } else if (auto* tuple = e.as<TupleNode>()) {
+      CHECK(target_index >= 0 && target_index < static_cast<int>(tuple->fields.size()))
+          << "target_index should be in the range of the number of return values of the function. "
+             "But the specified target_index is "
+          << target_index << ", while the number of return values is " << tuple->fields.size();
+      auto* var = tuple->fields[target_index].as<VarNode>();
+      CHECK(var) << "Target must be a Var, but the specified target is "
+                 << tuple->fields[target_index];
+      target_var_ = GetRef<Var>(var);
+    } else {
+      LOG(FATAL) << "The return value of the function must be Var or Tuple. However, the return "
+                    "value of the given function is "
+                 << e;
+    }
+    auto target_sinfo = GetStructInfo(target_var_);
+    CHECK(IsScalarTensor(target_sinfo) && IsFloatTensorSInfo(target_sinfo))
+        << "The differentiation target must be a float scalar (0-dim Tensor), but the StructInfo "
+           "of the given target "
+        << target_var_ << " is " << GetStructInfo(target_var_);
   }
 
   // Check every Var in require_grads:
@@ -386,11 +416,7 @@ class GradientMutator : private ExprMutator {
       CHECK_EQ(var_set.count(var), 0) << "Var " << var->name_hint() << " appears more than once";
       var_set.emplace(var);
 
-      auto is_float_tensor = [](const TensorStructInfo& sinfo) {
-        return sinfo->dtype.is_float() || sinfo->dtype.is_float16() || sinfo->dtype.is_bfloat16();
-      };
-
-      CHECK(IsNestedTensorConditioned(GetStructInfo(var), is_float_tensor))
+      CHECK(IsNestedTensorConditioned(GetStructInfo(var), IsFloatTensorSInfo))
           << "Only Tensors of floating point dtype or Tuples of float "
              "Tensors can require gradients, but the StructInfo of Var "
           << var->name_hint() << " is " << GetStructInfo(var);
@@ -400,8 +426,10 @@ class GradientMutator : private ExprMutator {
   // differentiation sources
   Array<Var> require_grads_;
   // the differentiation target
+  int target_index_;
   Var target_var_;
-  // the return value of the differentiated function
+  // the return value of the original function and the differentiated function
+  Expr orig_return_expr_;
   Expr return_expr_;
 };
 
@@ -412,8 +440,8 @@ class GradientMutator : private ExprMutator {
  * \param require_grads The relax variables whose adjoints are needed.
  * \return The module after transformation.
  */
-IRModule Gradient(const IRModule& mod, const String& func_name,
-                  Optional<Array<Var>> require_grads) {
+IRModule Gradient(const IRModule& mod, const String& func_name, Optional<Array<Var>> require_grads,
+                  int target_index) {
   auto* func = mod->Lookup(func_name).as<FunctionNode>();
   CHECK(func) << func_name << "is not a Relax Function";
 
@@ -422,14 +450,16 @@ IRModule Gradient(const IRModule& mod, const String& func_name,
     require_grads = func->params;
   }
 
-  return GradientMutator::Transform(mod, func_name, require_grads.value());
+  return GradientMutator::Transform(mod, func_name, require_grads.value(), target_index);
 }
 
 namespace transform {
 
-Pass Gradient(String func_name, Optional<Array<Var>> require_grads) {
-  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
-      [=](IRModule mod, PassContext pc) { return relax::Gradient(mod, func_name, require_grads); };
+Pass Gradient(String func_name, Optional<Array<Var>> require_grads, int target_index) {
+  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule mod,
+                                                                            PassContext pc) {
+    return relax::Gradient(mod, func_name, require_grads, target_index);
+  };
   return CreateModulePass(/*pass_function=*/pass_func,
                           /*opt_level=*/0,
                           /*pass_name=*/"Gradient",

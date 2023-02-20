@@ -470,19 +470,33 @@ def ConvertLayout(desired_layouts: Dict[str, List[str]]) -> tvm.ir.transform.Pas
 
 
 def Gradient(
-    func_name: str, require_grads: Optional[Union[Var, List[Var]]] = None
+    func_name: str, require_grads: Optional[Union[Var, List[Var]]] = None, target_index: int = 0
 ) -> tvm.ir.transform.Pass:
     """Reverse-mode automatic differentiation.
 
-    Now only supports differentiating one function in the IRModule with one dataflow block
-    with respect to the only return value of the function, which needs to be scalar.
+    This pass will differentiate one function in the IRModule. Now the input function must have only
+    one dataflow block.
 
-    For a given function specified by the input name, it generates a new function with the name
-    `func_name + "_adjoint"`. The new function computes the adjoints of the specified arguments
-    of the original function with respect to the only one return value of the original function.
+    For a given function specified by `func_name`, it generates a new function with the name
+    `func_name + "_adjoint"`. The new function computes the gradient of the **differentiation
+    target** with respect to the arguments specified by `require_grads` of the original function.
 
-    For examples, see the MLP examples in tests/python/relax/test_transform_gradient.py and
-    tests/python/relax/test_transform_gradient_numeric.py.
+    If the function has only one return value, the return value will be specified as target. If the
+    function has more than one return values, the target will be specified as the target_index-th
+    return value. The target must be a scalar (0-dim tensor).
+
+    The new function will be like:
+
+    .. code-block:: python
+        @R.function
+        def main_adjoint(original_parameters):
+            with R.dataflow():
+                # the bindings of the original function
+                ...
+                # calculating the gradients
+                ...
+                R.output(original_outputs, grad_1, grad_2, ...)
+            return (original_return_value, (grad_1, grad_2, ...))
 
     Parameters
     ----------
@@ -491,18 +505,138 @@ def Gradient(
 
     require_grads : Optional[Union[relax.Var, List[relax.Var]]]
         The relax variables whose adjoints is needed. Must be parameters of the given function and
-        should not be duplicate. If it is not specified, adjoints of all arguments would be
+        should not be duplicate. If it is not specified, adjoints of all parameters would be
         computed.
+
+    target_index : int
+        If the specified function has more than one return values, specify the index of the return
+        value as the target. If it is not specified, the first return value will be the target.
 
     Returns
     -------
     ret : tvm.ir.transform.Pass
         The Pass.
+
+    Examples
+    --------
+    The following code shows how to use this pass:
+
+    .. code-block:: python
+
+        @I.ir_module
+        class Module:
+            @R.function
+            def main(
+                x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3, 3), dtype="float32")
+            ) -> R.Tensor((), dtype="float32"):
+                with R.dataflow():
+                    lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, y)
+                    # use R.sum to reduce the tensor to a scalar
+                    lv2: R.Tensor((), dtype="float32") = R.sum(lv1, axis=None, keepdims=False)
+                    R.output(lv2)
+                return lv2
+
+        After = relax.transform.Gradient("main")(Module)
+
+    The module after the Gradient pass will be:
+
+    .. code-block:: python
+
+        @I.ir_module
+        class After:
+            @R.function
+            def main(
+                x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3, 3), dtype="float32")
+            ) -> R.Tensor((), dtype="float32"):
+                with R.dataflow():
+                    lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, y)
+                    lv2: R.Tensor((), dtype="float32") = R.sum(lv1, axis=None, keepdims=False)
+                    R.output(lv2)
+                return lv2
+
+            @R.function
+            def main_adjoint(
+                x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3, 3), dtype="float32")
+            ) -> R.Tuple(
+                R.Tensor((), dtype="float32"),
+                R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")),
+            ):
+                with R.dataflow():
+                    # original bindings
+                    lv1: R.Tensor((3, 3), dtype="float32") = R.add(x, y)
+                    lv2: R.Tensor((), dtype="float32") = R.sum(lv1, axis=None, keepdims=False)
+                    # bindings w.r.t. intermediate variables
+                    lv2_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+                    lv1_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(
+                        lv2_adjoint, (3, 3)
+                    )
+                    # bindings w.r.t. parameters
+                    x_adjoint: R.Tensor((3, 3), dtype="float32") = lv1_adjoint
+                    y_adjoint: R.Tensor((3, 3), dtype="float32") = lv1_adjoint
+                    R.output(lv2, x_adjoint, y_adjoint)
+                # return value: (orig_return_values, tuple(adjoints))
+                return (lv2, (x_adjoint, y_adjoint))
+
+    The second example is returning multiple values and specifying the target with `target_index`:
+
+    .. code-block:: python
+        @I.ir_module
+        class Module:
+            @R.function
+            def main(
+                x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3, 3), dtype="float32")
+            ) -> R.Tuple(R.Tensor((), dtype="float32"), R.Tensor((), dtype="float32")):
+                with R.dataflow():
+                    lv1: R.Tensor((), dtype="float32") = R.sum(x, axis=None, keepdims=False)
+                    lv2: R.Tensor((), dtype="float32") = R.sum(y, axis=None, keepdims=False)
+                    R.output(lv1, lv2)
+                return (lv1, lv2)
+
+        After = relax.transform.Gradient("main", target_index=1)(Module)
+
+    The module after the Gradient pass will be:
+
+    .. code-block:: python
+        @I.ir_module
+        class Module:
+            @R.function
+            def main(
+                x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3, 3), dtype="float32")
+            ) -> R.Tuple(R.Tensor((), dtype="float32"), R.Tensor((), dtype="float32")):
+                with R.dataflow():
+                    lv1: R.Tensor((), dtype="float32") = R.sum(x, axis=None, keepdims=False)
+                    lv2: R.Tensor((), dtype="float32") = R.sum(y, axis=None, keepdims=False)
+                    R.output(lv1, lv2)
+                return (lv1, lv2)
+
+            @R.function
+            def main_adjoint(
+                x: R.Tensor((3, 3), dtype="float32"), y: R.Tensor((3, 3), dtype="float32")
+            ) -> R.Tuple(
+                R.Tuple(R.Tensor((), dtype="float32"), R.Tensor((), dtype="float32")),
+                R.Tuple(R.Tensor((3, 3), dtype="float32"), R.Tensor((3, 3), dtype="float32")),
+            ):
+                with R.dataflow():
+                    # original bindings
+                    lv1: R.Tensor((), dtype="float32") = R.sum(x, axis=None, keepdims=False)
+                    lv2: R.Tensor((), dtype="float32") = R.sum(y, axis=None, keepdims=False)
+                    # bindings w.r.t. intermediate variables
+                    # gradient of intermediate variables that is not related to the target will not
+                    # be calculated
+                    lv2_adjoint: R.Tensor((), dtype="float32") = R.ones((), dtype="float32")
+                    # bindings w.r.t. parameters
+                    x_adjoint: R.Tensor((3, 3), dtype="float32") = R.zeros((3, 3), dtype="float32")
+                    y_adjoint: R.Tensor((3, 3), dtype="float32") = R.broadcast_to(
+                        lv2_adjoint, (3, 3)
+                    )
+                    R.output(lv1, lv2, x_adjoint, y_adjoint)
+                # return value: (orig_return_values, tuple(adjoints))
+                return ((lv1, lv2), (x_adjoint, y_adjoint))
     """
     if require_grads is not None and not isinstance(require_grads, list):
         require_grads = [require_grads]
 
-    return _ffi_api.Gradient(func_name, require_grads)  # type: ignore
+    return _ffi_api.Gradient(func_name, require_grads, target_index)  # type: ignore
 
 
 def SplitCallTIRByPattern(patterns, fcodegen) -> tvm.ir.transform.Pass:

@@ -19,14 +19,14 @@ import pytest
 import tvm.testing
 from tvm import relax
 from tvm.ir.base import assert_structural_equal
-from tvm.script.parser import ir as I, relax as R, tir as T
+from tvm.script.parser import relax as R, tir as T, ir as I
 from tvm._ffi.base import TVMError
 import numpy as np
 
 
 def test_simple():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")):
@@ -35,7 +35,7 @@ def test_simple():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
@@ -61,7 +61,7 @@ def test_simple():
 
 def test_assign_binding():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")):
@@ -72,7 +72,7 @@ def test_assign_binding():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")) -> R.Tensor((), "float32"):
@@ -104,7 +104,7 @@ def test_assign_binding():
 
 def test_multiple_uses():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")):
@@ -115,7 +115,7 @@ def test_multiple_uses():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")) -> R.Tensor((), "float32"):
@@ -147,7 +147,7 @@ def test_multiple_uses():
 
 def test_unused():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")):
@@ -158,7 +158,7 @@ def test_unused():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3, 3), "float32")) -> R.Tensor((), "float32"):
@@ -187,7 +187,7 @@ def test_unused():
 
 def test_default_require_grads():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -202,7 +202,7 @@ def test_default_require_grads():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected1:
         @R.function
         def main(
@@ -238,7 +238,7 @@ def test_default_require_grads():
     assert_structural_equal(After1["main_adjoint"], Expected1["main_adjoint"])
 
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected2:
         @R.function
         def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32"), z: R.Tensor((3, 3), "float32")) -> R.Tensor((), "float32"):
@@ -269,9 +269,50 @@ def test_default_require_grads():
     assert_structural_equal(After2["main_adjoint"], Expected2["main_adjoint"])
 
 
+def test_target_index():
+    # fmt: off
+    @I.ir_module
+    class Before:
+        @R.function
+        def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")):
+            with R.dataflow():
+                lv1 = x
+                lv2 = R.sum(x)
+                lv3 = R.sum(y)
+                R.output(lv1, lv2, lv3)
+            return (lv1, lv2, lv3)
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")) -> R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((), "float32"), R.Tensor((), "float32")):
+            with R.dataflow():
+                lv1: R.Tensor((3, 3), "float32") = x
+                lv2: R.Tensor((), "float32") = R.sum(x, axis=None, keepdims=False)
+                lv3: R.Tensor((), "float32") = R.sum(y, axis=None, keepdims=False)
+                R.output(lv1, lv2, lv3)
+            return (lv1, lv2, lv3)
+
+        @R.function
+        def main_adjoint(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")) -> R.Tuple(R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((), "float32"), R.Tensor((), "float32")), R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3, 3), "float32"))):
+            with R.dataflow():
+                lv1: R.Tensor((3, 3), "float32") = x
+                lv2: R.Tensor((), "float32") = R.sum(x, axis=None, keepdims=False)
+                lv3: R.Tensor((), "float32") = R.sum(y, axis=None, keepdims=False)
+                lv3_adjoint: R.Tensor((), "float32") = R.ones((), "float32")
+                x_adjoint: R.Tensor((3, 3), "float32") = R.zeros((3, 3), "float32")
+                y_adjoint: R.Tensor((3, 3), "float32") = R.broadcast_to(lv3_adjoint, (3, 3))
+                R.output(lv1, lv2, lv3, x_adjoint, y_adjoint)
+            return ((lv1, lv2, lv3), (x_adjoint, y_adjoint))
+    # fmt: on
+
+    After = relax.transform.Gradient("main", target_index=2)(Before)
+    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+
+
 def test_tuple():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -288,7 +329,7 @@ def test_tuple():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3, 3), "float32")), y: R.Tensor((3, 3), "float32"), z: R.Tensor((3, 3), "float32")) -> R.Tensor(None, "float32", ndim=0):
@@ -329,7 +370,7 @@ def test_tuple():
 
 def test_tuple_assignment():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -347,7 +388,7 @@ def test_tuple_assignment():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")) -> R.Tensor((), "float32"):
@@ -397,7 +438,7 @@ def test_tuple_assignment():
 
 def test_tuple_nested():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -422,7 +463,7 @@ def test_tuple_nested():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tuple(R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3, 3), "float32")), R.Tensor((3, 3), "float32")), y: R.Tensor((3, 3), "float32"), z: R.Tensor((3, 3), "float32"), u: R.Tensor((3, 3), "float32")) -> R.Tensor((), "float32"):
@@ -480,7 +521,7 @@ def test_tuple_update():
     """One tensor `x` is used in and out of tuple many times."""
 
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")):
@@ -499,7 +540,7 @@ def test_tuple_update():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")) -> R.Tensor((), "float32"):
@@ -565,7 +606,7 @@ def test_tuple_update():
 
 def test_tuple_op_simple():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -578,7 +619,7 @@ def test_tuple_op_simple():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((6,), "float32")) -> R.Tensor((), "float32"):
@@ -609,7 +650,7 @@ def test_tuple_op_simple():
 
 def test_tuple_op_construct():
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -627,7 +668,7 @@ def test_tuple_op_construct():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3,), "float32"), y: R.Tuple(R.Tensor((3,), "float32"), R.Tensor((3,), "float32"))) -> R.Tensor((), "float32"):
@@ -682,7 +723,7 @@ def test_tuple_op_const():
     c3 = R.const(np.zeros(3).astype(np.float32))
 
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -698,7 +739,7 @@ def test_tuple_op_const():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3,), "float32")) -> R.Tensor((), "float32"):
@@ -749,7 +790,7 @@ def test_const():
     cst = relax.const(np.ones((3, 3)), "float32")
 
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -767,7 +808,7 @@ def test_const():
                 R.output(gv)
             return gv
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")) -> R.Tensor((), "float32"):
@@ -813,7 +854,7 @@ def test_const():
 
 
 def test_params_copy():
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -839,7 +880,7 @@ def test_params_copy():
 
 
 def test_function_copy():
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -869,7 +910,20 @@ def test_function_copy():
 
 
 def test_report_error():
-    @tvm.script.ir_module
+    @I.ir_module
+    class TargetNotTensor:
+        @R.function
+        def main(x: R.Tensor((3, 3), "float32")):
+            with R.dataflow():
+                lv1 = R.sum(x)
+                gv = R.tuple(lv1, lv1)
+                R.output(gv)
+            return gv
+
+    with pytest.raises(TVMError):
+        relax.transform.Gradient("main")(TargetNotTensor)
+
+    @I.ir_module
     class TargetNotScalar:
         @R.function
         def main(x0: R.Tensor((3, 3), "float32"), x1: R.Tensor((3, 3), "float32")):
@@ -881,7 +935,56 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient("main")(TargetNotScalar)
 
-    @tvm.script.ir_module
+    @I.ir_module
+    class TargetNotFloat:
+        @R.function
+        def main(x: R.Tensor((3, 3), "float32")):
+            with R.dataflow():
+                gv = R.const(1)
+                R.output(gv)
+            return gv
+
+    with pytest.raises(TVMError):
+        relax.transform.Gradient("main")(TargetNotFloat)
+
+    @I.ir_module
+    class ReturnScalarAndWrongTargetIndex:
+        @R.function
+        def main(x: R.Tensor((3, 3), "float32")):
+            with R.dataflow():
+                gv = R.sum(x)
+                R.output(gv)
+            return gv
+
+    with pytest.raises(TVMError):
+        relax.transform.Gradient("main", target_index=1)(ReturnScalarAndWrongTargetIndex)
+
+    @I.ir_module
+    class ReturnTupleAndWrongTargetIndex:
+        @R.function
+        def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")):
+            with R.dataflow():
+                gv1 = R.sum(x)
+                gv2 = R.sum(y)
+                R.output(gv1, gv2)
+            return gv1, gv2
+
+    with pytest.raises(TVMError):
+        relax.transform.Gradient("main", target_index=2)(ReturnTupleAndWrongTargetIndex)
+
+    @I.ir_module
+    class IndexedTargetNotVar:
+        @R.function
+        def main(x: R.Tensor((3, 3), "float32")):
+            with R.dataflow():
+                gv = R.sum(x)
+                R.output(gv)
+            return gv, (gv, gv)
+
+    with pytest.raises(TVMError):
+        relax.transform.Gradient("main", target_index=1)(IndexedTargetNotVar)
+
+    @I.ir_module
     class NoDataflow:
         @R.function
         def main(x0: R.Tensor((3, 3), "float32")):
@@ -891,7 +994,7 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient("main")(NoDataflow)
 
-    @tvm.script.ir_module
+    @I.ir_module
     class MultiBlocks:
         @R.function
         def main(x0: R.Tensor((3, 3), "float32"), x1: R.Tensor((3, 3), "float32")):
@@ -906,7 +1009,7 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient("main")(MultiBlocks)
 
-    @tvm.script.ir_module
+    @I.ir_module
     class NormalModule:
         @R.function
         def main(x0: R.Tensor((3, 3), "float32"), x1: R.Tensor((3, 3), "float32")):
@@ -940,7 +1043,7 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient("main", require_grads=MultiBlocks["main"].params[0])(NormalModule)
 
-    @tvm.script.ir_module
+    @I.ir_module
     class IntDtype:
         @R.function
         def main(x: R.Tensor((3, 3), "int64")):
@@ -953,7 +1056,7 @@ def test_report_error():
     with pytest.raises(TVMError):
         relax.transform.Gradient("main")(IntDtype)
 
-    @tvm.script.ir_module
+    @I.ir_module
     class IntDtypeTuple:
         @R.function
         def main(x: R.Tuple(R.Tensor((3, 3), "int64"), R.Tensor((3, 3), "int64"))):
@@ -976,7 +1079,7 @@ def test_mlp_script():
     For n-layer perceptron, see test_transform_gradient_numeric.py.
     """
     # fmt: off
-    @tvm.script.ir_module
+    @I.ir_module
     class Before:
         @R.function
         def main(
@@ -993,7 +1096,7 @@ def test_mlp_script():
                 R.output(loss)
             return loss
 
-    @tvm.script.ir_module
+    @I.ir_module
     class Expected:
         @R.function
         def main(w0: R.Tensor((10, 5), "float32"), b0: R.Tensor((5,), "float32"), x: R.Tensor((3, 10), "float32"), label: R.Tensor((3, 5), "float32")) -> R.Tensor((), "float32"):
