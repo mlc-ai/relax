@@ -713,15 +713,8 @@ class TorchFXImporter:
                     shape = param.data.shape
                     dtype = self._convert_data_type(str(param.data.dtype))
                     if dtype in ("float32", "float16"):
-                        self.params[param] = relax.const(param.data.cpu().numpy(), dtype)
                         if not keep_params_as_input:
-                            self.params[param] = relax.const(
-                                param.data.cpu().numpy(), relax.TensorStructInfo(shape, dtype)
-                            )
-                        if dtype != "float32":
-                            self.params[param] = self.block_builder.emit(
-                                relax.op.wrap_param(self.params[param], "float32")
-                            )
+                            self.params[param] = relax.const(param.data.cpu().numpy(), dtype)
                     else:
                         raise ValueError("Unsupported data type for model parameters: %s" % dtype)
                 # Translate the model.
