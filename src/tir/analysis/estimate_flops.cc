@@ -190,8 +190,6 @@ class FlopEstimator : private ExprFunctor<TResult(const PrimExpr& n)>,
     }
     return ret;
   }
-
-  TResult VisitStmt_(const EvaluateNode* op) override { return VisitExpr(op->value); }
 };
 
 double PostprocessResults(const TResult& result) {
