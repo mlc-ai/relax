@@ -101,7 +101,7 @@ void InlinePostBlocks(Schedule sch, Trace anchor_trace, Target target,
 // Same to Structural Equal except ignoring float constant difference
 class SEqualHandlerIgnoreFloat : public SEqualHandlerDefault {
  public:
-  SEqualHandlerIgnoreFloat() : SEqualHandlerDefault(false, nullptr) {}
+  SEqualHandlerIgnoreFloat() : SEqualHandlerDefault(false, nullptr, false) {}
 
  protected:
   bool DispatchSEqualReduce(const ObjectRef& lhs, const ObjectRef& rhs, bool map_free_vars,
