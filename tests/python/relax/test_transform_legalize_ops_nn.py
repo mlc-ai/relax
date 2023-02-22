@@ -1351,6 +1351,330 @@ def test_batch_norm_symbolic():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_batch_norm_train():
+    # fmt: off
+    @tvm.script.ir_module
+    class BatchNorm:
+        @R.function
+        def main(x: R.Tensor((2, 3, 28, 28), "float32"), gamma: R.Tensor((3,), "float32"), beta: R.Tensor((3,), "float32"), moving_mean: R.Tensor((3,), "float32"), moving_var: R.Tensor((3,), "float32")) -> R.Tuple(R.Tensor((2, 3, 28, 28), "float32"), R.Tensor((3,), "float32"), R.Tensor((3,), "float32")):
+            gv: R.Tuple(R.Tensor((2, 3, 28, 28), "float32"), R.Tensor((3,), "float32"), R.Tensor((3,), "float32")) = R.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=1, training=True, momentum=0.2)
+            return gv
+
+    @tvm.script.ir_module
+    class Expected:
+        @T.prim_func
+        def batch_norm(
+            rxplaceholder: T.Buffer(
+                (T.int64(2), T.int64(3), T.int64(28), T.int64(28)), "float32"
+            ),
+            rxplaceholder_1: T.Buffer((T.int64(3),), "float32"),
+            rxplaceholder_2: T.Buffer((T.int64(3),), "float32"),
+            rxplaceholder_3: T.Buffer((T.int64(3),), "float32"),
+            rxplaceholder_4: T.Buffer((T.int64(3),), "float32"),
+            T_add: T.Buffer((T.int64(2), T.int64(3), T.int64(28), T.int64(28)), "float32"),
+            T_add_1: T.Buffer((T.int64(3),), "float32"),
+            T_add_2: T.Buffer((T.int64(3),), "float32"),
+        ):
+            T.func_attr({"tir.noalias": True})
+            # with T.block("root"):
+            T_reshape = T.alloc_buffer((T.int64(1), T.int64(3), T.int64(1), T.int64(1)))
+            T_subtract = T.alloc_buffer((T.int64(2), T.int64(3), T.int64(28), T.int64(28)))
+            T_reshape_1 = T.alloc_buffer((T.int64(1), T.int64(3), T.int64(1), T.int64(1)))
+            T_add_3 = T.alloc_buffer((T.int64(1), T.int64(3), T.int64(1), T.int64(1)))
+            compute = T.alloc_buffer((T.int64(1), T.int64(3), T.int64(1), T.int64(1)))
+            T_divide = T.alloc_buffer((T.int64(2), T.int64(3), T.int64(28), T.int64(28)))
+            T_reshape_2 = T.alloc_buffer((T.int64(1), T.int64(3), T.int64(1), T.int64(1)))
+            T_multiply = T.alloc_buffer((T.int64(2), T.int64(3), T.int64(28), T.int64(28)))
+            T_reshape_3 = T.alloc_buffer((T.int64(1), T.int64(3), T.int64(1), T.int64(1)))
+            T_multiply_1 = T.alloc_buffer((T.int64(3),))
+            rxplaceholder_red = T.alloc_buffer((T.int64(3),))
+            T_divide_1 = T.alloc_buffer((T.int64(3),))
+            T_multiply_2 = T.alloc_buffer((T.int64(3),))
+            T_multiply_3 = T.alloc_buffer((T.int64(3),))
+            T_reshape_4 = T.alloc_buffer((T.int64(1), T.int64(3), T.int64(1), T.int64(1)))
+            T_subtract_1 = T.alloc_buffer(
+                (T.int64(2), T.int64(3), T.int64(28), T.int64(28))
+            )
+            T_subtract_2 = T.alloc_buffer(
+                (T.int64(2), T.int64(3), T.int64(28), T.int64(28))
+            )
+            T_multiply_4 = T.alloc_buffer(
+                (T.int64(2), T.int64(3), T.int64(28), T.int64(28))
+            )
+            T_multiply_red = T.alloc_buffer((T.int64(3),))
+            T_divide_2 = T.alloc_buffer((T.int64(3),))
+            T_multiply_5 = T.alloc_buffer((T.int64(3),))
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(1), T.int64(3), T.int64(1), T.int64(1)
+            ):
+                with T.block("T_reshape"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(rxplaceholder_3[(v_ax1 + v_ax2 + v_ax3) % T.int64(3)])
+                    T.writes(T_reshape[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_reshape[v_ax0, v_ax1, v_ax2, v_ax3] = rxplaceholder_3[
+                        (v_ax1 + v_ax2 + v_ax3) % T.int64(3)
+                    ]
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(2), T.int64(3), T.int64(28), T.int64(28)
+            ):
+                with T.block("T_subtract"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(
+                        rxplaceholder[v_ax0, v_ax1, v_ax2, v_ax3],
+                        T_reshape[T.int64(0), v_ax1, T.int64(0), T.int64(0)],
+                    )
+                    T.writes(T_subtract[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_subtract[v_ax0, v_ax1, v_ax2, v_ax3] = (
+                        rxplaceholder[v_ax0, v_ax1, v_ax2, v_ax3]
+                        - T_reshape[T.int64(0), v_ax1, T.int64(0), T.int64(0)]
+                    )
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(1), T.int64(3), T.int64(1), T.int64(1)
+            ):
+                with T.block("T_reshape_1"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(rxplaceholder_4[(v_ax1 + v_ax2 + v_ax3) % T.int64(3)])
+                    T.writes(T_reshape_1[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_reshape_1[v_ax0, v_ax1, v_ax2, v_ax3] = rxplaceholder_4[
+                        (v_ax1 + v_ax2 + v_ax3) % T.int64(3)
+                    ]
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(1), T.int64(3), T.int64(1), T.int64(1)
+            ):
+                with T.block("T_add"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(T_reshape_1[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T.writes(T_add_3[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_add_3[v_ax0, v_ax1, v_ax2, v_ax3] = T_reshape_1[
+                        v_ax0, v_ax1, v_ax2, v_ax3
+                    ] + T.float32(1.0000000000000001e-05)
+            for i0, i1, i2, i3 in T.grid(T.int64(1), T.int64(3), T.int64(1), T.int64(1)):
+                with T.block("compute"):
+                    v_i0, v_i1, v_i2, v_i3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+                    T.reads(T_add_3[v_i0, v_i1, v_i2, v_i3])
+                    T.writes(compute[v_i0, v_i1, v_i2, v_i3])
+                    compute[v_i0, v_i1, v_i2, v_i3] = T.sqrt(
+                        T_add_3[v_i0, v_i1, v_i2, v_i3]
+                    )
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(2), T.int64(3), T.int64(28), T.int64(28)
+            ):
+                with T.block("T_divide"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(
+                        T_subtract[v_ax0, v_ax1, v_ax2, v_ax3],
+                        compute[T.int64(0), v_ax1, T.int64(0), T.int64(0)],
+                    )
+                    T.writes(T_divide[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_divide[v_ax0, v_ax1, v_ax2, v_ax3] = (
+                        T_subtract[v_ax0, v_ax1, v_ax2, v_ax3]
+                        / compute[T.int64(0), v_ax1, T.int64(0), T.int64(0)]
+                    )
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(1), T.int64(3), T.int64(1), T.int64(1)
+            ):
+                with T.block("T_reshape_2"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(rxplaceholder_1[(v_ax1 + v_ax2 + v_ax3) % T.int64(3)])
+                    T.writes(T_reshape_2[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_reshape_2[v_ax0, v_ax1, v_ax2, v_ax3] = rxplaceholder_1[
+                        (v_ax1 + v_ax2 + v_ax3) % T.int64(3)
+                    ]
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(2), T.int64(3), T.int64(28), T.int64(28)
+            ):
+                with T.block("T_multiply"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(
+                        T_divide[v_ax0, v_ax1, v_ax2, v_ax3],
+                        T_reshape_2[T.int64(0), v_ax1, T.int64(0), T.int64(0)],
+                    )
+                    T.writes(T_multiply[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_multiply[v_ax0, v_ax1, v_ax2, v_ax3] = (
+                        T_divide[v_ax0, v_ax1, v_ax2, v_ax3]
+                        * T_reshape_2[T.int64(0), v_ax1, T.int64(0), T.int64(0)]
+                    )
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(1), T.int64(3), T.int64(1), T.int64(1)
+            ):
+                with T.block("T_reshape_3"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(rxplaceholder_2[(v_ax1 + v_ax2 + v_ax3) % T.int64(3)])
+                    T.writes(T_reshape_3[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_reshape_3[v_ax0, v_ax1, v_ax2, v_ax3] = rxplaceholder_2[
+                        (v_ax1 + v_ax2 + v_ax3) % T.int64(3)
+                    ]
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(2), T.int64(3), T.int64(28), T.int64(28)
+            ):
+                with T.block("T_add_1"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(
+                        T_multiply[v_ax0, v_ax1, v_ax2, v_ax3],
+                        T_reshape_3[T.int64(0), v_ax1, T.int64(0), T.int64(0)],
+                    )
+                    T.writes(T_add[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_add[v_ax0, v_ax1, v_ax2, v_ax3] = (
+                        T_multiply[v_ax0, v_ax1, v_ax2, v_ax3]
+                        + T_reshape_3[T.int64(0), v_ax1, T.int64(0), T.int64(0)]
+                    )
+            for ax0 in range(T.int64(3)):
+                with T.block("T_multiply_1"):
+                    v_ax0 = T.axis.spatial(T.int64(3), ax0)
+                    T.reads(rxplaceholder_3[v_ax0])
+                    T.writes(T_multiply_1[v_ax0])
+                    T_multiply_1[v_ax0] = (
+                        T.float32(0.80000000000000004) * rxplaceholder_3[v_ax0]
+                    )
+            for ax0, k0, k2, k3 in T.grid(T.int64(3), T.int64(2), T.int64(28), T.int64(28)):
+                with T.block("rxplaceholder_red"):
+                    v_ax0, v_k0, v_k2, v_k3 = T.axis.remap("SRRR", [ax0, k0, k2, k3])
+                    T.reads(rxplaceholder[v_k0, v_ax0, v_k2, v_k3])
+                    T.writes(rxplaceholder_red[v_ax0])
+                    with T.init():
+                        rxplaceholder_red[v_ax0] = T.float32(0)
+                    rxplaceholder_red[v_ax0] = (
+                        rxplaceholder_red[v_ax0] + rxplaceholder[v_k0, v_ax0, v_k2, v_k3]
+                    )
+            for ax0 in range(T.int64(3)):
+                with T.block("T_divide_1"):
+                    v_ax0 = T.axis.spatial(T.int64(3), ax0)
+                    T.reads(rxplaceholder_red[v_ax0])
+                    T.writes(T_divide_1[v_ax0])
+                    T_divide_1[v_ax0] = rxplaceholder_red[v_ax0] * T.float32(
+                        0.33333333333333331
+                    )
+            for ax0 in range(T.int64(3)):
+                with T.block("T_multiply_2"):
+                    v_ax0 = T.axis.spatial(T.int64(3), ax0)
+                    T.reads(T_divide_1[v_ax0])
+                    T.writes(T_multiply_2[v_ax0])
+                    T_multiply_2[v_ax0] = T.float32(0.20000000000000001) * T_divide_1[v_ax0]
+            for ax0 in range(T.int64(3)):
+                with T.block("T_add_2"):
+                    v_ax0 = T.axis.spatial(T.int64(3), ax0)
+                    T.reads(T_multiply_1[v_ax0], T_multiply_2[v_ax0])
+                    T.writes(T_add_1[v_ax0])
+                    T_add_1[v_ax0] = T_multiply_1[v_ax0] + T_multiply_2[v_ax0]
+            for ax0 in range(T.int64(3)):
+                with T.block("T_multiply_3"):
+                    v_ax0 = T.axis.spatial(T.int64(3), ax0)
+                    T.reads(rxplaceholder_4[v_ax0])
+                    T.writes(T_multiply_3[v_ax0])
+                    T_multiply_3[v_ax0] = (
+                        T.float32(0.80000000000000004) * rxplaceholder_4[v_ax0]
+                    )
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(1), T.int64(3), T.int64(1), T.int64(1)
+            ):
+                with T.block("T_reshape_4"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(T_divide_1[(v_ax1 + v_ax2 + v_ax3) % T.int64(3)])
+                    T.writes(T_reshape_4[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_reshape_4[v_ax0, v_ax1, v_ax2, v_ax3] = T_divide_1[
+                        (v_ax1 + v_ax2 + v_ax3) % T.int64(3)
+                    ]
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(2), T.int64(3), T.int64(28), T.int64(28)
+            ):
+                with T.block("T_subtract_1"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(
+                        rxplaceholder[v_ax0, v_ax1, v_ax2, v_ax3],
+                        T_reshape_4[T.int64(0), v_ax1, T.int64(0), T.int64(0)],
+                    )
+                    T.writes(T_subtract_1[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_subtract_1[v_ax0, v_ax1, v_ax2, v_ax3] = (
+                        rxplaceholder[v_ax0, v_ax1, v_ax2, v_ax3]
+                        - T_reshape_4[T.int64(0), v_ax1, T.int64(0), T.int64(0)]
+                    )
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(2), T.int64(3), T.int64(28), T.int64(28)
+            ):
+                with T.block("T_subtract_2"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(
+                        rxplaceholder[v_ax0, v_ax1, v_ax2, v_ax3],
+                        T_reshape_4[T.int64(0), v_ax1, T.int64(0), T.int64(0)],
+                    )
+                    T.writes(T_subtract_2[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_subtract_2[v_ax0, v_ax1, v_ax2, v_ax3] = (
+                        rxplaceholder[v_ax0, v_ax1, v_ax2, v_ax3]
+                        - T_reshape_4[T.int64(0), v_ax1, T.int64(0), T.int64(0)]
+                    )
+            for ax0, ax1, ax2, ax3 in T.grid(
+                T.int64(2), T.int64(3), T.int64(28), T.int64(28)
+            ):
+                with T.block("T_multiply_4"):
+                    v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                    T.reads(
+                        T_subtract_1[v_ax0, v_ax1, v_ax2, v_ax3],
+                        T_subtract_2[v_ax0, v_ax1, v_ax2, v_ax3],
+                    )
+                    T.writes(T_multiply_4[v_ax0, v_ax1, v_ax2, v_ax3])
+                    T_multiply_4[v_ax0, v_ax1, v_ax2, v_ax3] = (
+                        T_subtract_1[v_ax0, v_ax1, v_ax2, v_ax3]
+                        * T_subtract_2[v_ax0, v_ax1, v_ax2, v_ax3]
+                    )
+            for ax0, k0, k2, k3 in T.grid(T.int64(3), T.int64(2), T.int64(28), T.int64(28)):
+                with T.block("T_multiply_red"):
+                    v_ax0, v_k0, v_k2, v_k3 = T.axis.remap("SRRR", [ax0, k0, k2, k3])
+                    T.reads(T_multiply_4[v_k0, v_ax0, v_k2, v_k3])
+                    T.writes(T_multiply_red[v_ax0])
+                    with T.init():
+                        T_multiply_red[v_ax0] = T.float32(0)
+                    T_multiply_red[v_ax0] = (
+                        T_multiply_red[v_ax0] + T_multiply_4[v_k0, v_ax0, v_k2, v_k3]
+                    )
+            for ax0 in range(T.int64(3)):
+                with T.block("T_divide_2"):
+                    v_ax0 = T.axis.spatial(T.int64(3), ax0)
+                    T.reads(T_multiply_red[v_ax0])
+                    T.writes(T_divide_2[v_ax0])
+                    T_divide_2[v_ax0] = T_multiply_red[v_ax0] * T.float32(
+                        0.33333333333333331
+                    )
+            for ax0 in range(T.int64(3)):
+                with T.block("T_multiply_5"):
+                    v_ax0 = T.axis.spatial(T.int64(3), ax0)
+                    T.reads(T_divide_2[v_ax0])
+                    T.writes(T_multiply_5[v_ax0])
+                    T_multiply_5[v_ax0] = T.float32(0.20000000000000001) * T_divide_2[v_ax0]
+            for ax0 in range(T.int64(3)):
+                with T.block("T_add_3"):
+                    v_ax0 = T.axis.spatial(T.int64(3), ax0)
+                    T.reads(T_multiply_3[v_ax0], T_multiply_5[v_ax0])
+                    T.writes(T_add_2[v_ax0])
+                    T_add_2[v_ax0] = T_multiply_3[v_ax0] + T_multiply_5[v_ax0]
+
+        @R.function
+        def main(
+            x: R.Tensor((2, 3, 28, 28), dtype="float32"),
+            gamma: R.Tensor((3,), dtype="float32"),
+            beta: R.Tensor((3,), dtype="float32"),
+            moving_mean: R.Tensor((3,), dtype="float32"),
+            moving_var: R.Tensor((3,), dtype="float32"),
+        ) -> R.Tuple(
+            R.Tensor((2, 3, 28, 28), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+            R.Tensor((3,), dtype="float32"),
+        ):
+            gv = R.call_tir(
+                batch_norm,
+                (x, gamma, beta, moving_mean, moving_var),
+                out_sinfo=[
+                    R.Tensor((2, 3, 28, 28), dtype="float32"),
+                    R.Tensor((3,), dtype="float32"),
+                    R.Tensor((3,), dtype="float32"),
+                ],
+            )
+            return gv
+    # fmt: on
+
+    mod = LegalizeOps()(BatchNorm)
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 def test_layer_norm():
     # fmt: off
     @tvm.script.ir_module

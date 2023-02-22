@@ -177,6 +177,8 @@ def _nn_batch_norm(bb: BlockBuilder, call: Call) -> Expr:
         epsilon=call.attrs.epsilon,
         center=call.attrs.center,
         scale=call.attrs.scale,
+        training=call.attrs.training,
+        momentum=call.attrs.momentum,
     )
 
 

@@ -28,6 +28,8 @@ def batch_norm(
     epsilon: float,
     center: bool,
     scale: bool,
+    training: bool,
+    momentum: float,
 ):
     """Batch Normalization operator implemented in Numpy.
 
@@ -62,6 +64,13 @@ def batch_norm(
         If True, scale normalized tensor by gamma. If False, gamma
         is ignored.
 
+    training : bool
+        Indicating whether it is in training mode. If True, update
+        moving_mean and moving_var.
+
+    momentum : float
+        The value used for the moving_mean and moving_var update
+
     Returns
     -------
     output : np.ndarray
@@ -85,5 +94,17 @@ def batch_norm(
         out = out * gamma.reshape(shape)
     if center:
         out = out + beta.reshape(shape)
+
+    if training:
+        reduce_axes = [i for i in range(len(x.shape))]
+        reduce_axes.remove(axis)
+        reduce_axes = tuple(reduce_axes)
+        new_mean = np.mean(x, axis=reduce_axes)
+        new_var = np.var(x, axis=reduce_axes)
+        return [
+            out,
+            (1 - momentum) * moving_mean + momentum * new_mean,
+            (1 - momentum) * moving_var + momentum * new_var,
+        ]
 
     return [out, moving_mean, moving_var]

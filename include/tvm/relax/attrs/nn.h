@@ -148,6 +148,8 @@ struct BatchNormAttrs : public tvm::AttrsNode<BatchNormAttrs> {
   double epsilon;
   bool center;
   bool scale;
+  bool training;
+  double momentum;
 
   TVM_DECLARE_ATTRS(BatchNormAttrs, "relax.attrs.BatchNormAttrs") {
     TVM_ATTR_FIELD(axis).describe("The axis along which the normalization is applied.");
@@ -155,6 +157,9 @@ struct BatchNormAttrs : public tvm::AttrsNode<BatchNormAttrs> {
     TVM_ATTR_FIELD(center).describe(
         "Indicating if the beta offset will be added to the normalized tensor.");
     TVM_ATTR_FIELD(scale).describe("Indicating if the gamma scale will be multiplied.");
+    TVM_ATTR_FIELD(training).describe(
+        "Indicating whether it is in training mode. If True, update moving_mean and moving_var.");
+    TVM_ATTR_FIELD(momentum).describe("The value used for the moving_mean and moving_var update.");
   }
 };  // struct BatchNormAttrs
 

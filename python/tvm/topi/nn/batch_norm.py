@@ -16,6 +16,7 @@
 # under the License.
 """Batch normalization."""
 import typing
+import math
 
 from tvm import te
 from tvm import topi
@@ -31,6 +32,8 @@ def batch_norm(
     epsilon: typing.Optional[float] = None,
     center: typing.Optional[bool] = None,
     scale: typing.Optional[bool] = None,
+    training: typing.Optional[bool] = None,
+    momentum: typing.Optional[float] = None,
 ) -> typing.List[te.Tensor]:
     """Batch normalization layer (Ioffe and Szegedy, 2014).
 
@@ -69,6 +72,13 @@ def batch_norm(
         If True, scale normalized tensor by gamma. If False, gamma
         is ignored.
 
+    training : bool, optional, defualt=False
+        Indicating whether it is in training mode. If True, update
+        moving_mean and moving_var.
+
+    momentum : float, optional, default=0.1
+        The value used for the moving_mean and moving_var update.
+
     Returns
     -------
     output : list of tvm.te.Tensor
@@ -92,6 +102,12 @@ def batch_norm(
     if scale is None:
         scale = True
 
+    if training is None:
+        training = False
+
+    if momentum is None:
+        momentum = 0.1
+
     shape = [1] * len(data.shape)
     shape[axis] = data.shape[axis]
 
@@ -104,6 +120,22 @@ def batch_norm(
         out = out * topi.reshape(gamma, shape)
     if center:
         out = out + topi.reshape(beta, shape)
+
+    if training:
+        assert 0 <= momentum <= 1, "the valid momentum range is [0, 1]."
+        reduce_axes = [i for i in range(len(data.shape))]
+        reduce_axes.remove(axis)
+        shape_prod = math.prod([data.shape[ax] for ax in reduce_axes])
+        new_mean = topi.sum(data, axis=reduce_axes) / shape_prod
+        new_mean_rs = topi.reshape(new_mean, shape)
+        new_var = (
+            topi.sum((data - new_mean_rs) * (data - new_mean_rs), axis=reduce_axes) / shape_prod
+        )
+        return [
+            out,
+            (1 - momentum) * moving_mean + momentum * new_mean,
+            (1 - momentum) * moving_var + momentum * new_var,
+        ]
 
     # Moving mean and var aren't updated during test. To avoid
     # placeholder reuse, we multiply by 1 and return them.
