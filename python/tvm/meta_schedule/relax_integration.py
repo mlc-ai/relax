@@ -56,7 +56,7 @@ def extract_tasks(
     mod: Union[IRModule, "relax.Function"],
     target: Target,
     params: Optional[Dict[str, NDArray]] = None,
-    module_equality="structural",
+    module_equality: str = "structural",
 ) -> List[ExtractedTask]:
     """Extract tuning tasks from a relax program.
 
@@ -66,6 +66,16 @@ def extract_tasks(
         The module or function to tune
     target : tvm.target.Target
         The compilation target
+    module_equality : str
+        A string to specify the module equality testing and hashing method.
+        It must be one of the followings:
+          - "structural": Use StructuralEqual/Hash
+          - "ignore-ndarray": Same as "structural", but ignore ndarray raw data during
+                              equality testing and hashing.
+          - "anchor-block": Apply equality testing and hashing on the anchor block extracted from a
+                            given module. The "ignore-ndarray" varint is used for the extracted
+                            blocks or in case no anchor block is found.
+                            For the definition of the anchor block, see tir/analysis/analysis.py.
 
     Returns
     -------
@@ -336,7 +346,7 @@ def compile_relax(
         The compilation target
     params : Optional[Dict[str, tvm.runtime.NDArray]]
         The associated parameters of the program
-    module_equality : Optional[str]
+    module_equality : str
         A string to specify the module equality testing and hashing method.
         It must be one of the followings:
           - "structural": Use StructuralEqual/Hash

@@ -462,7 +462,7 @@ def MetaScheduleApplyDatabase(
     work_dir : Optional[str]
        work directory to deduce default database if database is not provided
        (it will be ignored when an user passes database)
-    module_equality : Optional[str]
+    module_equality : str
         A string to specify the module equality testing and hashing method.
         It must be one of the followings:
           - "structural": Use StructuralEqual/Hash

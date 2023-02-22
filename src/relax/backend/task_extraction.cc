@@ -78,7 +78,7 @@ class TaskExtractor : public ExprVisitor {
       return;
     }
 
-    // Do not extract external functionF
+    // Do not extract external function
     if (call->args[0].as<ExternFuncNode>()) {
       return;
     }
