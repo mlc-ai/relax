@@ -22,6 +22,7 @@
 #include <tvm/relax/expr_functor.h>
 #include <tvm/target/target.h>
 #include <tvm/tir/function.h>
+
 #include "../../meta_schedule/module_equality.h"
 
 namespace tvm {
@@ -62,7 +63,9 @@ class TaskExtractor : public ExprVisitor {
 
  private:
   explicit TaskExtractor(IRModule mod, Target target, const ModuleEquality& mod_eq)
-      : mod_(std::move(mod)), target_(std::move(target)), mod2task_(/*bucket_count*/ 0, ModuleHash(mod_eq), ModuleEqual(mod_eq))  {
+      : mod_(std::move(mod)),
+        target_(std::move(target)),
+        mod2task_(/*bucket_count*/ 0, ModuleHash(mod_eq), ModuleEqual(mod_eq)) {
     normalize_mod_func_ = runtime::Registry::Get("tvm.meta_schedule.normalize_mod");
     ICHECK(normalize_mod_func_) << "Normalization function is not found.";
   }
@@ -85,7 +88,7 @@ class TaskExtractor : public ExprVisitor {
 
     const GlobalVar& global_var = Downcast<GlobalVar>(call->args[0]);
     BaseFunc f = mod_->Lookup(global_var);
-    if(f.as<ExternFuncNode>()){
+    if (f.as<ExternFuncNode>()) {
       return;
     }
     const tir::PrimFunc& func = Downcast<tir::PrimFunc>(f);
