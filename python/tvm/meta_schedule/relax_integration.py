@@ -346,7 +346,7 @@ def compile_relax(
                             given module. The "ignore-ndarray" varint is used for the extracted
                             blocks or in case no anchor block is found.
                             For the definition of the anchor block, see tir/analysis/analysis.py.
-                            
+
     Returns
     -------
     lib : relax.Executable
@@ -363,6 +363,6 @@ def compile_relax(
         mod = BindParams("main", params)(mod)
 
     with target, database, PassContext(opt_level=3):
-        relax_mod = MetaScheduleApplyDatabase()(mod, module_equality)
+        relax_mod = MetaScheduleApplyDatabase(module_equality=module_equality)(mod)
         relax_ex = relax_build(relax_mod, target=target)
     return relax_ex
