@@ -123,7 +123,7 @@ def batch_norm(
 
     if training:
         assert 0 <= momentum <= 1, "the valid momentum range is [0, 1]."
-        reduce_axes = [i for i in range(len(data.shape))]
+        reduce_axes = list(range(len(data.shape)))
         reduce_axes.remove(axis)
         shape_prod = math.prod([data.shape[ax] for ax in reduce_axes])
         new_mean = topi.sum(data, axis=reduce_axes) / shape_prod

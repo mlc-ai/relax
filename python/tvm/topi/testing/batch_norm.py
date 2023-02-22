@@ -96,7 +96,7 @@ def batch_norm(
         out = out + beta.reshape(shape)
 
     if training:
-        reduce_axes = [i for i in range(len(x.shape))]
+        reduce_axes = list(range(len(x.shape)))
         reduce_axes.remove(axis)
         reduce_axes = tuple(reduce_axes)
         new_mean = np.mean(x, axis=reduce_axes)
