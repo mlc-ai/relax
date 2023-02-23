@@ -35,6 +35,7 @@ from . import builtin
 from . import image
 from . import memory
 from . import nn
+from . import _op_gradient
 
 
 def _register_op_make():
