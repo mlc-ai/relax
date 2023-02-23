@@ -29,7 +29,7 @@ from tvm.script.parser import relax as R
 # pylint: disable=no-member,line-too-long,too-many-nested-blocks,unbalanced-tuple-unpacking,no-self-argument,missing-docstring,invalid-name
 
 
-@tvm.testing.requires_package("torch")
+@tvm.testing.requires_gpu
 def test_task_extraction_anchor_block():
     mod, params, _ = get_network(name="resnet_18", input_shape=[1, 3, 224, 224])
     relax_mod = relay_translator.from_relay(mod["main"], "llvm", params)
