@@ -16,7 +16,7 @@
 # under the License.
 """Batch normalization."""
 import typing
-import math
+from functools import reduce
 
 from tvm import te
 from tvm import topi
@@ -125,7 +125,7 @@ def batch_norm(
         assert 0 <= momentum <= 1, "the valid momentum range is [0, 1]."
         reduce_axes = list(range(len(data.shape)))
         reduce_axes.remove(axis)
-        shape_prod = math.prod([data.shape[ax] for ax in reduce_axes])
+        shape_prod = reduce(lambda x, y: x * y, [data.shape[ax] for ax in reduce_axes])
         new_mean = topi.sum(data, axis=reduce_axes) / shape_prod
         new_mean_rs = topi.reshape(new_mean, shape)
         new_var = (
