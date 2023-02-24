@@ -196,3 +196,32 @@ def _nn_layer_norm(bb: BlockBuilder, call: Call) -> Expr:
 def _nn_dropout(bb: BlockBuilder, call: Call) -> Expr:
     logging.info("Dropout is handled by frontend translator at this moment and is not legalized.")
     return call
+
+
+@register_legalize("relax.nn.nll_loss")
+def _nn_nll_loss(bb: BlockBuilder, call: Call) -> Expr:
+    def nll_loss_without_weight(predictions, targets, reduction, ignore_index):
+        weight = topi.full(
+            (predictions.shape[1] if len(predictions.shape) > 1 else predictions.shape[0],),
+            predictions.dtype,
+            1.0,
+        )
+        return topi.nn.nll_loss(predictions, targets, weight, reduction, ignore_index)
+
+    if len(call.args) == 2:
+        return bb.call_te(
+            nll_loss_without_weight,
+            call.args[0],
+            call.args[1],
+            reduction=call.attrs.reduction,
+            ignore_index=call.attrs.ignore_index,
+        )
+
+    return bb.call_te(
+        topi.nn.nll_loss,
+        call.args[0],
+        call.args[1],
+        call.args[2],
+        reduction=call.attrs.reduction,
+        ignore_index=call.attrs.ignore_index,
+    )
