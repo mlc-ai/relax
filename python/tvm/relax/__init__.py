@@ -87,6 +87,7 @@ from . import transform
 from . import block_builder
 from . import op
 from . import struct_info
+from . import training
 
 # VM
 from .vm_build import build, Executable
