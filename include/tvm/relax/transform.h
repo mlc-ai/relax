@@ -190,6 +190,27 @@ TVM_DLL Pass LegalizeOps(Optional<Map<String, PackedFunc>> cmap);
  */
 TVM_DLL Pass LiftTransformParams();
 
+/*!
+ * \brief Reverse-mode automatic differentiation.
+ *
+ * Now only supports differentiating one function in the IRModule with one dataflow block with
+ * respect to the only return value of the function, which needs to be scalar.
+ *
+ * For a given function specified by the input name, it generates a new function with the name
+ * `func_name + "_adjoint"`. The new function computes the adjoints of the specified arguments of
+ * the original function with respect to the only one return value of the original function.
+ *
+ * For examples, see the MLP examples in `tests/python/relax/test_transform_gradient.py` and
+ * `tests/python/relax/test_transform_gradient_numeric.py`.
+ *
+ * \param func_name The name of the specified function.
+ * \param require_grads The relax variables whose adjoints are needed. Must be parameters of the
+ * given function. If it is not specified, adjoints of all arguments would be computed.
+ * \return The Pass.
+ */
+TVM_DLL Pass Gradient(String func_name, Optional<Array<Var>> require_grads = NullOpt,
+                      int target_index = 0);
+
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm
