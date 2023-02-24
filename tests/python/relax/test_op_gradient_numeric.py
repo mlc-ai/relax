@@ -94,7 +94,7 @@ def relax_check_gradients(
         bb.emit_func_output(out)
     mod = bb.get()
     lower_mod = LegalizeOps()(mod)
-    ex_0 = relax.vm.build(lower_mod, target)
+    ex_0 = relax.build(lower_mod, target)
     vm_0 = relax.VirtualMachine(ex_0, dev)
 
     def forward(*inputs):
@@ -124,7 +124,7 @@ def relax_check_gradients(
     grad_mod = bb1.get()
     lower_grad_mod = LegalizeOps()(grad_mod)
 
-    ex_1 = relax.vm.build(lower_grad_mod, target)
+    ex_1 = relax.build(lower_grad_mod, target)
     vm_1 = relax.VirtualMachine(ex_1, dev)
     inputs_tvm = [_numpy_to_tvm(i) for i in inputs_numpy]
     weights_tvm = _numpy_to_tvm(weights)
