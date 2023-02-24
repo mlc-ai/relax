@@ -193,19 +193,24 @@ TVM_DLL Pass LiftTransformParams();
 /*!
  * \brief Reverse-mode automatic differentiation.
  *
- * Now only supports differentiating one function in the IRModule with one dataflow block with
- * respect to the only return value of the function, which needs to be scalar.
+ * This pass will differentiate one function in the IRModule. Now the input function must have only
+ * one dataflow block.
  *
- * For a given function specified by the input name, it generates a new function with the name
- * `func_name + "_adjoint"`. The new function computes the adjoints of the specified arguments of
- * the original function with respect to the only one return value of the original function.
+ * For a given function specified by `func_name`, it generates a new function with the name
+ * `func_name + "_adjoint"`. The new function computes the gradient of the **differentiation
+ * target** with respect to the arguments specified by `require_grads` of the original function.
  *
- * For examples, see the MLP examples in `tests/python/relax/test_transform_gradient.py` and
- * `tests/python/relax/test_transform_gradient_numeric.py`.
+ * If the function has only one return value, the return value will be specified as target. If the
+ * function has more than one return values, the target will be specified as the target_index-th
+ * return value. The target must be a scalar (0-dim tensor).
  *
  * \param func_name The name of the specified function.
- * \param require_grads The relax variables whose adjoints are needed. Must be parameters of the
- * given function. If it is not specified, adjoints of all arguments would be computed.
+ * \param require_grads The relax variables whose adjoints is needed. Must be parameters of the
+ * given function and should not be duplicate. If it is not specified, adjoints of all parameters
+ * would be computed.
+ * \param target_index If the specified function has more than one return values, specify the index
+ * of the return value as the target. If it is not specified, the first return value will be the
+ * target.
  * \return The Pass.
  */
 TVM_DLL Pass Gradient(String func_name, Optional<Array<Var>> require_grads = NullOpt,
