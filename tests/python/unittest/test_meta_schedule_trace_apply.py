@@ -1949,69 +1949,69 @@ class GroupNormSigmoidMultiply:
                 T.reads(compute[v_ax0, v_ax1, v_ax2, v_ax3], compute_1[v_ax0, v_ax1, v_ax2, v_ax3])
                 T.writes(T_multiply[v_ax0, v_ax1, v_ax2, v_ax3])
                 T_multiply[v_ax0, v_ax1, v_ax2, v_ax3] = compute[v_ax0, v_ax1, v_ax2, v_ax3] * compute_1[v_ax0, v_ax1, v_ax2, v_ax3]
-                
+
 @tvm.script.ir_module
-class GroupNorm:	
-    @T.prim_func	
-    def main(lv84: T.Buffer((T.int64(1), T.int64(512), T.int64(64), T.int64(64)), "float32"), param_0: T.Buffer((T.int64(512),), "float32"), param_1: T.Buffer((T.int64(512),), "float32"), compute: T.Buffer((T.int64(1), T.int64(512), T.int64(64), T.int64(64)), "float16")):	
-        T.func_attr({"global_symbol": "main", "tir.noalias": True})	
-        # with T.block("root"):	
-        T_reshape = T.alloc_buffer((T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)))	
-        rxplaceholder_red_temp_v0 = T.alloc_buffer((T.int64(1), T.int64(32)))	
-        rxplaceholder_red_temp_v1 = T.alloc_buffer((T.int64(1), T.int64(32)))	
-        T_reshape_1 = T.alloc_buffer((T.int64(32), T.int64(16)))	
-        T_reshape_2 = T.alloc_buffer((T.int64(32), T.int64(16)))	
-        T_group_norm = T.alloc_buffer((T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)))	
-        T_reshape_3 = T.alloc_buffer((T.int64(1), T.int64(512), T.int64(64), T.int64(64)))	
-        for ax0, ax1, ax2, ax3, ax4 in T.grid(T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)):	
-            with T.block("T_reshape"):	
-                v_ax0, v_ax1, v_ax2, v_ax3, v_ax4 = T.axis.remap("SSSSS", [ax0, ax1, ax2, ax3, ax4])	
-                T.reads(lv84[T.int64(0), (v_ax1 * T.int64(16) + (v_ax4 // T.int64(64) + v_ax3) // T.int64(64) + v_ax2) % T.int64(512), (v_ax4 // T.int64(64) + v_ax3) % T.int64(64), v_ax4 % T.int64(64)])	
-                T.writes(T_reshape[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4])	
-                T_reshape[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4] = lv84[T.int64(0), (v_ax1 * T.int64(16) + (v_ax4 // T.int64(64) + v_ax3) // T.int64(64) + v_ax2) % T.int64(512), (v_ax4 // T.int64(64) + v_ax3) % T.int64(64), v_ax4 % T.int64(64)]	
-        for ax0, ax1, k2, k3, k4 in T.grid(T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)):	
-            with T.block("rxplaceholder_red_temp"):	
-                v_ax0, v_ax1, v_k2, v_k3, v_k4 = T.axis.remap("SSRRR", [ax0, ax1, k2, k3, k4])	
-                T.reads(T_reshape[v_ax0, v_ax1, v_k2, v_k3, v_k4])	
-                T.writes(rxplaceholder_red_temp_v0[v_ax0, v_ax1], rxplaceholder_red_temp_v1[v_ax0, v_ax1])	
-                with T.init():	
-                    rxplaceholder_red_temp_v0[v_ax0, v_ax1] = T.float32(0)	
-                    rxplaceholder_red_temp_v1[v_ax0, v_ax1] = T.float32(0)	
-                v_rxplaceholder_red_temp_v0: T.float32 = rxplaceholder_red_temp_v0[v_ax0, v_ax1] + T_reshape[v_ax0, v_ax1, v_k2, v_k3, v_k4]	
-                v_rxplaceholder_red_temp_v1: T.float32 = rxplaceholder_red_temp_v1[v_ax0, v_ax1] + T_reshape[v_ax0, v_ax1, v_k2, v_k3, v_k4] * T_reshape[v_ax0, v_ax1, v_k2, v_k3, v_k4]	
-                rxplaceholder_red_temp_v0[v_ax0, v_ax1] = v_rxplaceholder_red_temp_v0	
-                rxplaceholder_red_temp_v1[v_ax0, v_ax1] = v_rxplaceholder_red_temp_v1	
-        for ax0, ax1 in T.grid(T.int64(32), T.int64(16)):	
-            with T.block("T_reshape_1"):	
-                v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])	
-                T.reads(param_0[(v_ax0 * T.int64(16) + v_ax1) % T.int64(512)])	
-                T.writes(T_reshape_1[v_ax0, v_ax1])	
-                T_reshape_1[v_ax0, v_ax1] = param_0[(v_ax0 * T.int64(16) + v_ax1) % T.int64(512)]	
-        for ax0, ax1 in T.grid(T.int64(32), T.int64(16)):	
-            with T.block("T_reshape_2"):	
-                v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])	
-                T.reads(param_1[(v_ax0 * T.int64(16) + v_ax1) % T.int64(512)])	
-                T.writes(T_reshape_2[v_ax0, v_ax1])	
-                T_reshape_2[v_ax0, v_ax1] = param_1[(v_ax0 * T.int64(16) + v_ax1) % T.int64(512)]	
-        for ax0, ax1, ax2, ax3, ax4 in T.grid(T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)):	
-            with T.block("T_group_norm"):	
-                v_ax0, v_ax1, v_ax2, v_ax3, v_ax4 = T.axis.remap("SSSSS", [ax0, ax1, ax2, ax3, ax4])	
-                T.reads(T_reshape[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4], rxplaceholder_red_temp_v0[v_ax0, v_ax1], rxplaceholder_red_temp_v1[v_ax0, v_ax1], T_reshape_1[v_ax1, v_ax2], T_reshape_2[v_ax1, v_ax2])	
-                T.writes(T_group_norm[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4])	
-                T_group_norm[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4] = (T_reshape[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4] - rxplaceholder_red_temp_v0[v_ax0, v_ax1] * T.float32(1.52587890625e-05)) * T.rsqrt(rxplaceholder_red_temp_v1[v_ax0, v_ax1] * T.float32(1.52587890625e-05) - rxplaceholder_red_temp_v0[v_ax0, v_ax1] * T.float32(1.52587890625e-05) * (rxplaceholder_red_temp_v0[v_ax0, v_ax1] * T.float32(1.52587890625e-05)) + T.float32(9.9999999999999995e-07)) * T_reshape_1[v_ax1, v_ax2] + T_reshape_2[v_ax1, v_ax2]	
-        for ax0, ax1, ax2, ax3 in T.grid(T.int64(1), T.int64(512), T.int64(64), T.int64(64)):	
-            with T.block("T_reshape_3"):	
-                v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])	
-                T.reads(T_group_norm[T.int64(0), ((v_ax3 // T.int64(64) + v_ax2) // T.int64(64) + v_ax1) % T.int64(512) // T.int64(16), ((v_ax3 // T.int64(64) + v_ax2) // T.int64(64) + v_ax1) % T.int64(16), (v_ax3 // T.int64(64) + v_ax2) % T.int64(64), v_ax3 % T.int64(64)])	
-                T.writes(T_reshape_3[v_ax0, v_ax1, v_ax2, v_ax3])	
-                T_reshape_3[v_ax0, v_ax1, v_ax2, v_ax3] = T_group_norm[T.int64(0), ((v_ax3 // T.int64(64) + v_ax2) // T.int64(64) + v_ax1) % T.int64(512) // T.int64(16), ((v_ax3 // T.int64(64) + v_ax2) // T.int64(64) + v_ax1) % T.int64(16), (v_ax3 // T.int64(64) + v_ax2) % T.int64(64), v_ax3 % T.int64(64)]	
-        for i0, i1, i2, i3 in T.grid(T.int64(1), T.int64(512), T.int64(64), T.int64(64)):	
-            with T.block("compute"):	
-                v_i0, v_i1, v_i2, v_i3 = T.axis.remap("SSSS", [i0, i1, i2, i3])	
-                T.reads(T_reshape_3[v_i0, v_i1, v_i2, v_i3])	
-                T.writes(compute[v_i0, v_i1, v_i2, v_i3])	
-                compute[v_i0, v_i1, v_i2, v_i3] = T.Cast("float16", T_reshape_3[v_i0, v_i1, v_i2, v_i3])	
-                
+class GroupNorm:
+    @T.prim_func
+    def main(lv84: T.Buffer((T.int64(1), T.int64(512), T.int64(64), T.int64(64)), "float32"), param_0: T.Buffer((T.int64(512),), "float32"), param_1: T.Buffer((T.int64(512),), "float32"), compute: T.Buffer((T.int64(1), T.int64(512), T.int64(64), T.int64(64)), "float16")):
+        T.func_attr({"global_symbol": "main", "tir.noalias": True})
+        # with T.block("root"):
+        T_reshape = T.alloc_buffer((T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)))
+        rxplaceholder_red_temp_v0 = T.alloc_buffer((T.int64(1), T.int64(32)))
+        rxplaceholder_red_temp_v1 = T.alloc_buffer((T.int64(1), T.int64(32)))
+        T_reshape_1 = T.alloc_buffer((T.int64(32), T.int64(16)))
+        T_reshape_2 = T.alloc_buffer((T.int64(32), T.int64(16)))
+        T_group_norm = T.alloc_buffer((T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)))
+        T_reshape_3 = T.alloc_buffer((T.int64(1), T.int64(512), T.int64(64), T.int64(64)))
+        for ax0, ax1, ax2, ax3, ax4 in T.grid(T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)):
+            with T.block("T_reshape"):
+                v_ax0, v_ax1, v_ax2, v_ax3, v_ax4 = T.axis.remap("SSSSS", [ax0, ax1, ax2, ax3, ax4])
+                T.reads(lv84[T.int64(0), (v_ax1 * T.int64(16) + (v_ax4 // T.int64(64) + v_ax3) // T.int64(64) + v_ax2) % T.int64(512), (v_ax4 // T.int64(64) + v_ax3) % T.int64(64), v_ax4 % T.int64(64)])
+                T.writes(T_reshape[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4])
+                T_reshape[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4] = lv84[T.int64(0), (v_ax1 * T.int64(16) + (v_ax4 // T.int64(64) + v_ax3) // T.int64(64) + v_ax2) % T.int64(512), (v_ax4 // T.int64(64) + v_ax3) % T.int64(64), v_ax4 % T.int64(64)]
+        for ax0, ax1, k2, k3, k4 in T.grid(T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)):
+            with T.block("rxplaceholder_red_temp"):
+                v_ax0, v_ax1, v_k2, v_k3, v_k4 = T.axis.remap("SSRRR", [ax0, ax1, k2, k3, k4])
+                T.reads(T_reshape[v_ax0, v_ax1, v_k2, v_k3, v_k4])
+                T.writes(rxplaceholder_red_temp_v0[v_ax0, v_ax1], rxplaceholder_red_temp_v1[v_ax0, v_ax1])
+                with T.init():
+                    rxplaceholder_red_temp_v0[v_ax0, v_ax1] = T.float32(0)
+                    rxplaceholder_red_temp_v1[v_ax0, v_ax1] = T.float32(0)
+                v_rxplaceholder_red_temp_v0: T.float32 = rxplaceholder_red_temp_v0[v_ax0, v_ax1] + T_reshape[v_ax0, v_ax1, v_k2, v_k3, v_k4]
+                v_rxplaceholder_red_temp_v1: T.float32 = rxplaceholder_red_temp_v1[v_ax0, v_ax1] + T_reshape[v_ax0, v_ax1, v_k2, v_k3, v_k4] * T_reshape[v_ax0, v_ax1, v_k2, v_k3, v_k4]
+                rxplaceholder_red_temp_v0[v_ax0, v_ax1] = v_rxplaceholder_red_temp_v0
+                rxplaceholder_red_temp_v1[v_ax0, v_ax1] = v_rxplaceholder_red_temp_v1
+        for ax0, ax1 in T.grid(T.int64(32), T.int64(16)):
+            with T.block("T_reshape_1"):
+                v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])
+                T.reads(param_0[(v_ax0 * T.int64(16) + v_ax1) % T.int64(512)])
+                T.writes(T_reshape_1[v_ax0, v_ax1])
+                T_reshape_1[v_ax0, v_ax1] = param_0[(v_ax0 * T.int64(16) + v_ax1) % T.int64(512)]
+        for ax0, ax1 in T.grid(T.int64(32), T.int64(16)):
+            with T.block("T_reshape_2"):
+                v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])
+                T.reads(param_1[(v_ax0 * T.int64(16) + v_ax1) % T.int64(512)])
+                T.writes(T_reshape_2[v_ax0, v_ax1])
+                T_reshape_2[v_ax0, v_ax1] = param_1[(v_ax0 * T.int64(16) + v_ax1) % T.int64(512)]
+        for ax0, ax1, ax2, ax3, ax4 in T.grid(T.int64(1), T.int64(32), T.int64(16), T.int64(64), T.int64(64)):
+            with T.block("T_group_norm"):
+                v_ax0, v_ax1, v_ax2, v_ax3, v_ax4 = T.axis.remap("SSSSS", [ax0, ax1, ax2, ax3, ax4])
+                T.reads(T_reshape[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4], rxplaceholder_red_temp_v0[v_ax0, v_ax1], rxplaceholder_red_temp_v1[v_ax0, v_ax1], T_reshape_1[v_ax1, v_ax2], T_reshape_2[v_ax1, v_ax2])
+                T.writes(T_group_norm[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4])
+                T_group_norm[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4] = (T_reshape[v_ax0, v_ax1, v_ax2, v_ax3, v_ax4] - rxplaceholder_red_temp_v0[v_ax0, v_ax1] * T.float32(1.52587890625e-05)) * T.rsqrt(rxplaceholder_red_temp_v1[v_ax0, v_ax1] * T.float32(1.52587890625e-05) - rxplaceholder_red_temp_v0[v_ax0, v_ax1] * T.float32(1.52587890625e-05) * (rxplaceholder_red_temp_v0[v_ax0, v_ax1] * T.float32(1.52587890625e-05)) + T.float32(9.9999999999999995e-07)) * T_reshape_1[v_ax1, v_ax2] + T_reshape_2[v_ax1, v_ax2]
+        for ax0, ax1, ax2, ax3 in T.grid(T.int64(1), T.int64(512), T.int64(64), T.int64(64)):
+            with T.block("T_reshape_3"):
+                v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+                T.reads(T_group_norm[T.int64(0), ((v_ax3 // T.int64(64) + v_ax2) // T.int64(64) + v_ax1) % T.int64(512) // T.int64(16), ((v_ax3 // T.int64(64) + v_ax2) // T.int64(64) + v_ax1) % T.int64(16), (v_ax3 // T.int64(64) + v_ax2) % T.int64(64), v_ax3 % T.int64(64)])
+                T.writes(T_reshape_3[v_ax0, v_ax1, v_ax2, v_ax3])
+                T_reshape_3[v_ax0, v_ax1, v_ax2, v_ax3] = T_group_norm[T.int64(0), ((v_ax3 // T.int64(64) + v_ax2) // T.int64(64) + v_ax1) % T.int64(512) // T.int64(16), ((v_ax3 // T.int64(64) + v_ax2) // T.int64(64) + v_ax1) % T.int64(16), (v_ax3 // T.int64(64) + v_ax2) % T.int64(64), v_ax3 % T.int64(64)]
+        for i0, i1, i2, i3 in T.grid(T.int64(1), T.int64(512), T.int64(64), T.int64(64)):
+            with T.block("compute"):
+                v_i0, v_i1, v_i2, v_i3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+                T.reads(T_reshape_3[v_i0, v_i1, v_i2, v_i3])
+                T.writes(compute[v_i0, v_i1, v_i2, v_i3])
+                compute[v_i0, v_i1, v_i2, v_i3] = T.Cast("float16", T_reshape_3[v_i0, v_i1, v_i2, v_i3])
+
 @tvm.script.ir_module
 class GroupNorm_scheduled:
     @T.prim_func
