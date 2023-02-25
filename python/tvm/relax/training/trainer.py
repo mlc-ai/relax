@@ -23,10 +23,11 @@ import numpy as np  # type: ignore
 import tvm
 from tvm import TVMError
 from tvm.ir.module import IRModule
+from tvm.runtime.relax_vm import VirtualMachine
 from tvm.runtime.ndarray import NDArray
 
 from .setup_trainer import SetupTrainer
-from ..vm import VirtualMachine, build
+from ..vm_build import build
 
 
 class Trainer:

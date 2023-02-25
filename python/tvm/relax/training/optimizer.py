@@ -85,8 +85,8 @@ class Optimizer:
 
         # Legalize and build mod
         lowered_mod = LegalizeOps()(mod)
-        ex = relax.vm.build(lowered_mod, target="llvm")
-        vm = relax.VirtualMachine(ex, tvm.cpu())
+        ex = build(lowered_mod, target="llvm")
+        vm = VirtualMachine(ex, tvm.cpu())
 
         # Optimization process
         # param_tuple is a runtime tuple of parameters

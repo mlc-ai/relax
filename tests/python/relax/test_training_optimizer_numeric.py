@@ -25,13 +25,14 @@ from tvm import IRModule
 from tvm.relax.training.optimizer import Adam, SGD, MomentumSGD
 from tvm.relax.transform import LegalizeOps
 from tvm.script.parser import relax as R
+from tvm.runtime.relax_vm import VirtualMachine
 from tvm.testing import assert_allclose
 
 
 def _legalize_and_build(mod: IRModule, target, dev):
     lowered_mod = LegalizeOps()(mod)
-    ex = relax.vm.build(lowered_mod, target)
-    vm = relax.VirtualMachine(ex, dev)
+    ex = relax.build(lowered_mod, target)
+    vm = VirtualMachine(ex, dev)
     return vm
 
 
