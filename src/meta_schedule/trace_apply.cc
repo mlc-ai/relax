@@ -238,23 +238,35 @@ std::vector<BlockRV> ApplyAnchorTrace(Schedule sch, Trace anchor_trace, const IR
       // The anchor trace does reverse_compute_inline on a block, but the block with the same name
       // in the target schedule cannot be reverse compute inline-ed.
       // In such cases, it should be possible to apply compute_inline instead.
-      auto block = Downcast<BlockRV>(inputs[0]);
-      auto block_sref = sch->GetSRef(block);
+      auto block_rv = Downcast<BlockRV>(inputs[0]);
+      auto block_sref = sch->GetSRef(block_rv);
+      Block block = sch->Get(block_rv);
+      if (target2record.count(block->name_hint)) {
+        String record_block_name = target2record[block->name_hint];
+        target2record.erase(block->name_hint);
+        record2target.erase(record_block_name);
+      }
       if (!CanReverseComputeInline(sch->state(), block_sref)) {
         ICHECK(CanComputeInline(sch->state(), block_sref));
-        sch->ComputeInline(block);
+        sch->ComputeInline(block_rv);
         continue;
       }
     } else if (inst->kind.same_as(kind_compute_inline)) {
       // Similar to the reverse_compute_inline case above.
-      auto block = Downcast<BlockRV>(inputs[0]);
-      auto block_sref = sch->GetSRef(block);
+      auto block_rv = Downcast<BlockRV>(inputs[0]);
+      auto block_sref = sch->GetSRef(block_rv);
+      Block block = sch->Get(block_rv);
+      if (target2record.count(block->name_hint)) {
+        String record_block_name = target2record[block->name_hint];
+        target2record.erase(block->name_hint);
+        record2target.erase(record_block_name);
+      }
       auto state = sch->state();
       if (!CanComputeInline(state, block_sref)) {
         ICHECK(IsOutputBlock(state, block_sref, GetScopeRoot(state, block_sref, false)))
             << "If a spatial block cannot be inlined, it should be the output block";
         if (CanReverseComputeInline(sch->state(), block_sref)) {
-          sch->ReverseComputeInline(block);
+          sch->ReverseComputeInline(block_rv);
         }
         continue;
       }
