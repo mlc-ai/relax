@@ -122,7 +122,7 @@ def _test_anchor_tuning(target):
     res = vm["main"](data_tvm)
     out = res.numpy()
 
-    from tvm.relax.vm import build as relax_build
+    from tvm.relax import build as relax_build
 
     relax_mod = relax.transform.BindParams("main", params)(relax_mod)
     lib_ref = relax_build(relax_mod, target)
