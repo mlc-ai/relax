@@ -268,31 +268,6 @@ TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_opt
                         Array<runtime::String> entry_functions);
 
 /*!
- * \brief Reverse-mode automatic differentiation.
- *
- * This pass will differentiate one function in the IRModule. Now the input function must have only
- * one dataflow block.
- *
- * For a given function specified by `func_name`, it generates a new function with the name
- * `func_name + "_adjoint"`. The new function computes the gradient of the **differentiation
- * target** with respect to the arguments specified by `require_grads` of the original function.
- *
- * If the function has only one return value, the return value will be specified as target. If the
- * function has more than one return values, the target will be specified as the target_index-th
- * return value. The target must be a scalar (0-dim tensor).
- *
- * \param func_name The name of the specified function.
- * \param require_grads The relax variables whose adjoints is needed. Must be parameters of the
- * given function and should not be duplicate. If it is not specified, adjoints of all parameters
- * would be computed.
- * \param target_index If the specified function has more than one return values, specify the index
- * of the return value as the target. If it is not specified, the first return value will be the
- * target.
- * \return The Pass.
- */
-TVM_DLL Pass Gradient(String func_name, Optional<Array<Var>> require_grads = NullOpt,
-                      int target_index = 0);
-/*!
  * \brief Rewriting some operators to its training mode.
  *
  * Some operators behave differently in eval mode and train mode (e.g. BatchNorm). Usually, there
@@ -304,80 +279,6 @@ TVM_DLL Pass Gradient(String func_name, Optional<Array<Var>> require_grads = Nul
  */
 TVM_DLL Pass ToTrainMode();
 
-/*!
- * \brief Annotate Op Pattern Kind for TIR functions, which is used in FuseOps.
- * \note It is an auto-detect pass for "unscheduled prim_funcs", the op_pattern will be
- *       "opaque" of we can't detect it. Users can manually annotate the attr `op_pattern`
- *       to prim_func.
- * \return The Pass.
- */
-TVM_DLL Pass AnnotateTIROpPattern();
-
-/*!
- * \brief This pass groups bindings in a dataflow block of Relax functions and generates a new
- * grouped Relax function for each group, according to the fusion algorithm described in the pass
- * implementation. By grouping bindings into new Relax functions, we substitute the bindings in the
- * function being manipulated into function calls to the new grouped function.
- *
- * A follow-up pass named "FuseTIR" will generate a TIR PrimFunc for each grouped function.
- * \param fuse_opt_level The level of fuse optimization.
- *        -1 indicates that the level will be inferred from pass context.
- * \return The Pass.
- */
-TVM_DLL Pass FuseOps(int fuse_opt_level = -1);
-
-/*!
- * \brief Apply pattern matching to each function in the given module, and group matched
- * expressions into a new function. The end result is similar to FuseOps, but fusion is driven
- * completely by the provided patterns.
- *
- * \param pattern_names The name of each pattern. It becomes the value of the kComposite attribute
- * of a fused function after successful matching.
- * \param patterns The patterns to detect. The order of the patterns determines the order
- * of priority in which they are matched. Higher-priority patterns should come earlier in the list.
- * \param annotate_codegen If true, wrap each created composite function with another function,
- * whose body consists only of a call to the composite function, and annotate the outer function
- * with kCodegen and kGlobalSymbol attributes. The kCodegen attribute is set as the prefix of the
- * corresponding pattern name. For example, "dnnl" if the pattern name is "dnnl.conv2d_relu".
- * This must be True if the created composite functions are intended to be offloaded to
- * an external backend without using the MergeCompositeFunctions pass.
- * \return The Pass.
- */
-TVM_DLL Pass FuseOpsByPattern(const tvm::Array<runtime::String>& pattern_names,
-                              const tvm::Array<DFPattern>& patterns, bool annotate_codegen = false);
-
-/*!
- * \brief Group one or multiple composite functions created by FuseOpsByPattern into a new
- *  function. The new function will be annotated with kCodegen and GlobalSymbol attributes,
- *  and it is intented to be offloaded to an external backend.
- *
- * \return The Pass.
- */
-TVM_DLL Pass MergeCompositeFunctions();
-
-/*!
- * \brief Fuse relax sub-function into a larger TIR function if possible.
-    this pass works together with FuseOps to perform operator fusion.
-
- * \return The Pass.
- */
-TVM_DLL Pass FuseTIR();
-
-/*!
- * \brief Remove unused global relax functions in an IRModule.
- * \param entry_functions list of entry functions
- * \return The Pass.
- */
-TVM_DLL Pass RemoveUnusedFunctions(Array<runtime::String> entry_functions);
-
-/*!
- * \brief Run codegen.
- * \param target_options pairs of target name and compilation options
- * \param entry_functions list of entry functions
- * \return The Pass.
- */
-TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_options,
-                        Array<runtime::String> entry_functions);
 /*!
  * \brief Reverse-mode automatic differentiation.
  *
