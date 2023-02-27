@@ -50,8 +50,8 @@ def test_dtensor_struct_info():
     device_mesh1 = rx.distributed.DeviceMesh((2, 2), Range(0, 4))
     tvm.ir.assert_structural_equal(device_mesh0, device_mesh1)
 
-    shard0 = rx.distributed.sharding(0)
-    replica = rx.distributed.replica()
+    shard0 = rx.distributed.PlacementSpec.sharding(0)
+    replica = rx.distributed.PlacementSpec.replica()
 
     placement0 = rx.distributed.Placement([shard0, replica])
     placement1 = rx.distributed.Placement([shard0, replica])
@@ -77,13 +77,13 @@ def test_dtensor_struct_info():
     # str(s0)
 
     # dimension of device mesh and placement should be the same
-    shard1 = rx.distributed.sharding(1)
+    shard1 = rx.distributed.PlacementSpec.sharding(1)
     placement2 = rx.distributed.Placement([shard0, replica, shard1])
     with pytest.raises(ValueError):
         rx.distributed.DTensorStructInfo(tensor_s0, device_mesh0, placement2)
 
     # Sharding dimension should be smaller than tensor ndim
-    shard3 = rx.distributed.sharding(3)
+    shard3 = rx.distributed.PlacementSpec.sharding(3)
     placement3 = rx.distributed.Placement([shard3, replica])
     with pytest.raises(ValueError):
         rx.distributed.DTensorStructInfo(tensor_s0, device_mesh0, placement3)

@@ -52,32 +52,32 @@ class PlacementSpec(Object):
     def __init__(self, *args, **kwargs):
         raise TVMError("PlacementSpec is not intended to be constructed directly, ")
 
+    @staticmethod
+    def sharding(axis: int) -> "PlacementSpec":
+        """Create a sharding placement spec
 
-def sharding(axis: int) -> PlacementSpec:
-    """Create a sharding placement spec
+        Parameters
+        ----------
+        axis: int
+            The tensor dimension to shard.
 
-    Parameters
-    ----------
-    axis: int
-        The tensor dimension to shard.
+        Returns
+        -------
+        placement_spec: PlacementSpec
+            The placement spec.
+        """
+        return _ffi_api.Sharding(axis)
 
-    Returns
-    -------
-    placement_spec: PlacementSpec
-        The placement spec.
-    """
-    return _ffi_api.Sharding(axis)
+    @staticmethod
+    def replica() -> "PlacementSpec":
+        """Create a replica placement spec
 
-
-def replica() -> PlacementSpec:
-    """Create a replica placement spec
-
-    Returns
-    -------
-    placement_spec: PlacementSpec
-        The placement spec.
-    """
-    return _ffi_api.Replica()
+        Returns
+        -------
+        placement_spec: PlacementSpec
+            The placement spec.
+        """
+        return _ffi_api.Replica()
 
 
 @tvm._ffi.register_object("relax.distributed.Placement")
