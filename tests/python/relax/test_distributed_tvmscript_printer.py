@@ -35,19 +35,25 @@ def test_dtensor_struct_info():
 
     tensor_sinfo1 = TensorStructInfo((32, 32), "float32")
     tensor_sinfo2 = TensorStructInfo((32, 32), "void")
-    obj0 = DTensorStructInfo(tensor_sinfo1, DeviceMesh((2, 2), Range(0, 4)), Placement.from_text("S[1], R"))
+    obj0 = DTensorStructInfo(
+        tensor_sinfo1, DeviceMesh((2, 2), Range(0, 4)), Placement.from_text("S[1], R")
+    )
     assert (
         obj0.__str__()
         == """R.DTensor((32, 32), "float32", I.device_mesh((2, 2), R.Range(0, 4)), "S[1], R")"""
     )
 
-    obj1 = DTensorStructInfo(tensor_sinfo2, DeviceMesh((2, 2), Range(0, 4)), Placement.from_text("S[1], R"))
+    obj1 = DTensorStructInfo(
+        tensor_sinfo2, DeviceMesh((2, 2), Range(0, 4)), Placement.from_text("S[1], R")
+    )
     assert (
         obj1.__str__()
         == """R.DTensor((32, 32), device_mesh=I.device_mesh((2, 2), R.Range(0, 4)), placement="S[1], R")"""
     )
 
-    obj2 = DTensorStructInfo(tensor_sinfo2, DeviceMesh((2, 2), [0, 1, 2, 3]), Placement.from_text("S[1], R"))
+    obj2 = DTensorStructInfo(
+        tensor_sinfo2, DeviceMesh((2, 2), [0, 1, 2, 3]), Placement.from_text("S[1], R")
+    )
     assert (
         obj2.__str__()
         == """R.DTensor((32, 32), device_mesh=I.device_mesh((2, 2), [0, 1, 2, 3]), placement="S[1], R")"""
