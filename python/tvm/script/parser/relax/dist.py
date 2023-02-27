@@ -22,10 +22,10 @@ from typing import Dict, List, Optional, Set, Union
 from tvm.relax import TensorStructInfo
 from tvm.ir import Range
 from tvm.tir import PrimExpr
-from tvm.relax.distributed import DeviceMesh, Placement, DTensorStructInfo, device_mesh
+from tvm.relax.distributed import DeviceMesh, Placement, DTensorStructInfo
 from tvm.script.ir_builder import IRBuilder
 from tvm.script.ir_builder.ir import IRModuleFrame
-from tvm.script.ir_builder.relax.distributed import call_tir, range
+from tvm.script.ir_builder.relax.distributed import call_tir
 from .entry import StructInfoProxy, TensorProxy
 
 
@@ -92,4 +92,4 @@ def DTensor(
     return DTensorProxy(TensorProxy(shape, dtype, ndim), device_mesh, placement)
 
 
-__all__ = ["DTensor", "device_mesh", "range"]
+__all__ = ["DTensor"]

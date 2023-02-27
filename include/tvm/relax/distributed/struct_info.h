@@ -37,6 +37,9 @@ class PlacementNode : public Object {
   /*! \brief placement for each dim of device mesh. -1 represents replica, and integer >=0
    * represents sharding dimension on tensor*/
   Array<Integer> dim_placement;
+
+  String ToString() const;
+
   void VisitAttrs(tvm::AttrVisitor* v) { v->Visit("dim_placement", &dim_placement); }
 
   bool SEqualReduce(const PlacementNode* other, SEqualReducer equal) const {

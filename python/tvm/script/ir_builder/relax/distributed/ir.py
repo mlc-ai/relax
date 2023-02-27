@@ -19,7 +19,7 @@
 """IRBuilder for distributed Relax dialect"""
 from typing import Union, List, Tuple, Optional
 
-from tvm.ir import PrimExpr, Range
+from tvm.ir import PrimExpr
 from tvm.relax.expr import Expr, ShapeExpr, Call, ExternFunc
 from tvm.relax.expr import Tuple as RxTuple
 from tvm.relax.distributed import DTensorStructInfo
@@ -68,21 +68,3 @@ def call_tir(
         tir_vars = ShapeExpr(tir_vars)
 
     return _ffi_api.call_tir_dist(func, args, out_sinfo, tir_vars)  # type: ignore
-
-
-def range(start: PrimExpr, stop: PrimExpr) -> Range:
-    """Create a range expression.
-
-    Parameters
-    ----------
-    start: PrimExpr
-        The start value of the range.
-    stop: PrimExpr
-        The stop value of the range.
-
-    Returns
-    -------
-    res : Range
-        The result range.
-    """
-    return Range(start, stop)

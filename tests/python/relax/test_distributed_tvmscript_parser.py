@@ -91,8 +91,8 @@ def test_call_tir_dtensor():
         I.module_global_infos(
             {
                 "mesh": [
-                    R.device_mesh((2, 2), R.range(0, 4)),  # mesh[0]
-                    R.device_mesh((1,), R.range(4, 5)),  # mesh[1]
+                    I.device_mesh((2, 2), I.Range(0, 4)),  # mesh[0]
+                    I.device_mesh((1,), I.Range(4, 5)),  # mesh[1]
                 ]
             }
         )
@@ -139,7 +139,8 @@ def test_call_tir_dtensor():
     assert value.sinfo_args[0] == R.DTensor(
         (128, 128), "float32", device_mesh_list[0], placement="S[0], R"
     )
+    print(TestModule.script())
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    test_call_tir_dtensor()

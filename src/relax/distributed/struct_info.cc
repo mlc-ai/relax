@@ -27,6 +27,21 @@ namespace tvm {
 namespace relax {
 namespace distributed {
 
+String PlacementNode::ToString() const{
+  std::stringstream ss;
+  for (size_t i = 0; i < dim_placement.size(); ++i) {
+    if (i != 0) {
+      ss << ", ";
+    }
+    if (dim_placement[i] == -1) {
+      ss << "R";
+    } else {
+      ss << "S[" << dim_placement[i] << "]";
+    }
+  }
+  return ss.str();
+}
+
 Placement::Placement(Array<Integer> dim_placement) {
   ObjectPtr<PlacementNode> n = make_object<PlacementNode>();
   n->dim_placement = std::move(dim_placement);
