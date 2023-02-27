@@ -50,7 +50,9 @@ class StaticTypeDeriver : public StructInfoFunctor<Type(const StructInfo&)> {
     return DynTensorType(op->ndim, op->dtype);
   }
 
+  // module: distributed
   Type VisitStructInfo_(const distributed::DTensorStructInfoNode* op) final { return ObjectType(); }
+  // end-module: distributed
 
   Type VisitStructInfo_(const TupleStructInfoNode* op) final {
     Array<Type> fields =
@@ -346,6 +348,7 @@ class StructInfoBaseChecker
     return ShapeMatchCheck(lhs->shape.value(), rhs->shape.value());
   }
 
+  // module: distributed
   BaseCheckResult VisitStructInfo_(const distributed::DTensorStructInfoNode* lhs,
                                    const StructInfo& other) final {
     auto* rhs = other.as<distributed::DTensorStructInfoNode>();
@@ -358,13 +361,13 @@ class StructInfoBaseChecker
     BaseCheckResult other_check_result;
     if (!struct_equal_(lhs->device_mesh, rhs->device_mesh) ||
         !struct_equal_(lhs->placement, rhs->placement)) {
-      // todo(hongyi): FailL1 or FailL2 ?
       other_check_result = BaseCheckResult::kFailL1;
     } else {
       other_check_result = BaseCheckResult::kPass;
     }
     return CombineCheck(tensor_sinfo_check_result, other_check_result);
   }
+  // end-module: distributed
 
   BaseCheckResult VisitStructInfo_(const TupleStructInfoNode* lhs, const StructInfo& other) final {
     auto* rhs = other.as<TupleStructInfoNode>();

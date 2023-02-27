@@ -31,22 +31,82 @@ namespace tvm {
 namespace relax {
 namespace distributed {
 
+enum class PlacementSpecKind : int { kSharding = 0, kReplica = 1 };
+
+/*! \brief Describes how data is distributed in one dimension of the device mesh*/
+class PlacementSpecNode : public Object {
+ public:
+  /*! \brief If the kind is sharding, this value represents the tensor dimension to shard.
+   *         otherwise, axis is -1.
+   */
+  int axis;
+
+  /*! \brief The kind of placement spec. Possible values: kSharding and kReplica. */
+  PlacementSpecKind kind;
+
+  void VisitAttrs(tvm::AttrVisitor* v) {
+    v->Visit("axis", &axis);
+    v->Visit("kind", &kind);
+  }
+  bool SEqualReduce(const PlacementSpecNode* other, SEqualReducer equal) const {
+    return equal(axis, other->axis) && equal(kind, other->kind);
+  }
+
+  void SHashReduce(SHashReducer hash_reduce) const {
+    hash_reduce(axis);
+    hash_reduce(static_cast<int>(kind));
+  }
+
+  static constexpr const char* _type_key = "relax.distributed.PlacementSpec";
+  static constexpr const bool _type_has_method_sequal_reduce = true;
+  static constexpr const bool _type_has_method_shash_reduce = true;
+  TVM_DECLARE_BASE_OBJECT_INFO(PlacementSpecNode, Object);
+};
+
+/*!
+ * \brief Managed reference to PlacementSpecNode.
+ * \sa PlacementSpecNode
+ */
+class PlacementSpec : public ObjectRef {
+ public:
+  TVM_DLL static PlacementSpec Sharding(int axis);
+
+  TVM_DLL static PlacementSpec Replica();
+
+  TVM_DEFINE_OBJECT_REF_METHODS(PlacementSpec, ObjectRef, PlacementSpecNode);
+};
+
+class ShardingNode : public PlacementSpecNode {
+ public:
+  /*! \brief The dimension of tensor we shard*/
+  Integer sharding_dim;
+
+  void VisitAttrs(tvm::AttrVisitor* v) { v->Visit("sharding_dim", &sharding_dim); }
+
+  bool SEqualReduce(const ShardingNode* other, SEqualReducer equal) const {
+    return equal(sharding_dim, other->sharding_dim);
+  }
+
+  void SHashReduce(SHashReducer hash_reduce) const { hash_reduce(sharding_dim); }
+  static constexpr const char* _type_key = "relax.distributed.Sharding";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ShardingNode, PlacementSpecNode);
+};
+
 /*! \brief Describes how data is distributed in each dimension of the device mesh*/
 class PlacementNode : public Object {
  public:
-  /*! \brief placement for each dim of device mesh. -1 represents replica, and integer >=0
-   * represents sharding dimension on tensor*/
-  Array<Integer> dim_placement;
+  /*! \brief specs for each dim of device mesh.*/
+  Array<PlacementSpec> dim_specs;
 
   String ToString() const;
 
-  void VisitAttrs(tvm::AttrVisitor* v) { v->Visit("dim_placement", &dim_placement); }
+  void VisitAttrs(tvm::AttrVisitor* v) { v->Visit("dim_specs", &dim_specs); }
 
   bool SEqualReduce(const PlacementNode* other, SEqualReducer equal) const {
-    return equal(dim_placement, other->dim_placement);
+    return equal(dim_specs, other->dim_specs);
   }
 
-  void SHashReduce(SHashReducer hash_reduce) const { hash_reduce(dim_placement); }
+  void SHashReduce(SHashReducer hash_reduce) const { hash_reduce(dim_specs); }
 
   static constexpr const bool _type_has_method_sequal_reduce = true;
   static constexpr const bool _type_has_method_shash_reduce = true;
@@ -60,10 +120,9 @@ class PlacementNode : public Object {
  */
 class Placement : public ObjectRef {
  public:
-  TVM_DLL explicit Placement(Array<Integer> dim_placement);
-  /*! \brief replica dim is printed as "R" and sharding dim is printed as "S[i]". So a text "S[1]R"
-   * can be translated into placement[1, -1]*/
-  TVM_DLL explicit Placement(String text_format);
+  TVM_DLL explicit Placement(Array<PlacementSpec> dim_specs);
+  /*! \brief replica dim is printed as "R" and sharding dim is printed as "S[i]".]*/
+  static Placement FromText(String text_repr);
   TVM_DEFINE_OBJECT_REF_METHODS(Placement, ObjectRef, PlacementNode);
 };
 

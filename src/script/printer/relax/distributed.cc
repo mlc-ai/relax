@@ -27,10 +27,11 @@ namespace printer {
 
 // distributed::Placement
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<relax::distributed::Placement>(
-        "", [](relax::distributed::Placement n, ObjectPath n_p, IRDocsifier d) -> Doc {
-          return d->AsDoc<Doc>(n->ToString(), n_p->Attr("dim_placement"));
-        });
+    .set_dispatch<relax::distributed::Placement>("",
+                                                 [](relax::distributed::Placement n, ObjectPath n_p,
+                                                    IRDocsifier d) -> Doc {
+                                                   return d->AsDoc<Doc>(n->ToString(), n_p);
+                                                 });
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<relax::distributed::DTensorStructInfo>(

@@ -17,5 +17,5 @@
 
 """The infrastructure for distributed inference on Relax."""
 
-from .global_info import *  # pylint: disable=wildcard-import,redefined-builtin
-from .struct_info import *  # pylint: disable=wildcard-import,redefined-builtin
+from .global_info import DeviceMesh, device_mesh
+from .struct_info import Placement, DTensorStructInfo, sharding, replica

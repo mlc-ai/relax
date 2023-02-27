@@ -88,7 +88,7 @@ def DTensor(
                 break
         assert isinstance(device_mesh, DeviceMesh)
     if isinstance(placement, str):
-        placement = Placement(placement)
+        placement = Placement.from_text(placement)
     return DTensorProxy(TensorProxy(shape, dtype, ndim), device_mesh, placement)
 
 

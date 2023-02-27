@@ -16,13 +16,68 @@
 # under the License.
 # pylint: disable=redefined-builtin, invalid-name
 """Struct Info for distributed tensor."""
+import enum
+from typing import List
 import tvm
 from tvm.relax.struct_info import StructInfo, TensorStructInfo
 from tvm.ir import Span
 from tvm.runtime.object import Object
+from tvm import TVMError
 
 from .global_info import DeviceMesh
 from . import _ffi_api
+
+
+class PlacementSpecKind(enum.IntEnum):
+    kSharding = 0
+    kReplica = 1
+
+
+@tvm._ffi.register_object("relax.distributed.PlacementSpec")
+class PlacementSpec(Object):
+    """Describes how data is distributed in one dimension of the device mesh
+
+    Parameters
+    ----------
+    axis: int
+        If the kind is sharding, this value represents the tensor dimension to shard.
+        otherwise, axis is -1
+    kind: PlacementSpecKind
+        The kind of placement spec. Possible values: kSharding and kReplica.
+    """
+
+    axis: int
+    kind: PlacementSpecKind
+
+    def __init__(self, *args, **kwargs):
+        raise TVMError("PlacementSpec is not intended to be constructed directly, ")
+
+
+def sharding(axis: int) -> PlacementSpec:
+    """Create a sharding placement spec
+
+    Parameters
+    ----------
+    axis: int
+        The tensor dimension to shard.
+
+    Returns
+    -------
+    placement_spec: PlacementSpec
+        The placement spec.
+    """
+    return _ffi_api.Sharding(axis)
+
+
+def replica() -> PlacementSpec:
+    """Create a replica placement spec
+
+    Returns
+    -------
+    placement_spec: PlacementSpec
+        The placement spec.
+    """
+    return _ffi_api.Replica()
 
 
 @tvm._ffi.register_object("relax.distributed.Placement")
@@ -31,12 +86,28 @@ class Placement(Object):
 
     Parameters
     ----------
-    text_format: str
-        The text format of placement.
+    dim_specs: List[PlacementSpec]
+        The placement spec for each dimension of the device mesh.
     """
 
-    def __init__(self, text_format: str):
-        self.__init_handle_by_constructor__(_ffi_api.Placement, text_format)  # type: ignore
+    def __init__(self, dim_specs: List[PlacementSpec]):
+        self.__init_handle_by_constructor__(_ffi_api.Placement, dim_specs)  # type: ignore
+
+    @staticmethod
+    def from_text(text: str) -> "Placement":
+        """Create a placement from a text string.
+
+        Parameters
+        ----------
+        text: str
+            The text string.
+
+        Returns
+        -------
+        placement: Placement
+            The placement.
+        """
+        return _ffi_api.PlacementFromText(text)
 
 
 @tvm._ffi.register_object("relax.DTensorStructInfo")
