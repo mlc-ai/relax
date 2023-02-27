@@ -39,7 +39,7 @@ DeviceMesh::DeviceMesh(ShapeTuple shape, Array<Integer> device_ids) {
 DeviceMesh::DeviceMesh(ShapeTuple shape, Range device_range) {
   ObjectPtr<DeviceMeshNode> n = make_object<DeviceMeshNode>();
   Array<Integer> device_ids;
-  int range_start = device_range.as<IntImmNode>()->value;
+  int range_start = device_range->min.as<IntImmNode>()->value;
   int range_extent = device_range->extent.as<IntImmNode>()->value;
   for (int i = range_start; i < range_start + range_extent; i++) {
     device_ids.push_back(i);
