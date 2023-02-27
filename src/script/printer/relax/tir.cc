@@ -84,10 +84,9 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
       return Relax(d, "Range")
           ->Call({
               d->AsDoc<ExprDoc>(range->min, p->Attr("min")),
-              d->AsDoc<ExprDoc>(range->extent+range->min, p->Attr("extent")),
+              d->AsDoc<ExprDoc>(range->extent + range->min, p->Attr("extent")),
           });
     });
-
 
 }  // namespace printer
 }  // namespace script

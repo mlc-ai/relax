@@ -18,13 +18,14 @@
  */
 #include <tvm/ir/expr.h>
 #include <tvm/relax/distributed/struct_info.h>
+
 #include "./utils.h"
 
 namespace tvm {
 namespace script {
 namespace printer {
 
-//distributed::Placement
+// distributed::Placement
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<relax::distributed::Placement>(
         "", [](relax::distributed::Placement n, ObjectPath n_p, IRDocsifier d) -> Doc {
@@ -50,32 +51,33 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
               }
               args.push_back(TupleDoc(shape_docs));
             } else {
-              args.push_back(d->AsDoc<ExprDoc>( n->tensor_sinfo->shape.value(), n_p->Attr("shape")));
+              args.push_back(d->AsDoc<ExprDoc>(n->tensor_sinfo->shape.value(), n_p->Attr("shape")));
             }
           } else {
             require_kwargs = true;
           }
           if (!n->tensor_sinfo->IsUnknownDtype()) {
-            if(!require_kwargs){
-                args.push_back(LiteralDoc::DataType(n->tensor_sinfo->dtype, n_p->Attr("dtype")));
+            if (!require_kwargs) {
+              args.push_back(LiteralDoc::DataType(n->tensor_sinfo->dtype, n_p->Attr("dtype")));
             } else {
-                kwargs_keys.push_back("dtype");
-                kwargs_values.push_back(LiteralDoc::DataType(n->tensor_sinfo->dtype, n_p->Attr("dtype")));
+              kwargs_keys.push_back("dtype");
+              kwargs_values.push_back(
+                  LiteralDoc::DataType(n->tensor_sinfo->dtype, n_p->Attr("dtype")));
             }
           } else {
             require_kwargs = true;
           }
           if (!require_kwargs) {
-            args.push_back(d->AsDoc<ExprDoc>( n->device_mesh, n_p->Attr("device_mesh")));
+            args.push_back(d->AsDoc<ExprDoc>(n->device_mesh, n_p->Attr("device_mesh")));
           } else {
             kwargs_keys.push_back("device_mesh");
-            kwargs_values.push_back(d->AsDoc<ExprDoc>( n->device_mesh, n_p->Attr("device_mesh")));
+            kwargs_values.push_back(d->AsDoc<ExprDoc>(n->device_mesh, n_p->Attr("device_mesh")));
           }
           if (!require_kwargs) {
-            args.push_back(d->AsDoc<ExprDoc>( n->placement, n_p->Attr("placement")));
+            args.push_back(d->AsDoc<ExprDoc>(n->placement, n_p->Attr("placement")));
           } else {
             kwargs_keys.push_back("placement");
-            kwargs_values.push_back(d->AsDoc<ExprDoc>( n->placement, n_p->Attr("placement")));
+            kwargs_values.push_back(d->AsDoc<ExprDoc>(n->placement, n_p->Attr("placement")));
           }
           if (!n->tensor_sinfo->shape.defined() && !n->tensor_sinfo->IsUnknownNdim()) {
             kwargs_keys.push_back("ndim");

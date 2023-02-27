@@ -38,9 +38,9 @@ class IRFrameNode : public FrameNode {
  public:
   Map<String, Array<GlobalInfo>>* global_infos = nullptr;
   void VisitAttrs(AttrVisitor* v) {
-     FrameNode::VisitAttrs(v); 
-     // `global_infos` is not visited
-    }
+    FrameNode::VisitAttrs(v);
+    // `global_infos` is not visited
+  }
 
   static constexpr const char* _type_key = "script.printer.IRFrame";
   TVM_DECLARE_FINAL_OBJECT_INFO(IRFrameNode, FrameNode);

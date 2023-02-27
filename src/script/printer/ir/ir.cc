@@ -160,10 +160,9 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
       return IR(d, "Range")
           ->Call({
               d->AsDoc<ExprDoc>(range->min, p->Attr("min")),
-              d->AsDoc<ExprDoc>(range->extent+range->min, p->Attr("extent")),
+              d->AsDoc<ExprDoc>(range->extent + range->min, p->Attr("extent")),
           });
     });
-
 
 std::string ReprPrintIRModule(const ObjectRef& mod, const PrinterConfig& cfg) {
   if (const auto* f = runtime::Registry::Get("relay.ir.PrintRelayModule")) {
