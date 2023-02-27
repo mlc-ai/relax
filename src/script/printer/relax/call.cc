@@ -120,14 +120,14 @@ Optional<ExprDoc> PrintCallTIR(const relax::Call& n, const ObjectPath& n_p, cons
     Array<ExprDoc> fields;
     ObjectPath fields_p = o_sinfo_p->Attr("fields");
     for (int i = 0, l = o->fields.size(); i < l; ++i) {
-      if (const auto* dtensor = o->fields[i].as<relax::distributed::DTensorStructInfoNode>()) {
+      if (o->fields[i].as<relax::distributed::DTensorStructInfoNode>()) {
         is_dtensor = true;
       }
       fields.push_back(d->AsDoc<ExprDoc>(o->fields[i], fields_p->ArrayIndex(i)));
     }
     kwargs_values.push_back(ListDoc(fields));
   } else {
-    if (const auto* dtensor = o_sinfo.as<relax::distributed::DTensorStructInfoNode>()) {
+    if (o_sinfo.as<relax::distributed::DTensorStructInfoNode>()) {
       is_dtensor = true;
     }
     kwargs_values.push_back(d->AsDoc<ExprDoc>(o_sinfo, o_sinfo_p));

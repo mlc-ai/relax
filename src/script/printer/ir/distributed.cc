@@ -43,7 +43,7 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
           bool has_relax_frame = false;
           const IRFrameNode* f = nullptr;
           for (const Frame& frame : d->frames) {
-            if (const auto* relax_frame = frame.as<RelaxFrameNode>()) {
+            if (frame.as<RelaxFrameNode>()) {
               has_relax_frame = true;
               break;
             } else if (const auto* ir_frame = frame.as<IRFrameNode>()) {
