@@ -58,8 +58,11 @@ DeviceMesh::DeviceMesh(ShapeTuple shape, Range device_range) {
 
 TVM_REGISTER_NODE_TYPE(DeviceMeshNode);
 TVM_REGISTER_GLOBAL("relax.distributed.DeviceMesh")
-    .set_body_typed([](ShapeTuple shape, Range device_range) {
-      return DeviceMesh(shape, device_range);
+    .set_body_typed([](ShapeTuple shape, Array<Integer> device_ids, Optional<Range> device_range) {
+      if(device_range.defined())
+        return DeviceMesh(shape, device_range.value());
+      else
+        return DeviceMesh(shape, device_ids);
     });
 
 }  // namespace distributed

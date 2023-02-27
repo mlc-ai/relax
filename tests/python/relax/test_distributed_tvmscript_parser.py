@@ -101,5 +101,50 @@ def test_call_tir_dtensor():
     _check(TestModule)
 
 
+def test_explicit_device_id():
+    @I.ir_module
+    class TestModule:
+        I.module_attrs({"device_num": 10})
+        I.module_global_infos(
+            {
+                "mesh": [
+                    I.device_mesh((2, 2), [0, 1, 2, 3]),  # mesh[0]
+                    I.device_mesh(
+                        (1,),
+                        [
+                            4,
+                        ],
+                    ),  # mesh[1]
+                ]
+            }
+        )
+
+        @T.prim_func
+        def tir_func(
+            x: T.Buffer((T.int64(128), T.int64(128)), "float32"),
+            y: T.Buffer((T.int64(128), T.int64(128)), "float32"),
+        ):
+            T.func_attr({"tir.noalias": True})
+            for i, j in T.grid(T.int64(128), T.int64(128)):
+                with T.block():
+                    vi, vj = T.axis.remap("SS", [i, j])
+                    y[vi, vj] = x[vi, vj] + 1.0
+
+        @R.function
+        def foo(
+            x: R.DTensor((128, 128), "float32", device_mesh="mesh[0]", placement="S[0], R"),
+        ) -> R.DTensor((128, 128), "float32", device_mesh="mesh[0]", placement="S[0], R"):
+            gv0 = R.dist.call_tir(
+                tir_func,
+                x,
+                R.DTensor(
+                    shape=(128, 128), dtype="float32", device_mesh="mesh[0]", placement="S[0], R"
+                ),
+            )
+            return gv0
+
+    _check(TestModule)
+
+
 if __name__ == "__main__":
-    test_call_tir_dtensor()
+    tvm.testing.main()

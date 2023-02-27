@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import tvm.testing
 from tvm.ir import Range
 from tvm.script.parser import ir as I
 from tvm.script.parser import relax as R
@@ -44,6 +45,12 @@ def test_dtensor_struct_info():
     assert (
         obj1.__str__()
         == """R.DTensor((32, 32), device_mesh=I.device_mesh((2, 2), R.Range(0, 4)), placement="S[1], R")"""
+    )
+
+    obj2 = DTensorStructInfo(tensor_sinfo2, DeviceMesh((2, 2), [0, 1, 2, 3]), Placement("S[1], R"))
+    assert (
+        obj2.__str__()
+        == """R.DTensor((32, 32), device_mesh=I.device_mesh((2, 2), [0, 1, 2, 3]), placement="S[1], R")"""
     )
 
 
