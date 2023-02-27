@@ -36,14 +36,6 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
           return TupleDoc(results);
         });
 
-TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<Range>("ir", [](Range range, ObjectPath p, IRDocsifier d) -> Doc {
-      return IR(d, "Range")
-          ->Call({
-              d->AsDoc<ExprDoc>(range->min, p->Attr("min")),
-              d->AsDoc<ExprDoc>(range->extent, p->Attr("extent")),
-          });
-    });
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<relax::distributed::DeviceMesh>(
@@ -59,7 +51,7 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
                     f = ir_frame;
                 }
             }
-            if(!has_relax_frame){
+            if (!has_relax_frame || !f) {
                 Array<ExprDoc> args;
                 args.push_back(d->AsDoc<ExprDoc>(n->shape, n_p->Attr("shape")));
                 if(n->device_range.defined()){
@@ -84,7 +76,6 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
         });
 
 TVM_SCRIPT_REPR(relax::distributed::DeviceMeshNode, ReprPrintIR);
-TVM_SCRIPT_REPR(RangeNode, ReprPrintIR);
 
 }  // namespace printer
 }  // namespace script

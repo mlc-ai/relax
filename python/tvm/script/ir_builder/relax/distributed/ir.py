@@ -24,8 +24,9 @@ from tvm.relax.expr import Expr, ShapeExpr, Call, ExternFunc
 from tvm.relax.expr import Tuple as RxTuple
 from tvm.relax.distributed import DTensorStructInfo
 from . import _ffi_api
+from tvm.relax.utils import args_converter
 
-
+@args_converter.auto
 def call_tir(
     func: Union[str, Expr],
     args: Expr,

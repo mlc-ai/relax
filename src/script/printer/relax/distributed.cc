@@ -38,7 +38,7 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
           Array<String> kwargs_keys;
           Array<ExprDoc> kwargs_values;
           bool require_kwargs = false;
-          if ( n->tensor_sinfo->shape.defined()) {
+          if (n->tensor_sinfo->shape.defined()) {
             // Need to dig into ShapeExpr to preserve the `R.shape` prefix
             if (const auto* shape = n->tensor_sinfo->shape.value().as<relax::ShapeExprNode>()) {
               auto shape_expr = GetRef<relax::ShapeExpr>(shape);
@@ -65,23 +65,23 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
           } else {
             require_kwargs = true;
           }
-          if(!require_kwargs){
+          if (!require_kwargs) {
             args.push_back(d->AsDoc<ExprDoc>( n->device_mesh, n_p->Attr("device_mesh")));
           } else {
             kwargs_keys.push_back("device_mesh");
             kwargs_values.push_back(d->AsDoc<ExprDoc>( n->device_mesh, n_p->Attr("device_mesh")));
           }
-        if(!require_kwargs){
+          if (!require_kwargs) {
             args.push_back(d->AsDoc<ExprDoc>( n->placement, n_p->Attr("placement")));
-        } else {
+          } else {
             kwargs_keys.push_back("placement");
             kwargs_values.push_back(d->AsDoc<ExprDoc>( n->placement, n_p->Attr("placement")));
-        }
-        if (!n->tensor_sinfo->shape.defined() && !n->tensor_sinfo->IsUnknownNdim()) {
+          }
+          if (!n->tensor_sinfo->shape.defined() && !n->tensor_sinfo->IsUnknownNdim()) {
             kwargs_keys.push_back("ndim");
             kwargs_values.push_back(LiteralDoc::Int(n->tensor_sinfo->ndim, n_p->Attr("ndim")));
           }
-        return Relax(d, "Tensor")->Call(args, kwargs_keys, kwargs_values);
+          return Relax(d, "DTensor")->Call(args, kwargs_keys, kwargs_values);
         });
 
 TVM_SCRIPT_REPR(relax::distributed::PlacementNode, ReprPrintRelax);
