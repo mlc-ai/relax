@@ -25,9 +25,7 @@ from ...expr import Call, Expr, Var, Tuple, TupleGetItem
 from .common import TEFunc, LegalizeFunc, register_legalize
 
 
-def _reshape(
-    te_func: TEFunc, primfunc_name: str, is_collapse_sum_like: bool = False
-) -> LegalizeFunc:
+def _reshape(te_func: TEFunc, primfunc_name: str) -> LegalizeFunc:
     def reshape_call_te(bb: BlockBuilder, call: Call):
         return bb.call_te(
             te_func, call.args[0], call.struct_info.shape, primfunc_name_hint=primfunc_name
@@ -38,10 +36,7 @@ def _reshape(
 
 register_legalize("relax.broadcast_to", _reshape(topi.broadcast_to, "broadcast_to"))
 register_legalize("relax.reshape", _reshape(topi.reshape, "reshape"))
-register_legalize(
-    "relax.collapse_sum_like",
-    _reshape(topi.collapse_sum, "collapse_sum", is_collapse_sum_like=True),
-)
+register_legalize("relax.collapse_sum_like", _reshape(topi.collapse_sum, "collapse_sum"))
 register_legalize("relax.collapse_sum_to", _reshape(topi.collapse_sum, "collapse_sum"))
 
 
