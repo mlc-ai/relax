@@ -652,7 +652,7 @@ def instantiate_template(func_name, annotations, func_args):
 
         code = instantiate_conv2d_template(attrs, func_args)
         return CodegenResult(code, headers)
-        
+
     elif "attention" in func_name:
         headers.append("kernel_forward.h")
         attrs["num_batches"] = str(int(annotations["num_batches"]))
