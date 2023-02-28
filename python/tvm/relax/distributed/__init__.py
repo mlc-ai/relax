@@ -14,19 +14,8 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""The ir module parser"""
-from tvm.relax.distributed import device_mesh
-from tvm.ir import Range
-from ...ir_builder.ir import *  # pylint: disable=redefined-builtin
-from . import parser as _parser
-from .entry import ir_module
 
+"""The infrastructure for distributed inference on Relax."""
 
-__all__ = [
-    "ir_module",
-    "module_attrs",
-    "module_global_infos",
-    "dummy_global_info",
-    "device_mesh",
-    "Range",
-]
+from .global_info import DeviceMesh, device_mesh
+from .struct_info import Placement, DTensorStructInfo, PlacementSpec

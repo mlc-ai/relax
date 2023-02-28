@@ -79,6 +79,15 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
           return ret;
         });
 
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<Range>("relax", [](Range range, ObjectPath p, IRDocsifier d) -> Doc {
+      return Relax(d, "Range")
+          ->Call({
+              d->AsDoc<ExprDoc>(range->min, p->Attr("min")),
+              d->AsDoc<ExprDoc>(range->extent + range->min, p->Attr("extent")),
+          });
+    });
+
 }  // namespace printer
 }  // namespace script
 }  // namespace tvm
