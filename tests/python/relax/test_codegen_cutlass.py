@@ -22,6 +22,7 @@ import pytest
 
 import tvm
 import tvm.testing
+import tvm.topi.testing
 from tvm import relax, relay
 from tvm.relax.backend import get_patterns_with_prefix
 from tvm.script import relax as R
@@ -436,6 +437,80 @@ def test_matmul_transposed_bias_gelu_offload(matmul_x, matmul_y, matmul_bias):
     ref = get_relay_ref(ref_relay_expr, x, y.transpose(), bias)
 
     tvm.testing.assert_allclose(out, ref, rtol=1e-2, atol=1e-3)
+
+
+@pytest.fixture(
+    params=[
+        # B, S, N, H
+        (32, (4, 4), 16, (8, 8)),
+        (4, (8, 4), 32, (8, 8)),
+        (4, (8, 4), 32, (8, 16)),
+    ]
+)
+def attention_size(request):
+    return request.param
+
+
+@pytest.fixture
+def attention_q(attention_size, target_dtype):
+    b, (s, _), n, (h, _) = attention_size
+    return np.random.randn(b, s, n, h).astype(target_dtype)
+
+
+@pytest.fixture
+def attention_k(attention_size, target_dtype):
+    b, (_, s), n, (h, _) = attention_size
+    return np.random.randn(b, s, n, h).astype(target_dtype)
+
+
+@pytest.fixture
+def attention_v(attention_size, target_dtype):
+    b, (_, s), n, (_, h) = attention_size
+    return np.random.randn(b, s, n, h).astype(target_dtype)
+
+
+def get_relax_attention_module(q, k, v):
+    dtype = str(q.dtype)
+
+    from tvm.script.ir_builder import IRBuilder
+    from tvm.script.ir_builder import relax as relax_builder
+
+    with IRBuilder() as builder:
+        with relax_builder.function():
+            R.func_name("main")
+            q = R.arg("q", R.Tensor(q.shape, dtype))
+            k = R.arg("k", R.Tensor(k.shape, dtype))
+            v = R.arg("v", R.Tensor(v.shape, dtype))
+
+            with R.dataflow() as frame:
+                result = R.emit(R.nn.attention(q, k, v))
+                R.output(result)
+
+            R.func_ret_value(frame.output_vars[0])
+
+    func = builder.get()
+    return tvm.IRModule({"main": func})
+
+
+def get_numpy_attention_ref(q, k, v):
+    qt = q.transpose(0, 2, 1, 3)  # b, n, s, h
+    kt = k.transpose(0, 2, 3, 1)  # b, n, h, s
+    score = qt @ kt / np.sqrt(q.shape[-1])  # b, n, s, s
+    attn = tvm.topi.testing.softmax_python(score, -1)
+    vt = v.transpose(0, 2, 1, 3)  # b, n, s, h
+    ref = attn @ vt  # b, n, s, h
+    return ref.transpose(0, 2, 1, 3)  # b, s, n, h
+
+
+def test_attention_offload(attention_q, attention_k, attention_v):
+    q, k, v = attention_q, attention_k, attention_v
+
+    mod = get_relax_attention_module(q, k, v)
+    out = get_result_with_relax_cutlass_offload(mod, q, k, v)
+
+    ref = get_numpy_attention_ref(q, k, v)
+
+    tvm.testing.assert_allclose(out, ref, rtol=1e-2, atol=1e-2)
 
 
 if __name__ == "__main__":

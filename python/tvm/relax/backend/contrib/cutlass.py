@@ -20,7 +20,7 @@
 from tvm.relax import transform
 
 from ..pattern_registry import get_patterns_with_prefix, register_patterns
-from ..patterns import make_fused_bias_activation_pattern, make_matmul_pattern
+from ..patterns import make_fused_bias_activation_pattern, make_matmul_pattern, make_attention_pattern
 
 register_patterns(
     [
@@ -95,6 +95,10 @@ register_patterns(
                 activation="relax.nn.gelu",
                 transposed_rhs=True,
             ),
+        ),
+        (
+            "cutlass.attention",
+            make_attention_pattern(),
         ),
     ]
 )
