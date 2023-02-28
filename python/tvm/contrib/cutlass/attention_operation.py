@@ -33,7 +33,7 @@ def instantiate_attention_template(attrs, func_args):
 
   using Attention =
       AttentionKernel<T,
-                      /*ArchTag=*/${arch}, 
+                      /*ArchTag=*/${arch},
                       /*is_aligned=*/true,
                       /*queries_per_block=*/${kQueriesPerBlock},
                       /*keys_per_block=*/${kKeysPerBlock},
@@ -88,8 +88,7 @@ def instantiate_attention_template(attrs, func_args):
   }
 
   CHECK(Attention::check_supported(p));
-  kernel_fn<<<p.getBlocksGrid(), p.getThreadsGrid(),
-              smem_bytes /*cuda stream?*/>>>(p);
+  kernel_fn<<<p.getBlocksGrid(), p.getThreadsGrid(), smem_bytes>>>(p);
 """
     for i, arg in enumerate(func_args):
         attrs["arg{}".format(i)] = arg
