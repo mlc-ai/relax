@@ -128,9 +128,9 @@ def make_attention_pattern():
         The mapping from arg name to its pattern. It can be used to extract
         arg expression from match result.
     """
-    q = wildcard()
-    k = wildcard()
-    v = wildcard()
-    out = is_op("relax.nn.attention")(q, k, v)
+    query = wildcard()
+    key = wildcard()
+    value = wildcard()
+    out = is_op("relax.nn.attention")(query, key, value)
 
     return out
