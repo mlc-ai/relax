@@ -29,7 +29,9 @@ def _reshape(
     te_func: TEFunc, primfunc_name: str, is_collapse_sum_like: bool = False
 ) -> LegalizeFunc:
     def reshape_call_te(bb: BlockBuilder, call: Call):
-        return bb.call_te(te_func, call.args[0], call.struct_info.shape, primfunc_name_hint=primfunc_name)
+        return bb.call_te(
+            te_func, call.args[0], call.struct_info.shape, primfunc_name_hint=primfunc_name
+        )
 
     return reshape_call_te
 
