@@ -56,6 +56,7 @@ def extract_tasks(
     mod: Union[IRModule, "relax.Function"],
     target: Target,
     params: Optional[Dict[str, NDArray]] = None,
+    module_equality: str = "structural",
 ) -> List[ExtractedTask]:
     """Extract tuning tasks from a relax program.
 
@@ -65,6 +66,16 @@ def extract_tasks(
         The module or function to tune
     target : tvm.target.Target
         The compilation target
+    module_equality : str
+        A string to specify the module equality testing and hashing method.
+        It must be one of the followings:
+          - "structural": Use StructuralEqual/Hash
+          - "ignore-ndarray": Same as "structural", but ignore ndarray raw data during
+                              equality testing and hashing.
+          - "anchor-block": Apply equality testing and hashing on the anchor block extracted from a
+                            given module. The "ignore-ndarray" varint is used for the extracted
+                            blocks or in case no anchor block is found.
+                            For the definition of the anchor block, see tir/analysis/analysis.py.
 
     Returns
     -------
@@ -82,7 +93,7 @@ def extract_tasks(
         target = Target(target)
     if params:
         mod = BindParams("main", params)(mod)
-    return list(_extract_task_func(mod, target))
+    return list(_extract_task_func(mod, target, module_equality))
 
 
 def extracted_tasks_to_tune_contexts(
@@ -158,6 +169,7 @@ def tune_relax(
     space: SpaceGenerator.SpaceGeneratorType = "post-order-apply",
     strategy: SearchStrategy.SearchStrategyType = "evolutionary",
     seed: Optional[int] = None,
+    module_equality: str = "structural",
 ) -> Database:
     """Tune a Relax program.
 
@@ -202,7 +214,7 @@ def tune_relax(
         The database that contains the tuning records
     """
     tasks, task_weights = extracted_tasks_to_tune_contexts(
-        extracted_tasks=extract_tasks(mod, target, params),
+        extracted_tasks=extract_tasks(mod, target, params, module_equality),
         work_dir=work_dir,
         space=space,
         strategy=strategy,
@@ -221,6 +233,7 @@ def tune_relax(
         cost_model=cost_model,
         measure_callbacks=measure_callbacks,
         task_scheduler=task_scheduler,
+        module_equality=module_equality,
     )
 
 
@@ -243,6 +256,7 @@ def _tune_relax(
     space: SpaceGenerator.SpaceGeneratorType = "post-order-apply",
     strategy: SearchStrategy.SearchStrategyType = "evolutionary",
     seed: Optional[int] = None,
+    module_equality: str = "structural",
 ) -> Database:
     """Interface with tuning api to tune a Relax program.
 
@@ -306,6 +320,7 @@ def _tune_relax(
         space=space,
         strategy=strategy,
         seed=seed,
+        module_equality=module_equality,
     )
     # Return original IRModule
     # This pass only makes optimization decision
@@ -317,6 +332,7 @@ def compile_relax(
     mod: IRModule,
     target: Union[Target, str],
     params: Optional[Dict[str, NDArray]],
+    module_equality: str = "structural",
 ) -> "relax.Executable":
     """Compile a relax program with a MetaSchedule database.
 
@@ -330,6 +346,16 @@ def compile_relax(
         The compilation target
     params : Optional[Dict[str, tvm.runtime.NDArray]]
         The associated parameters of the program
+    module_equality : str
+        A string to specify the module equality testing and hashing method.
+        It must be one of the followings:
+          - "structural": Use StructuralEqual/Hash
+          - "ignore-ndarray": Same as "structural", but ignore ndarray raw data during
+                              equality testing and hashing.
+          - "anchor-block": Apply equality testing and hashing on the anchor block extracted from a
+                            given module. The "ignore-ndarray" varint is used for the extracted
+                            blocks or in case no anchor block is found.
+                            For the definition of the anchor block, see tir/analysis/analysis.py.
 
     Returns
     -------
@@ -347,6 +373,6 @@ def compile_relax(
         mod = BindParams("main", params)(mod)
 
     with target, database, PassContext(opt_level=3):
-        relax_mod = MetaScheduleApplyDatabase()(mod)
+        relax_mod = MetaScheduleApplyDatabase(module_equality=module_equality)(mod)
         relax_ex = relax_build(relax_mod, target=target)
     return relax_ex

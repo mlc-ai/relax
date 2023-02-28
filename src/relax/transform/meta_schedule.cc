@@ -83,7 +83,7 @@ class MetaScheduleTuner {
   const runtime::PackedFunc* normalize_mod_func_;
 };
 
-Pass MetaScheduleApplyDatabase(Optional<String> work_dir) {
+Pass MetaScheduleApplyDatabase(Optional<String> work_dir, String mod_eq_name) {
   using tvm::meta_schedule::Database;
   Target target = Target::Current(false);
   const runtime::PackedFunc* normalize_mod_func_ =
@@ -101,7 +101,8 @@ Pass MetaScheduleApplyDatabase(Optional<String> work_dir) {
       String path_tuning_record = work_dir.value() + "/database_tuning_record.json";
       LOG(WARNING) << "Creating JSONDatabase. Workload at: " << path_workload
                    << ", Tuning records at: " << path_tuning_record;
-      database = meta_schedule::Database::JSONDatabase(path_workload, path_tuning_record, true);
+      database = meta_schedule::Database::JSONDatabase(path_workload, path_tuning_record, true,
+                                                       mod_eq_name);
     }
 
     Map<GlobalVar, BaseFunc> result;
