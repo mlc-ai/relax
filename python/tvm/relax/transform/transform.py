@@ -454,23 +454,6 @@ def LegalizeOps(customize_legalize_map: Optional[Dict[str, LegalizeFunc]] = None
     return _ffi_api.LegalizeOps(customize_legalize_map)  # type: ignore
 
 
-def ToTrainMode():
-    """Rewriting some operators to its training mode.
-
-    Some operators behave differently in eval mode and train mode (e.g. BatchNorm).
-    Usually, there will be a training: bool flag to indicate whether the operator is
-    in training mode. This pass can turn a relax function to "train mode" by setting
-    the training flag as true for all this kind of operators.
-
-    Returns
-    -------
-    ret : tvm.transform.Pass
-        The registered pass
-    """
-
-    return _ffi_api.ToTrainMode()  # type: ignore
-
-
 def MetaScheduleApplyDatabase(
     work_dir: Optional[str] = None,
 ) -> tvm.ir.transform.Pass:

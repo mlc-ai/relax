@@ -111,10 +111,21 @@ def batch_norm(
     shape = [1] * len(data.shape)
     shape[axis] = data.shape[axis]
 
-    moving_mean_rs = topi.reshape(moving_mean, shape)
-    moving_var_rs = topi.reshape(moving_var, shape)
-
-    out = (data - moving_mean_rs) / topi.math.sqrt(moving_var_rs + epsilon)
+    if training:
+        reduce_axes = list(range(len(data.shape)))
+        reduce_axes.remove(axis)
+        shape_prod = reduce(lambda x, y: x * y, [data.shape[ax] for ax in reduce_axes])
+        data_mean = topi.sum(data, axis=reduce_axes) / shape_prod
+        data_mean_rs = topi.reshape(data_mean, shape)
+        data_var = (
+            topi.sum((data - data_mean_rs) * (data - data_mean_rs), axis=reduce_axes) / shape_prod
+        )
+        data_var_rs = topi.reshape(data_var, shape)
+        out = (data - data_mean_rs) / topi.math.sqrt(data_var_rs + epsilon)
+    else:
+        moving_mean_rs = topi.reshape(moving_mean, shape)
+        moving_var_rs = topi.reshape(moving_var, shape)
+        out = (data - moving_mean_rs) / topi.math.sqrt(moving_var_rs + epsilon)
 
     if scale:
         out = out * topi.reshape(gamma, shape)
@@ -123,18 +134,13 @@ def batch_norm(
 
     if training:
         assert 0 <= momentum <= 1, "the valid momentum range is [0, 1]."
-        reduce_axes = list(range(len(data.shape)))
-        reduce_axes.remove(axis)
-        shape_prod = reduce(lambda x, y: x * y, [data.shape[ax] for ax in reduce_axes])
-        new_mean = topi.sum(data, axis=reduce_axes) / shape_prod
-        new_mean_rs = topi.reshape(new_mean, shape)
-        new_var = (
-            topi.sum((data - new_mean_rs) * (data - new_mean_rs), axis=reduce_axes) / shape_prod
+        data_var = (
+            topi.sum((data - data_mean_rs) * (data - data_mean_rs), axis=reduce_axes) / shape_prod
         )
         return [
             out,
-            (1 - momentum) * moving_mean + momentum * new_mean,
-            (1 - momentum) * moving_var + momentum * new_var,
+            (1 - momentum) * moving_mean + momentum * data_mean,
+            (1 - momentum) * moving_var + momentum * data_var,
         ]
 
     # Moving mean and var aren't updated during test. To avoid

@@ -147,7 +147,7 @@ def test_batch_norm():
             R.Tensor((2, 4, 3, 3), dtype="float32"),
             R.Tensor((4,), dtype="float32"),
             R.Tensor((4,), dtype="float32"),
-        ) = R.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=1)
+        ) = R.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=1, momentum=0.1)
         return gv
 
     x = relax.Var("x", R.Tensor((2, 4, 3, 3), "float32"))
@@ -158,7 +158,9 @@ def test_batch_norm():
 
     bb = relax.BlockBuilder()
     with bb.function("foo", [x, gamma, beta, moving_mean, moving_var]):
-        gv = bb.emit(relax.op.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=1))
+        gv = bb.emit(
+            relax.op.nn.batch_norm(x, gamma, beta, moving_mean, moving_var, axis=1, momentum=0.1)
+        )
         bb.emit_func_output(gv)
 
     _check(foo, bb.get()["foo"])

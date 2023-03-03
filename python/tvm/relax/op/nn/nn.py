@@ -386,7 +386,6 @@ def batch_norm(
     epsilon: float = 1e-5,
     center: bool = True,
     scale: bool = True,
-    training: bool = False,
     momentum: float = 0.1,
 ) -> Expr:
     r"""
@@ -427,6 +426,9 @@ def batch_norm(
 
     .. note::
 
+        By default this operator is in the training module (i.e. it will return the updated
+        moving_mean and moving_var).
+
         This operator can be optimized away for inference.
 
     Parameters
@@ -458,10 +460,6 @@ def batch_norm(
     scale : bool
         Indicating if the gamma scale will be multiplied.
 
-    training : bool
-        Indicating whether it is in training mode. If True, update
-        moving_mean and moving_var.
-
     momentum : float
         The value used for the moving_mean and moving_var update.
 
@@ -471,7 +469,7 @@ def batch_norm(
         The computed result.
     """
     return _ffi_api.batch_norm(  # type: ignore
-        data, gamma, beta, moving_mean, moving_var, axis, epsilon, center, scale, training, momentum
+        data, gamma, beta, moving_mean, moving_var, axis, epsilon, center, scale, momentum
     )
 
 
