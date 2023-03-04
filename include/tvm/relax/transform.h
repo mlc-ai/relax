@@ -273,7 +273,6 @@ TVM_DLL Pass RemoveUnusedFunctions(Array<runtime::String> entry_functions);
 TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_options,
                         Array<runtime::String> entry_functions);
 
-
 /*!
  * \brief Simplify normalization operators during inference. For example, the result
  * of a batch norm which is indexed at tuple index 0 will be unpacked into a
