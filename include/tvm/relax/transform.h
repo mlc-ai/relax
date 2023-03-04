@@ -336,6 +336,29 @@ class PatternCheckContext : public ObjectRef {
 };
 
 /*!
+ * \brief Simplify normalization operators during inference. For example, the result
+ * of a batch norm which is indexed at tuple index 0 will be unpacked into a
+ * number of simplified operators.
+ * \return The Pass.
+ */
+TVM_DLL Pass SimplifyNormInference();
+
+/*!
+ * \brief Returns a pass which replaces PrimFuncs which have matching kOperatorName attribute in \p
+ * op_impl_map, with replacement PrimFunc that could possibly have different layouts on i/o
+ * buffers. The layout transformations on i/o buffers is present in the \p op_buffer_transforms. The
+ * pass inserts the layout transformations in the call sites of PrimFuncs being replaced to
+ * transform i/o buffers into expected layout.
+ *
+ * \param op_impl_map Map from from kOperatorName attr (e.g., relax.conv2d) to replacement PrimFunc
+ * \param op_buffer_transforms Map from kOperatorName attr to layout transformations on each of the
+ * PrimFunc i/o buffers.
+ * \return The Pass.
+ */
+TVM_DLL Pass AlterOpImpl(const Map<String, tir::PrimFunc>& op_impl_map,
+                         const Map<String, Array<tir::IndexMap>>& op_buffer_transforms);
+
+/*!
  * \brief Reverse-mode automatic differentiation.
  *
  * This pass will differentiate one function in the IRModule. Now the input function must have only
