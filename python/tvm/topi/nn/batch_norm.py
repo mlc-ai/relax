@@ -114,7 +114,7 @@ def batch_norm(
     if training:
         reduce_axes = list(range(len(data.shape)))
         reduce_axes.remove(axis)
-        shape_prod = reduce(lambda x, y: x * y, [data.shape[ax] for ax in reduce_axes])
+        shape_prod = reduce(lambda x, y: x * y, [data.shape[ax] for ax in reduce_axes], 1)
         data_mean = topi.sum(data, axis=reduce_axes) / shape_prod
         data_mean_rs = topi.reshape(data_mean, shape)
         data_var = (

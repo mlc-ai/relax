@@ -178,7 +178,7 @@ def _nn_batch_norm(bb: BlockBuilder, call: Call) -> Expr:
         center=call.attrs.center,
         scale=call.attrs.scale,
         # By default relax batch_norm is training mode.
-        # To transform it to eval mode, use Norm SimplifyInference pass.
+        # To transform it to eval mode, use SimplifyNormInference pass.
         training=True,
         momentum=call.attrs.momentum,
     )
