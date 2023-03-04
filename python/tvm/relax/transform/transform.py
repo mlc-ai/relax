@@ -697,6 +697,8 @@ def Gradient(
     if require_grads is not None and not isinstance(require_grads, list):
         require_grads = [require_grads]
 
+    return _ffi_api.Gradient(func_name, require_grads, target_index)  # type: ignore
+
 
 def SimplifyNormInference() -> tvm.ir.transform.Pass:
     """Simplify normalization operators during inference. For example, the result
