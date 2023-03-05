@@ -611,6 +611,22 @@ def NarrowDataType(target_bits: int):
     return _ffi_api.NarrowDataType(target_bits)  # type: ignore
 
 
+def NarrowDataTypeToI32():
+    """Narrow down indexing expressions and integer buffers to int32 dtype.
+
+    Returns
+    -------
+    fpass : tvm.transform.Pass
+        The result pass
+
+    Note
+    ----
+    fpass : tvm.transform.Pass
+        The result pass
+    """
+    return _ffi_api.NarrowDataTypeToI32()  # type: ignore
+
+
 def VerifyMemory():
     """Verify if func contains illegal host side direct memory access.
 

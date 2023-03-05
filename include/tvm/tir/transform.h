@@ -337,6 +337,13 @@ TVM_DLL Pass CombineContextCall();
 TVM_DLL Pass NarrowDataType(int target_bits);
 
 /*!
+ * \brief Narrow down indexing expressions and integer buffers to int32 dtype.
+ *
+ * \return The pass.
+ */
+TVM_DLL Pass NarrowDataTypeToI32();
+
+/*!
  * \brief Legalize bf16 typed Ops. Add a cast to fp32
  *   before Ops, then add a cast back to bf16.
  * \return The pass.
