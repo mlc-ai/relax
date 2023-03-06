@@ -305,8 +305,8 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
       if (IsNumber(a) && IsNumber(b)) {
         return TIR(d, "Div")->Call({a, b});
       }
-      if ((node->a->dtype.is_int() || node->a->dtype.is_uint()) && node->b->dtype.is_int() ||
-          node->b->dtype.is_uint()) {
+      if ((node->a->dtype.is_int() || node->a->dtype.is_uint()) &&
+          (node->b->dtype.is_int() || node->b->dtype.is_uint())) {
         return TIR(d, "truncdiv")->Call({a, b});
       }
       return OperationDoc(OperationDocNode::Kind::kDiv, {a, b});
