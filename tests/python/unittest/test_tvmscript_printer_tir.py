@@ -536,6 +536,19 @@ a {} b""".format(
         _assert_print(obj, expected)
 
 
+def test_int_div():
+    a = tir.Var("a", "int32")
+    b = tir.Var("b", "int32")
+    _assert_print(
+        tir.Div(a, b),
+        """
+a = T.int32()
+b = T.int32()
+T.truncdiv(a, b)
+""",
+    )
+
+
 def test_logical():
     a = tir.Var("a", "bool")
     b = tir.Var("b", "bool")

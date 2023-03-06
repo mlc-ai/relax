@@ -298,6 +298,20 @@ bool IsNumber(const ExprDoc& e) {
   return false;
 }
 
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<tir::Div>("", [](tir::Div node, ObjectPath p, IRDocsifier d) -> Doc {
+      ExprDoc a = d->AsDoc<ExprDoc>(node->a, p->Attr("a"));
+      ExprDoc b = d->AsDoc<ExprDoc>(node->b, p->Attr("b"));
+      if (IsNumber(a) && IsNumber(b)) {
+        return TIR(d, "Div")->Call({a, b});
+      }
+      if ((node->a->dtype.is_int() || node->a->dtype.is_uint()) && node->b->dtype.is_int() ||
+          node->b->dtype.is_uint()) {
+        return TIR(d, "truncdiv")->Call({a, b});
+      }
+      return OperationDoc(OperationDocNode::Kind::kDiv, {a, b});
+    });
+
 #define TVM_SCRIPT_PRINTER_DEF_BINARY_WITH_SUGAR(NodeType, OpString, OpKind)                      \
   TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)                                                      \
       .set_dispatch<tir::NodeType>("",                                                            \
@@ -313,7 +327,6 @@ bool IsNumber(const ExprDoc& e) {
 TVM_SCRIPT_PRINTER_DEF_BINARY_WITH_SUGAR(Add, "Add", kAdd);
 TVM_SCRIPT_PRINTER_DEF_BINARY_WITH_SUGAR(Sub, "Sub", kSub);
 TVM_SCRIPT_PRINTER_DEF_BINARY_WITH_SUGAR(Mul, "Mul", kMult);
-TVM_SCRIPT_PRINTER_DEF_BINARY_WITH_SUGAR(Div, "Div", kDiv);
 TVM_SCRIPT_PRINTER_DEF_BINARY_WITH_SUGAR(FloorDiv, "FloorDiv", kFloorDiv);
 TVM_SCRIPT_PRINTER_DEF_BINARY_WITH_SUGAR(FloorMod, "FloorMod", kMod);
 TVM_SCRIPT_PRINTER_DEF_BINARY_WITH_SUGAR(LT, "LT", kLt);
