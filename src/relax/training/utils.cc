@@ -28,6 +28,8 @@
 #include <tvm/relax/expr_functor.h>
 #include <tvm/relax/transform.h>
 
+#include <unordered_set>
+
 #include "../transform/utils.h"
 
 namespace tvm {
