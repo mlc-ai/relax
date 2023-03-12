@@ -301,20 +301,27 @@ class BackwardBindingGenerator : private ExprVisitor {
 
 class GradientMutator : private ExprMutator {
  public:
-  static IRModule Transform(IRModule mod, String func_name, Array<Var> require_grads,
+  static IRModule Transform(IRModule mod, String func_name, Optional<Array<Var>> require_grads,
                             int target_index) {
-    Function old_func = Downcast<Function>(mod->Lookup(func_name));
-    CheckRequireGrads(require_grads, old_func->params, func_name);
+    auto* old_func_ptr = mod->Lookup(func_name).as<FunctionNode>();
+    CHECK(old_func_ptr) << func_name << "is not a Relax Function";
+    auto old_func = GetRef<Function>(old_func_ptr);
+
+    // when require_grads is not specified, it would be set to all params of the function
+    auto require_grads_value = require_grads.value_or(old_func->params);
+
+    CheckRequireGrads(require_grads_value, old_func->params, func_name);
 
     Function new_func = CopyWithNewVars(old_func);
     // map the parameter list into new params
-    for (size_t i = 0; i < require_grads.size(); ++i) {
-      int idx = std::find(old_func->params.begin(), old_func->params.end(), require_grads[i]) -
-                old_func->params.begin();
-      require_grads.Set(i, new_func->params[idx]);
+    for (size_t i = 0; i < require_grads_value.size(); ++i) {
+      int idx =
+          std::find(old_func->params.begin(), old_func->params.end(), require_grads_value[i]) -
+          old_func->params.begin();
+      require_grads_value.Set(i, new_func->params[idx]);
     }
 
-    GradientMutator mutator(mod, require_grads, target_index);
+    GradientMutator mutator(mod, require_grads_value, target_index);
     Function new_func_transformed = Downcast<Function>(mutator.VisitExpr(new_func));
 
     IRModule new_module = GetRef<IRModule>(mod.CopyOnWrite());
@@ -327,14 +334,11 @@ class GradientMutator : private ExprMutator {
       : ExprMutator(module), require_grads_(require_grads), target_index_(target_index) {}
 
   Expr VisitExpr_(const FunctionNode* func) final {
-    CHECK(func->body->IsInstance<SeqExprNode>())
-        << "Currently the body of the function must be SeqExpr.";
-    auto* func_sinfo = GetStructInfoAs<FuncStructInfoNode>(GetRef<Function>(func));
-    CHECK(func_sinfo->params.defined()) << "Currently don't support opaque function.";
+    CHECK(func->body->IsInstance<SeqExprNode>()) << "The body of the function must be SeqExpr.";
 
     Expr new_body = this->VisitExpr(func->body);
 
-    return Function(func->params, new_body, GetStructInfo(return_expr_), func->attrs);
+    return Function(func->params, new_body, NullOpt, func->attrs);
   }
 
   Expr VisitExpr_(const SeqExprNode* seq_expr) final {
@@ -433,32 +437,12 @@ class GradientMutator : private ExprMutator {
   Expr return_expr_;
 };
 
-/*!
- * \brief This is the internal function of tvm::relax::transform::Gradient.
- * \param mod The module
- * \param func_name The name of the specified function
- * \param require_grads The relax variables whose adjoints are needed.
- * \return The module after transformation.
- */
-IRModule Gradient(const IRModule& mod, const String& func_name, Optional<Array<Var>> require_grads,
-                  int target_index) {
-  auto* func = mod->Lookup(func_name).as<FunctionNode>();
-  CHECK(func) << func_name << "is not a Relax Function";
-
-  if (!require_grads.defined()) {
-    // when require_grads is not specified, it would be set to all params of the function
-    require_grads = func->params;
-  }
-
-  return GradientMutator::Transform(mod, func_name, require_grads.value(), target_index);
-}
-
 namespace transform {
 
 Pass Gradient(String func_name, Optional<Array<Var>> require_grads, int target_index) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule mod,
                                                                             PassContext pc) {
-    return relax::Gradient(mod, func_name, require_grads, target_index);
+    return relax::GradientMutator::Transform(mod, func_name, require_grads, target_index);
   };
   return CreateModulePass(/*pass_function=*/pass_func,
                           /*opt_level=*/0,

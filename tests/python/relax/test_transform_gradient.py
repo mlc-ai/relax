@@ -55,8 +55,7 @@ def test_simple():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main"], Expected["main"])
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_assign_binding():
@@ -99,7 +98,7 @@ def test_assign_binding():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_multiple_uses():
@@ -142,7 +141,7 @@ def test_multiple_uses():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_unused():
@@ -182,7 +181,7 @@ def test_unused():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_default_require_grads():
@@ -194,7 +193,7 @@ def test_default_require_grads():
             x: R.Tensor((3, 3), "float32"),
             y: R.Tensor((3, 3), "float32"),
             z: R.Tensor((3, 3), "float32"),
-     ):
+        ):
             with R.dataflow():
                 lv1 = R.add(x, y)
                 lv2 = R.add(lv1, z)
@@ -209,7 +208,7 @@ def test_default_require_grads():
             x: R.Tensor((3, 3), "float32"),
             y: R.Tensor((3, 3), "float32"),
             z: R.Tensor((3, 3), "float32"),
-     ) -> R.Tensor((), "float32"):
+        ) -> R.Tensor((), "float32"):
             # block 0
             with R.dataflow():
                 lv1: R.Tensor((3, 3), "float32") = R.add(x, y)
@@ -235,7 +234,7 @@ def test_default_require_grads():
     # fmt: on
 
     After1 = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After1["main_adjoint"], Expected1["main_adjoint"])
+    assert_structural_equal(After1, Expected1)
 
     # fmt: off
     @I.ir_module
@@ -266,7 +265,7 @@ def test_default_require_grads():
     # fmt: on
 
     After2 = relax.transform.Gradient("main", require_grads=Before["main"].params[0])(Before)
-    assert_structural_equal(After2["main_adjoint"], Expected2["main_adjoint"])
+    assert_structural_equal(After2, Expected2)
 
 
 def test_target_index():
@@ -319,7 +318,7 @@ def test_tuple():
             x: R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3, 3), "float32")),
             y: R.Tensor((3, 3), "float32"),
             z: R.Tensor((3, 3), "float32"),
-     ):
+        ):
             with R.dataflow():
                 lv1 = (y, z)
                 lv2 = x[0]
@@ -365,7 +364,7 @@ def test_tuple():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_tuple_assignment():
@@ -373,10 +372,7 @@ def test_tuple_assignment():
     @I.ir_module
     class Before:
         @R.function
-        def main(
-            x: R.Tensor((3, 3), "float32"),
-            y: R.Tensor((3, 3), "float32"),
-     ):
+        def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")):
             with R.dataflow():
                 lv1 = (x, y)
                 lv4 = lv1[0]
@@ -433,7 +429,7 @@ def test_tuple_assignment():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_tuple_nested():
@@ -442,10 +438,7 @@ def test_tuple_nested():
     class Before:
         @R.function
         def main(
-            x: R.Tuple(
-                R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3, 3), "float32")),
-                R.Tensor((3, 3), "float32"),
-         ),
+            x: R.Tuple(R.Tuple(R.Tensor((3, 3), "float32"), R.Tensor((3, 3), "float32")), R.Tensor((3, 3), "float32")),
             y: R.Tensor((3, 3), "float32"),
             z: R.Tensor((3, 3), "float32"),
             u: R.Tensor((3, 3), "float32"),
@@ -514,7 +507,7 @@ def test_tuple_nested():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_tuple_update():
@@ -601,7 +594,7 @@ def test_tuple_update():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_tuple_op_simple():
@@ -609,9 +602,7 @@ def test_tuple_op_simple():
     @I.ir_module
     class Before:
         @R.function
-        def main(
-            x: R.Tensor((6,), "float32"),
-        ):
+        def main(x: R.Tensor((6,), "float32")):
             with R.dataflow():
                 lv1 = R.split(x, 2)
                 lv2 = R.concat(lv1)
@@ -645,7 +636,7 @@ def test_tuple_op_simple():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_tuple_op_construct():
@@ -653,10 +644,7 @@ def test_tuple_op_construct():
     @I.ir_module
     class Before:
         @R.function
-        def main(
-            x: R.Tensor((3,), "float32"),
-            y: R.Tuple(R.Tensor((3, ), "float32"), R.Tensor((3, ), "float32")),
-        ):
+        def main(x: R.Tensor((3,), "float32"), y: R.Tuple(R.Tensor((3, ), "float32"), R.Tensor((3, ), "float32")),):
             with R.dataflow():
                 lv1 = (x, x)
                 lv2 = R.concat(lv1)
@@ -714,7 +702,7 @@ def test_tuple_op_construct():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_tuple_op_const():
@@ -726,9 +714,7 @@ def test_tuple_op_const():
     @I.ir_module
     class Before:
         @R.function
-        def main(
-            x: R.Tensor((3,), "float32")
-        ):
+        def main(x: R.Tensor((3,), "float32")):
             with R.dataflow():
                 lv1 = R.concat((c1, c2))
                 lv2 = R.concat((c3, x))
@@ -793,10 +779,7 @@ def test_const():
     @I.ir_module
     class Before:
         @R.function
-        def main(
-            x: R.Tensor((3, 3), "float32"),
-            y: R.Tensor((3, 3), "float32"),
-       ):
+        def main(x: R.Tensor((3, 3), "float32"), y: R.Tensor((3, 3), "float32")):
             with R.dataflow():
                 lv1 = R.add(x, cst)
                 lv2 = cst
@@ -850,7 +833,7 @@ def test_const():
     # fmt: on
 
     After = relax.transform.Gradient("main")(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_params_copy():
@@ -1135,7 +1118,7 @@ def test_mlp_script():
     # fmt: on
 
     After = relax.transform.Gradient("main", require_grads=Before["main"].params[:2])(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 if __name__ == "__main__":
