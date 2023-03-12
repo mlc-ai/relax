@@ -17,20 +17,22 @@
 import tvm.testing
 from tvm import relax
 from tvm.ir.base import assert_structural_equal
-from tvm.script import relax as R
+from tvm.script import relax as R, ir as I
 
 
-@R.function
-def forward(
-    x: R.Tensor((2, 4), "float32"),
-    w: R.Tensor((4, 4), "float32"),
-    b: R.Tensor((2, 4), "float32"),
-) -> R.Tensor((2, 4), "float32"):
-    with R.dataflow():
-        lv: R.Tensor((2, 4), "float32") = R.matmul(x, w)
-        out: R.Tensor((2, 4), "float32") = R.add(lv, b)
-        R.output(out)
-    return out
+@I.ir_module
+class Module:
+    @R.function
+    def forward(
+        x: R.Tensor((2, 4), "float32"),
+        w: R.Tensor((4, 4), "float32"),
+        b: R.Tensor((2, 4), "float32"),
+    ) -> R.Tensor((2, 4), "float32"):
+        with R.dataflow():
+            lv: R.Tensor((2, 4), "float32") = R.matmul(x, w)
+            out: R.Tensor((2, 4), "float32") = R.add(lv, b)
+            R.output(out)
+        return out
 
 
 def test_l1_loss():
@@ -55,9 +57,11 @@ def test_l1_loss():
 
 
 def test_l1_loss_append():
-    s = forward.ret_struct_info
+    s = Module["forward"].ret_struct_info
     l1_loss = relax.training.loss.L1Loss(reduction="sum")
-    forward_with_loss = relax.training.utils.append_loss(forward, l1_loss(s, s))
+    After = relax.training.AppendLoss("forward", l1_loss(s, s), l1_loss.num_backbone_outputs)(
+        Module
+    )
 
     @R.function
     def expected(
@@ -75,7 +79,7 @@ def test_l1_loss_append():
             R.output(gv)
         return gv
 
-    assert_structural_equal(forward_with_loss, expected)
+    assert_structural_equal(After["forward_loss"], expected)
 
 
 def test_mse_loss():
@@ -100,9 +104,11 @@ def test_mse_loss():
 
 
 def test_mse_loss_append():
-    s = forward.ret_struct_info
+    s = Module["forward"].ret_struct_info
     mse_loss = relax.training.loss.MSELoss(reduction="sum")
-    forward_with_loss = relax.training.utils.append_loss(forward, mse_loss(s, s))
+    After = relax.training.AppendLoss("forward", mse_loss(s, s), mse_loss.num_backbone_outputs)(
+        Module
+    )
 
     @R.function
     def expected(
@@ -120,7 +126,7 @@ def test_mse_loss_append():
             R.output(gv)
         return gv
 
-    assert_structural_equal(forward_with_loss, expected)
+    assert_structural_equal(After["forward_loss"], expected)
 
 
 def test_cross_entropy_loss():
@@ -171,15 +177,15 @@ def test_cross_entropy_loss_without_weights():
 
 
 def test_cross_entropy_loss_append():
-    s = forward.ret_struct_info
+    s = Module["forward"].ret_struct_info
     N = s.shape[0]
     C = s.shape[1]
     targets = relax.TensorStructInfo((N,), "int64")
     weights = relax.TensorStructInfo((C,), "float32")
     cross_entropy_loss = relax.training.loss.CrossEntropyLoss(reduction="sum", ignore_index=1)
-    forward_with_loss = relax.training.utils.append_loss(
-        forward, cross_entropy_loss(s, targets, weights)
-    )
+    After = relax.training.AppendLoss(
+        "forward", cross_entropy_loss(s, targets, weights), cross_entropy_loss.num_backbone_outputs
+    )(Module)
 
     @R.function
     def expected(
@@ -199,7 +205,7 @@ def test_cross_entropy_loss_append():
             R.output(gv)
         return gv
 
-    assert_structural_equal(forward_with_loss, expected)
+    assert_structural_equal(After["forward_loss"], expected)
 
 
 if __name__ == "__main__":
