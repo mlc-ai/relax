@@ -21,12 +21,12 @@ from typing import List
 import tvm
 from tvm.ir.module import IRModule
 
-from ..transform import LegalizeOps, Gradient
 from .loss import Loss
-from .utils import append_loss
 from .optimizer import Optimizer
-from ..struct_info import TensorStructInfo
 from ..analysis import well_formed
+from ..struct_info import TensorStructInfo
+from ..training.utils import AppendLoss
+from ..transform import LegalizeOps, Gradient
 
 
 @tvm.transform.module_pass(opt_level=0, name="SetupTrainer")
@@ -45,7 +45,7 @@ class SetupTrainer:
     ----------
     loss : Loss
         The loss function. It will be appended to the backbone function using
-        relax.training.utils.append_loss.
+        relax.transform.AppendLoss.
 
     optimizer : Optimizer
         The optimizer. It will be put as the `update_params` function of the transformed module. The
@@ -100,11 +100,12 @@ class SetupTrainer:
 
         self._check_backbone_validity(mod)
         # Step 1: Prepare Loss.
-        predict_with_loss = append_loss(
-            mod[self.PREDICT_FUNC_NAME],
+        mod = AppendLoss(
+            self.PREDICT_FUNC_NAME,
             self._loss(*self._loss_args),  # type: ignore
-        )
-        mod[self.LOSS_FUNC_NAME] = predict_with_loss
+            self._loss.num_backbone_outputs,
+            self.LOSS_FUNC_NAME,
+        )(mod)
 
         # Step 2: Gradient pass.
         params_num = int(mod[self.PREDICT_FUNC_NAME].attrs[self.PARAMS_NUM_ATTR_KEY])

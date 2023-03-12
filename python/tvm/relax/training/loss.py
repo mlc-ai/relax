@@ -32,6 +32,9 @@ from ..op.nn import log_softmax, nll_loss
 
 
 def _create_param_var(param: Union[Var, StructInfo], param_name: str) -> Var:
+    """If param is a StructInfo, create a Var with the given StructInfo and name.
+
+    If param is a Var, create a Var with the same StructInfo and name as the given param Var."""
     if isinstance(param, StructInfo):
         param = Var(param_name, param)
     if not isinstance(param, Var):
@@ -42,10 +45,32 @@ def _create_param_var(param: Union[Var, StructInfo], param_name: str) -> Var:
 class Loss:
     r"""Base class of all loss.
 
+    Generally, loss function will take one or more **input parameters** (that is outputs of
+    the backbone of a model), one or more **target parameters**, and generate a scalar value
+    denoting the loss.
+
+    You can use `relax.transform.AppendLoss` to append the loss function to a one-dataflowblock
+    backbone function in a IRModule. That will generate a one-dataflowblock function accepting
+    instances and targets, and then returning the loss.
+
+    Most loss functions involve a reduction of losses from all instances in a batch. We use
+    `reduction` parameter to denote the reduction method. Possible reduction methods include
+    `"mean"`, `"sum"` and `"none"`.
+
     Parameters
     ----------
     loss_name : str
-        The name of the loss function.
+        The name of the loss function. Should be provided when calling `super().__init__` in
+        constructor functions of subclasses.
+
+    num_backbone_outputs : int
+        The number of `prediction_outputs` of the backbone function, alos the number of the
+        backbone_prediction_outputs of the loss function. See `relax.transform.AppendLoss`.
+
+        Should be provided when calling `super().__init__` in constructor functions of subclasses.
+
+        For example, `CrossEntropyLoss` requires one backbone prediction output; `MarginRankingLoss`
+        requires two backbone prediction outputs.
 
     reduction : Literal["mean", "sum", "none"]
         The reduction method to apply to output. Can be "mean", "sum" or "none".
@@ -57,12 +82,23 @@ class Loss:
 
     _valid_reductions = ["mean", "sum", "none"]
 
-    def __init__(self, loss_name: str, reduction: Literal["mean", "sum", "none"] = "mean") -> None:
+    def __init__(
+        self,
+        loss_name: str,
+        num_backbone_outputs: int,
+        reduction: Literal["mean", "sum", "none"] = "mean",
+    ) -> None:
         self._loss_name = loss_name
         self._reduction = reduction
+        self._num_backbone_outputs = num_backbone_outputs
 
         if self._reduction not in self._valid_reductions:
             raise ValueError("Reduction can only be one of these values: ", self._valid_reductions)
+
+    @property
+    def num_backbone_outputs(self) -> int:
+        """Get the number of number of the outputs of the backbone function."""
+        return self._num_backbone_outputs
 
     def _with_reduction(self, expr: Expr) -> Expr:
         """Add a reduction to the final loss.
@@ -71,6 +107,11 @@ class Loss:
         ----------
         expr : Expr
             The loss expr.
+
+        Returns
+        -------
+        ret : Expr
+            The reduced result.
         """
         if self._reduction == "sum":
             expr = sum(expr)
@@ -95,7 +136,7 @@ class L1Loss(Loss):
     """
 
     def __init__(self, reduction: Literal["mean", "sum", "none"] = "mean") -> None:
-        super().__init__("l1_loss", reduction)
+        super().__init__("l1_loss", 1, reduction)
 
     def __call__(
         self,
@@ -144,7 +185,7 @@ class MSELoss(Loss):
     """
 
     def __init__(self, reduction: Literal["mean", "sum", "none"] = "mean") -> None:
-        super().__init__("mse_loss", reduction)
+        super().__init__("mse_loss", 1, reduction)
 
     def __call__(
         self,
@@ -203,7 +244,7 @@ class CrossEntropyLoss(Loss):
         reduction: Literal["mean", "sum", "none"] = "mean",
         ignore_index: int = -100,
     ) -> None:
-        super().__init__("cross_entropy_loss", reduction)
+        super().__init__("cross_entropy_loss", 1, reduction)
         self.ignore_index = ignore_index
 
     def __call__(
