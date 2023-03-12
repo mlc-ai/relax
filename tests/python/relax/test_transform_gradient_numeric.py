@@ -111,7 +111,7 @@ def test_mlp_blockbuilder(target, dev):
         bb.emit_func_output(gv0)
 
     Before = bb.get()
-    After = relax.transform.Gradient("MLP", args_list)(Before)
+    After = relax.transform.Gradient("MLP", w_list + b_list)(Before)
     # Check numerical gradients equal
     args = []
     for arg in After["MLP_adjoint"].params[:-1]:
@@ -126,10 +126,10 @@ def test_mlp_blockbuilder(target, dev):
     _, grad = vm_after["MLP_adjoint"](*args)
 
     def func(*inputs):
-        loss = vm_before["MLP"](*[tvm.nd.array(i) for i in inputs])
+        loss = vm_before["MLP"](args[0], *[tvm.nd.array(i) for i in inputs], args[-1])
         return loss.numpy()
 
-    check_numerical_grads(func, [i.numpy() for i in args], [i.numpy() for i in grad])
+    check_numerical_grads(func, [i.numpy() for i in args[1:-1]], [i.numpy() for i in grad])
 
 
 @tvm.testing.parametrize_targets("llvm")
