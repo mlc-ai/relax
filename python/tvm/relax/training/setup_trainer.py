@@ -21,11 +21,12 @@ from typing import List
 import tvm
 from tvm.ir.module import IRModule
 
-from ..transform import LegalizeOps, Gradient, AppendLoss
 from .loss import Loss
 from .optimizer import Optimizer
-from ..struct_info import TensorStructInfo
 from ..analysis import well_formed
+from ..struct_info import TensorStructInfo
+from ..training.utils import AppendLoss
+from ..transform import LegalizeOps, Gradient
 
 
 @tvm.transform.module_pass(opt_level=0, name="SetupTrainer")

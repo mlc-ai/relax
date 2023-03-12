@@ -306,7 +306,7 @@ def test_target_index():
     # fmt: on
 
     After = relax.transform.Gradient("main", target_index=2)(Before)
-    assert_structural_equal(After["main_adjoint"], Expected["main_adjoint"])
+    assert_structural_equal(After, Expected)
 
 
 def test_tuple():
