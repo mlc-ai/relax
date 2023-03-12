@@ -138,7 +138,7 @@ def AppendLoss(
 
     Notes
     -----
-    This util can be replaced if we have Inline pass. It is equivalent to inline a tail call in
+    This util can be replaced if we have inline pass. It is equivalent to inline a tail call in
     some sense.
     """
 
