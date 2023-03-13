@@ -49,7 +49,7 @@ def AppendLoss(
             # and `running_var` in `batch_norm`
             #
             # input_of_states, output_of_states can be empty
-            return prediction_outputs, output_of_states
+            return prediction_ou`tputs, output_of_states
 
         @R.function
         def loss(backbone_prediction_outputs, targets):

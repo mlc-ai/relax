@@ -21,46 +21,38 @@ from typing import Union, List, Optional, Dict
 import numpy as np  # type: ignore
 
 import tvm
-from tvm import TVMError
+from tvm import relax, TVMError
 from tvm.ir.module import IRModule
-from tvm.runtime.relax_vm import VirtualMachine
 from tvm.runtime.ndarray import NDArray
-
-from .setup_trainer import SetupTrainer
-from ..vm_build import build
 
 
 class Trainer:
-    r"""Unified wrapper for relax training. It uses SetupTrainer to setup the backbone and
-    then compiles/builds/runs the module. Also it maintains the parameters internally.
+    r"""Unified wrapper for relax training. It uses SetupTrainer to setup the backbone and then
+    builds and runs the module. Also it maintains the parameters and the model states internally.
 
     Parameters
     ----------
     backbone : IRModule
-        Backbone of the module to be trained. It should be a relax module with a function
-        which has name `predict` and returns a single Tensor.
-
-    params_num : int,
-        The numer of parameters. The first `params_num` inputs of the prediction function
-        will be regarded as the parameters. It will be annotated into the prediction function
-        as the value of func attr `update_params`.
+        Backbone of the module to be trained. It should be a relax module with a function which has
+        name `predict` and returns a single Tensor.
 
     setup_trainer_pass : SetupTrainer
         The configured SetupTrainer pass.
 
     Examples
     --------
-    >>> setup_trainer = setup_trainer = SetupTrainer(
-    ...     MSELoss(reduction="sum"),
-    ...     SGD(0.001),
-    ...     [pred_sinfo, pred_sinfo],
-    ... )
+    .. code-block:: python
+        setup_trainer = SetupTrainer(
+            MSELoss(reduction="sum"),
+            SGD(0.001),
+            [pred_sinfo, target_sinfo],
+        )
 
-    >>> trainer = Trainer(MLP, 2, setup_trainer)
-    >>> trainer.build(target="llvm")
-    >>> trainer.xaiver_uniform_init_params()
-    >>> trainer.predict(*predict_inputs)
-    >>> trainer.update_params(*update_params_inputs)
+        trainer = Trainer(MLP, 2, setup_trainer)
+        trainer.build(target="llvm")
+        trainer.xaiver_uniform_init_params()
+        trainer.predict(*predict_inputs)
+        trainer.update_params(*update_params_inputs)
 
     Notes
     -----
@@ -69,44 +61,53 @@ class Trainer:
 
     def __init__(
         self,
-        backbone: IRModule,
-        params_num: int,
-        setup_trainer_pass: SetupTrainer,
+        train_mod: IRModule,
+        zero_init_param_state: bool = True,
     ) -> None:
-        # Function Names
-        self._predict_fn = setup_trainer_pass.PREDICT_FUNC_NAME
-        self._adjoint_fn = setup_trainer_pass.ADJOINT_FUNC_NAME
-        self._update_params_fn = setup_trainer_pass.UPDATE_PARAMS_FUNC_NAME
+        # Function Handles
+        self._predict_fn = train_mod.attrs["predict_fn"]
+        self._adjoint_fn = train_mod.attrs["adjoint_fn"]
+        self._update_params_fn = train_mod.attrs["update_params_fn"]
 
         # Compile & Build
-        backbone[self._predict_fn] = backbone[self._predict_fn].with_attr(
-            setup_trainer_pass.PARAMS_NUM_ATTR_KEY, params_num
-        )
-        self._mod = setup_trainer_pass(backbone)  # type: ignore
-        self._vm: Optional[VirtualMachine] = None
-        self._optim_state = self._mod[self._update_params_fn].attrs[
-            setup_trainer_pass.OPTIM_STATE_ATTR_KEY
+        self._mod = train_mod  # type: ignore
+        self._vm: Optional[relax.VirtualMachine] = None
+
+        # Runtime values
+        self._optim_state = self._mod.attrs["optim_state"]
+
+        self._inputs_num = int(self._mod.attrs["inputs_num"])
+        self._params_num = int(self._mod.attrs["params_num"])
+        self._states_num = int(self._mod.attrs["states_num"])
+
+        # used to initialize params and states
+        self._param_vars = self._mod[self._adjoint_fn].params[
+            self._inputs_num : self._inputs_num + self._params_num
+        ]
+        self._state_vars = self._mod[self._adjoint_fn].params[
+            self._inputs_num
+            + self._params_num : self._inputs_num
+            + self._params_num
+            + self._states_num
         ]
 
-        # Allocate Parameters
-        self._parameters_buffer: List[NDArray] = []
-        self._parameters_name_to_pos: Dict[str, int] = {}
+        self._params: List[Optional[NDArray]] = [None] * self._params_num
+        self._param_name_to_pos: Dict[str, int] = {
+            p.name_hint: i for i, p in enumerate(self._param_vars)
+        }
 
-        def _convert_from_tvm_shape(tvm_shape):
-            return [int(dim) for dim in tvm_shape]
+        self._states: List[Optional[NDArray]] = [None] * self._states_num
+        self._state_name_to_pos: Dict[str, int] = {
+            s.name_hint: i for i, s in enumerate(self._state_vars)
+        }
 
-        self._parameters_buffer = []
-        for i, param in enumerate(self._mod[setup_trainer_pass.ADJOINT_FUNC_NAME].params):
-            if i < params_num:
-                self._parameters_buffer.append(
-                    tvm.nd.array(
-                        np.zeros(
-                            shape=_convert_from_tvm_shape(param.struct_info.shape),
-                            dtype=np.dtype(param.struct_info.dtype),
-                        )
-                    )
-                )
-                self._parameters_name_to_pos[param.name_hint] = i
+        if zero_init_param_state:
+            self.zero_init_params()
+            self.zero_init_states()
+
+    @staticmethod
+    def _shape_expr_to_int_list(tvm_shape):
+        return [int(dim) for dim in tvm_shape]
 
     def build(
         self,
@@ -127,12 +128,26 @@ class Trainer:
         memory_cfg : Optional[str]
             The allocator behavior to use for the VM.
         """
-        ex = build(self._mod, target=target)
-        self._vm = VirtualMachine(ex, device=device, memory_cfg=memory_cfg)
+        ex = relax.build(self._mod, target=target)
+        self._vm = relax.VirtualMachine(ex, device=device, memory_cfg=memory_cfg)
 
     def _check_build(self):
         if self._vm is None:
             raise TVMError("Please build the trainer first. Use `trainer.build(...)`.")
+
+        idx_not_inited_param = next((i for i, p in enumerate(self._params) if p is None), -1)
+        if idx_not_inited_param != -1:
+            raise TVMError(
+                f"The {idx_not_inited_param}-th parameter is not initialized before training or "
+                "inference."
+            )
+
+        idx_not_inited_state = next((i for i, s in enumerate(self._states) if s is None), -1)
+        if idx_not_inited_state != -1:
+            raise TVMError(
+                f"The {idx_not_inited_state}-th model state is not initialized before training or "
+                "inference."
+            )
 
     @property
     def mod(self) -> IRModule:
@@ -146,7 +161,7 @@ class Trainer:
         return self._mod
 
     @property
-    def vm(self) -> VirtualMachine:
+    def vm(self) -> relax.VirtualMachine:
         """Return the relax virtual machine of the module. Should first build the trainer.
 
         Returns
@@ -154,19 +169,37 @@ class Trainer:
         ret : VirtualMachine
             The relax virtual machine.
         """
-        self._check_build()
+        if self._vm is None:
+            raise TVMError("Please build the trainer first. Use `trainer.build(...)`.")
         return self._vm
 
     def xaiver_uniform_init_params(self):
         """Randomly initialize parameters using the method described in `Understanding the
         difficulty of training deep feedforward neural networks` - Glorot, X. & Bengio, Y.
         (2010)."""
-        self._parameters_buffer = [
+        self._params = [
             tvm.nd.array(
-                np.sqrt(6.0 / np.sum(v.shape))
-                * np.random.uniform(-1.0, 1.0, v.shape).astype(np.dtype(v.dtype))
+                (np.sqrt(6.0 / np.sum(p.shape)) * np.random.uniform(-1.0, 1.0, p.shape)).astype(
+                    p.dtype
+                )
             )
-            for v in self._parameters_buffer
+            for p in self._param_vars
+        ]
+
+    def zero_init_params(self):
+        self._params = [
+            tvm.nd.array(
+                np.zeros(self._shape_expr_to_int_list(p.struct_info.shape), p.struct_info.dtype)
+            )
+            for p in self._param_vars
+        ]
+
+    def zero_init_states(self):
+        self._states = [
+            tvm.nd.array(
+                np.zeros(self._shape_expr_to_int_list(s.struct_info.shape), s.struct_info.dtype)
+            )
+            for s in self._state_vars
         ]
 
     def load_params(self, extern_param_dict: Dict[str, Union[np.ndarray, NDArray]]):
@@ -180,7 +213,20 @@ class Trainer:
             be the same as the name hint of corresponding relax Var.
         """
         for key, val in extern_param_dict.items():
-            self._parameters_buffer[self._parameters_name_to_pos[key]] = tvm.nd.array(val)
+            self._params[self._param_name_to_pos[key]] = tvm.nd.array(val)
+
+    def load_states(self, extern_state_dict: Dict[str, Union[np.ndarray, NDArray]]):
+        """Load parameters from a dict.
+        The key of the dict should be the same with the parameter name in backbone.
+
+        Parameters
+        ----------
+        extern_param_dict : Dict[str, Union[np.ndarray, NDArray]]
+            The external parameters dict: param_name -> param_value. The param name should
+            be the same as the name hint of corresponding relax Var.
+        """
+        for key, val in extern_state_dict.items():
+            self._states[self._state_name_to_pos[key]] = tvm.nd.array(val)
 
     def export_params(self) -> Dict[str, NDArray]:
         """Export parameters to a dict (parameter name -> NDArray).
@@ -190,21 +236,17 @@ class Trainer:
         exported_dict : Dict[str, NDArray]
             The exported dictionary of parameters.
         """
-        ret: Dict[str, NDArray] = {}
-        for key, pos in self._parameters_name_to_pos.items():
-            ret[key] = self._parameters_buffer[pos]
-        return ret
+        return {key: self._params[pos] for key, pos in self._param_name_to_pos.items()}
 
-    def _prepare_inputs(self, func_name, inputs):
-        input_len = len(self._mod[func_name].params)
-        param_len = len(self._parameters_buffer)
-        assert len(inputs) + param_len == input_len
-        to_vm = []
-        for i in range(param_len):
-            to_vm.append(self._parameters_buffer[i])
-        for i in range(input_len - param_len):
-            to_vm.append(tvm.nd.array(inputs[i]))
-        return to_vm
+    def export_states(self) -> Dict[str, NDArray]:
+        """Export parameters to a dict (parameter name -> NDArray).
+
+        Returns
+        -------
+        exported_dict : Dict[str, NDArray]
+            The exported dictionary of parameters.
+        """
+        return {key: self._states[pos] for key, pos in self._state_name_to_pos.items()}
 
     def predict(self, *inputs: Union[np.ndarray, NDArray]) -> NDArray:
         """Call the `predict` function and return the prediction result of the backbone.
@@ -226,9 +268,14 @@ class Trainer:
         argument list with skipping all parameters.
         """
         self._check_build()
-        return self._vm[self._predict_fn](*self._prepare_inputs(self._predict_fn, inputs))
+        if len(inputs) != self._inputs_num:
+            raise ValueError("The length of the input does not match the backbone")
+        all_inputs = [tvm.nd.array(i) for i in inputs] + self._params + self._states
+        return self._vm[self._predict_fn](*all_inputs)
 
-    def update_params(self, *inputs: Union[np.ndarray, NDArray]) -> NDArray:
+    def update_params(
+        self, inputs: List[Union[np.ndarray, NDArray]], targets: List[Union[np.ndarray, NDArray]]
+    ) -> NDArray:
         """Calculate loss and update parameters. It will calculate the gradients of parameters
         and update them using `update_params` function.
 
@@ -249,9 +296,28 @@ class Trainer:
         argument list with skipping all parameters.
         """
         self._check_build()
-        loss, grads = self._vm[self._adjoint_fn](*self._prepare_inputs(self._adjoint_fn, inputs))
-        new_params, self._optim_state = self._vm[self._update_params_fn](
-            self._parameters_buffer, grads, self._optim_state
+
+        # handle inputs
+        if len(inputs) != self._inputs_num:
+            raise ValueError("The length of the input does not match the backbone")
+        all_inputs = (
+            [tvm.nd.array(i) for i in inputs]
+            + self._params
+            + self._states
+            + [tvm.nd.array(i) for i in targets]
         )
-        self._parameters_buffer = [new_params[i] for i in range(len(new_params))]
-        return loss
+        ret, grads = self._vm[self._adjoint_fn](*all_inputs)
+
+        # update model states
+        if self._states_num != 0:
+            self._states = list(ret[1:])
+            ret = ret[0]
+
+        # update params
+        new_params, self._optim_state = self._vm[self._update_params_fn](
+            self._params, grads, self._optim_state
+        )
+        self._params = list(new_params)
+
+        # return the loss
+        return ret

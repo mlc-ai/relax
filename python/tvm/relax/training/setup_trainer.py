@@ -19,14 +19,17 @@
 from typing import List
 
 import tvm
+from tvm._ffi.base import TVMError
 from tvm.ir.module import IRModule
+from tvm.tir.expr import IntImm
 
-from .loss import Loss
-from .optimizer import Optimizer
 from ..analysis import well_formed
+from ..expr import Tuple
 from ..struct_info import TensorStructInfo
 from ..training.utils import AppendLoss
 from ..transform import LegalizeOps, Gradient
+from .loss import Loss
+from .optimizer import Optimizer
 
 
 @tvm.transform.module_pass(opt_level=0, name="SetupTrainer")
@@ -35,7 +38,7 @@ class SetupTrainer:
 
     The transformed module will contains the following functions:
     - `predict`: Predicts the result. It is provided in the input module.
-    - `loss`: Calculates the specified loss between the prediction results and the ground truth.
+    - `loss`: Calculates the specified loss between the prediction result and the ground truth.
     - `loss_adjoint`: Calculates the loss and the adjoints of parameters.
     - `update_params`: Takes the parameters, the adjoints of parameters and the optimizer state as
     the inputs and returns updated parameters and new optimizer state. It contains a func attr named
@@ -66,29 +69,61 @@ class SetupTrainer:
     """
 
     PREDICT_FUNC_NAME: str = "predict"
-    LOSS_FUNC_NAME: str = "loss"
-    ADJOINT_FUNC_NAME: str = "loss_adjoint"
+    LOSS_FUNC_NAME: str = "predict_loss"
+    ADJOINT_FUNC_NAME: str = "predict_loss_adjoint"
     UPDATE_PARAMS_FUNC_NAME: str = "update_params"
 
     PARAMS_NUM_ATTR_KEY: str = "params_num"
-    OPTIM_STATE_ATTR_KEY: str = "optim_state"
+    STATES_NUM_ATTR_KEY: str = "states_num"
 
     def __init__(self, loss: Loss, optimizer: Optimizer, loss_args: List[TensorStructInfo]):
         self._loss = loss
         self._optimizer = optimizer
         self._loss_args = loss_args
 
-    @classmethod
-    def _check_backbone_validity(cls, mod: IRModule):
+    def _check_mod(self, mod: IRModule):
         if not well_formed(mod):
-            raise ValueError("Backbone Invalid: The backbone is not well formed.")
-        ret_sinfo = mod[cls.PREDICT_FUNC_NAME].struct_info.ret
-        if not isinstance(ret_sinfo, TensorStructInfo):
+            raise ValueError("SetupTrainer: The backbone module is not well formed.")
+        try:
+            func = mod[self.PREDICT_FUNC_NAME]
+        except TVMError as exc:
             raise ValueError(
-                "Backbone Invalid: The predict function is expected to have a single Tensor "
-                "return value, which serves as the prediction result of the module. But got ",
-                ret_sinfo,
+                f"SetupTrainer: The backbone module does not contain a function named "
+                f"{self.PREDICT_FUNC_NAME}"
+            ) from exc
+
+        # Check function attrs
+        if not self.PARAMS_NUM_ATTR_KEY in mod.attrs or not isinstance(
+            mod.attrs[self.PARAMS_NUM_ATTR_KEY], IntImm
+        ):
+            raise ValueError(
+                f"SetupTrainer: The backbone module should has integer attribute "
+                f"{self.PARAMS_NUM_ATTR_KEY}"
             )
+        if not self.STATES_NUM_ATTR_KEY in mod.attrs or not isinstance(
+            mod.attrs[self.STATES_NUM_ATTR_KEY], IntImm
+        ):
+            raise ValueError(
+                f"SetupTrainer: The backbone module should has integer attribute "
+                f"{self.STATES_NUM_ATTR_KEY}"
+            )
+
+        nparam = int(mod.attrs[self.PARAMS_NUM_ATTR_KEY])
+        nstate = int(mod.attrs[self.STATES_NUM_ATTR_KEY])
+
+        # Check parameters and return values
+        if len(func.params) < nparam + nstate:
+            raise ValueError(
+                "SetupTrainer: The number of parameters of the predict function should be no less "
+                "than the number of parameters and states"
+            )
+
+        if nstate > 0:
+            if not isinstance(func.body.body, Tuple) or len(func.body.body) <= nstate:
+                raise ValueError(
+                    "SetupTrainer: When model state exists, the predict function should return a "
+                    "tuple of length more than the number of states"
+                )
 
     def transform_module(self, mod: IRModule, ctx: tvm.transform.PassContext) -> IRModule:
         """Setup the trainer in 3 steps.
@@ -97,9 +132,9 @@ class SetupTrainer:
         3. Add Optimizer function.
         4. Legalize operators.
         """
+        self._check_mod(mod)
 
-        self._check_backbone_validity(mod)
-        # Step 1: Prepare Loss.
+        # AppendLoss pass.
         mod = AppendLoss(
             self.PREDICT_FUNC_NAME,
             self._loss(*self._loss_args),  # type: ignore
@@ -107,16 +142,31 @@ class SetupTrainer:
             self.LOSS_FUNC_NAME,
         )(mod)
 
-        # Step 2: Gradient pass.
-        params_num = int(mod[self.PREDICT_FUNC_NAME].attrs[self.PARAMS_NUM_ATTR_KEY])
-        require_grads = mod[self.LOSS_FUNC_NAME].params[:params_num]
-        mod = Gradient(self.LOSS_FUNC_NAME, require_grads=require_grads)(mod)
+        # Gradient pass.
+        params_num = int(mod.attrs[self.PARAMS_NUM_ATTR_KEY])
+        states_num = int(mod.attrs[self.STATES_NUM_ATTR_KEY])
+        inputs_num = len(mod[self.PREDICT_FUNC_NAME].params) - params_num - states_num
+        params = mod[self.LOSS_FUNC_NAME].params[inputs_num : inputs_num + params_num]
+        mod = Gradient(self.LOSS_FUNC_NAME, require_grads=params, target_index=0)(mod)
 
-        # Step 3: Build Optimizer.
-        self._optimizer.init(list(mod[self.ADJOINT_FUNC_NAME].params)[:params_num])
-        mod[self.UPDATE_PARAMS_FUNC_NAME] = self._optimizer.get_function().with_attr(
-            self.OPTIM_STATE_ATTR_KEY, self._optimizer.state
+        # Build Optimizer.
+        self._optimizer.init(params)
+        mod[self.UPDATE_PARAMS_FUNC_NAME] = self._optimizer.get_function()
+
+        # Module attrs
+        mod = mod.with_attrs(
+            {
+                # inputs_num
+                "inputs_num": inputs_num,
+                # function names
+                "predict_fn": self.PREDICT_FUNC_NAME,
+                "loss_fn": self.LOSS_FUNC_NAME,
+                "adjoint_fn": self.ADJOINT_FUNC_NAME,
+                "update_params_fn": self.UPDATE_PARAMS_FUNC_NAME,
+                # optimizer states
+                "optim_state": self._optimizer.state,
+            }
         )
 
-        # Step 4: Legalize operators.
-        return LegalizeOps()(mod)  # type: ignore
+        # Legalize operators.
+        return LegalizeOps()(mod)

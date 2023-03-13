@@ -315,7 +315,7 @@ class IRModule(Node, Scriptable):
             A new copy of the IRModule with the attribute
         """
 
-        return _ffi_api.Module_WithAttr(self, attr_key, attr_value)
+        return _ffi_api.Module_WithAttr(self, attr_key, tvm.runtime.convert(attr_value))
 
     def without_attr(self, attr_key: str) -> "IRModule":
         """Copy the IRModule and remove an attribute key and its associated value.

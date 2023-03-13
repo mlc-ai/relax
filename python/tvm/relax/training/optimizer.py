@@ -126,7 +126,7 @@ class Optimizer:
         self : Optimizer
             The optimizer itself.
         """
-        if not isinstance(params, list):
+        if isinstance(params, Var):
             params = [params]
         self._set_params_and_dtype(params)
         # State should be initialized in any implementation of optimizer.
