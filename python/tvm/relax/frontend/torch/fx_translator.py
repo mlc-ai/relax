@@ -980,7 +980,6 @@ class TorchFXImporter:
                         raise ValueError("Unsupported data type for model parameters: %s" % dtype)
                 # Translate the model.
                 for node in graph.nodes:
-                    print(node.op, node.name, node.args, node.kwargs, node.target)
                     if node.op == "placeholder":
                         assert len(inputs) > 0, "Provided inputs is less than actual inputs"
                         self.env[node] = inputs.pop(0)
