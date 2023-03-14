@@ -901,9 +901,11 @@ class TorchFXImporter:
             nn.GroupNorm: self._group_norm,
             nn.Dropout: lambda node: self.env[node.args[0]],
             nn.modules.sparse.Embedding: self._embedding,
+            nn.Identity: lambda node: self.env[node.args[0]],
             # call_function and call_method
             "cos": self._cos,
             "sin": self._sin,
+            "iadd": self._add,
             "add": self._add,
             "floordiv": self._floordiv,
             "mul": self._mul,
