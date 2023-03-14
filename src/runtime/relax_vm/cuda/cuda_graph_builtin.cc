@@ -53,7 +53,6 @@ class CUDAGraphNode : public Object {
   }
 
   TVM_DECLARE_FINAL_OBJECT_INFO(CUDAGraphNode, Object);
-
 };
 
 /*!
@@ -75,6 +74,8 @@ class CUDAGraphCache : public Object {
  public:
   struct Entry {
     /*! \brief The tensors allocated in the cuda graph */
+    Array<ObjectRef> alloc_storages;
+    /*! \brief Intemediate tensors in the capture func that will be used outside the capture func */
     Array<ObjectRef> states;
     /*! \brief The cuda graph instance */
     CUDAGraph graph;
@@ -96,23 +97,19 @@ class CUDAGraphCache : public Object {
 
     cudaStream_t capture_stream;
     CUDA_CALL(cudaStreamCreate(&capture_stream));
+    CUDAGraphCache::Entry entry;
 
     // Invoke the alloc function
     TVMArgs alloc_func_args(nullptr, nullptr, 0);
     TVMRetValue alloc_func_rv;
     vm->InvokeClosurePacked(alloc_func, alloc_func_args, &alloc_func_rv);
-    ADT tensors = alloc_func_rv;
-    CUDAGraphCache::Entry entry;
-    for (size_t i = 0; i < tensors.size(); ++i) {
-      NDArray tensor = Downcast<NDArray>(tensors[i]);
-      entry.states.push_back(tensor);
-    }
+    entry.alloc_storages = alloc_func_rv;
 
     // Set up arguments for the graph execution
     std::vector<TVMValue> values(1);
     std::vector<int> tcodes(1);
     TVMArgsSetter setter(values.data(), tcodes.data());
-    setter(0, tensors);
+    setter(0, entry.alloc_storages);
     TVMRetValue capture_func_rv;
 
     // Warm up run
@@ -127,6 +124,7 @@ class CUDAGraphCache : public Object {
 
     vm->InvokeClosurePacked(capture_func, TVMArgs(values.data(), tcodes.data(), 1),
                             &capture_func_rv);
+    entry.states = capture_func_rv;
     CUDA_CALL(cudaStreamEndCapture(CUDAThreadEntry::ThreadLocal()->stream, &graph));
     std::swap(capture_stream, CUDAThreadEntry::ThreadLocal()->stream);
 
@@ -149,13 +147,13 @@ TVM_REGISTER_GLOBAL("vm.builtin.get_captured_cuda_graph")
     .set_body([](TVMArgs args, TVMRetValue* rv) {
       ICHECK_EQ(args.size(), 3);
       VirtualMachine* vm = VirtualMachine::GetContextPtr(args[0]);
-      ObjectRef alloc_func = args[1];    // () -> Tuple[Tensor0, ... TensorN]
-      ObjectRef capture_func = args[2];  // (Tuple[Tensor0, ... TensorN]) -> ()
+      ObjectRef alloc_func = args[1];  // () -> Tuple[Tensor0, ... TensorN]
+      ObjectRef capture_func =
+          args[2];  // (Tuple[Tensor0, ... TensorN]) -> Tuple[Tensor0, ... TensorN']
 
       CUDAGraphCache* cache = CUDAGraphCache::Get();
       auto cached = cache->GetOrCapture(vm, alloc_func, capture_func);
-      *rv = ADT::Tuple(std::vector<ObjectRef>{
-          cached.graph, ADT::Tuple(cached.states.begin(), cached.states.end())});
+      *rv = Array<ObjectRef>{cached.graph, cached.alloc_storages, cached.states};
     });
 
 TVM_REGISTER_GLOBAL("vm.builtin.cuda_graph_launch").set_body_typed([](CUDAGraph cuda_graph) {
