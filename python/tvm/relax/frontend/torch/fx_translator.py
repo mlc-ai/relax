@@ -865,9 +865,11 @@ class TorchFXImporter:
             nn.GroupNorm: self._group_norm,
             nn.Dropout: lambda node: self.env[node.args[0]],
             nn.modules.sparse.Embedding: self._embedding,
+            nn.Identity: lambda node: self.env[node.args[0]],
             # call_function and call_method
             "cos": self._cos,
             "sin": self._sin,
+            "iadd": self._add,
             "add": self._add,
             "floordiv": self._floordiv,
             "mul": self._mul,
@@ -978,6 +980,7 @@ class TorchFXImporter:
                         raise ValueError("Unsupported data type for model parameters: %s" % dtype)
                 # Translate the model.
                 for node in graph.nodes:
+                    print(node.op, node.name, node.args, node.kwargs, node.target)
                     if node.op == "placeholder":
                         assert len(inputs) > 0, "Provided inputs is less than actual inputs"
                         self.env[node] = inputs.pop(0)
