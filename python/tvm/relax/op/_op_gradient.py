@@ -17,28 +17,22 @@
 # pylint: disable=unused-argument, redefined-builtin
 """Gradient definitions for Relax operators."""
 from typing import List
+
 from tvm import relax
-from tvm.arith import Analyzer
-from tvm.relax.expr import Call, Var, Expr, ShapeExpr
 from tvm._ffi.base import TVMError
+from tvm.arith import Analyzer
+from tvm.relax.op.index import strided_slice
+from tvm.relax.op.nn.nn import conv2d
 
 from ..block_builder import BlockBuilder
+from ..expr import Call, Var, Expr, ShapeExpr
 from ...tir import PrimExpr
-from .base import register_gradient
 
-from .unary import (
-    cos,
-    exp,
-    sin,
-    sqrt,
-)
+from .base import register_gradient
+from .unary import cos, exp, sin, sqrt
 from .binary import less
 from .statistical import sum
-from .create import (
-    zeros,
-    ones,
-    zeros_like,
-)
+from .create import zeros, ones, zeros_like
 from .search import where
 from .linear_algebra import matmul
 from .manipulate import (
@@ -47,8 +41,15 @@ from .manipulate import (
     permute_dims,
     expand_dims,
     concat,
+    reshape,
     split,
     squeeze,
+)
+from .nn import conv2d_transpose
+from .grad import (
+    nll_loss_backward,
+    max_pool2d_backward,
+    avg_pool2d_backward,
 )
 
 
@@ -114,10 +115,10 @@ def add_grad(
     """Gradient of add.
 
     Forward Form:
-        z = relax.add(x, y)
+        `z = relax.add(x, y)`
 
     Backward:
-        Returns [z_output_grad, z_grad].
+        Returns `[z_output_grad, z_grad]`.
     """
     output_grad_shape = _get_shape(output_grad)
     return [
@@ -136,10 +137,10 @@ def subtract_grad(
     """Gradient of subtract.
 
     Forward Form:
-        z = relax.subtract(x, y)
+        `z = relax.subtract(x, y)`
 
     Backward:
-        Returns [z_output_grad, -z_grad].
+        Returns `[z_output_grad, -z_grad]`.
     """
     output_grad_shape = _get_shape(output_grad)
     return [
@@ -158,10 +159,10 @@ def multiply_grad(
     """Gradient of multiply.
 
     Forward Form:
-        z = relax.multiply(x, y)
+        `z = relax.multiply(x, y)`
 
     Backward:
-        Returns [z_grad * y, z_grad * x].
+        Returns `[z_grad * y, z_grad * x]`.
     """
     x, y = orig_call.args
     output_grad_shape = _get_shape(output_grad)
@@ -181,10 +182,10 @@ def divide_grad(
     """Gradient of divide.
 
     Forward Form:
-        z = relax.divide(x, y)
+        `z = relax.divide(x, y)`
 
     Backward:
-        Returns [z_grad / y,  - z_grad * z / y].
+        Returns `[z_grad / y,  -z_grad * z / y]`.
     """
     x, y = orig_call.args
     output_grad_shape = _get_shape(output_grad)
@@ -308,10 +309,10 @@ def abs_grad(
     """Gradient of abs.
 
     Forward Form:
-        y = relax.abs(x)
+        `y = relax.abs(x)`
 
     Backward:
-        Returns [y_grad * where(x < 0, -1, 1)].
+        Returns `[y_grad * where(x < 0, -1, 1)]`.
     """
     x = orig_call.args[0]
     x_zeros = _zeros(x)
@@ -329,10 +330,10 @@ def cos_grad(
     """Gradient of cos.
 
     Forward Form:
-        y = relax.cos(x)
+        `y = relax.cos(x)`
 
     Backward:
-        Returns [-y_grad * sin(x)].
+        Returns `[-y_grad * sin(x)]`.
     """
     return [-output_grad * sin(orig_call.args[0])]
 
@@ -347,10 +348,10 @@ def exp_grad(
     """Gradient of exp.
 
     Forward Form:
-        y = relax.exp(x)
+        `y = relax.exp(x)`
 
     Backward:
-        Returns [y_grad * y].
+        Returns `[y_grad * y]`.
     """
     return [output_grad * orig_var]
 
@@ -365,10 +366,10 @@ def log_grad(
     """Gradient of log.
 
     Forward Form:
-        y = relax.log(x)
+        `y = relax.log(x)`
 
     Backward:
-        Returns [y_grad / x].
+        Returns `[y_grad / x]`.
     """
     return [output_grad / orig_call.args[0]]
 
@@ -383,10 +384,10 @@ def negative_grad(
     """Gradient of negative.
 
     Forward Form:
-        y = relax.negative(x)
+        `y = relax.negative(x)`
 
     Backward:
-        Returns [- y_grad].
+        Returns `[-y_grad]`.
     """
     return [-output_grad]
 
@@ -401,10 +402,10 @@ def sigmoid_grad(
     """Gradient of sigmoid.
 
     Forward Form:
-        y = relax.sigmoid(x)
+        `y = relax.sigmoid(x)`
 
     Backward:
-        Returns [y_grad * y * (1 - y)].
+        Returns `[y_grad * y * (1 - y)]`.
     """
     x_ones = _ones(orig_call.args[0])
     return [output_grad * orig_var * (x_ones - orig_var)]
@@ -420,10 +421,10 @@ def sin_grad(
     """Gradient of sin.
 
     Forward Form:
-        y = relax.sin(x)
+        `y = relax.sin(x)`
 
     Backward:
-        Returns [y_grad * cos(x)].
+        Returns `[y_grad * cos(x)]`.
     """
     return [output_grad * cos(orig_call.args[0])]
 
@@ -438,10 +439,10 @@ def sqrt_grad(
     """Gradient of sqrt.
 
     Forward Form:
-        y = relax.sqrt(x)
+        `y = relax.sqrt(x)`
 
     Backward:
-        Returns [0.5 * y_grad / sqrt(x)].
+        Returns `[0.5 * y_grad / sqrt(x)]`.
     """
     x = orig_call.args[0]
     cst = relax.const(0.5, dtype=_get_dtype(x))
@@ -458,10 +459,10 @@ def tanh_grad(
     """Gradient of tanh.
 
     Forward Form:
-        y = relax.tanh(x)
+        `y = relax.tanh(x)`
 
     Backward:
-        Returns [y_grad * (1 - y * y)].
+        Returns `[y_grad * (1 - y * y)]`.
     """
     x_ones = _ones(orig_call.args[0])
     return [output_grad * (x_ones - orig_var * orig_var)]
@@ -480,10 +481,11 @@ def sum_grad(
     """Gradient of sum.
 
     Forward Form:
-        y = relax.sum(x, axis, keepdims)
+        `y = relax.sum(x, axis, keepdims)`
 
     Backward:
-        Returns [broadcast_to(y_output_grad, x.shape)].
+        Returns `[broadcast_to(y_output_grad, x.shape)]`.
+
         If `keepdims=False`, the summed axis will be added back.
     """
     axis = orig_call.attrs["axis"]
@@ -506,7 +508,7 @@ def permute_dims_grad(
     """Gradient of permute_dims.
 
     Forward Form:
-        y = relax.permute_dims(x, axes)
+        `y = relax.permute_dims(x, axes)`
 
     Backward:
         Returns grad transposed over the **inverse permutation** of the original permute_dims axes.
@@ -533,10 +535,10 @@ def concat_grad(
     """Gradient of concat.
 
     Forward Form:
-        y = concat((x1, x2, x3), axis)
+        `y = concat((x1, x2, x3), axis)`
 
     Backward:
-        Returns [split(y_output_grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis]], axis)].
+        Returns `[split(y_output_grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis]], axis)]`.
     """
     axis = orig_call.attrs["axis"]
     assert axis is not None
@@ -565,10 +567,10 @@ def split_grad(
     """Gradient of split.
 
     Forward Form:
-        y = split(x, indices, axis)
+        `y = split(x, indices, axis)`
 
     Backward:
-        Returns [concat(y_output_grad, axis)].
+        Returns `[concat(y_output_grad, axis)]`.
     """
     axis = orig_call.attrs["axis"]
     assert axis is not None
@@ -589,10 +591,11 @@ def matmul_grad(
     """Gradient of matmul.
 
     Forward Form:
-        c = relax.matmul(a, b)
+        `c = relax.matmul(a, b)`
 
     Backward:
-        Generally, returns [c_grad @ b^T, a^T @ c_grad].
+        Generally, returns `[c_grad @ b^T, a^T @ c_grad]`.
+
         Here we only transpose the last two dimensions because of the definition
         of batch matmul. Note that ndim=1 should be treaded specially.
     """
@@ -650,10 +653,10 @@ def relu_grad(
     """Gradient of relu.
 
     Forward Form:
-        y = relax.relu(x)
+        `y = relax.relu(x)`
 
     Backward:
-        Returns [y_grad * (where(x < 0, 0, 1))].
+        Returns `[y_grad * (where(x < 0, 0, 1))]`.
     """
     x = orig_call.args[0]
     x_zeros = _zeros(x)
@@ -671,10 +674,10 @@ def softmax_grad(
     """Gradient of softmax.
 
     Forward Form:
-        y = relax.softmax(x, axis)
+        `y = relax.softmax(x, axis)`
 
     Backward:
-        Returns [(y_grad - sum(y_grad * y, axis, keepdims=True)) * y]
+        Returns `[(y_grad - sum(y_grad * y, axis, keepdims=True)) * y]`
     """
     return [(output_grad - sum(output_grad * orig_var, orig_call.attrs.axis, True)) * orig_var]
 
@@ -689,10 +692,10 @@ def log_softmax_grad(
     """Gradient of log_softmax.
 
     Forward Form:
-        y = relax.log_softmax(x, axis)
+        `y = relax.log_softmax(x, axis)`
 
     Backward:
-        Returns [y_grad - sum(y_output_grad, axis, keepdims=True) * softmax(x)]
+        Returns `[y_grad - sum(y_output_grad, axis, keepdims=True) * softmax(x)]`
     """
     x_softmax = exp(orig_var)
     return [(output_grad - sum(output_grad, orig_call.attrs.axis, True) * x_softmax)]
@@ -719,12 +722,213 @@ def cross_entropy_with_logits_grad(
     """Gradient of cross_entropy_with_logits.
 
     Forward Form:
-        z = cross_entropy_with_logits(x, y)
+        `z = cross_entropy_with_logits(x, y)`
 
     Backward:
-        Returns [-z_grad * y, -z_grad * x].
+        Returns `[-z_grad * y, -z_grad * x]`.
         If it has batch_size N, the results should divide by N.
     """
     x, y = orig_call.args
     output_grad = _divide_batch(x, output_grad)
     return [-output_grad * y, -output_grad * x]
+
+
+# TODO(chaofan, yixin): remove nll_loss_backward and register the gradient using existing operators
+# This may require one_hot, strided_set, etc.
+@register_gradient("relax.nn.nll_loss")
+def nll_loss_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+):
+    """Gradient of nll_loss.
+
+    Forward Form:
+        `z = nll_loss(predictions, targets, weights, reduction, ignore_index)`
+
+        Suppose that `out = nll_loss(predictions, targets, weights, "none", ignore_index)`, and
+        `z = reduction(out)` where reduction is in `["none", "mean", "sum"]`.
+
+    Backward:
+        First find the gradient w.r.t. `out`. Assume it is `out_grad`.
+
+        Gererally, the gradient w.r.t. predictions is
+
+        `predictions_grad[n, c, i_1, ..., i_k] = -o * w if c == t else 0`, where
+        - `o = out_grad[n, i_1, ..., i_k]`,
+        - `w = weights[n, i_1, ..., i_k]`,
+        - `t = targets[n, i_1, ..., i_k]`.
+
+        Additional checks are added if `ignore_index >= 0`, `weights=None`, or the predictions
+        provided do not have batch.
+
+        The gradient w.r.t. targets and weights are not available. Now `nll_loss_grad` return zeros
+        for them.
+    """
+    pred_grad = nll_loss_backward(
+        output_grad,
+        orig_call.args[0],
+        orig_call.args[1],
+        weights=orig_call.args[2] if len(orig_call.args) == 3 else None,
+        reduction=orig_call.attrs.reduction,
+        ignore_index=orig_call.attrs.ignore_index,
+    )
+    tgt_grad = zeros(orig_call.args[1].struct_info.shape, orig_call.args[1].struct_info.dtype)
+    if len(orig_call.args) == 2:
+        return [pred_grad, tgt_grad]
+
+    weight_grad = zeros(orig_call.args[2].struct_info.shape, orig_call.args[2].struct_info.dtype)
+    return [pred_grad, tgt_grad, weight_grad]
+
+
+@register_gradient("relax.nn.conv2d")
+def conv2d_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of conv2d. Now only supports `NCHW` data layout and `OIHW` kernel layout.
+
+    Forward Form:
+        `y = relax.conv2d(x, weight, strides, padding, dilation, groups, data_layout, \
+kernel_layout, out_layout, out_dtype)`
+
+    Backward:
+        Returns `[x_grad, weight_grad]`
+    """
+    attrs = orig_call.attrs
+    assert attrs.data_layout == "NCHW", "only support NCHW data layout"
+    assert attrs.kernel_layout == "OIHW", "only support OIHW kernel layout"
+    assert attrs.out_layout == "NCHW", "only support NCHW output layout"
+
+    assert len(attrs.padding) == 4
+    assert len(attrs.strides) == 2
+    assert len(attrs.dilation) == 2
+
+    # calculate output_padding
+    data, weight = orig_call.args
+    batch, out_channel, grad_h, grad_w = _get_shape(orig_var)
+    _, in_channel, in_h, in_w = _get_shape(data)
+    _, _, filter_h, filter_w = _get_shape(weight)
+
+    pad_top, pad_left, pad_bottom, pad_right = attrs.padding
+    stride_h, stride_w = attrs.strides
+    dilation_h, dilation_w = attrs.dilation
+
+    out_h = (grad_h - 1) * stride_h - pad_top - pad_bottom + filter_h
+    out_w = (grad_w - 1) * stride_w - pad_left - pad_right + filter_w
+
+    output_padding = (in_h - out_h, in_w - out_w)
+
+    data_grad = conv2d_transpose(  # type: ignore
+        output_grad,
+        orig_call.args[1],
+        attrs.strides,
+        attrs.padding,
+        output_padding,
+        attrs.dilation,
+        attrs.groups,
+        attrs.out_layout,
+        attrs.kernel_layout[1] + attrs.kernel_layout[0] + attrs.kernel_layout[2:],
+        attrs.data_layout,
+        attrs.out_dtype,
+    )
+
+    if attrs.groups != 1:
+        data = reshape(data, (batch, attrs.groups, in_channel // attrs.groups, in_h, in_w))
+        data = permute_dims(data, [1, 0, 2, 3, 4])
+        data = reshape(data, (batch * attrs.groups, in_channel // attrs.groups, in_h, in_w))
+
+    weight_grad = conv2d(
+        data,
+        output_grad,
+        strides=attrs.dilation,
+        padding=attrs.padding,
+        dilation=attrs.strides,
+        groups=attrs.groups,
+        out_dtype=attrs.out_dtype,
+        data_layout="CNHW",
+        kernel_layout="IOHW",
+        out_layout="CNHW",
+    )
+
+    # infer shape of weight_grad
+    weight_grad_h = (in_h - (grad_h - 1) * stride_h - 1 + pad_top + pad_bottom) // dilation_h + 1
+    weight_grad_w = (in_w - (grad_w - 1) * stride_w - 1 + pad_left + pad_right) // dilation_w + 1
+
+    assert weight_grad_h >= filter_h
+    assert weight_grad_w >= filter_w
+
+    if weight_grad_h > filter_h or weight_grad_w > filter_w:
+        weight_grad = strided_slice(
+            weight_grad,
+            axes=[0, 1, 2, 3],
+            begin=[0, 0, 0, 0],
+            end=[out_channel, in_channel // attrs.groups, filter_h, filter_w],
+        )
+
+    return [data_grad, weight_grad]
+
+
+@register_gradient("relax.nn.max_pool2d")
+def max_pool2d_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+):
+    """Gradient of max_pool2d.
+
+    Forward Form:
+        `y = relax.max_pool2d(x, pool_size, strides, padding, dilation, ceil_mode, layout, \
+out_layout)`
+
+    Backward:
+        Returns `[x_grad]`
+    """
+    return [
+        max_pool2d_backward(  # type: ignore
+            output_grad,
+            orig_call.args[0],
+            orig_call.attrs.pool_size,
+            orig_call.attrs.strides,
+            orig_call.attrs.padding,
+            orig_call.attrs.dilation,
+            orig_call.attrs.ceil_mode,
+            orig_call.attrs.layout,
+            orig_call.attrs.out_layout,
+        )
+    ]
+
+
+@register_gradient("relax.nn.avg_pool2d")
+def avg_pool2d_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+):
+    """Gradient of avg_pool2d.
+
+    Forward Form:
+        `y = relax.avg_pool2d(x, pool_size, strides, padding, dilation, ceil_mode, layout, \
+out_layout)`
+
+    Backward:
+        Returns `[x_grad]`
+    """
+    return [
+        avg_pool2d_backward(  # type: ignore
+            output_grad,
+            orig_call.args[0],
+            orig_call.attrs.pool_size,
+            orig_call.attrs.strides,
+            orig_call.attrs.padding,
+            orig_call.attrs.dilation,
+            orig_call.attrs.ceil_mode,
+            orig_call.attrs.layout,
+            orig_call.attrs.out_layout,
+        )
+    ]

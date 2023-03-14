@@ -33,6 +33,7 @@ def relax_check_gradients(
     dev: tvm._ffi.runtime_ctypes.Device,
     output_shape: Union[Tuple, List[Tuple]],
     tuple_input: bool = False,
+    ignore_grads: List[int] = [],
     **kwargs,  # attr for operators
 ):
     """Generate module and run it to check numberic gradients."""
@@ -98,7 +99,13 @@ def relax_check_gradients(
     vm_0 = relax.VirtualMachine(ex_0, dev)
 
     def forward(*inputs):
-        inputs_tvm = [_numpy_to_tvm(i) for i in inputs]
+        inputs_iter = iter(inputs)
+        inputs_tvm = [
+            _numpy_to_tvm(next(inputs_iter))
+            if i not in ignore_grads
+            else _numpy_to_tvm(inputs_numpy[i])
+            for i in range(len(inputs_numpy))
+        ]
         result = vm_0[func_name](*inputs_tvm)
         result_numpy = _tvm_to_numpy(result)
         if isinstance(result_numpy, list):
@@ -128,9 +135,10 @@ def relax_check_gradients(
     vm_1 = relax.VirtualMachine(ex_1, dev)
     inputs_tvm = [_numpy_to_tvm(i) for i in inputs_numpy]
     weights_tvm = _numpy_to_tvm(weights)
-    result = vm_1[func_name](*inputs_tvm, weights_tvm)
+    result = _tvm_to_numpy(vm_1[func_name](*inputs_tvm, weights_tvm))
+    result_filtered = [result[i] for i in range(len(result)) if i not in ignore_grads]
 
-    check_numerical_grads(forward, inputs_numpy, _tvm_to_numpy(result))
+    check_numerical_grads(forward, inputs_numpy, result_filtered)
 
 
 ##################### Binary #####################
@@ -437,6 +445,175 @@ def test_cross_entropy_with_logits_batch(target, dev):
         target,
         dev,
         (),
+    )
+
+
+(nll_reduction, nll_weighted, nll_ignore_index) = tvm.testing.parameters(
+    ("mean", True, -1),
+    ("sum", True, -1),
+    ("none", True, -1),
+    ("mean", True, 1),
+    ("mean", True, 1),
+    ("mean", False, 1),
+)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_nll_loss(target, dev, nll_reduction, nll_weighted, nll_ignore_index):
+    data1_numpy = np.random.randint(0, 16, (2, 3, 4)).astype(np.float32)
+    data2_numpy = np.random.randint(0, 3, (2, 4)).astype(np.int64)
+    data3_numpy = np.random.randint(0, 16, (3,)).astype(np.float32)
+
+    out_shape = data2_numpy.shape if nll_reduction == "none" else ()
+    input = [data1_numpy, data2_numpy] + ([data3_numpy] if nll_weighted else [])
+    ignore_grads = [1] + ([2] if nll_weighted else [])
+
+    relax_check_gradients(
+        relax.op.nn.nll_loss,
+        "relax.nn.nll_loss",
+        input,
+        target,
+        dev,
+        out_shape,
+        ignore_grads=ignore_grads,
+        reduction=nll_reduction,
+        ignore_index=nll_ignore_index,
+    )
+
+
+(nll_reduction1, nll_weighted1, nll_ignore_index1) = tvm.testing.parameters(
+    ("mean", True, -1),
+    ("sum", True, -1),
+    ("none", True, -1),
+)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_nll_loss_no_batch(target, dev, nll_reduction1, nll_weighted1, nll_ignore_index1):
+    data1_numpy = np.random.randint(0, 16, (3,)).astype(np.float32)
+    data2_numpy = np.random.randint(0, 3, ()).astype(np.int64)
+    data3_numpy = np.random.randint(1, 16, (3,)).astype(np.float32)
+
+    out_shape = data2_numpy.shape if nll_reduction1 == "none" else ()
+    input = [data1_numpy, data2_numpy] + ([data3_numpy] if nll_weighted1 else [])
+    ignore_grads = [1] + ([2] if nll_weighted1 else [])
+
+    relax_check_gradients(
+        relax.op.nn.nll_loss,
+        "relax.nn.nll_loss",
+        input,
+        target,
+        dev,
+        out_shape,
+        ignore_grads=ignore_grads,
+        reduction=nll_reduction1,
+        ignore_index=nll_ignore_index1,
+    )
+
+
+(c2d_shape1, c2d_shape2, c2d_out_shape, c2d_kwargs,) = tvm.testing.parameters(
+    (
+        (3, 2, 10, 10),
+        (3, 2, 3, 3),
+        (3, 3, 8, 8),
+        {},
+    ),
+    (
+        (3, 2, 10, 10),
+        (3, 2, 1, 2),
+        (3, 3, 10, 9),
+        {},
+    ),
+    (
+        (3, 2, 10, 10),
+        (3, 2, 3, 3),
+        (3, 3, 7, 6),
+        {"strides": (2, 2), "padding": (3, 2), "dilation": (1, 1)},
+    ),
+    (
+        (3, 2, 10, 10),
+        (3, 2, 3, 3),
+        (3, 3, 6, 12),
+        {"strides": (2, 1), "padding": (2, 2), "dilation": (1, 1)},
+    ),
+    (
+        (3, 6, 10, 10),
+        (4, 3, 3, 3),
+        (3, 4, 8, 8),
+        {"groups": 2},
+    ),
+    (
+        (3, 2, 10, 10),
+        (4, 1, 3, 3),
+        (3, 4, 6, 6),
+        {"groups": 2, "strides": (2, 2), "padding": (2, 2), "dilation": (1, 1)},
+    ),
+)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_conv2d(target, dev, c2d_shape1, c2d_shape2, c2d_out_shape, c2d_kwargs):
+    # We should use float32 to check the correctness of conv2d
+    # to avoid possible precision problems
+    data1_numpy = np.random.randint(0, 16, c2d_shape1).astype(np.float64)
+    data2_numpy = np.random.randint(0, 3, c2d_shape2).astype(np.float64)
+    relax_check_gradients(
+        relax.op.nn.conv2d,
+        "relax.nn.conv2d",
+        [data1_numpy, data2_numpy],
+        target,
+        dev,
+        c2d_out_shape,
+        **c2d_kwargs,
+    )
+
+
+(pool_size, pool_out_shape, pool_kwargs,) = tvm.testing.parameters(
+    (
+        (3, 3),
+        (3, 2, 8, 8),
+        {},
+    ),
+    (
+        (3, 3),
+        (3, 2, 5, 6),
+        {"strides": (2, 2), "padding": (1, 2), "dilation": (1, 1)},
+    ),
+    (
+        (5, 5),
+        (3, 2, 6, 5),
+        {"strides": (2, 2), "padding": (2, 1), "dilation": (1, 1), "ceil_mode": True},
+    ),
+)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_max_pool2d(target, dev, pool_size, pool_out_shape, pool_kwargs):
+    data_numpy = np.random.uniform(0, 16, size=(3, 2, 10, 10)).astype(np.float64)
+    relax_check_gradients(
+        relax.op.nn.max_pool2d,
+        "relax.nn.max_pool2d",
+        [data_numpy],
+        target,
+        dev,
+        pool_out_shape,
+        pool_size=pool_size,
+        **pool_kwargs,
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_avg_pool2d(target, dev, pool_size, pool_out_shape, pool_kwargs):
+    data_numpy = np.random.uniform(0, 16, size=(3, 2, 10, 10)).astype(np.float64)
+    relax_check_gradients(
+        relax.op.nn.avg_pool2d,
+        "relax.nn.avg_pool2d",
+        [data_numpy],
+        target,
+        dev,
+        pool_out_shape,
+        pool_size=pool_size,
+        **pool_kwargs,
     )
 
 
