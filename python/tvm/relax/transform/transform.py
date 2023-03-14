@@ -161,6 +161,53 @@ def AttachGlobalSymbol() -> tvm.ir.transform.Pass:
     return _ffi_api.AttachGlobalSymbol()  # type: ignore
 
 
+def RewriteCUDAGraph() -> tvm.ir.transform.Pass:
+    """Rewrite the relax program to a cuda graph.
+
+    Returns
+    -------
+    ret: tvm.ir.transform.Pass
+    """
+    return _ffi_api.RewriteCUDAGraph()  # type: ignore
+
+
+def Normalize() -> tvm.ir.transform.Pass:
+    """Transforming Relax IR to normal form, i.e., the expressions are normalized(no nesting
+    and hence the AST is in ANF), and all checked_type_ and shape_ of expressions are available.
+
+    Returns
+    -------
+    ret: tvm.ir.transform.Pass
+    """
+    return _ffi_api.Normalize()  # type: ignore
+
+
+def CanonicalizeBindings() -> tvm.ir.transform.Pass:
+    """
+    Canonicalizes variable definitions
+    (e.g., if there is y = x and z = y, it replaces uses of y and z with x).
+
+    Best combined with constant folding and the elimination of unused definitions.
+
+    Returns
+    -------
+    ret: tvm.ir.transform.Pass
+    """
+    return _ffi_api.CanonicalizeBindings()  # type: ignore
+
+
+def ResolveGlobals() -> tvm.ir.transform.Pass:
+    """Resolve global variables using string equality. This ensures all GlobalVars in the IR refer
+    to the correct GlobalVar of the input IRModule. An error is reported if any GlobalVar cannot be
+    resolved.
+
+    Returns
+    -------
+    ret: tvm.ir.transform.Pass
+    """
+    return _ffi_api.ResolveGlobals()  # type: ignore
+
+
 def BindParams(
     func_name: str,
     params: Dict[str, Union[tvm.runtime.NDArray, np.ndarray]],
