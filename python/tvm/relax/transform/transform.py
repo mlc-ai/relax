@@ -20,7 +20,12 @@ import functools
 import inspect
 import types
 from typing import Callable, Dict, Union, Optional, List, Tuple
+
+# isort: off
+from typing_extensions import Literal
+
 from tvm.tir import PrimFunc, IndexMap
+
 import numpy as np  # type: ignore
 import tvm.ir
 from tvm.runtime import NDArray
@@ -531,10 +536,21 @@ def MetaScheduleTuneIRMod(
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
 
 
-def SimplifyNormInference() -> tvm.ir.transform.Pass:
-    """Simplify normalization operators during inference. For example, the result
-    of a batch norm which is indexed at tuple index 0 will be unpacked into a
-    number of simplified operators.
+def SimplifyNorm(
+    func_name: Optional[str] = None, mode: Literal["eval", "training"] = "eval"
+) -> tvm.ir.transform.Pass:
+    """Simplify normalization operators.
+
+    The result of batch norm (a triple) will be simplified.
+
+    Parameters
+    ----------
+    func_name: Optional[str]
+        The name of the specified function. If not specified, the pass will run in
+        all functions.
+
+    mode: Literal["eval", "training"]
+        The mode of simplification. Can be `"eval"` or `"training"`.
 
     Returns
     -------
@@ -542,7 +558,7 @@ def SimplifyNormInference() -> tvm.ir.transform.Pass:
         The registered pass
     """
 
-    return _ffi_api.SimplifyNormInference()  # type: ignore
+    return _ffi_api.SimplifyNorm(func_name, mode)  # type: ignore
 
 
 def AlterOpImpl(
