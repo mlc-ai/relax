@@ -336,12 +336,14 @@ class PatternCheckContext : public ObjectRef {
 };
 
 /*!
- * \brief Simplify normalization operators during inference. For example, the result
- * of a batch norm which is indexed at tuple index 0 will be unpacked into a
- * number of simplified operators.
+ * \brief Simplify normalization operators.
+ * The result of batch norm (a triple) will be simplified.
+ * \param func_name The name of the specified function. If not specified, the pass will run in
+ * all functions.
+ * \param mode The mode of simplification. Can be `eval` or `training`.
  * \return The Pass.
  */
-TVM_DLL Pass SimplifyNormInference();
+TVM_DLL Pass SimplifyNorm(Optional<String> func_name, String mode = "eval");
 
 /*!
  * \brief Returns a pass which replaces PrimFuncs which have matching kOperatorName attribute in \p
@@ -428,7 +430,6 @@ TVM_DLL Pass FuseTIR();
  */
 TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_options,
                         Array<runtime::String> entry_functions);
-
 
 /*!
  * \brief Decompose composite operators during inference. For example, the result

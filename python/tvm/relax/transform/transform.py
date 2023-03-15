@@ -21,6 +21,9 @@ import inspect
 import types
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
+# isort: off
+from typing_extensions import Literal
+
 import numpy as np  # type: ignore
 
 import tvm.ir
@@ -778,14 +781,32 @@ def DecomposeCompositeOps() -> tvm.ir.transform.Pass:
     For example, the result of a batch norm which is indexed at tuple index 0 will be unpacked
     into a number of simplified operators. Attention, tensor_to_shape, etc. can be also
     decomposed into a number of simplified operators as well.
+    """
+    return _ffi_api.DecomposeCompositeOps()  # type: ignore
+
+
+def SimplifyNorm(
+    func_name: Optional[str] = None, mode: Literal["eval", "training"] = "eval"
+) -> tvm.ir.transform.Pass:
+    """Simplify normalization operators.
+
+    The result of batch norm (a triple) will be simplified.
+
+    Parameters
+    ----------
+    func_name: Optional[str]
+        The name of the specified function. If not specified, the pass will run in
+        all functions.
+
+    mode: Literal["eval", "training"]
+        The mode of simplification. Can be `"eval"` or `"training"`.
 
     Returns
     -------
     ret : tvm.transform.Pass
         The registered pass
     """
-
-    return _ffi_api.DecomposeCompositeOps()  # type: ignore
+    return _ffi_api.SimplifyNorm(func_name, mode)  # type: ignore
 
 
 def AlterOpImpl(
