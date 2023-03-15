@@ -534,7 +534,9 @@ def MetaScheduleTuneIRMod(
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
 
 
-def SimplifyNorm(mode: Literal["eval", "training"] = "eval") -> tvm.ir.transform.Pass:
+def SimplifyNorm(
+    func_name: Optional[str], mode: Literal["eval", "training"] = "eval"
+) -> tvm.ir.transform.Pass:
     """Simplify normalization operators.
 
     During inference, for example, the result of a batch norm which is indexed at
@@ -544,8 +546,12 @@ def SimplifyNorm(mode: Literal["eval", "training"] = "eval") -> tvm.ir.transform
 
     Parameters
     ----------
+    func_name: Optional[str]
+        The name of the specified function. If not specified, the pass will run in
+        all functions.
+
     mode: Literal["eval", "training"]
-        The mode of simplification. Can be `eval` or `training`.
+        The mode of simplification. Can be `"eval"` or `"training"`.
 
     Returns
     -------
@@ -553,7 +559,7 @@ def SimplifyNorm(mode: Literal["eval", "training"] = "eval") -> tvm.ir.transform
         The registered pass
     """
 
-    return _ffi_api.SimplifyNorm(mode)  # type: ignore
+    return _ffi_api.SimplifyNorm(func_name, mode)  # type: ignore
 
 
 def Gradient(
@@ -928,7 +934,7 @@ def dataflowblock_pass(
         name of the optimization function will be used as the pass name.
 
     required : Optional[List[str]]
-        The list of passes that the dataflowblock pass is dependent on.z
+        The list of passes that the dataflowblock pass is dependent on.
 
     traceable: Boolean
         Boolean variable whether the dataflowblock pass is traceable
