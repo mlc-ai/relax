@@ -20,6 +20,10 @@ import functools
 import inspect
 import types
 from typing import Callable, Dict, Union, Optional, List, Tuple
+
+# isort: off
+from typing_extensions import Literal
+
 import numpy as np  # type: ignore
 import tvm.ir
 from tvm.runtime import NDArray
@@ -530,10 +534,18 @@ def MetaScheduleTuneIRMod(
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
 
 
-def SimplifyNormInference() -> tvm.ir.transform.Pass:
-    """Simplify normalization operators during inference. For example, the result
-    of a batch norm which is indexed at tuple index 0 will be unpacked into a
-    number of simplified operators.
+def SimplifyNorm(mode: Literal["eval", "training"] = "eval") -> tvm.ir.transform.Pass:
+    """Simplify normalization operators.
+
+    During inference, for example, the result of a batch norm which is indexed at
+    tuple index 0 will be unpacked into a number of simplified operators.
+
+    During training, the result of a batch norm in all indices will be unpacked.
+
+    Parameters
+    ----------
+    mode: Literal["eval", "training"]
+        The mode of simplification. Can be `eval` or `training`.
 
     Returns
     -------
@@ -541,7 +553,7 @@ def SimplifyNormInference() -> tvm.ir.transform.Pass:
         The registered pass
     """
 
-    return _ffi_api.SimplifyNormInference()  # type: ignore
+    return _ffi_api.SimplifyNorm(mode)  # type: ignore
 
 
 def Gradient(
@@ -916,7 +928,7 @@ def dataflowblock_pass(
         name of the optimization function will be used as the pass name.
 
     required : Optional[List[str]]
-        The list of passes that the dataflowblock pass is dependent on.
+        The list of passes that the dataflowblock pass is dependent on.z
 
     traceable: Boolean
         Boolean variable whether the dataflowblock pass is traceable

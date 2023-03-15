@@ -273,12 +273,14 @@ TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_opt
                         Array<runtime::String> entry_functions);
 
 /*!
- * \brief Simplify normalization operators during inference. For example, the result
- * of a batch norm which is indexed at tuple index 0 will be unpacked into a
- * number of simplified operators.
+ * \brief Simplify normalization operators.
+ * During inference, for example, the result of a batch norm which is indexed at
+ * tuple index 0 will be unpacked into a number of simplified operators.
+ * During training, the result of a batch norm in all indices will be unpacked.
+ * \param mode The mode of simplification. Can be `eval` or `training`.
  * \return The Pass.
  */
-TVM_DLL Pass SimplifyNormInference();
+TVM_DLL Pass SimplifyNorm(String mode = "eval");
 
 /*!
  * \brief Reverse-mode automatic differentiation.

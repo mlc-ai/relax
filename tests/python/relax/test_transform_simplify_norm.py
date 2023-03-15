@@ -25,12 +25,12 @@ from tvm.relax import Function
 from tvm.script import relax as R
 
 
-def _check(before: Union[Function, IRModule], expected: Union[Function, IRModule]):
+def _check(before: Union[Function, IRModule], expected: Union[Function, IRModule], mode: str):
     if isinstance(before, Function):
         before = IRModule({"main": before})
     if isinstance(expected, Function):
         expected = IRModule({"main": expected})
-    after = relax.transform.SimplifyNormInference()(before)
+    after = relax.transform.SimplifyNorm(mode)(before)
     tvm.ir.assert_structural_equal(expected, after)
 
 
@@ -81,7 +81,7 @@ def test_batch_norm_simple():
             R.output(out)
         return out
 
-    _check(before, expected)
+    _check(before, expected, "eval")
 
 
 def test_batch_norm_complex():
@@ -146,7 +146,82 @@ def test_batch_norm_complex():
             R.output(out, gv1)
         return out, gv1
 
-    _check(before, expected)
+    _check(before, expected, "eval")
+
+
+def test_batch_norm_training():
+    @R.function
+    def before(
+        x: R.Tensor((1, 64, 112, 112), "float32"),
+        gamma: R.Tensor((64,), "float32"),
+        beta: R.Tensor((64,), "float32"),
+        moving_mean: R.Tensor((64,), "float32"),
+        moving_var: R.Tensor((64,), "float32"),
+    ):
+        with R.dataflow():
+            bn = R.nn.batch_norm(
+                x,
+                gamma,
+                beta,
+                moving_mean,
+                moving_var,
+                axis=1,
+                epsilon=1e-5,
+                center=True,
+                scale=True,
+                momentum=0.1,
+            )
+            gv0 = bn[0]
+            gv1 = bn[1]
+            gv2 = bn[2]
+            R.output(gv0, gv1, gv2)
+        return gv0, gv1, gv2
+
+    @R.function
+    def expected(
+        x: R.Tensor((1, 64, 112, 112), dtype="float32"),
+        gamma: R.Tensor((64,), dtype="float32"),
+        beta: R.Tensor((64,), dtype="float32"),
+        moving_mean: R.Tensor((64,), dtype="float32"),
+        moving_var: R.Tensor((64,), dtype="float32"),
+    ) -> R.Tuple(
+        R.Tensor((1, 64, 112, 112), dtype="float32"),
+        R.Tensor((64,), dtype="float32"),
+        R.Tensor((64,), dtype="float32"),
+    ):
+        with R.dataflow():
+            lv: R.Tensor((64,), dtype="float32") = R.mean(x, axis=[0, 2, 3], keepdims=False)
+            lv1: R.Tensor((1, 64, 1, 1), dtype="float32") = R.expand_dims(lv, axis=[0, 2, 3])
+            lv2: R.Tensor((1, 64, 112, 112), dtype="float32") = R.subtract(x, lv1)
+            lv3: R.Tensor((64,), dtype="float32") = R.variance(x, axis=[0, 2, 3], keepdims=False)
+            lv4: R.Tensor((1, 64, 1, 1), dtype="float32") = R.expand_dims(lv3, axis=[0, 2, 3])
+            lv5: R.Tensor((1, 64, 1, 1), dtype="float32") = R.add(
+                lv4, R.const(9.9999997473787516e-06, "float32")
+            )
+            lv6: R.Tensor((1, 64, 1, 1), dtype="float32") = R.sqrt(lv5)
+            lv7: R.Tensor((1, 64, 112, 112), dtype="float32") = R.divide(lv2, lv6)
+            lv8: R.Tensor((1, 64, 1, 1), dtype="float32") = R.expand_dims(gamma, axis=[0, 2, 3])
+            lv9: R.Tensor((1, 64, 112, 112), dtype="float32") = R.multiply(lv7, lv8)
+            lv10: R.Tensor((1, 64, 1, 1), dtype="float32") = R.expand_dims(beta, axis=[0, 2, 3])
+            gv0: R.Tensor((1, 64, 112, 112), dtype="float32") = R.add(lv9, lv10)
+            lv11: R.Tensor((64,), dtype="float32") = R.multiply(
+                R.const(0.89999997615814209, "float32"), moving_mean
+            )
+            lv12: R.Tensor((64,), dtype="float32") = R.multiply(
+                R.const(0.10000000149011612, "float32"), lv
+            )
+            gv1: R.Tensor((64,), dtype="float32") = R.add(lv11, lv12)
+            lv13: R.Tensor((64,), dtype="float32") = R.multiply(
+                R.const(0.89999997615814209, "float32"), moving_var
+            )
+            lv14: R.Tensor((64,), dtype="float32") = R.multiply(
+                R.const(0.10000000149011612, "float32"), lv3
+            )
+            gv2: R.Tensor((64,), dtype="float32") = R.add(lv13, lv14)
+            R.output(gv0, gv1, gv2)
+        return gv0, gv1, gv2
+
+    _check(before, expected, "training")
 
 
 if __name__ == "__main__":
