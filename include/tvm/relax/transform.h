@@ -274,9 +274,7 @@ TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_opt
 
 /*!
  * \brief Simplify normalization operators.
- * During inference, for example, the result of a batch norm which is indexed at
- * tuple index 0 will be unpacked into a number of simplified operators.
- * During training, the result of a batch norm in all indices will be unpacked.
+ * The result of batch norm (a triple) will be simplified.
  * \param func_name The name of the specified function. If not specified, the pass will run in
  * all functions.
  * \param mode The mode of simplification. Can be `eval` or `training`.

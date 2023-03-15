@@ -535,14 +535,11 @@ def MetaScheduleTuneIRMod(
 
 
 def SimplifyNorm(
-    func_name: Optional[str], mode: Literal["eval", "training"] = "eval"
+    func_name: Optional[str] = None, mode: Literal["eval", "training"] = "eval"
 ) -> tvm.ir.transform.Pass:
     """Simplify normalization operators.
 
-    During inference, for example, the result of a batch norm which is indexed at
-    tuple index 0 will be unpacked into a number of simplified operators.
-
-    During training, the result of a batch norm in all indices will be unpacked.
+    The result of batch norm (a triple) will be simplified.
 
     Parameters
     ----------

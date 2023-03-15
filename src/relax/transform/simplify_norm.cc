@@ -141,7 +141,7 @@ class NormSimplifier : private ExprMutator {
           new_module->Update(func_pr.first, f_simplified);
         }
       }
-    } else {  // simplify specified functions
+    } else {  // simplify specified function
       auto* func_ptr = mod->Lookup(func_name.value()).as<FunctionNode>();
       CHECK(func_ptr) << func_name.value() << "is not a Relax Function";
       auto gvar = mod->GetGlobalVar(func_name.value());
