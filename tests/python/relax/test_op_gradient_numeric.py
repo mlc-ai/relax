@@ -33,6 +33,7 @@ def relax_check_gradients(
     dev: tvm._ffi.runtime_ctypes.Device,
     output_shape: Union[Tuple, List[Tuple]],
     tuple_input: bool = False,
+    weight_dtype: str = "float32",
     ignore_grads: List[int] = [],
     **kwargs,  # attr for operators
 ):
@@ -76,7 +77,7 @@ def relax_check_gradients(
     param_vars = [
         _numpy_to_var(input_numpy, "x_" + str(i)) for i, input_numpy in enumerate(inputs_numpy)
     ]
-    weights = _gen_weights(output_shape, inputs_numpy[0].dtype)
+    weights = _gen_weights(output_shape, weight_dtype)
     grad_var = _numpy_to_var(weights, "grad")
 
     # get gradient
@@ -137,8 +138,9 @@ def relax_check_gradients(
     weights_tvm = _numpy_to_tvm(weights)
     result = _tvm_to_numpy(vm_1[func_name](*inputs_tvm, weights_tvm))
     result_filtered = [result[i] for i in range(len(result)) if i not in ignore_grads]
+    inputs_filtered = [inputs_numpy[i] for i in range(len(result)) if i not in ignore_grads]
 
-    check_numerical_grads(forward, inputs_numpy, result_filtered)
+    check_numerical_grads(forward, inputs_filtered, result_filtered)
 
 
 ##################### Binary #####################
@@ -148,6 +150,7 @@ binary_arith_op_func, binary_arith_op_name = tvm.testing.parameters(
     (relax.op.subtract, "relax.subtract"),
     (relax.op.multiply, "relax.multiply"),
     (relax.op.divide, "relax.divide"),
+    (relax.op.power, "relax.power"),
 )
 
 
@@ -221,7 +224,13 @@ def test_create_like(target, dev, like_op_func, like_op_name, is_full):
     if is_full:
         full_value = np.random.uniform(-1, 1, ()).astype(np.float32)
         relax_check_gradients(
-            like_op_func, like_op_name, [data_numpy, full_value], target, dev, (3, 3)
+            like_op_func,
+            like_op_name,
+            [data_numpy, full_value],
+            target,
+            dev,
+            (3, 3),
+            ignore_grads=[1],
         )
     else:
         relax_check_gradients(like_op_func, like_op_name, [data_numpy], target, dev, (3, 3))
@@ -324,6 +333,61 @@ def test_split_section(target, dev):
     )
 
 
+@tvm.testing.parametrize_targets("llvm")
+def test_cumsum(target, dev):
+    data_numpy1 = np.random.randint(1, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.cumsum,
+        "relax.cumsum",
+        [data_numpy1],
+        target,
+        dev,
+        (3, 3),
+        axis=1,
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_cumsum_no_axis(target, dev):
+    data_numpy1 = np.random.randint(1, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.cumsum,
+        "relax.cumsum",
+        [data_numpy1],
+        target,
+        dev,
+        (9,),
+    )
+
+
+##################### Index #####################
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_take(target, dev):
+    pass
+
+
+##################### Search #####################
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_where(target, dev):
+    data1_numpy = np.random.uniform(0, 1, size=(3, 3)) > 0.5
+    data2_numpy = np.random.uniform(0, 16, size=(3, 3)).astype(np.float32)
+    data3_numpy = np.random.uniform(0, 16, size=(3, 3)).astype(np.float32)
+
+    relax_check_gradients(
+        relax.op.where,
+        "relax.where",
+        [data1_numpy, data2_numpy, data3_numpy],
+        target,
+        dev,
+        (3, 3),
+        ignore_grads=[0],
+    )
+
+
 ##################### Linear Algebra #####################
 
 
@@ -374,6 +438,17 @@ def test_matmul_5_4(target, dev):
         target,
         dev,
         (2, 3, 2, 4, 4),
+    )
+
+
+##################### Datatype #####################
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_astype(target, dev):
+    data_numpy = np.random.uniform(0, 16, size=(3, 3)).astype(np.float64)
+    relax_check_gradients(
+        relax.op.astype, "relax.astype", [data_numpy], target, dev, (3, 3), dtype="float32"
     )
 
 
@@ -565,6 +640,7 @@ def test_conv2d(target, dev, c2d_shape1, c2d_shape2, c2d_out_shape, c2d_kwargs):
         dev,
         c2d_out_shape,
         **c2d_kwargs,
+        weight_dtype="float64",
     )
 
 
@@ -599,6 +675,7 @@ def test_max_pool2d(target, dev, pool_size, pool_out_shape, pool_kwargs):
         pool_out_shape,
         pool_size=pool_size,
         **pool_kwargs,
+        weight_dtype="float64",
     )
 
 
@@ -614,6 +691,7 @@ def test_avg_pool2d(target, dev, pool_size, pool_out_shape, pool_kwargs):
         pool_out_shape,
         pool_size=pool_size,
         **pool_kwargs,
+        weight_dtype="float64",
     )
 
 

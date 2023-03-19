@@ -118,3 +118,8 @@ def register_legalize(op_name: str, legal_func: LegalizeFunc = None):
         The function for transforming an expr to another expr.
     """
     return tvm.ir.register_op_attr(op_name, _LEGALIZE_ATTR_NAME, legal_func)
+
+
+@register_legalize("relax.no_grad")
+def _no_grad(bb: BlockBuilder, call: Call) -> Expr:
+    return call.args[0]

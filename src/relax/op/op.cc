@@ -487,5 +487,15 @@ Expr MakeCallTIRDyn(Expr func, Tuple args) {
 
 TVM_REGISTER_GLOBAL("relax.op.vm.call_tir_dyn").set_body_typed(MakeCallTIRDyn);
 
+// no gradient dummy op
+
+StructInfo InferStructInfoNoGrad(const Call& call, const BlockBuilder& ctx) {
+  return GetStructInfo(call->args[0]);
+}
+
+RELAY_REGISTER_OP("relax.no_grad")
+    .set_num_inputs(0)
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoNoGrad);
+
 }  // namespace relax
 }  // namespace tvm

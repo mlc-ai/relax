@@ -19,6 +19,7 @@
 from typing import List
 
 from tvm import relax
+from tvm.ir import Op
 from tvm._ffi.base import TVMError
 from tvm.arith import Analyzer
 from tvm.relax.op.index import strided_slice
@@ -29,11 +30,12 @@ from ..expr import Call, Var, Expr, ShapeExpr
 from ...tir import PrimExpr
 
 from .base import register_gradient
-from .unary import cos, exp, sin, sqrt
+from .unary import cos, exp, sin, sqrt, log
 from .binary import less
 from .statistical import sum
 from .create import zeros, ones, zeros_like
 from .search import where
+from .index import take
 from .linear_algebra import matmul
 from .manipulate import (
     collapse_sum_to,
@@ -44,13 +46,19 @@ from .manipulate import (
     reshape,
     split,
     squeeze,
+    cumsum,
+    flatten,
 )
+from .datatype import astype
 from .nn import conv2d_transpose
 from .grad import (
     nll_loss_backward,
     max_pool2d_backward,
     avg_pool2d_backward,
 )
+
+
+##################### Utilities #####################
 
 
 def _get_shape(expr: Expr) -> ShapeExpr:
@@ -100,6 +108,10 @@ def _fit_shape(expr: Expr, expr_shape: ShapeExpr, target: Expr) -> Expr:
         return True
 
     return expr if _check_shape_equal() else collapse_sum_to(expr, target_shape)
+
+
+def _make_no_grad(data: Expr) -> Expr:
+    return Call(Op.get("relax.no_grad"), [data])
 
 
 ##################### Binary #####################
@@ -192,6 +204,32 @@ def divide_grad(
     return [
         _fit_shape(output_grad / y, output_grad_shape, x),
         _fit_shape(-output_grad * orig_var / y, output_grad_shape, y),
+    ]
+
+
+@register_gradient("relax.power")
+def power_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of power.
+
+    Forward Form:
+        `z = relax.power(x, y)`
+
+    Backward:
+        Returns `[y * x ** (y-1) * z_grad, z * ln(x) * z_grad]`.
+
+        The gradient w.r.t. the second parameter, y, makes sense only when x > 0.
+    """
+    x, y = orig_call.args
+    output_grad_shape = _get_shape(output_grad)
+    y_ones = _ones(y)
+    return [
+        _fit_shape(output_grad * y * (x ** (y - y_ones)), output_grad_shape, x),
+        _fit_shape(output_grad * orig_var * log(x), output_grad_shape, y),
     ]
 
 
@@ -293,7 +331,37 @@ def full_like_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [zeros_like(orig_call.args[0], orig_call.attrs.dtype)]
+    return [zeros_like(orig_call.args[0], orig_call.attrs.dtype), _make_no_grad(orig_call.args[1])]
+
+
+@register_gradient("relax.zeros")
+def zeros_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    return [_make_no_grad(orig_call.args[0])]
+
+
+@register_gradient("relax.ones")
+def ones_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    return [_make_no_grad(orig_call.args[0])]
+
+
+@register_gradient("relax.full")
+def full_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    return [_make_no_grad(orig_call.args[0]), zeros_like(orig_call.args[1], orig_call.attrs.dtype)]
 
 
 ##################### Unary #####################
@@ -578,6 +646,125 @@ def split_grad(
     return [concat(output_grad, axis)]
 
 
+@register_gradient("relax.reshape")
+def reshape_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of reshape.
+
+    Forward Form:
+        `y = relax.reshape(x, new_shape)`
+
+    Backward:
+        Returns `[reshape(y_grad, x.shape), no_grad]`.
+
+        The second parameter, the target ShapeExpr, is not differentiable.
+    """
+    return [
+        reshape(output_grad, orig_call.args[0].struct_info.shape),
+        _make_no_grad(orig_call.args[1]),
+    ]
+
+
+@register_gradient("relax.cumsum")
+def cumsum_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of cumsum.
+
+    Forward Form:
+        `y = relax.cumsum(x, axis)`
+
+    Backward:
+        The "reversed" cumsum along the same axis. Implement by some tricks now.
+    """
+
+    axis = orig_call.attrs["axis"]
+    dtype = orig_call.attrs["dtype"]
+    x_shape = _get_shape(orig_call.args[0])
+
+    if axis is not None:
+        axis = int(axis)
+        row_shape = [1 if i == axis else x_shape[i] for i in range(len(x_shape))]
+        grad = sum(output_grad, axis, keepdims=True) - cumsum(output_grad, axis) + output_grad
+    else:
+        grad = reshape(
+            sum(output_grad, keepdims=True) - cumsum(output_grad) + flatten(output_grad), x_shape
+        )
+
+    if dtype is not None:
+        grad = astype(grad, _get_dtype(orig_call.args[0]))
+
+    return [grad]
+
+
+##################### Index #####################
+
+
+@register_gradient("relax.take")
+def take_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of take.
+
+    Forward Form:
+        `y = relax.take(x, indices, axis)`
+
+    Backward:
+        Returns .
+
+        The second parameter, the indices, is not differentiable.
+    """
+
+    axis = orig_call.attrs["axis"]
+
+    return [
+        _make_no_grad(orig_call.args[0]),
+        _make_no_grad(orig_call.args[1]),
+    ]
+
+
+##################### Search #####################
+
+
+@register_gradient("relax.where")
+def where_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of where.
+
+    Forward Form:
+        `y = relax.where(cond, x1, x2)`
+
+    Backward:
+        Returns `[where(cond, y_grad, 0), where(cond, 0, y_grad)]`.
+
+        The first parameter, the condition, is not differentiable.
+    """
+
+    cond = orig_call.args[0]
+    x1_zeros = _zeros(orig_call.args[1])
+    x2_zeros = _zeros(orig_call.args[2])
+
+    return [
+        _make_no_grad(orig_call.args[0]),
+        where(cond, output_grad, x1_zeros),
+        where(cond, x2_zeros, output_grad),
+    ]
+
+
 ##################### Linear Algebra #####################
 
 
@@ -638,6 +825,27 @@ def matmul_grad(
         _fit_shape(a_grad, output_grad_shape, tensor_a),
         _fit_shape(b_grad, output_grad_shape, tensor_b),
     ]
+
+
+##################### Datatype #####################
+
+
+@register_gradient("relax.astype")
+def astype_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of astype.
+
+    Forward Form:
+        `y = relax.astype(x, dtype_of_y)`
+
+    Backward:
+        Returns `[astype(y_grad, dtype_of_x)]`.
+    """
+    return [astype(output_grad, _get_dtype(orig_call.args[0]))]
 
 
 ##################### Neural network #####################
@@ -763,8 +971,7 @@ def nll_loss_grad(
         Additional checks are added if `ignore_index >= 0`, `weights=None`, or the predictions
         provided do not have batch.
 
-        The gradient w.r.t. targets and weights are not available. Now `nll_loss_grad` return zeros
-        for them.
+        The gradient w.r.t. targets and weights are not available.
     """
     pred_grad = nll_loss_backward(
         output_grad,
@@ -774,12 +981,10 @@ def nll_loss_grad(
         reduction=orig_call.attrs.reduction,
         ignore_index=orig_call.attrs.ignore_index,
     )
-    tgt_grad = zeros(orig_call.args[1].struct_info.shape, orig_call.args[1].struct_info.dtype)
     if len(orig_call.args) == 2:
-        return [pred_grad, tgt_grad]
+        return [pred_grad, _make_no_grad(orig_call.args[1])]
 
-    weight_grad = zeros(orig_call.args[2].struct_info.shape, orig_call.args[2].struct_info.dtype)
-    return [pred_grad, tgt_grad, weight_grad]
+    return [pred_grad, _make_no_grad(orig_call.args[1]), _make_no_grad(orig_call.args[2])]
 
 
 @register_gradient("relax.nn.conv2d")
