@@ -309,5 +309,57 @@ def test_batch_norm_multiple_functions():
     tvm.ir.assert_structural_equal(Expected, After)
 
 
+def test_layer_norm():
+    @I.ir_module
+    class Before:
+        @R.function
+        def main(
+            x: R.Tensor((4, 64, 112, 112), "float32"),
+            gamma: R.Tensor((112, 112), "float32"),
+            beta: R.Tensor((112, 112), "float32"),
+        ):
+            with R.dataflow():
+                ln = R.nn.layer_norm(
+                    x,
+                    gamma,
+                    beta,
+                    axes=[-2, -1],
+                    epsilon=1e-5,
+                    center=True,
+                    scale=True,
+                )
+                R.output(ln)
+            return ln
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(
+            x: R.Tensor((4, 64, 112, 112), dtype="float32"),
+            gamma: R.Tensor((112, 112), dtype="float32"),
+            beta: R.Tensor((112, 112), dtype="float32"),
+        ) -> R.Tensor((4, 64, 112, 112), dtype="float32"):
+            with R.dataflow():
+                lv: R.Tensor((4, 64, 1, 1), dtype="float32") = R.mean(
+                    x, axis=[-2, -1], keepdims=True
+                )
+                lv1: R.Tensor((4, 64, 112, 112), dtype="float32") = R.subtract(x, lv)
+                lv2: R.Tensor((4, 64, 1, 1), dtype="float32") = R.variance(
+                    x, axis=[-2, -1], keepdims=True
+                )
+                lv3: R.Tensor((4, 64, 1, 1), dtype="float32") = R.add(
+                    lv2, R.const(9.9999997473787516e-06, "float32")
+                )
+                lv4: R.Tensor((4, 64, 1, 1), dtype="float32") = R.sqrt(lv3)
+                lv5: R.Tensor((4, 64, 112, 112), dtype="float32") = R.divide(lv1, lv4)
+                lv6: R.Tensor((4, 64, 112, 112), dtype="float32") = R.multiply(lv5, gamma)
+                ln: R.Tensor((4, 64, 112, 112), dtype="float32") = R.add(lv6, beta)
+                R.output(ln)
+            return ln
+
+    After = relax.transform.SimplifyNorm(mode="eval")(Before)
+    tvm.ir.assert_structural_equal(Expected, After)
+
+
 if __name__ == "__main__":
     tvm.testing.main()

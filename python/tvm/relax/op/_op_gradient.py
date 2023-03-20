@@ -35,7 +35,6 @@ from .binary import less
 from .statistical import sum
 from .create import zeros, ones, zeros_like
 from .search import where
-from .index import take
 from .linear_algebra import matmul
 from .manipulate import (
     collapse_sum_to,
@@ -691,7 +690,6 @@ def cumsum_grad(
 
     if axis is not None:
         axis = int(axis)
-        row_shape = [1 if i == axis else x_shape[i] for i in range(len(x_shape))]
         grad = sum(output_grad, axis, keepdims=True) - cumsum(output_grad, axis) + output_grad
     else:
         grad = reshape(
@@ -724,6 +722,8 @@ def take_grad(
 
         The second parameter, the indices, is not differentiable.
     """
+
+    # TODO: gradient of take
 
     axis = orig_call.attrs["axis"]
 
