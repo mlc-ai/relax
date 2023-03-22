@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name
+# pylint: disable=abstract-method,invalid-name,missing-class-docstring,missing-function-docstring,missing-module-docstring,unused-argument
 """Relax quantization passes."""
 import tvm
 from tvm import topi, relax
@@ -27,6 +27,7 @@ from tvm.tir import IntImm
 
 
 def te_encode_i4(x, group_size=64):
+    """topi implementation of int4 quantization encoding"""
     assert len(x.shape) == 2
     assert x.shape[1] % group_size == 0
     x_reshape = topi.reshape(x, (x.shape[0], x.shape[1] // group_size, group_size))
@@ -46,6 +47,7 @@ def te_encode_i4(x, group_size=64):
 
 
 def te_decode_i4(x, x_max, x_min):
+    """topi implementation of int4 quantization decoding"""
     assert len(x.shape) == 3
     assert len(x_max.shape) == 3
     assert len(x_min.shape) == 3
@@ -66,7 +68,19 @@ def te_decode_i4(x, x_max, x_min):
 
 @tvm.transform.module_pass(opt_level=3, name="GroupQuantize")
 class GroupQuantize:
+    """
+    A pass that quantize the input tensor to int4 by group.
+    """
+
     def __init__(self, group_size: int = 64) -> None:
+        """
+        Parameters
+        ----------
+
+        group_size: int
+            The size of the group for quantization.
+
+        """
         self.group_size = group_size
 
     def transform_module(self, mod: IRModule, ctx: tvm.transform.PassContext) -> IRModule:
@@ -126,7 +140,7 @@ class GroupQuantize:
                 else:
                     return args, False
 
-            def visit_call_(self, call):
+            def visit_call_(self, call):  # pylint: disable=arguments-differ
                 call = self.visit_expr_post_order(call)
                 new_args, updated = self.process_args(call.args)
                 if not updated:
