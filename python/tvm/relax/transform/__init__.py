@@ -21,3 +21,5 @@ from .transform import *
 
 # Import to register the legalization functions.
 from . import legalize_ops
+
+from .quantization import GroupQuantize
