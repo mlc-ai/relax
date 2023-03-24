@@ -117,6 +117,9 @@ class BackwardBindingGenerator : private ExprVisitor {
 
     for (size_t i = 0; i < partials.size(); ++i) {
       Expr partial = partials[i];
+      if (IsCallNoGrad(partial)) {  // no grad: don't update
+        continue;
+      }
       if (!partial->struct_info_.defined()) {
         UpdateStructInfo(partial, GetStructInfo(call->args[i]));
       }

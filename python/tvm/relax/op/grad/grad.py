@@ -108,3 +108,20 @@ def avg_pool2d_backward(
     return _ffi_api.avg_pool2d_backward(  # type: ignore
         output_grad, data, pool_size, strides, padding, dilation, ceil_mode, layout, out_layout
     )
+
+
+def take_backward(output_grad: Expr, x: Expr, indices: Expr, axis: Optional[int] = None) -> Expr:
+    """Backward operator of relax.take. All parameters except output_grad is the same as
+    relax.take. Returns the gradient w.r.t. data.
+
+    Parameters
+    ----------
+    output_grad : relax.Expr
+      The gradient w.r.t. the result of take.
+
+    Returns
+    -------
+    result : relax.Expr
+      The gradient w.r.t. data.
+    """
+    return _ffi_api.take_backward(output_grad, x, indices, axis)  # type: ignore

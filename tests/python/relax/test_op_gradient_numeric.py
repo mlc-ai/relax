@@ -365,7 +365,33 @@ def test_cumsum_no_axis(target, dev):
 
 @tvm.testing.parametrize_targets("llvm")
 def test_take(target, dev):
-    pass
+    data_numpy = np.random.uniform(0, 16, size=(2, 3, 4)).astype(np.float32)
+    indices = np.array([0, 1])
+    relax_check_gradients(
+        relax.op.take,
+        "relax.take",
+        [data_numpy, indices],
+        target,
+        dev,
+        (2, 2, 4),
+        axis=1,
+        ignore_grads=[1],
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_take_no_axis(target, dev):
+    data_numpy = np.random.uniform(0, 16, size=(5,)).astype(np.float32)
+    indices = np.array([1, 3])
+    relax_check_gradients(
+        relax.op.take,
+        "relax.take",
+        [data_numpy, indices],
+        target,
+        dev,
+        (2,),
+        ignore_grads=[1],
+    )
 
 
 ##################### Search #####################

@@ -119,5 +119,30 @@ TVM_REGISTER_OP("relax.grad.avg_pool2d_backward")
     .set_attrs_type<Pool2DAttrs>()
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoAvgPool2DBackward);
 
+/* relax.take_backward */
+TVM_REGISTER_NODE_TYPE(TakeAttrs);
+
+Expr take_backward(Expr output_grad, Expr x, Expr indices, Optional<Integer> axis) {
+  ObjectPtr<TakeAttrs> attrs = make_object<TakeAttrs>();
+  attrs->axis = std::move(axis);
+
+  static const Op& op = Op::Get("relax.grad.take_backward");
+  return Call(op, {std::move(output_grad), std::move(x), std::move(indices)}, Attrs(attrs), {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.grad.take_backward").set_body_typed(take_backward);
+
+StructInfo InferStructInfoTakeBackward(const Call& call, const BlockBuilder& ctx) {
+  return GetStructInfo(call->args[1]);
+}
+
+TVM_REGISTER_OP("relax.grad.take_backward")
+    .set_attrs_type<TakeAttrs>()
+    .set_num_inputs(3)
+    .add_argument("output_grad", "Tensor", "The output gradient.")
+    .add_argument("x", "Tensor", "The source tensor.")
+    .add_argument("indices", "Tensor", "The indices of the values to extract.")
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoTakeBackward);
+
 }  // namespace relax
 }  // namespace tvm

@@ -17,6 +17,8 @@
 # pylint: disable=unused-argument, redefined-builtin
 """Gradient definitions for Relax operators."""
 from typing import List
+import functools
+import operator
 
 from tvm import relax
 from tvm.ir import Op
@@ -54,6 +56,7 @@ from .grad import (
     nll_loss_backward,
     max_pool2d_backward,
     avg_pool2d_backward,
+    take_backward,
 )
 
 
@@ -111,6 +114,15 @@ def _fit_shape(expr: Expr, expr_shape: ShapeExpr, target: Expr) -> Expr:
 
 def _make_no_grad(data: Expr) -> Expr:
     return Call(Op.get("relax.no_grad"), [data])
+
+
+def _get_shape_prod(expr, axis):
+    if axis is None:
+        return functools.reduce(operator.mul, (int(i) for i in expr.struct_info.shape), 1)
+    else:
+        return functools.reduce(
+            operator.mul, (int(expr.struct_info.shape[int(i)]) for i in axis), 1
+        )
 
 
 ##################### Binary #####################
@@ -562,6 +574,62 @@ def sum_grad(
     return [broadcast_to(output_grad, _get_shape(orig_call.args[0]))]
 
 
+@register_gradient("relax.mean")
+def mean_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of sum.
+
+    Forward Form:
+        `y = relax.mean(x, axis, keepdims)`
+
+    Backward:
+        Returns `[broadcast_to(y_output_grad, x.shape) / prod(x.shape[i] for i in axis)]`.
+
+        If `keepdims=False`, the summed axis will be added back.
+    """
+    axis = orig_call.attrs.axis
+    keepdims = orig_call.attrs.keepdims
+    output_grad = output_grad / relax.const(
+        _get_shape_prod(orig_call.args[0], axis), output_grad.struct_info.dtype
+    )
+    if not keepdims and axis:
+        output_grad = expand_dims(output_grad, axis)
+    return [broadcast_to(output_grad, _get_shape(orig_call.args[0]))]
+
+
+@register_gradient("relax.variance")
+def variance_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of variance.
+
+    Forward Form:
+        `y = relax.variance(x, axis, keepdims)`
+
+    Backward:
+        Returns `[broadcast_to(y_output_grad, x.shape)]`.
+
+        If `keepdims=False`, the summed axis will be added back.
+    """
+    x = orig_call.args[0]
+    axis = orig_call.attrs.axis
+    keepdims = orig_call.attrs.keepdims
+    shape_prod = _get_shape_prod(x, axis)
+    dtype = x.struct_info.dtype
+    grad1 = relax.const(2.0 / shape_prod, dtype) * x
+    grad2 = relax.const(2.0 / shape_prod / shape_prod, dtype) * sum(x, axis, keepdims=True)
+    if not keepdims and axis:
+        output_grad = expand_dims(output_grad, axis)
+    return [output_grad * (grad1 - grad2)]
+
+
 ##################### Manipulate #####################
 
 
@@ -723,12 +791,10 @@ def take_grad(
         The second parameter, the indices, is not differentiable.
     """
 
-    # TODO: gradient of take
-
     axis = orig_call.attrs["axis"]
 
     return [
-        _make_no_grad(orig_call.args[0]),
+        take_backward(output_grad, orig_call.args[0], orig_call.args[1], axis),
         _make_no_grad(orig_call.args[1]),
     ]
 

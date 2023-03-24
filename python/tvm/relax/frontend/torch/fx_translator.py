@@ -1127,8 +1127,8 @@ class TorchFXImporter:
             self.block_builder.emit_func_output(output)
 
         mod = self.block_builder.get()
-        if keep_params_as_input:
-            mod["main"] = mod["main"].with_attr("params", params)
+        # if keep_params_as_input:
+        #    mod["main"] = mod["main"].with_attr("params", params)
         return mod
 
 
