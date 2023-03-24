@@ -16,26 +16,29 @@
 # under the License.
 # pylint: disable=unused-argument, redefined-builtin
 """Gradient definitions for Relax operators."""
-from typing import List
 import functools
 import operator
+from typing import List
 
 from tvm import relax
 from tvm._ffi.base import TVMError
 from tvm.arith import Analyzer
-from tvm.relax.op.index import strided_slice
-from tvm.relax.op.nn.nn import conv2d
 
 from ..block_builder import BlockBuilder
 from ..expr import Call, Var, Expr, ShapeExpr
 from ...tir import PrimExpr
 
 from .base import register_gradient
-from .unary import cos, exp, sin, sqrt, log
 from .binary import less
-from .statistical import sum
-from .create import zeros, ones, zeros_like
-from .search import where
+from .datatype import astype
+from .grad import (
+    no_grad,
+    nll_loss_backward,
+    max_pool2d_backward,
+    avg_pool2d_backward,
+    take_backward,
+)
+from .index import strided_slice
 from .linear_algebra import matmul
 from .manipulate import (
     collapse_sum_to,
@@ -49,15 +52,13 @@ from .manipulate import (
     cumsum,
     flatten,
 )
-from .datatype import astype
-from .nn import conv2d_transpose
-from .grad import (
-    no_grad,
-    nll_loss_backward,
-    max_pool2d_backward,
-    avg_pool2d_backward,
-    take_backward,
-)
+from .nn import conv2d_transpose, conv2d
+from .search import where
+from .statistical import sum
+from .unary import cos, exp, log, sin, sqrt
+
+
+# TODO(yixin, chaofan): handle symbolic shape for most of the gradients
 
 
 ##################### Utilities #####################
@@ -85,14 +86,6 @@ def _get_dtype(expr: Expr) -> str:
     return dtype
 
 
-def _ones(expr: Expr) -> Expr:
-    return ones(_get_shape(expr), _get_dtype(expr))
-
-
-def _zeros(expr: Expr) -> Expr:
-    return zeros(_get_shape(expr), _get_dtype(expr))
-
-
 def _fit_shape(expr: Expr, expr_shape: ShapeExpr, target: Expr) -> Expr:
     target_shape = _get_shape(target)
     expr_sinfo = expr_shape.struct_info
@@ -113,12 +106,11 @@ def _fit_shape(expr: Expr, expr_shape: ShapeExpr, target: Expr) -> Expr:
 
 
 def _get_shape_prod(expr, axis):
+    shape = _get_shape(expr)
     if axis is None:
-        return functools.reduce(operator.mul, (int(i) for i in expr.struct_info.shape), 1)
+        return functools.reduce(operator.mul, (int(i) for i in shape), 1)
     else:
-        return functools.reduce(
-            operator.mul, (int(expr.struct_info.shape[int(i)]) for i in axis), 1
-        )
+        return functools.reduce(operator.mul, (int(shape[int(i)]) for i in axis), 1)
 
 
 ##################### Binary #####################
@@ -233,18 +225,15 @@ def power_grad(
     """
     x, y = orig_call.args
     output_grad_shape = _get_shape(output_grad)
-    y_ones = _ones(y)
+    one = relax.const(1, _get_dtype(y))
     return [
-        _fit_shape(output_grad * y * (x ** (y - y_ones)), output_grad_shape, x),
+        _fit_shape(output_grad * y * (x ** (y - one)), output_grad_shape, x),
         _fit_shape(output_grad * orig_var * log(x), output_grad_shape, y),
     ]
 
 
-# TODO(chaofan): floor-divide
-
-# For most comparison operators, the gradients are just zeros.
-def _binary_zeros(call: Call) -> List[Expr]:
-    return [_zeros(call.args[0]), _zeros(call.args[1])]
+##################### Binary Comparison #####################
+# For comparison operators, the gradients are no_grad
 
 
 @register_gradient("relax.equal")
@@ -254,7 +243,7 @@ def equal_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return _binary_zeros(orig_call)
+    return [no_grad(orig_call.args[0]), no_grad(orig_call.args[1])]
 
 
 @register_gradient("relax.greater")
@@ -264,7 +253,7 @@ def greater_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return _binary_zeros(orig_call)
+    return [no_grad(orig_call.args[0]), no_grad(orig_call.args[1])]
 
 
 @register_gradient("relax.greater_equal")
@@ -274,7 +263,7 @@ def greater_equal_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return _binary_zeros(orig_call)
+    return [no_grad(orig_call.args[0]), no_grad(orig_call.args[1])]
 
 
 @register_gradient("relax.less")
@@ -284,7 +273,7 @@ def less_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return _binary_zeros(orig_call)
+    return [no_grad(orig_call.args[0]), no_grad(orig_call.args[1])]
 
 
 @register_gradient("relax.less_equal")
@@ -294,7 +283,7 @@ def less_equal_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return _binary_zeros(orig_call)
+    return [no_grad(orig_call.args[0]), no_grad(orig_call.args[1])]
 
 
 @register_gradient("relax.not_equal")
@@ -304,13 +293,13 @@ def not_equal_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return _binary_zeros(orig_call)
+    return [no_grad(orig_call.args[0]), no_grad(orig_call.args[1])]
 
 
 ##################### Create #####################
+# For create operators, the gradients are no_grad.
 
 
-# For these create operators, the gradients are just zeros.
 @register_gradient("relax.zeros_like")
 def zeros_like_grad(
     orig_var: Var,
@@ -318,7 +307,7 @@ def zeros_like_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [orig_var]
+    return [no_grad(orig_call.args[0])]
 
 
 @register_gradient("relax.ones_like")
@@ -328,7 +317,7 @@ def ones_like_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [zeros_like(orig_call.args[0], orig_call.attrs.dtype)]
+    return [no_grad(orig_call.args[0])]
 
 
 @register_gradient("relax.full_like")
@@ -338,7 +327,7 @@ def full_like_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [zeros_like(orig_call.args[0], orig_call.attrs.dtype), no_grad(orig_call.args[1])]
+    return [no_grad(orig_call.args[0]), no_grad(orig_call.args[1])]
 
 
 @register_gradient("relax.zeros")
@@ -368,7 +357,7 @@ def full_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [no_grad(orig_call.args[0]), zeros_like(orig_call.args[1], orig_call.attrs.dtype)]
+    return [no_grad(orig_call.args[0]), no_grad(orig_call.args[1])]
 
 
 ##################### Unary #####################
@@ -390,9 +379,9 @@ def abs_grad(
         Returns `[y_grad * where(x < 0, -1, 1)]`.
     """
     x = orig_call.args[0]
-    x_zeros = _zeros(x)
-    x_ones = _ones(x)
-    return [output_grad * where(less(x, x_zeros), -x_ones, x_ones)]
+    zero = relax.const(0, _get_dtype(x))
+    one = relax.const(1, _get_dtype(x))
+    return [output_grad * where(less(x, zero), -one, one)]
 
 
 @register_gradient("relax.cos")
@@ -482,8 +471,8 @@ def sigmoid_grad(
     Backward:
         Returns `[y_grad * y * (1 - y)]`.
     """
-    x_ones = _ones(orig_call.args[0])
-    return [output_grad * orig_var * (x_ones - orig_var)]
+    one = relax.const(1, _get_dtype(orig_call.args[0]))
+    return [output_grad * orig_var * (one - orig_var)]
 
 
 @register_gradient("relax.sin")
@@ -520,7 +509,7 @@ def sqrt_grad(
         Returns `[0.5 * y_grad / sqrt(x)]`.
     """
     x = orig_call.args[0]
-    cst = relax.const(0.5, dtype=_get_dtype(x))
+    cst = relax.const(0.5, _get_dtype(x))
     return [cst * output_grad / sqrt(x)]
 
 
@@ -539,8 +528,8 @@ def tanh_grad(
     Backward:
         Returns `[y_grad * (1 - y * y)]`.
     """
-    x_ones = _ones(orig_call.args[0])
-    return [output_grad * (x_ones - orig_var * orig_var)]
+    one = relax.const(1, _get_dtype(orig_call.args[0]))
+    return [output_grad * (one - orig_var * orig_var)]
 
 
 ##################### Statistical #####################
@@ -563,8 +552,8 @@ def sum_grad(
 
         If `keepdims=False`, the summed axis will be added back.
     """
-    axis = orig_call.attrs["axis"]
-    keepdims = orig_call.attrs["keepdims"]
+    axis = orig_call.attrs.axis
+    keepdims = orig_call.attrs.keepdims
     if not keepdims and axis:
         output_grad = expand_dims(output_grad, axis)
     return [broadcast_to(output_grad, _get_shape(orig_call.args[0]))]
@@ -590,7 +579,7 @@ def mean_grad(
     axis = orig_call.attrs.axis
     keepdims = orig_call.attrs.keepdims
     output_grad = output_grad / relax.const(
-        _get_shape_prod(orig_call.args[0], axis), output_grad.struct_info.dtype
+        _get_shape_prod(orig_call.args[0], axis), _get_dtype(output_grad)
     )
     if not keepdims and axis:
         output_grad = expand_dims(output_grad, axis)
@@ -618,7 +607,7 @@ def variance_grad(
     axis = orig_call.attrs.axis
     keepdims = orig_call.attrs.keepdims
     shape_prod = _get_shape_prod(x, axis)
-    dtype = x.struct_info.dtype
+    dtype = _get_dtype(x)
     grad1 = relax.const(2.0 / shape_prod, dtype) * x
     grad2 = relax.const(2.0 / shape_prod / shape_prod, dtype) * sum(x, axis, keepdims=True)
     if not keepdims and axis:
@@ -644,7 +633,7 @@ def permute_dims_grad(
     Backward:
         Returns grad transposed over the **inverse permutation** of the original permute_dims axes.
     """
-    axes = orig_call.attrs["axes"]
+    axes = orig_call.attrs.axes
     if axes:
         dims = len(axes)
         new_axes = [0] * dims
@@ -655,7 +644,6 @@ def permute_dims_grad(
         return [permute_dims(output_grad)]
 
 
-# TODO(yixin, chaofan): handle symbolic shape
 @register_gradient("relax.concat")
 def concat_grad(
     orig_var: Var,
@@ -666,12 +654,12 @@ def concat_grad(
     """Gradient of concat.
 
     Forward Form:
-        `y = concat((x1, x2, x3), axis)`
+        `y = relax.concat((x1, x2, x3), axis)`
 
     Backward:
         Returns `[split(y_output_grad, [x1.shape[axis], x1.shape[axis] + x2.shape[axis]], axis)]`.
     """
-    axis = orig_call.attrs["axis"]
+    axis = orig_call.attrs.axis
     assert axis is not None
     axis = int(axis)
     split_indices: List[PrimExpr] = []
@@ -698,15 +686,32 @@ def split_grad(
     """Gradient of split.
 
     Forward Form:
-        `y = split(x, indices, axis)`
+        `y = relax.split(x, indices, axis)`
 
     Backward:
         Returns `[concat(y_output_grad, axis)]`.
     """
-    axis = orig_call.attrs["axis"]
-    assert axis is not None
+    axis = orig_call.attrs.axis
     axis = int(axis)
     return [concat(output_grad, axis)]
+
+
+@register_gradient("relax.expand_dims")
+def expand_dims_grad(
+    orig_var: Var,
+    orig_call: Call,
+    output_grad: Var,
+    ctx: BlockBuilder,
+) -> List[Expr]:
+    """Gradient of expand_dims.
+
+    Forward Form:
+        `y = relax.expand_dims(x, axis)`
+
+    Backward:
+        Returns `[squeeze_dims(y_grad, axis)]`.
+    """
+    return [squeeze(output_grad, orig_call.attrs.axis)]
 
 
 @register_gradient("relax.reshape")
@@ -727,7 +732,7 @@ def reshape_grad(
         The second parameter, the target ShapeExpr, is not differentiable.
     """
     return [
-        reshape(output_grad, orig_call.args[0].struct_info.shape),
+        reshape(output_grad, _get_shape(orig_call.args[0])),
         no_grad(orig_call.args[1]),
     ]
 
@@ -817,13 +822,13 @@ def where_grad(
     """
 
     cond = orig_call.args[0]
-    x1_zeros = _zeros(orig_call.args[1])
-    x2_zeros = _zeros(orig_call.args[2])
+    x1_zero = relax.const(0, _get_dtype(orig_call.args[1]))
+    x2_zero = relax.const(0, _get_dtype(orig_call.args[2]))
 
     return [
         no_grad(orig_call.args[0]),
-        where(cond, output_grad, x1_zeros),
-        where(cond, x2_zeros, output_grad),
+        where(cond, output_grad, x1_zero),
+        where(cond, x2_zero, output_grad),
     ]
 
 
@@ -929,9 +934,9 @@ def relu_grad(
         Returns `[y_grad * (where(x < 0, 0, 1))]`.
     """
     x = orig_call.args[0]
-    x_zeros = _zeros(x)
-    x_ones = _ones(x)
-    return [where(less(x, x_zeros), x_zeros, x_ones) * output_grad]
+    one = relax.const(1, _get_dtype(x))
+    zero = relax.const(0, _get_dtype(x))
+    return [where(less(x, zero), zero, one) * output_grad]
 
 
 @register_gradient("relax.nn.softmax")
@@ -971,17 +976,6 @@ def log_softmax_grad(
     return [(output_grad - sum(output_grad, orig_call.attrs.axis, True) * x_softmax)]
 
 
-def _divide_batch(x: Expr, expr: Expr):
-    if x.struct_info.ndim > 1:
-        # TODO(chaofan, yixin): support symbolic shape
-        x_shape = _get_shape(x)
-        batch_size = int(x_shape[0])
-        # batch_size = take(shape_of(x), relax.const(0, dtype="int32"), axis=0)
-        # expr = divide(expr, batch_size)
-        expr = expr / relax.const(batch_size, dtype=_get_dtype(expr))
-    return expr
-
-
 @register_gradient("relax.nn.cross_entropy_with_logits")
 def cross_entropy_with_logits_grad(
     orig_var: Var,
@@ -992,14 +986,18 @@ def cross_entropy_with_logits_grad(
     """Gradient of cross_entropy_with_logits.
 
     Forward Form:
-        `z = cross_entropy_with_logits(x, y)`
+        `z = relax.nn.cross_entropy_with_logits(x, y)`
 
     Backward:
         Returns `[-z_grad * y, -z_grad * x]`.
         If it has batch_size N, the results should divide by N.
     """
     x, y = orig_call.args
-    output_grad = _divide_batch(x, output_grad)
+
+    if x.struct_info.ndim > 1:
+        batch_size = int(_get_shape(x)[0])
+        output_grad = output_grad / relax.const(batch_size, _get_dtype(output_grad))
+
     return [-output_grad * y, -output_grad * x]
 
 
@@ -1015,7 +1013,7 @@ def nll_loss_grad(
     """Gradient of nll_loss.
 
     Forward Form:
-        `z = nll_loss(predictions, targets, weights, reduction, ignore_index)`
+        `z = relax.nn.nll_loss(predictions, targets, weights, reduction, ignore_index)`
 
         Suppose that `out = nll_loss(predictions, targets, weights, "none", ignore_index)`, and
         `z = reduction(out)` where reduction is in `["none", "mean", "sum"]`.
@@ -1059,7 +1057,7 @@ def conv2d_grad(
     """Gradient of conv2d. Now only supports `NCHW` data layout and `OIHW` kernel layout.
 
     Forward Form:
-        `y = relax.conv2d(x, weight, strides, padding, dilation, groups, data_layout, \
+        `y = relax.nn.conv2d(x, weight, strides, padding, dilation, groups, data_layout, \
 kernel_layout, out_layout, out_dtype)`
 
     Backward:
@@ -1149,7 +1147,7 @@ def max_pool2d_grad(
     """Gradient of max_pool2d.
 
     Forward Form:
-        `y = relax.max_pool2d(x, pool_size, strides, padding, dilation, ceil_mode, layout, \
+        `y = relax.nn.max_pool2d(x, pool_size, strides, padding, dilation, ceil_mode, layout, \
 out_layout)`
 
     Backward:
@@ -1180,7 +1178,7 @@ def avg_pool2d_grad(
     """Gradient of avg_pool2d.
 
     Forward Form:
-        `y = relax.avg_pool2d(x, pool_size, strides, padding, dilation, ceil_mode, layout, \
+        `y = relax.nn.avg_pool2d(x, pool_size, strides, padding, dilation, ceil_mode, layout, \
 out_layout)`
 
     Backward:

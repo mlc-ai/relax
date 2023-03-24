@@ -18,6 +18,7 @@ from typing import Callable, Union, Tuple, List
 
 import numpy as np
 import tvm
+from tvm.relax.expr import Call
 from tvm.relax.struct_info import TensorStructInfo, TupleStructInfo
 import tvm.testing
 from tvm import relax
@@ -35,7 +36,7 @@ def relax_check_gradients(
     ignore_grads: List[int] = [],
     **kwargs,  # attr for operators
 ):
-    """Generate module and run it to check numberic gradients.
+    """Generate the forward and the gradient module. Then run them and check numeric gradients.
 
     Parameters
     ----------
@@ -64,8 +65,11 @@ def relax_check_gradients(
         Specifies which input we do not need to find gradient.
 
         Sometimes the input is not differentiable, such as shape, boolean values, positions, etc.
-        We can specify the index of these inputs to prevent relax_check_gradients() find the
-        gradient of these inputs.
+        We can specify the index of these inputs to check the gradient of them is no_grad, and
+        prevent computing numeric gradient.
+
+    kwargs : Any
+        The keyword arguments for the op_func. Will be passed to op_func directly.
     """
 
     func_name = "main"
@@ -81,9 +85,9 @@ def relax_check_gradients(
             return [_numpy_to_tvm(d) for d in data]
         return tvm.nd.array(data)
 
-    def _tvm_to_numpy(data):
+    def _tvm_to_numpy(data, ignore_idx=[]):
         if isinstance(data, tvm.ir.Array):
-            return [_tvm_to_numpy(d) for d in data]
+            return [_tvm_to_numpy(d) for i, d in enumerate(data) if i not in ignore_idx]
         if isinstance(data, tvm.runtime.ndarray.NDArray):
             return data.numpy()
         return data
@@ -94,6 +98,9 @@ def relax_check_gradients(
         else:
             assert isinstance(out_sinfo, TensorStructInfo)
             return np.random.uniform(size=[int(i) for i in out_sinfo.shape]).astype(out_sinfo.dtype)
+
+    def _is_call_no_grad(expr):
+        return isinstance(expr, Call) and expr.op == Op.get("relax.grad.no_grad")
 
     # Generate parameter relax Vars
     param_vars = [
@@ -160,15 +167,22 @@ def relax_check_gradients(
         with grad_bb.dataflow():
             orig = grad_bb.emit(call)
             # op_grad_func returns a list of Exprs representing the gradients
-            # so we need to wrap them in relax.Tuple
-            grad_call = relax.Tuple(op_grad_func(orig, call, grad_var, grad_bb))
+            grad_call = op_grad_func(orig, call, grad_var, grad_bb)
+
+            # Check ignore_grads
+            for i, grad in enumerate(grad_call):
+                if i in ignore_grads:
+                    assert _is_call_no_grad(grad), f"The {i}-th gradient should be no_grad"
+                else:
+                    assert not _is_call_no_grad(grad), f"The {i}-th gradient should not be no_grad"
+
             if tuple_input:
                 # If the input is a tuple, the gradient is also a tuple.
                 # The gradient tuple is the first (the only) element of grad_call.
-                adjoints = grad_bb.emit(grad_call)
-                out = grad_bb.emit_output(relax.TupleGetItem(adjoints, 0))
+                out = grad_bb.emit_output(grad_call[0])
             else:
-                out = grad_bb.emit_output(grad_call)
+                # We need to wrap the list into a relax.Tuple so as to emit it
+                out = grad_bb.emit_output(relax.Tuple(grad_call))
         grad_bb.emit_func_output(out)
 
     grad_mod = grad_bb.get()
@@ -179,8 +193,7 @@ def relax_check_gradients(
     # tvm.runtime.NDArray inputs
     inputs_tvm = [_numpy_to_tvm(i) for i in inputs_numpy]
     weights_tvm = _numpy_to_tvm(weights)
-    result = _tvm_to_numpy(grad_vm[func_name](*inputs_tvm, weights_tvm))
-    result_filtered = [result[i] for i in range(len(result)) if i not in ignore_grads]
+    result_filtered = _tvm_to_numpy(grad_vm[func_name](*inputs_tvm, weights_tvm), ignore_grads)
 
     # Inputs contained in ignore_grads are removed
     inputs_filtered = [inputs_numpy[i] for i in range(len(inputs_numpy)) if i not in ignore_grads]
@@ -242,13 +255,11 @@ def test_binary_arith(target, dev, binary_arith_op_func):
 
 @tvm.testing.parametrize_targets("llvm")
 def test_binary_cmp(target, dev, binary_cmp_op_func):
-    # We must assure data1_numpy[i] != data2_numpy[i] for all possible i-s
-    # If data1_numpy[i] == data2_numpy[i], the operator is not differentiable w.r.t. place i
     data1_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
-    delta = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
-    sign = np.random.randint(0, 2, (3, 3)).astype(np.float32) * 2 - 1
-    data2_numpy = data1_numpy + delta * sign
-    relax_check_gradients(binary_cmp_op_func, [data1_numpy, data2_numpy], target, dev)
+    data2_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
+    relax_check_gradients(
+        binary_cmp_op_func, [data1_numpy, data2_numpy], target, dev, ignore_grads=[0, 1]
+    )
 
 
 ##################### Create #####################
@@ -263,15 +274,28 @@ def test_binary_cmp(target, dev, binary_cmp_op_func):
 @tvm.testing.parametrize_targets("llvm")
 def test_ones_zeros_like(target, dev, like_op_func):
     data_numpy = np.random.uniform(-1, 1, (3, 3)).astype(np.float32)
-    relax_check_gradients(like_op_func, [data_numpy], target, dev)
+    relax_check_gradients(like_op_func, [data_numpy], target, dev, ignore_grads=[0])
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_full_like(target, dev):
     data_numpy = np.random.uniform(-1, 1, (3, 3)).astype(np.float32)
-    full_value = np.random.uniform(-1, 1, ()).astype(np.float32)
+    fill_value = np.random.uniform(-1, 1, ()).astype(np.float32)
     relax_check_gradients(
-        relax.op.full_like, [data_numpy, full_value], target, dev, ignore_grads=[1]
+        relax.op.full_like, [data_numpy, fill_value], target, dev, ignore_grads=[0, 1]
+    )
+
+
+(create_op_func,) = tvm.testing.parameters(
+    (relax.op.zeros,),
+    (relax.op.ones,),
+)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_ones_zeros(target, dev, create_op_func):
+    relax_check_gradients(
+        create_op_func, [], target, dev, ignore_grads=[0], shape=(3, 3), dtype="float32"
     )
 
 
@@ -296,21 +320,73 @@ def test_sum_keepdims(target, dev):
     relax_check_gradients(relax.op.sum, [data1_numpy], target, dev, keepdims=True, axis=1)
 
 
+@tvm.testing.parametrize_targets("llvm")
+def test_mean(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(relax.op.mean, [data1_numpy], target, dev)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_mean_with_axis(target, dev):
+    data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
+    relax_check_gradients(relax.op.mean, [data1_numpy], target, dev, axis=[1, 3])
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_mean_keepdims(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(relax.op.mean, [data1_numpy], target, dev, keepdims=True, axis=1)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_variance(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(relax.op.variance, [data1_numpy], target, dev)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_variance_with_axis(target, dev):
+    data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
+    relax_check_gradients(relax.op.variance, [data1_numpy], target, dev, axis=[1, 3])
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_variance_keepdims(target, dev):
+    data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
+    relax_check_gradients(relax.op.variance, [data1_numpy], target, dev, keepdims=True, axis=1)
+
+
 ##################### Manipulate #####################
 
 
 @tvm.testing.parametrize_targets("llvm")
+def test_reshape(target, dev):
+    data_numpy = np.random.randint(0, 16, (2, 3, 5)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.reshape, [data_numpy], target, dev, ignore_grads=[1], shape=(5, 6)
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_reshape_infer_dim(target, dev):
+    data_numpy = np.random.randint(0, 16, (2, 3, 5)).astype(np.float32)
+    relax_check_gradients(
+        relax.op.reshape, [data_numpy], target, dev, ignore_grads=[1], shape=(5, 2, 1, -1)
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
 def test_permute_dims(target, dev):
-    data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
-    relax_check_gradients(relax.op.permute_dims, [data1_numpy], target, dev)
+    data_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
+    relax_check_gradients(relax.op.permute_dims, [data_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_permute_dims_with_axes(target, dev):
-    data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
+    data_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
     relax_check_gradients(
         relax.op.permute_dims,
-        [data1_numpy],
+        [data_numpy],
         target,
         dev,
         axes=(0, 3, 1, 2),
@@ -364,11 +440,9 @@ def test_reshape(target, dev):
 
     relax_check_gradients(
         relax.op.reshape,
-        "relax.reshape",
         [data_numpy],
         target,
         dev,
-        (3, 2, 2),
         shape=(3, 2, 2),
         ignore_grads=[1],
     )
@@ -395,6 +469,18 @@ def test_cumsum_no_axis(target, dev):
         target,
         dev,
     )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_expand_dims(target, dev):
+    data_numpy = np.random.randint(1, 16, (3, 12)).astype(np.float32)
+    relax_check_gradients(relax.op.expand_dims, [data_numpy], target, dev, axis=1)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_expand_dims_list(target, dev):
+    data_numpy = np.random.randint(1, 16, (3, 12)).astype(np.float32)
+    relax_check_gradients(relax.op.expand_dims, [data_numpy], target, dev, axis=(0, 2, 3))
 
 
 ##################### Index #####################
@@ -705,5 +791,4 @@ def test_avg_pool2d(target, dev, pool_size, pool_kwargs):
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_reshape("llvm", tvm.cpu(0))
+    tvm.testing.main()
