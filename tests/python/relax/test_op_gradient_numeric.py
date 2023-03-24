@@ -18,6 +18,7 @@ from typing import Callable, Union, Tuple, List
 
 import numpy as np
 import tvm
+from tvm.relax.struct_info import TensorStructInfo, TupleStructInfo
 import tvm.testing
 from tvm import relax
 from tvm.relax.transform import LegalizeOps
@@ -27,80 +28,106 @@ from tvm.ir.op import Op
 
 def relax_check_gradients(
     op_func: Callable,
-    op_name: str,
-    inputs_numpy: np.array,
+    inputs_numpy: List[np.array],
     target: Union[str, tvm.target.Target],
     dev: tvm._ffi.runtime_ctypes.Device,
-    output_shape: Union[Tuple, List[Tuple]],
     tuple_input: bool = False,
-    weight_dtype: str = "float32",
     ignore_grads: List[int] = [],
     **kwargs,  # attr for operators
 ):
-    """Generate module and run it to check numberic gradients."""
+    """Generate module and run it to check numberic gradients.
+
+    Parameters
+    ----------
+    op_func : Callable
+        The forward operator function. Should be a function in package relax.op.
+
+    inputs_numpy : List[np.array]
+        The np array inputs for op_func. inputs_numpy will be transformed into TVM NDArray inside
+        this function.
+
+        If op_func takes a tuple of tensors as input, you can set tuple_input as True, and pass the
+        tuple input (or list) as inputs_numpy. See test_concat().
+
+    target : Union[str, tvm.target.Target]
+        The building target.
+
+    dev : tvm._ffi.runtime_ctypes.Device
+        The device to deploy the module.
+
+    tuple_input : bool
+        Whether the operator accepts a tuple as input. If true, operator will accept exactly one
+        tuple of tensors as input; otherwise, operator accept one or more tensors as input. See
+        test_concat(). Default: False.
+
+    ignore_grads: List[int]
+        Specifies which input we do not need to find gradient.
+
+        Sometimes the input is not differentiable, such as shape, boolean values, positions, etc.
+        We can specify the index of these inputs to prevent relax_check_gradients() find the
+        gradient of these inputs.
+    """
 
     func_name = "main"
 
-    # prepare input
-    def _numpy_to_var(data, var_name):
+    # Helper functions
+    def _numpy_to_sinfo(data):
         if isinstance(data, list):
-            struct_infos = []
-            for _data in data:
-                tvm_var = _numpy_to_var(_data, "")
-                struct_infos.append(tvm_var.struct_info)
-            return relax.Var(var_name, relax.TupleStructInfo(struct_infos))
-        return relax.Var(var_name, relax.TensorStructInfo(data.shape, str(data.dtype)))
+            return relax.TupleStructInfo([_numpy_to_sinfo(d) for d in data])
+        return relax.TensorStructInfo(data.shape, str(data.dtype))
 
     def _numpy_to_tvm(data):
         if isinstance(data, list):
-            ret_data = []
-            for _data in data:
-                tvm_data = _numpy_to_tvm(_data)
-                ret_data.append(tvm_data)
-            return ret_data
+            return [_numpy_to_tvm(d) for d in data]
         return tvm.nd.array(data)
 
     def _tvm_to_numpy(data):
         if isinstance(data, tvm.ir.Array):
-            return [_tvm_to_numpy(i) for i in data]
+            return [_tvm_to_numpy(d) for d in data]
         if isinstance(data, tvm.runtime.ndarray.NDArray):
             return data.numpy()
         return data
 
-    def _gen_weights(shape, dtype):
-        if isinstance(shape, list):
-            ret = []
-            for s in shape:
-                ret.append(_gen_weights(s, dtype))
-            return ret
+    def _gen_weights(out_sinfo):
+        if isinstance(out_sinfo, TupleStructInfo):
+            return [_gen_weights(sinfo) for sinfo in out_sinfo.fields]
         else:
-            return np.random.uniform(size=shape).astype(dtype)
+            assert isinstance(out_sinfo, TensorStructInfo)
+            return np.random.uniform(size=[int(i) for i in out_sinfo.shape]).astype(out_sinfo.dtype)
 
+    # Generate parameter relax Vars
     param_vars = [
-        _numpy_to_var(input_numpy, "x_" + str(i)) for i, input_numpy in enumerate(inputs_numpy)
+        relax.Var("x_" + str(i), _numpy_to_sinfo(data)) for i, data in enumerate(inputs_numpy)
     ]
-    weights = _gen_weights(output_shape, weight_dtype)
-    grad_var = _numpy_to_var(weights, "grad")
 
-    # get gradient
-    op = Op.get(op_name)
-    op_grad_func = op.get_attr("FPrimalGradient")
+    # Generate the forward call
     if tuple_input:
         t = relax.Tuple(param_vars)
         call = op_func(t, **kwargs)
     else:
         call = op_func(*param_vars, **kwargs)
 
-    bb = relax.BlockBuilder()
-    with bb.function(func_name, param_vars):
-        with bb.dataflow():
-            out = bb.emit_output(call)
-        bb.emit_func_output(out)
-    mod = bb.get()
-    lower_mod = LegalizeOps()(mod)
-    ex_0 = relax.build(lower_mod, target)
-    vm_0 = relax.VirtualMachine(ex_0, dev)
+    # Forward mod
+    forward_bb = relax.BlockBuilder()
+    with forward_bb.function(func_name, param_vars):
+        with forward_bb.dataflow():
+            out = forward_bb.emit_output(call)
+        forward_bb.emit_func_output(out)
+    forward_mod = forward_bb.get()
+    forward_lower_mod = LegalizeOps()(forward_mod)
+    forward_ex = relax.build(forward_lower_mod, target)
+    forward_vm = relax.VirtualMachine(forward_ex, dev)
 
+    # Generate weights
+    # In forward process, weights represent the weight of every element of the result of the
+    # forward call. The weighted result will be sum(weight * result).
+    # If the result is a tuple, weights will be a list, and the weighted result will be
+    # sum(i * j for i, j in zip(weights, result))
+    # In the gradient process, weights is the output gradient, i.e. the gradient w.r.t. the result.
+    out_sinfo = forward_mod[func_name].body.body.struct_info
+    weights = _gen_weights(out_sinfo)
+
+    # The inputs of the forward function are inputs_filtered below.
     def forward(*inputs):
         inputs_iter = iter(inputs)
         inputs_tvm = [
@@ -109,7 +136,7 @@ def relax_check_gradients(
             else _numpy_to_tvm(inputs_numpy[i])
             for i in range(len(inputs_numpy))
         ]
-        result = vm_0[func_name](*inputs_tvm)
+        result = forward_vm[func_name](*inputs_tvm)
         result_numpy = _tvm_to_numpy(result)
         if isinstance(result_numpy, list):
             assert isinstance(weights, list)
@@ -120,122 +147,132 @@ def relax_check_gradients(
             return ret
         return np.sum(weights * result_numpy)
 
-    bb1 = relax.BlockBuilder()
-    with bb1.function(func_name, param_vars + [grad_var]):
-        with bb1.dataflow():
-            orig_var = bb1.emit(call)
-            grad_call = relax.Tuple(op_grad_func(orig_var, call, grad_var, bb1))
-            if tuple_input:
-                adjoints = bb1.emit(grad_call)
-                out = bb1.emit_output(relax.TupleGetItem(adjoints, 0))
-            else:
-                out = bb1.emit_output(grad_call)
-        bb1.emit_func_output(out)
-    grad_mod = bb1.get()
-    lower_grad_mod = LegalizeOps()(grad_mod)
+    # The gradient function
+    assert isinstance(call.op, Op)
+    op_grad_func = call.op.get_attr("FPrimalGradient")
 
-    ex_1 = relax.build(lower_grad_mod, target)
-    vm_1 = relax.VirtualMachine(ex_1, dev)
+    # The parameter Var for gradient
+    grad_var = relax.Var("grad", _numpy_to_sinfo(weights))
+
+    # Gradient mod
+    grad_bb = relax.BlockBuilder()
+    with grad_bb.function(func_name, param_vars + [grad_var]):
+        with grad_bb.dataflow():
+            orig = grad_bb.emit(call)
+            # op_grad_func returns a list of Exprs representing the gradients
+            # so we need to wrap them in relax.Tuple
+            grad_call = relax.Tuple(op_grad_func(orig, call, grad_var, grad_bb))
+            if tuple_input:
+                # If the input is a tuple, the gradient is also a tuple.
+                # The gradient tuple is the first (the only) element of grad_call.
+                adjoints = grad_bb.emit(grad_call)
+                out = grad_bb.emit_output(relax.TupleGetItem(adjoints, 0))
+            else:
+                out = grad_bb.emit_output(grad_call)
+        grad_bb.emit_func_output(out)
+
+    grad_mod = grad_bb.get()
+    grad_lower_mod = LegalizeOps()(grad_mod)
+    grad_ex = relax.build(grad_lower_mod, target)
+    grad_vm = relax.VirtualMachine(grad_ex, dev)
+
+    # tvm.runtime.NDArray inputs
     inputs_tvm = [_numpy_to_tvm(i) for i in inputs_numpy]
     weights_tvm = _numpy_to_tvm(weights)
-    result = _tvm_to_numpy(vm_1[func_name](*inputs_tvm, weights_tvm))
+    result = _tvm_to_numpy(grad_vm[func_name](*inputs_tvm, weights_tvm))
     result_filtered = [result[i] for i in range(len(result)) if i not in ignore_grads]
-    inputs_filtered = [inputs_numpy[i] for i in range(len(result)) if i not in ignore_grads]
+
+    # Inputs contained in ignore_grads are removed
+    inputs_filtered = [inputs_numpy[i] for i in range(len(inputs_numpy)) if i not in ignore_grads]
 
     check_numerical_grads(forward, inputs_filtered, result_filtered)
 
 
+##################### Unary #####################
+
+
+unary_op_func, can_be_neg = tvm.testing.parameters(
+    (relax.op.abs, True),
+    (relax.op.cos, True),
+    (relax.op.exp, True),
+    (relax.op.log, False),
+    (relax.op.negative, True),
+    (relax.op.sigmoid, True),
+    (relax.op.sin, True),
+    (relax.op.sqrt, False),
+    (relax.op.tanh, True),
+)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_unary(target, dev, unary_op_func, can_be_neg):
+    (low, high) = (-1, 1) if can_be_neg else (0.1, 1)
+    data_numpy = np.random.uniform(low, high, (3, 3)).astype(np.float32)
+    relax_check_gradients(unary_op_func, [data_numpy], target, dev)
+
+
 ##################### Binary #####################
 
-binary_arith_op_func, binary_arith_op_name = tvm.testing.parameters(
-    (relax.op.add, "relax.add"),
-    (relax.op.subtract, "relax.subtract"),
-    (relax.op.multiply, "relax.multiply"),
-    (relax.op.divide, "relax.divide"),
-    (relax.op.power, "relax.power"),
+
+(binary_arith_op_func,) = tvm.testing.parameters(
+    (relax.op.add,),
+    (relax.op.subtract,),
+    (relax.op.multiply,),
+    (relax.op.divide,),
+    (relax.op.power,),
 )
 
 
 @tvm.testing.parametrize_targets("llvm")
-def test_binary_arith(target, dev, binary_arith_op_func, binary_arith_op_name):
+def test_binary_arith(target, dev, binary_arith_op_func):
     data1_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
     data2_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
-    relax_check_gradients(
-        binary_arith_op_func, binary_arith_op_name, [data1_numpy, data2_numpy], target, dev, (3, 3)
-    )
+    relax_check_gradients(binary_arith_op_func, [data1_numpy, data2_numpy], target, dev)
 
 
-binary_cmp_op_func, binary_cmp_op_name = tvm.testing.parameters(
-    (relax.op.equal, "relax.equal"),
-    (relax.op.greater, "relax.greater"),
-    (relax.op.greater_equal, "relax.greater_equal"),
-    (relax.op.less, "relax.less"),
-    (relax.op.less_equal, "relax.less_equal"),
-    (relax.op.not_equal, "relax.not_equal"),
+(binary_cmp_op_func,) = tvm.testing.parameters(
+    (relax.op.equal,),
+    (relax.op.greater,),
+    (relax.op.greater_equal,),
+    (relax.op.less,),
+    (relax.op.less_equal,),
+    (relax.op.not_equal,),
 )
 
 
 @tvm.testing.parametrize_targets("llvm")
-def test_binary_cmp(target, dev, binary_cmp_op_func, binary_cmp_op_name):
+def test_binary_cmp(target, dev, binary_cmp_op_func):
     # We must assure data1_numpy[i] != data2_numpy[i] for all possible i-s
     # If data1_numpy[i] == data2_numpy[i], the operator is not differentiable w.r.t. place i
     data1_numpy = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
     delta = np.random.uniform(1, 2, (3, 3)).astype(np.float32)
     sign = np.random.randint(0, 2, (3, 3)).astype(np.float32) * 2 - 1
     data2_numpy = data1_numpy + delta * sign
-    relax_check_gradients(
-        binary_cmp_op_func, binary_cmp_op_name, [data1_numpy, data2_numpy], target, dev, (3, 3)
-    )
-
-
-##################### Unary #####################
-
-unary_op_func, unary_op_name, can_be_neg = tvm.testing.parameters(
-    (relax.op.abs, "relax.abs", True),
-    (relax.op.cos, "relax.cos", True),
-    (relax.op.exp, "relax.exp", True),
-    (relax.op.log, "relax.log", False),
-    (relax.op.negative, "relax.negative", True),
-    (relax.op.sigmoid, "relax.sigmoid", True),
-    (relax.op.sin, "relax.sin", True),
-    (relax.op.sqrt, "relax.sqrt", False),
-    (relax.op.tanh, "relax.tanh", True),
-)
-
-
-@tvm.testing.parametrize_targets("llvm")
-def test_unary(target, dev, unary_op_func, unary_op_name, can_be_neg):
-    (low, high) = (-1, 1) if can_be_neg else (0.1, 1)
-    data_numpy = np.random.uniform(low, high, (3, 3)).astype(np.float32)
-    relax_check_gradients(unary_op_func, unary_op_name, [data_numpy], target, dev, (3, 3))
+    relax_check_gradients(binary_cmp_op_func, [data1_numpy, data2_numpy], target, dev)
 
 
 ##################### Create #####################
 
 
-like_op_func, like_op_name, is_full = tvm.testing.parameters(
-    (relax.op.zeros_like, "relax.zeros_like", False),
-    (relax.op.ones_like, "relax.ones_like", False),
-    (relax.op.full_like, "relax.full_like", True),
+(like_op_func,) = tvm.testing.parameters(
+    (relax.op.zeros_like,),
+    (relax.op.ones_like,),
 )
 
 
 @tvm.testing.parametrize_targets("llvm")
-def test_create_like(target, dev, like_op_func, like_op_name, is_full):
+def test_ones_zeros_like(target, dev, like_op_func):
     data_numpy = np.random.uniform(-1, 1, (3, 3)).astype(np.float32)
-    if is_full:
-        full_value = np.random.uniform(-1, 1, ()).astype(np.float32)
-        relax_check_gradients(
-            like_op_func,
-            like_op_name,
-            [data_numpy, full_value],
-            target,
-            dev,
-            (3, 3),
-            ignore_grads=[1],
-        )
-    else:
-        relax_check_gradients(like_op_func, like_op_name, [data_numpy], target, dev, (3, 3))
+    relax_check_gradients(like_op_func, [data_numpy], target, dev)
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_full_like(target, dev):
+    data_numpy = np.random.uniform(-1, 1, (3, 3)).astype(np.float32)
+    full_value = np.random.uniform(-1, 1, ()).astype(np.float32)
+    relax_check_gradients(
+        relax.op.full_like, [data_numpy, full_value], target, dev, ignore_grads=[1]
+    )
 
 
 ##################### Statistical #####################
@@ -244,23 +281,19 @@ def test_create_like(target, dev, like_op_func, like_op_name, is_full):
 @tvm.testing.parametrize_targets("llvm")
 def test_sum(target, dev):
     data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
-    relax_check_gradients(relax.op.sum, "relax.sum", [data1_numpy], target, dev, ())
+    relax_check_gradients(relax.op.sum, [data1_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_sum_with_axis(target, dev):
     data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.sum, "relax.sum", [data1_numpy], target, dev, (2, 4), axis=[1, 3]
-    )
+    relax_check_gradients(relax.op.sum, [data1_numpy], target, dev, axis=[1, 3])
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_sum_keepdims(target, dev):
     data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.sum, "relax.sum", [data1_numpy], target, dev, (3, 1), keepdims=True, axis=1
-    )
+    relax_check_gradients(relax.op.sum, [data1_numpy], target, dev, keepdims=True, axis=1)
 
 
 ##################### Manipulate #####################
@@ -269,9 +302,7 @@ def test_sum_keepdims(target, dev):
 @tvm.testing.parametrize_targets("llvm")
 def test_permute_dims(target, dev):
     data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.permute_dims, "relax.permute_dims", [data1_numpy], target, dev, (5, 4, 3, 2)
-    )
+    relax_check_gradients(relax.op.permute_dims, [data1_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
@@ -279,11 +310,9 @@ def test_permute_dims_with_axes(target, dev):
     data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
     relax_check_gradients(
         relax.op.permute_dims,
-        "relax.permute_dims",
         [data1_numpy],
         target,
         dev,
-        (2, 5, 3, 4),
         axes=(0, 3, 1, 2),
     )
 
@@ -295,11 +324,9 @@ def test_concat(target, dev):
     data_numpy3 = np.random.randint(1, 16, (3, 5)).astype(np.float32)
     relax_check_gradients(
         relax.op.concat,
-        "relax.concat",
         [data_numpy1, data_numpy2, data_numpy3],
         target,
         dev,
-        (3, 12),
         tuple_input=True,
         axis=1,
     )
@@ -310,11 +337,9 @@ def test_split_indices(target, dev):
     data_numpy = np.random.randint(1, 16, (3, 12)).astype(np.float32)
     relax_check_gradients(
         relax.op.split,
-        "relax.split",
         [data_numpy],
         target,
         dev,
-        [(3, 3), (3, 4), (3, 5)],
         indices_or_sections=[3, 7],
         axis=1,
     )
@@ -325,11 +350,9 @@ def test_split_section(target, dev):
     data_numpy = np.random.randint(1, 16, (3, 12)).astype(np.float32)
     relax_check_gradients(
         relax.op.split,
-        "relax.split",
         [data_numpy],
         target,
         dev,
-        [(3, 4), (3, 4), (3, 4)],
         indices_or_sections=3,
         axis=1,
     )
@@ -356,11 +379,9 @@ def test_cumsum(target, dev):
     data_numpy1 = np.random.randint(1, 16, (3, 3)).astype(np.float32)
     relax_check_gradients(
         relax.op.cumsum,
-        "relax.cumsum",
         [data_numpy1],
         target,
         dev,
-        (3, 3),
         axis=1,
     )
 
@@ -370,11 +391,9 @@ def test_cumsum_no_axis(target, dev):
     data_numpy1 = np.random.randint(1, 16, (3, 3)).astype(np.float32)
     relax_check_gradients(
         relax.op.cumsum,
-        "relax.cumsum",
         [data_numpy1],
         target,
         dev,
-        (9,),
     )
 
 
@@ -387,11 +406,9 @@ def test_take(target, dev):
     indices = np.array([0, 1])
     relax_check_gradients(
         relax.op.take,
-        "relax.take",
         [data_numpy, indices],
         target,
         dev,
-        (2, 2, 4),
         axis=1,
         ignore_grads=[1],
     )
@@ -403,11 +420,9 @@ def test_take_no_axis(target, dev):
     indices = np.array([1, 3])
     relax_check_gradients(
         relax.op.take,
-        "relax.take",
         [data_numpy, indices],
         target,
         dev,
-        (2,),
         ignore_grads=[1],
     )
 
@@ -423,11 +438,9 @@ def test_where(target, dev):
 
     relax_check_gradients(
         relax.op.where,
-        "relax.where",
         [data1_numpy, data2_numpy, data3_numpy],
         target,
         dev,
-        (3, 3),
         ignore_grads=[0],
     )
 
@@ -439,36 +452,28 @@ def test_where(target, dev):
 def test_matmul_2_2(target, dev):
     data1_numpy = np.random.randint(0, 16, (2, 3)).astype(np.float32)
     data2_numpy = np.random.randint(0, 16, (3, 4)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.matmul, "relax.matmul", [data1_numpy, data2_numpy], target, dev, (2, 4)
-    )
+    relax_check_gradients(relax.op.matmul, [data1_numpy, data2_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_matmul_1_1(target, dev):
     data1_numpy = np.random.randint(0, 16, (4,)).astype(np.float32)
     data2_numpy = np.random.randint(0, 16, (4,)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.matmul, "relax.matmul", [data1_numpy, data2_numpy], target, dev, ()
-    )
+    relax_check_gradients(relax.op.matmul, [data1_numpy, data2_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_matmul_1_4(target, dev):
     data1_numpy = np.random.randint(0, 16, (4,)).astype(np.float32)
     data2_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.matmul, "relax.matmul", [data1_numpy, data2_numpy], target, dev, (2, 3, 5)
-    )
+    relax_check_gradients(relax.op.matmul, [data1_numpy, data2_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_matmul_4_1(target, dev):
     data1_numpy = np.random.randint(0, 16, (2, 3, 4, 5)).astype(np.float32)
     data2_numpy = np.random.randint(0, 16, (5,)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.matmul, "relax.matmul", [data1_numpy, data2_numpy], target, dev, (2, 3, 4)
-    )
+    relax_check_gradients(relax.op.matmul, [data1_numpy, data2_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
@@ -477,11 +482,9 @@ def test_matmul_5_4(target, dev):
     data2_numpy = np.random.randint(0, 16, (3, 2, 5, 4)).astype(np.float32)
     relax_check_gradients(
         relax.op.matmul,
-        "relax.matmul",
         [data1_numpy, data2_numpy],
         target,
         dev,
-        (2, 3, 2, 4, 4),
     )
 
 
@@ -491,9 +494,7 @@ def test_matmul_5_4(target, dev):
 @tvm.testing.parametrize_targets("llvm")
 def test_astype(target, dev):
     data_numpy = np.random.uniform(0, 16, size=(3, 3)).astype(np.float64)
-    relax_check_gradients(
-        relax.op.astype, "relax.astype", [data_numpy], target, dev, (3, 3), dtype="float32"
-    )
+    relax_check_gradients(relax.op.astype, [data_numpy], target, dev, dtype="float32")
 
 
 ##################### Neural network #####################
@@ -504,39 +505,31 @@ def test_relu(target, dev):
     data1_numpy = np.random.uniform(0.2, 1, (3, 3)).astype(np.float32)
     sign = np.random.randint(0, 2, (3, 3)).astype(np.float32) * 2 - 1
     data1_numpy *= sign
-    relax_check_gradients(relax.op.nn.relu, "relax.nn.relu", [data1_numpy], target, dev, (3, 3))
+    relax_check_gradients(relax.op.nn.relu, [data1_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_softmax(target, dev):
     data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.nn.softmax, "relax.nn.softmax", [data1_numpy], target, dev, (3, 3)
-    )
+    relax_check_gradients(relax.op.nn.softmax, [data1_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_softmax_with_axis(target, dev):
     data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.nn.softmax, "relax.nn.softmax", [data1_numpy], target, dev, (3, 3), axis=1
-    )
+    relax_check_gradients(relax.op.nn.softmax, [data1_numpy], target, dev, axis=1)
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_log_softmax(target, dev):
     data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.nn.log_softmax, "relax.nn.log_softmax", [data1_numpy], target, dev, (3, 3)
-    )
+    relax_check_gradients(relax.op.nn.log_softmax, [data1_numpy], target, dev)
 
 
 @tvm.testing.parametrize_targets("llvm")
 def test_log_softmax_with_axis(target, dev):
     data1_numpy = np.random.randint(0, 16, (3, 3)).astype(np.float32)
-    relax_check_gradients(
-        relax.op.nn.log_softmax, "relax.nn.log_softmax", [data1_numpy], target, dev, (3, 3), axis=1
-    )
+    relax_check_gradients(relax.op.nn.log_softmax, [data1_numpy], target, dev, axis=1)
 
 
 @tvm.testing.parametrize_targets("llvm")
@@ -545,11 +538,9 @@ def test_cross_entropy_with_logits(target, dev):
     data_numpy2 = np.random.randint(1, 16, (3,)).astype(np.float32)
     relax_check_gradients(
         relax.op.nn.cross_entropy_with_logits,
-        "relax.nn.cross_entropy_with_logits",
         [data_numpy1, data_numpy2],
         target,
         dev,
-        (),
     )
 
 
@@ -559,11 +550,9 @@ def test_cross_entropy_with_logits_batch(target, dev):
     data_numpy2 = np.random.randint(1, 16, (2, 3)).astype(np.float32)
     relax_check_gradients(
         relax.op.nn.cross_entropy_with_logits,
-        "relax.nn.cross_entropy_with_logits",
         [data_numpy1, data_numpy2],
         target,
         dev,
-        (),
     )
 
 
@@ -583,17 +572,14 @@ def test_nll_loss(target, dev, nll_reduction, nll_weighted, nll_ignore_index):
     data2_numpy = np.random.randint(0, 3, (2, 4)).astype(np.int64)
     data3_numpy = np.random.randint(0, 16, (3,)).astype(np.float32)
 
-    out_shape = data2_numpy.shape if nll_reduction == "none" else ()
     input = [data1_numpy, data2_numpy] + ([data3_numpy] if nll_weighted else [])
     ignore_grads = [1] + ([2] if nll_weighted else [])
 
     relax_check_gradients(
         relax.op.nn.nll_loss,
-        "relax.nn.nll_loss",
         input,
         target,
         dev,
-        out_shape,
         ignore_grads=ignore_grads,
         reduction=nll_reduction,
         ignore_index=nll_ignore_index,
@@ -613,129 +599,108 @@ def test_nll_loss_no_batch(target, dev, nll_reduction1, nll_weighted1, nll_ignor
     data2_numpy = np.random.randint(0, 3, ()).astype(np.int64)
     data3_numpy = np.random.randint(1, 16, (3,)).astype(np.float32)
 
-    out_shape = data2_numpy.shape if nll_reduction1 == "none" else ()
     input = [data1_numpy, data2_numpy] + ([data3_numpy] if nll_weighted1 else [])
     ignore_grads = [1] + ([2] if nll_weighted1 else [])
 
     relax_check_gradients(
         relax.op.nn.nll_loss,
-        "relax.nn.nll_loss",
         input,
         target,
         dev,
-        out_shape,
         ignore_grads=ignore_grads,
         reduction=nll_reduction1,
         ignore_index=nll_ignore_index1,
     )
 
 
-(c2d_shape1, c2d_shape2, c2d_out_shape, c2d_kwargs,) = tvm.testing.parameters(
+(c2d_shape1, c2d_shape2, c2d_kwargs,) = tvm.testing.parameters(
     (
         (3, 2, 10, 10),
         (3, 2, 3, 3),
-        (3, 3, 8, 8),
         {},
     ),
     (
         (3, 2, 10, 10),
         (3, 2, 1, 2),
-        (3, 3, 10, 9),
         {},
     ),
     (
         (3, 2, 10, 10),
         (3, 2, 3, 3),
-        (3, 3, 7, 6),
         {"strides": (2, 2), "padding": (3, 2), "dilation": (1, 1)},
     ),
     (
         (3, 2, 10, 10),
         (3, 2, 3, 3),
-        (3, 3, 6, 12),
         {"strides": (2, 1), "padding": (2, 2), "dilation": (1, 1)},
     ),
     (
         (3, 6, 10, 10),
         (4, 3, 3, 3),
-        (3, 4, 8, 8),
         {"groups": 2},
     ),
     (
         (3, 2, 10, 10),
         (4, 1, 3, 3),
-        (3, 4, 6, 6),
         {"groups": 2, "strides": (2, 2), "padding": (2, 2), "dilation": (1, 1)},
     ),
 )
 
 
 @tvm.testing.parametrize_targets("llvm")
-def test_conv2d(target, dev, c2d_shape1, c2d_shape2, c2d_out_shape, c2d_kwargs):
+def test_conv2d(target, dev, c2d_shape1, c2d_shape2, c2d_kwargs):
     # We should use float32 to check the correctness of conv2d
     # to avoid possible precision problems
     data1_numpy = np.random.randint(0, 16, c2d_shape1).astype(np.float64)
     data2_numpy = np.random.randint(0, 3, c2d_shape2).astype(np.float64)
     relax_check_gradients(
         relax.op.nn.conv2d,
-        "relax.nn.conv2d",
         [data1_numpy, data2_numpy],
         target,
         dev,
-        c2d_out_shape,
         **c2d_kwargs,
-        weight_dtype="float64",
     )
 
 
-(pool_size, pool_out_shape, pool_kwargs,) = tvm.testing.parameters(
+(pool_size, pool_kwargs,) = tvm.testing.parameters(
     (
         (3, 3),
-        (3, 2, 8, 8),
         {},
     ),
     (
         (3, 3),
-        (3, 2, 5, 6),
         {"strides": (2, 2), "padding": (1, 2), "dilation": (1, 1)},
     ),
     (
         (5, 5),
-        (3, 2, 6, 5),
         {"strides": (2, 2), "padding": (2, 1), "dilation": (1, 1), "ceil_mode": True},
     ),
 )
 
 
 @tvm.testing.parametrize_targets("llvm")
-def test_max_pool2d(target, dev, pool_size, pool_out_shape, pool_kwargs):
+def test_max_pool2d(target, dev, pool_size, pool_kwargs):
     data_numpy = np.random.uniform(0, 16, size=(3, 2, 10, 10)).astype(np.float64)
     relax_check_gradients(
         relax.op.nn.max_pool2d,
-        "relax.nn.max_pool2d",
         [data_numpy],
         target,
         dev,
-        pool_out_shape,
         pool_size=pool_size,
         **pool_kwargs,
-        weight_dtype="float64",
     )
 
 
 @tvm.testing.parametrize_targets("llvm")
-def test_avg_pool2d(target, dev, pool_size, pool_out_shape, pool_kwargs):
+def test_avg_pool2d(target, dev, pool_size, pool_kwargs):
     data_numpy = np.random.uniform(0, 16, size=(3, 2, 10, 10)).astype(np.float64)
     relax_check_gradients(
         relax.op.nn.avg_pool2d,
-        "relax.nn.avg_pool2d",
         [data_numpy],
         target,
         dev,
-        pool_out_shape,
         pool_size=pool_size,
         **pool_kwargs,
-        weight_dtype="float64",
     )
 
 
