@@ -591,6 +591,34 @@ class TorchFXImporter:
             )
         )
 
+    def _avg_pool2d(self, node: fx.node.Node) -> relax.Var:
+        x = self.env[node.args[0]]
+        if node.target in self.named_modules:
+            module = self.named_modules[node.target]
+            kernel = module.kernel_size
+            stride = module.stride
+            padding = module.padding
+            ceil_mode = module.ceil_mode
+        else:
+            nargs = len(node.args)
+            kernel = node.args[1] if nargs > 1 else node.kwargs["kernel_size"]
+            stride = node.args[2] if nargs > 2 else node.kwargs["stride"]
+            padding = node.args[3] if nargs > 3 else node.kwargs["padding"]
+            ceil_mode = node.args[4] if nargs > 4 else node.kwargs["ceil_mode"]
+
+        stride = kernel if stride is None else stride
+
+        return self.block_builder.emit(
+            relax.op.nn.avg_pool2d(
+                x,
+                pool_size=kernel,
+                strides=stride,
+                padding=padding,
+                layout="NCHW",
+                ceil_mode=ceil_mode,
+            )
+        )
+
     def _adaptive_avg_pool2d(self, is_module: bool) -> Callable:
         from torch import fx
 
@@ -903,6 +931,7 @@ class TorchFXImporter:
             nn.Linear: self._linear,
             nn.Conv2d: self._conv2d,
             nn.MaxPool2d: self._max_pool2d,
+            nn.AvgPool2d: self._avg_pool2d,
             nn.AdaptiveAvgPool2d: self._adaptive_avg_pool2d(is_module=True),
             nn.Softmax: self._softmax,
             nn.ReLU: lambda node: self.block_builder.emit(relax.op.nn.relu(self.env[node.args[0]])),
@@ -978,6 +1007,7 @@ class TorchFXImporter:
             "getitem": self._getitem,
             "contiguous": lambda node: self.env[node.args[0]],
             "to": lambda node: self.env[node.args[0]],
+            "avg_pool2d": self._avg_pool2d,
             "adaptive_avg_pool2d": self._adaptive_avg_pool2d(is_module=False),
             "layer_norm": self._layer_norm,
             "index_select": self._index_select,
