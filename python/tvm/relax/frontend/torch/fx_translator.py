@@ -839,11 +839,31 @@ class TorchFXImporter:
     def _cross_entropy(self, node: fx.node.Node) -> relax.Expr:
         preds = self.env[node.args[0]]
         targets = self.env[node.args[1]]
-        weights = node.kwargs["weight"]
+
+        # functional.cross_entropy
+        if node.target not in self.named_modules:
+            weights = node.kwargs["weight"]
+            if weights is not None:
+                weights = self.env[weights]
+            reduction = node.kwargs["reduction"]
+            ignore_index = node.kwargs["ignore_index"]
+
+            return self.block_builder.emit(
+                relax.op.nn.nll_loss(
+                    relax.op.nn.log_softmax(preds), targets, weights, reduction, ignore_index
+                )
+            )
+
+        module = self.named_modules[node.target]
+
+        weights = module.weight
         if weights is not None:
-            weights = self.env[weights]
-        reduction = node.kwargs["reduction"]
-        ignore_index = node.kwargs["ignore_index"]
+            if weights in self.params:
+                weights = self.params[weights]
+            else:
+                weights = relax.const(weights.numpy(), preds.struct_info.dtype)
+        reduction = module.reduction
+        ignore_index = module.ignore_index
 
         return self.block_builder.emit(
             relax.op.nn.nll_loss(
@@ -946,6 +966,7 @@ class TorchFXImporter:
             nn.Dropout: lambda node: self.env[node.args[0]],
             nn.modules.sparse.Embedding: self._embedding,
             nn.Identity: lambda node: self.env[node.args[0]],
+            nn.CrossEntropyLoss: self._cross_entropy,
             # call_function and call_method
             "cos": self._cos,
             "sin": self._sin,
