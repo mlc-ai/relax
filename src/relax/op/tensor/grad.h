@@ -32,6 +32,13 @@
 namespace tvm {
 namespace relax {
 
+/*!
+ * \brief No gradient dummy operator.
+ * \param input The corresponding input tensor.
+ * \return The no-gradient representation w.r.t. input.
+ */
+Expr no_grad(Expr input);
+
 /*! \brief Backward operator of relax.nll_loss. All parameters except output_grad is the same as
  * relax.nll_loss. Returns the gradient w.r.t. predictions. */
 Expr nll_loss_backward(Expr output_grad, Expr predictions, Expr targets, Optional<Expr> weights,

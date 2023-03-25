@@ -29,6 +29,23 @@
 namespace tvm {
 namespace relax {
 
+/* relax.grad.no_grad */
+Expr no_grad(Expr input) {
+  static const Op& op = Op::Get("relax.grad.no_grad");
+  return Call(op, {std::move(input)}, {}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.grad.no_grad").set_body_typed(no_grad);
+
+StructInfo InferStructInfoNoGrad(const Call& call, const BlockBuilder& ctx) {
+  return GetStructInfo(call->args[0]);
+}
+
+TVM_REGISTER_OP("relax.grad.no_grad")
+    .set_num_inputs(0)
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoNoGrad);
+
+/* relax.grad.nll_loss_backward */
 Expr nll_loss_backward(Expr output_grad, Expr predictions, Expr targets, Optional<Expr> weights,
                        String reduction, int ignore_index) {
   ObjectPtr<NLLLossAttrs> attrs = make_object<NLLLossAttrs>();
@@ -63,6 +80,7 @@ TVM_REGISTER_OP("relax.grad.nll_loss_backward")
     .add_argument("weights", "Optional<Tensor>", "The weight of each target values.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoNLLLossBackward);
 
+/* relax.grad.max_pool2d_backward */
 Expr max_pool2d_backward(Expr output_grad, Expr data, Array<IntImm> pool_size,
                          Array<IntImm> strides, Array<IntImm> padding, Array<IntImm> dilation,
                          bool ceil_mode, String layout, Optional<String> out_layout) {
@@ -91,6 +109,7 @@ TVM_REGISTER_OP("relax.grad.max_pool2d_backward")
     .set_attrs_type<Pool2DAttrs>()
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoMaxPool2DBackward);
 
+/* relax.grad.avg_pool2d_backward */
 Expr avg_pool2d_backward(Expr output_grad, Expr data, Array<IntImm> pool_size,
                          Array<IntImm> strides, Array<IntImm> padding, Array<IntImm> dilation,
                          bool ceil_mode, String layout, Optional<String> out_layout) {
@@ -119,7 +138,7 @@ TVM_REGISTER_OP("relax.grad.avg_pool2d_backward")
     .set_attrs_type<Pool2DAttrs>()
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoAvgPool2DBackward);
 
-/* relax.take_backward */
+/* relax.grad.take_backward */
 TVM_REGISTER_NODE_TYPE(TakeAttrs);
 
 Expr take_backward(Expr output_grad, Expr x, Expr indices, Optional<Integer> axis) {

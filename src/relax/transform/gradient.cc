@@ -236,7 +236,8 @@ class BackwardBindingGenerator : private ExprVisitor {
   }
 
   static bool IsCallNoGrad(const Expr& expr) {
-    return expr->IsInstance<CallNode>() && Downcast<Call>(expr)->op == Op::Get("relax.no_grad");
+    return expr->IsInstance<CallNode>() &&
+           Downcast<Call>(expr)->op == Op::Get("relax.grad.no_grad");
   }
 
   static Expr AdjointMsgToExpr(AdjointMsg msg) {

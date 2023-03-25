@@ -14,7 +14,6 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name,unused-argument
 """Common functionality for legalization."""
 from typing import Callable, Optional, Union
 
@@ -119,8 +118,3 @@ def register_legalize(op_name: str, legal_func: LegalizeFunc = None):
         The function for transforming an expr to another expr.
     """
     return tvm.ir.register_op_attr(op_name, _LEGALIZE_ATTR_NAME, legal_func)
-
-
-@register_legalize("relax.no_grad")
-def _no_grad(bb: BlockBuilder, call: Call) -> Expr:
-    return call.args[0]

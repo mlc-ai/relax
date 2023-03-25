@@ -21,7 +21,6 @@ import functools
 import operator
 
 from tvm import relax
-from tvm.ir import Op
 from tvm._ffi.base import TVMError
 from tvm.arith import Analyzer
 from tvm.relax.op.index import strided_slice
@@ -53,6 +52,7 @@ from .manipulate import (
 from .datatype import astype
 from .nn import conv2d_transpose
 from .grad import (
+    no_grad,
     nll_loss_backward,
     max_pool2d_backward,
     avg_pool2d_backward,
@@ -110,10 +110,6 @@ def _fit_shape(expr: Expr, expr_shape: ShapeExpr, target: Expr) -> Expr:
         return True
 
     return expr if _check_shape_equal() else collapse_sum_to(expr, target_shape)
-
-
-def _make_no_grad(data: Expr) -> Expr:
-    return Call(Op.get("relax.no_grad"), [data])
 
 
 def _get_shape_prod(expr, axis):
@@ -342,7 +338,7 @@ def full_like_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [zeros_like(orig_call.args[0], orig_call.attrs.dtype), _make_no_grad(orig_call.args[1])]
+    return [zeros_like(orig_call.args[0], orig_call.attrs.dtype), no_grad(orig_call.args[1])]
 
 
 @register_gradient("relax.zeros")
@@ -352,7 +348,7 @@ def zeros_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [_make_no_grad(orig_call.args[0])]
+    return [no_grad(orig_call.args[0])]
 
 
 @register_gradient("relax.ones")
@@ -362,7 +358,7 @@ def ones_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [_make_no_grad(orig_call.args[0])]
+    return [no_grad(orig_call.args[0])]
 
 
 @register_gradient("relax.full")
@@ -372,7 +368,7 @@ def full_grad(
     output_grad: Var,
     ctx: BlockBuilder,
 ) -> List[Expr]:
-    return [_make_no_grad(orig_call.args[0]), zeros_like(orig_call.args[1], orig_call.attrs.dtype)]
+    return [no_grad(orig_call.args[0]), zeros_like(orig_call.args[1], orig_call.attrs.dtype)]
 
 
 ##################### Unary #####################
@@ -732,7 +728,7 @@ def reshape_grad(
     """
     return [
         reshape(output_grad, orig_call.args[0].struct_info.shape),
-        _make_no_grad(orig_call.args[1]),
+        no_grad(orig_call.args[1]),
     ]
 
 
@@ -795,7 +791,7 @@ def take_grad(
 
     return [
         take_backward(output_grad, orig_call.args[0], orig_call.args[1], axis),
-        _make_no_grad(orig_call.args[1]),
+        no_grad(orig_call.args[1]),
     ]
 
 
@@ -825,7 +821,7 @@ def where_grad(
     x2_zeros = _zeros(orig_call.args[2])
 
     return [
-        _make_no_grad(orig_call.args[0]),
+        no_grad(orig_call.args[0]),
         where(cond, output_grad, x1_zeros),
         where(cond, x2_zeros, output_grad),
     ]
@@ -1048,9 +1044,9 @@ def nll_loss_grad(
         ignore_index=orig_call.attrs.ignore_index,
     )
     if len(orig_call.args) == 2:
-        return [pred_grad, _make_no_grad(orig_call.args[1])]
+        return [pred_grad, no_grad(orig_call.args[1])]
 
-    return [pred_grad, _make_no_grad(orig_call.args[1]), _make_no_grad(orig_call.args[2])]
+    return [pred_grad, no_grad(orig_call.args[1]), no_grad(orig_call.args[2])]
 
 
 @register_gradient("relax.nn.conv2d")

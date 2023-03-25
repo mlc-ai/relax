@@ -36,6 +36,13 @@ def test_op_correctness():
     assert relax.op.grad.avg_pool2d_backward(g, x, (3, 3)).op == Op.get(
         "relax.grad.avg_pool2d_backward"
     )
+    g = relax.Var("g", R.Tensor((3, 2, 5), "float32"))
+    x = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+    indices = relax.Var("indices", R.Tensor((2,), "float32"))
+    assert relax.op.grad.take_backward(g, x, indices, axis=1).op == Op.get(
+        "relax.grad.take_backward"
+    )
+    assert relax.op.grad.no_grad(x).op == Op.get("relax.grad.no_grad")
 
 
 def _check_inference(bb: relax.BlockBuilder, call: relax.Call, expected_sinfo: relax.StructInfo):
@@ -73,6 +80,16 @@ def test_avg_pool2d_backward_infer_struct_info():
 
     _check_inference(bb, relax.op.grad.avg_pool2d_backward(g, x, (2, 2)), x.struct_info)
     _check_inference(bb, relax.op.grad.avg_pool2d_backward(g, x, (3, 3)), x.struct_info)
+
+
+def test_take_backward_infer_struct_info():
+    bb = relax.BlockBuilder()
+
+    g = relax.Var("g", R.Tensor((3, 2, 5), "float32"))
+    x = relax.Var("x", R.Tensor((3, 4, 5), "float32"))
+    indices = relax.Var("indices", R.Tensor((2,), "float32"))
+
+    _check_inference(bb, relax.op.grad.take_backward(g, x, indices, axis=1), x.struct_info)
 
 
 if __name__ == "__main__":

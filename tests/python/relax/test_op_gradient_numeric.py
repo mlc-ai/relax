@@ -63,7 +63,9 @@ def relax_check_gradients(
     def _tvm_to_numpy(data):
         if isinstance(data, tvm.ir.Array):
             return [_tvm_to_numpy(i) for i in data]
-        return data.numpy()
+        if isinstance(data, tvm.runtime.ndarray.NDArray):
+            return data.numpy()
+        return data
 
     def _gen_weights(shape, dtype):
         if isinstance(shape, list):
@@ -330,6 +332,22 @@ def test_split_section(target, dev):
         [(3, 4), (3, 4), (3, 4)],
         indices_or_sections=3,
         axis=1,
+    )
+
+
+@tvm.testing.parametrize_targets("llvm")
+def test_reshape(target, dev):
+    data_numpy = np.random.randint(1, 16, (3, 4)).astype(np.float32)
+
+    relax_check_gradients(
+        relax.op.reshape,
+        "relax.reshape",
+        [data_numpy],
+        target,
+        dev,
+        (3, 2, 2),
+        shape=(3, 2, 2),
+        ignore_grads=[1],
     )
 
 
@@ -722,4 +740,5 @@ def test_avg_pool2d(target, dev, pool_size, pool_out_shape, pool_kwargs):
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_reshape("llvm", tvm.cpu(0))

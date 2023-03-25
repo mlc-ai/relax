@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=redefined-builtin
 """Operators to implement operaor gradients. Used in `_op_gradient.py`.
 
 We are trying to keep grad operators as simple as possible, and hope they are only used for finding
@@ -24,6 +25,22 @@ from typing import Optional, Tuple
 
 from . import _ffi_api
 from ...expr import Expr
+
+
+def no_grad(input: Expr) -> Expr:
+    """No gradient dummy operator w.r.t. the input.
+
+    Parameters
+    ----------
+    input : relax.Expr
+      The corresponding input tensor.
+
+    Returns
+    -------
+    result : relax.Expr
+      The no-gradient representation w.r.t. input.
+    """
+    return _ffi_api.no_grad(input)  # type: ignore
 
 
 def nll_loss_backward(
@@ -112,7 +129,7 @@ def avg_pool2d_backward(
 
 def take_backward(output_grad: Expr, x: Expr, indices: Expr, axis: Optional[int] = None) -> Expr:
     """Backward operator of relax.take. All parameters except output_grad is the same as
-    relax.take. Returns the gradient w.r.t. data.
+    relax.take. Returns the gradient w.r.t. x.
 
     Parameters
     ----------
@@ -122,6 +139,6 @@ def take_backward(output_grad: Expr, x: Expr, indices: Expr, axis: Optional[int]
     Returns
     -------
     result : relax.Expr
-      The gradient w.r.t. data.
+      The gradient w.r.t. x.
     """
     return _ffi_api.take_backward(output_grad, x, indices, axis)  # type: ignore

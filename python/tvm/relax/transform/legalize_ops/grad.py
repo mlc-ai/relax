@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name,unused-argument
 """Default legalization function for perators to implement operaor gradients."""
 import logging
 
@@ -22,6 +22,11 @@ from tvm import te, tir, topi
 from ...block_builder import BlockBuilder
 from ...expr import Call, Expr
 from .common import register_legalize
+
+
+@register_legalize("relax.grad.no_grad")
+def _no_grad(bb: BlockBuilder, call: Call) -> Expr:
+    return call.args[0]
 
 
 @register_legalize("relax.grad.nll_loss_backward")
