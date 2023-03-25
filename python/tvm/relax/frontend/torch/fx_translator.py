@@ -808,6 +808,21 @@ class TorchFXImporter:
             )
         )
 
+    def _cross_entropy(self, node: fx.node.Node) -> relax.Expr:
+        preds = self.env[node.args[0]]
+        targets = self.env[node.args[1]]
+        weights = node.kwargs["weight"]
+        if weights is not None:
+            weights = self.env[weights]
+        reduction = node.kwargs["reduction"]
+        ignore_index = node.kwargs["ignore_index"]
+
+        return self.block_builder.emit(
+            relax.op.nn.nll_loss(
+                relax.op.nn.log_softmax(preds), targets, weights, reduction, ignore_index
+            )
+        )
+
     ########## Others ##########
 
     def _size(self, node: fx.node.Node) -> relax.Expr:
@@ -967,6 +982,7 @@ class TorchFXImporter:
             "layer_norm": self._layer_norm,
             "index_select": self._index_select,
             "masked_fill": self._masked_fill,
+            "cross_entropy": self._cross_entropy,
         }
 
     def from_fx(
