@@ -1055,6 +1055,47 @@ def test_report_error():
         relax.transform.Gradient("main")(IntDtypeTuple)
 
 
+def test_shape_expr():
+    # fmt: off
+    @I.ir_module
+    class Before:
+        @R.function
+        def main(x: R.Tensor((3, 4), "float32")):
+            with R.dataflow():
+                s = R.shape([3, 2, 2])
+                lv = R.reshape(x, s)
+                gv = R.sum(lv)
+                R.output(gv)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main_adjoint(x: R.Tensor((3, 4), dtype="float32")) -> R.Tuple(R.Tensor((), dtype="float32"), R.Tuple(R.Tensor((3, 4), dtype="float32"))):
+            with R.dataflow():
+                s: R.Shape([3, 2, 2]) = R.shape([3, 2, 2])
+                lv = R.reshape(x, s)
+                gv: R.Tensor((), dtype="float32") = R.sum(lv, axis=None, keepdims=False)
+                gv_adjoint: R.Tensor((), dtype="float32") = R.ones(R.shape([]), dtype="float32")
+                lv_adjoint = R.broadcast_to(gv_adjoint, s)
+                x_adjoint: R.Tensor((3, 4), dtype="float32") = R.reshape(lv_adjoint, R.shape([3, 4]))
+                R.output(gv, x_adjoint)
+            return (gv, (x_adjoint,))
+
+        @R.function
+        def main(x: R.Tensor((3, 4), dtype="float32")) -> R.Tensor((), dtype="float32"):
+            with R.dataflow():
+                s: R.Shape([3, 2, 2]) = R.shape([3, 2, 2])
+                lv = R.reshape(x, s)
+                gv: R.Tensor((), dtype="float32") = R.sum(lv, axis=None, keepdims=False)
+                R.output(gv)
+            return gv
+    # fmt: on
+
+    After = relax.transform.Gradient("main")(Before)
+    assert_structural_equal(After, Expected)
+
+
 def test_mlp_script():
     """
     An example of single layer multi-layer perceptron. You can add extra layers if you want.

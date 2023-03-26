@@ -24,12 +24,20 @@
 #ifndef TVM_RELAX_OP_TENSOR_GRAD_H_
 #define TVM_RELAX_OP_TENSOR_GRAD_H_
 
+#include <tvm/relax/attrs/index.h>
 #include <tvm/relax/attrs/nn.h>
 
 #include "../op_common.h"
 
 namespace tvm {
 namespace relax {
+
+/*!
+ * \brief No gradient dummy operator.
+ * \param input The corresponding input tensor.
+ * \return The no-gradient representation w.r.t. input.
+ */
+Expr no_grad(Expr input);
 
 /*! \brief Backward operator of relax.nll_loss. All parameters except output_grad is the same as
  * relax.nll_loss. Returns the gradient w.r.t. predictions. */
@@ -47,6 +55,10 @@ Expr max_pool2d_backward(Expr output_grad, Expr data, Array<IntImm> pool_size,
 Expr avg_pool2d_backward(Expr output_grad, Expr data, Array<IntImm> pool_size,
                          Array<IntImm> strides, Array<IntImm> padding, Array<IntImm> dilation,
                          bool ceil_mode, String layout, Optional<String> out_layout);
+
+/*! \brief Backward operator of relax.take. All parameters except output_grad is the same as
+ * relax.take. Returns the gradient w.r.t. data. */
+Expr take_backward(Expr output_grad, Expr x, Expr indices, Optional<Integer> axis);
 
 }  // namespace relax
 }  // namespace tvm

@@ -297,5 +297,41 @@ def test_avg_pool2d_backward():
     tvm.ir.assert_structural_equal(mod, Expected)
 
 
+def test_take_backward():
+    # fmt: off
+    @tvm.script.ir_module
+    class TakeBackward:
+        @R.function
+        def main(output_grad: R.Tensor((3, 2, 4), "float32"), x: R.Tensor((3, 4, 5), "float32"), indices: R.Tensor((2,), "int32")):
+            gv = R.grad.take_backward(output_grad, x, indices)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @T.prim_func
+        def take_backward(var_rxplaceholder: T.handle, var_rxplaceholder_1: T.handle, var_rxplaceholder_2: T.handle, out_buf: T.Buffer((T.int64(3), T.int64(4), T.int64(5)), "float32")):
+            T.func_attr({"tir.noalias": True})
+            rxplaceholder = T.match_buffer(var_rxplaceholder, (T.int64(3), T.int64(2), T.int64(4)), offset_factor=1)
+            rxplaceholder_1 = T.match_buffer(var_rxplaceholder_1, (T.int64(3), T.int64(4), T.int64(5)), offset_factor=1)
+            rxplaceholder_2 = T.match_buffer(var_rxplaceholder_2, (T.int64(2),), "int32", offset_factor=1)
+            with T.block("take_backward"):
+                T.reads(rxplaceholder[T.int64(0):T.int64(3), T.int64(0):T.int64(2), T.int64(0):T.int64(4)], rxplaceholder_1[T.int64(0):T.int64(3), T.int64(0):T.int64(4), T.int64(0):T.int64(5)], rxplaceholder_2[T.int64(0):T.int64(2)])
+                T.writes(out_buf[T.int64(0):T.int64(3), T.int64(0):T.int64(4), T.int64(0):T.int64(5)])
+                for i in range(T.int64(60)):
+                    out_buf[i // T.int64(5) // T.int64(4), i // T.int64(5) % T.int64(4), i % T.int64(5)] = T.float32(0)
+                out_buf[T.Cast("int64", rxplaceholder_2[T.int64(1)]) // T.int64(5) // T.int64(4), T.Cast("int64", rxplaceholder_2[T.int64(1)]) // T.int64(5) % T.int64(4), T.Cast("int64", rxplaceholder_2[T.int64(1)]) % T.int64(5)] = out_buf[T.Cast("int64", rxplaceholder_2[T.int64(1)]) // T.int64(5) // T.int64(4), T.Cast("int64", rxplaceholder_2[T.int64(1)]) // T.int64(5) % T.int64(4), T.Cast("int64", rxplaceholder_2[T.int64(1)]) % T.int64(5)] + rxplaceholder[T.int64(0), T.int64(0), T.int64(1)]
+                out_buf[T.Cast("int64", rxplaceholder_2[T.int64(0)]) // T.int64(5) // T.int64(4), T.Cast("int64", rxplaceholder_2[T.int64(0)]) // T.int64(5) % T.int64(4), T.Cast("int64", rxplaceholder_2[T.int64(0)]) % T.int64(5)] = out_buf[T.Cast("int64", rxplaceholder_2[T.int64(0)]) // T.int64(5) // T.int64(4), T.Cast("int64", rxplaceholder_2[T.int64(0)]) // T.int64(5) % T.int64(4), T.Cast("int64", rxplaceholder_2[T.int64(0)]) % T.int64(5)] + rxplaceholder[T.int64(0), T.int64(0), T.int64(0)]
+
+        @R.function
+        def main(output_grad: R.Tensor((3, 2, 4), dtype="float32"), x: R.Tensor((3, 4, 5), dtype="float32"), indices: R.Tensor((2,), dtype="int32")) -> R.Tensor((3, 4, 5), dtype="float32"):
+            cls = Expected
+            gv = R.call_tir(cls.take_backward, (output_grad, x, indices), out_sinfo=R.Tensor((3, 4, 5), dtype="float32"))
+            return gv
+    # fmt: on
+
+    mod = LegalizeOps()(TakeBackward)
+    tvm.ir.assert_structural_equal(mod, Expected)
+
+
 if __name__ == "__main__":
     tvm.testing.main()
