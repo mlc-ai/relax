@@ -117,6 +117,9 @@ class BackwardBindingGenerator : private ExprVisitor {
 
     for (size_t i = 0; i < partials.size(); ++i) {
       Expr partial = partials[i];
+      if (IsCallNoGrad(partial)) {  // no grad: don't update
+        continue;
+      }
       if (!partial->struct_info_.defined()) {
         UpdateStructInfo(partial, GetStructInfo(call->args[i]));
       }
@@ -183,6 +186,9 @@ class BackwardBindingGenerator : private ExprVisitor {
         }
       } else if (leaf->IsInstance<ConstantNode>()) {
         // nothing to do
+      } else if (leaf->IsInstance<ShapeExprNode>()) {
+        // must be no grad
+        ICHECK(IsCallNoGrad(partial));
       } else {
         LOG(FATAL) << "UpdateAdjoint: leaf type not supported. Currently Var and Constant leaves "
                       "are supported.";
@@ -227,6 +233,11 @@ class BackwardBindingGenerator : private ExprVisitor {
 
   static bool IsCallZeros(const Expr& expr) {
     return expr->IsInstance<CallNode>() && Downcast<Call>(expr)->op == Op::Get("relax.zeros");
+  }
+
+  static bool IsCallNoGrad(const Expr& expr) {
+    return expr->IsInstance<CallNode>() &&
+           Downcast<Call>(expr)->op == Op::Get("relax.grad.no_grad");
   }
 
   static Expr AdjointMsgToExpr(AdjointMsg msg) {

@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name,unused-argument
 """Default legalization function for perators to implement operaor gradients."""
 import logging
 
@@ -22,6 +22,11 @@ from tvm import te, tir, topi
 from ...block_builder import BlockBuilder
 from ...expr import Call, Expr
 from .common import register_legalize
+
+
+@register_legalize("relax.grad.no_grad")
+def _no_grad(bb: BlockBuilder, call: Call) -> Expr:
+    return call.args[0]
 
 
 @register_legalize("relax.grad.nll_loss_backward")
@@ -132,4 +137,82 @@ def _grad_avg_pool2d_backward(bb: BlockBuilder, call: Call) -> Expr:
         ceil_mode=call.attrs.ceil_mode,
         layout=call.attrs.layout,
         primfunc_name_hint="avg_pool2d_backward",
+    )
+
+
+@register_legalize("relax.grad.take_backward")
+def _grad_take_backward(bb: BlockBuilder, call: Call) -> Expr:
+    axis = call.attrs.axis
+    if axis is not None:
+        axis = int(axis)
+
+    def te_take_backward(output_grad, x, indices):
+        def gen_ir(output_grad_ptr, x_ptr, indices_ptr, out_ptr):
+            # pylint: disable=invalid-name
+            ib = tir.ir_builder.create()
+
+            output_grad = ib.buffer_ptr(output_grad_ptr)
+            indices = ib.buffer_ptr(indices_ptr)
+            out = ib.buffer_ptr(out_ptr)
+
+            fused_shape = 1
+            for i in x_ptr.shape:
+                fused_shape *= i
+
+            with ib.for_range(0, fused_shape) as i:
+                out[i] = tir.const(0, dtype=x_ptr.dtype)
+
+            indices_len = indices_ptr.shape[0].value  # must be 1-dim
+
+            if axis is not None:
+                fused_output_grad_shape_pre = 1
+                fused_output_grad_shape_nxt = 1
+                for i in range(len(output_grad_ptr.shape)):
+                    if i < axis:
+                        fused_output_grad_shape_pre *= output_grad_ptr.shape[i]
+                    elif i > axis:
+                        fused_output_grad_shape_nxt *= output_grad_ptr.shape[i]
+
+                x_axis_len = x_ptr.shape[axis].value
+
+                with ib.for_range(
+                    0, fused_output_grad_shape_pre * fused_output_grad_shape_nxt, "parallel"
+                ) as fused:
+                    i = fused // fused_output_grad_shape_nxt
+                    j = fused % fused_output_grad_shape_nxt
+                    for l in reversed(range(indices_len)):
+                        out[
+                            i * fused_output_grad_shape_nxt * x_axis_len
+                            + indices[l] * fused_output_grad_shape_nxt
+                            + j
+                        ] += output_grad[
+                            i * fused_output_grad_shape_nxt * indices_len
+                            + l * fused_output_grad_shape_nxt
+                            + j
+                        ]
+            else:
+                for l in reversed(range(indices_len)):
+                    out[indices[l]] += output_grad[l]
+
+            return ib.get()
+
+        shape = x.shape
+        out_buf = tir.decl_buffer(shape, x.dtype, "out_buf")
+
+        return te.extern(
+            [shape],
+            [output_grad, x, indices],
+            lambda ins, outs: gen_ir(ins[0], ins[1], ins[2], outs[0]),
+            dtype=x.dtype,
+            out_buffers=[out_buf],
+            name="take_backward",
+            tag="take_backward",
+        )
+
+    return bb.call_te(
+        te_take_backward,
+        call.args[0],
+        call.args[1],
+        call.args[2],
+        primfunc_name_hint="take_backward",
     )

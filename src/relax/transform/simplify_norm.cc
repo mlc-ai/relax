@@ -119,6 +119,33 @@ Tuple SimplifyBatchNormTraining(const CallNode* call) {
   });
 }
 
+Expr SimplifyLayerNorm(const CallNode* call) {
+  auto attrs = call->attrs.as<LayerNormAttrs>();
+  ICHECK_NOTNULL(attrs);
+
+  Expr data = call->args[0];
+  TensorStructInfo sinfo = MatchTensorStructInfo(data);
+  Expr gamma = call->args[1];
+  Expr beta = call->args[2];
+
+  Expr data_mean = mean(data, attrs->axes, true);
+  Expr data_var = variance(data, attrs->axes, true);
+
+  // output = (x - mean) / sqrt(var + epsilon) * gamma + beta
+  Expr epsilon = MakeConstantScalar(attrs->epsilon, sinfo->dtype);
+  Expr sqrt_var = sqrt(add(data_var, epsilon));
+  Expr out = divide(subtract(data, data_mean), sqrt_var);
+
+  if (attrs->scale) {
+    out = multiply(out, gamma);
+  }
+  if (attrs->center) {
+    out = add(out, beta);
+  }
+
+  return out;
+}
+
 /*! \brief A mutator to simplify the normalization. */
 class NormSimplifier : private ExprMutator {
  public:
@@ -163,6 +190,8 @@ class NormSimplifier : private ExprMutator {
         ICHECK_EQ(mode_, kModeTraining);
         return SimplifyBatchNormTraining(call);
       }
+    } else if (call->op == Op::Get("relax.nn.layer_norm")) {
+      return SimplifyLayerNorm(call);
     }
     return GetRef<Call>(call);
   }

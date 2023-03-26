@@ -1354,8 +1354,8 @@ StructInfo InferStructInfoCumsum(const Call& call, const BlockBuilder& ctx) {
 }
 
 TVM_REGISTER_OP("relax.cumsum")
-    .set_attrs_type<CumsumAttrs>()
     .set_num_inputs(1)
+    .set_attrs_type<CumsumAttrs>()
     .add_argument("data", "Tensor", "The input tensor.")
     .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoCumsum);
 
