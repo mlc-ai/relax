@@ -776,21 +776,12 @@ def MetaScheduleTuneIRMod(
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
 
 
-def DecomposeCompositeOps() -> tvm.ir.transform.Pass:
-    """Decompose composite operators that are composed by other operators during inference.
-    For example, the result of a batch norm which is indexed at tuple index 0 will be unpacked
-    into a number of simplified operators. Attention, tensor_to_shape, etc. can be also
-    decomposed into a number of simplified operators as well.
-    """
-    return _ffi_api.DecomposeCompositeOps()  # type: ignore
-
-
-def SimplifyNorm(
+def DecomposeCompositeOps(
     func_name: Optional[str] = None, mode: Literal["eval", "training"] = "eval"
 ) -> tvm.ir.transform.Pass:
-    """Simplify normalization operators.
-
-    The result of batch norm (a triple) will be simplified.
+    """Decompose composite operators that are composed by other operators during inference.
+    For example, the result of batch norm (a triple) will be simplified. Attention, tensor_to_shape,
+    etc. can be also decomposed into a number of simplified operators as well.
 
     Parameters
     ----------
@@ -806,7 +797,7 @@ def SimplifyNorm(
     ret : tvm.transform.Pass
         The registered pass
     """
-    return _ffi_api.SimplifyNorm(func_name, mode)  # type: ignore
+    return _ffi_api.DecomposeCompositeOps(func_name, mode)  # type: ignore
 
 
 def AlterOpImpl(

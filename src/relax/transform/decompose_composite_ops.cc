@@ -48,7 +48,7 @@ Expr ExpandToMatchInput(Expr data, int ndim, Array<Integer> axes) {
   return expand_dims(data, expand_axes);
 }
 
-Expr SimplifyBatchNorm(const CallNode* call) {
+Tuple SimplifyBatchNormInference(const CallNode* call) {
   auto attrs = call->attrs.as<BatchNormAttrs>();
   ICHECK_NOTNULL(attrs);
 
@@ -56,11 +56,12 @@ Expr SimplifyBatchNorm(const CallNode* call) {
   TensorStructInfo sinfo = MatchTensorStructInfo(data);
   Expr gamma = call->args[1];
   Expr beta = call->args[2];
+
   Expr moving_mean = ExpandToMatchInput(call->args[3], sinfo->ndim, {attrs->axis});
   Expr moving_var = ExpandToMatchInput(call->args[4], sinfo->ndim, {attrs->axis});
 
   // output = (x - mean) / sqrt(var + epsilon) * gamma + beta
-  Expr epsilon = MakeConstantScalar(static_cast<float>(attrs->epsilon), sinfo->dtype);
+  Expr epsilon = MakeConstantScalar(attrs->epsilon, sinfo->dtype);
   Expr sqrt_var = sqrt(add(moving_var, epsilon));
   Expr out = divide(subtract(data, moving_mean), sqrt_var);
 
@@ -71,44 +72,108 @@ Expr SimplifyBatchNorm(const CallNode* call) {
     out = add(out, ExpandToMatchInput(beta, sinfo->ndim, {attrs->axis}));
   }
 
+  return Tuple({out, call->args[3], call->args[4]});
+}
+
+Tuple SimplifyBatchNormTraining(const CallNode* call) {
+  auto attrs = call->attrs.as<BatchNormAttrs>();
+  ICHECK_NOTNULL(attrs);
+
+  Expr data = call->args[0];
+  TensorStructInfo sinfo = MatchTensorStructInfo(data);
+  Expr gamma = call->args[1];
+  Expr beta = call->args[2];
+
+  Array<Integer> reduce_axes;
+  for (int i = 0; i < sinfo->ndim; ++i) {
+    if (i != attrs->axis) {
+      reduce_axes.push_back(i);
+    }
+  }
+
+  Expr data_mean = mean(data, reduce_axes, false);
+  Expr data_mean_rs = ExpandToMatchInput(data_mean, sinfo->ndim, {attrs->axis});
+  Expr data_var = variance(data, reduce_axes, false);
+  Expr data_var_rs = ExpandToMatchInput(data_var, sinfo->ndim, {attrs->axis});
+
+  // output = (x - mean) / sqrt(var + epsilon) * gamma + beta
+  Expr epsilon = MakeConstantScalar(attrs->epsilon, sinfo->dtype);
+  Expr sqrt_var = sqrt(add(data_var_rs, epsilon));
+  Expr out = divide(subtract(data, data_mean_rs), sqrt_var);
+
+  if (attrs->scale) {
+    out = multiply(out, ExpandToMatchInput(gamma, sinfo->ndim, {attrs->axis}));
+  }
+  if (attrs->center) {
+    out = add(out, ExpandToMatchInput(beta, sinfo->ndim, {attrs->axis}));
+  }
+
+  Expr moving_mean = call->args[3];
+  Expr moving_var = call->args[4];
+  Expr momentum = MakeConstantScalar(attrs->momentum, sinfo->dtype);
+  Expr one_minus_mom = MakeConstantScalar(1 - attrs->momentum, sinfo->dtype);
+
+  return Tuple({
+      out,
+      add(multiply(one_minus_mom, moving_mean), multiply(momentum, data_mean)),
+      add(multiply(one_minus_mom, moving_var), multiply(momentum, data_var)),
+  });
+}
+
+Expr SimplifyLayerNorm(const CallNode* call) {
+  auto attrs = call->attrs.as<LayerNormAttrs>();
+  ICHECK_NOTNULL(attrs);
+
+  Expr data = call->args[0];
+  TensorStructInfo sinfo = MatchTensorStructInfo(data);
+  Expr gamma = call->args[1];
+  Expr beta = call->args[2];
+
+  Expr data_mean = mean(data, attrs->axes, true);
+  Expr data_var = variance(data, attrs->axes, true);
+
+  // output = (x - mean) / sqrt(var + epsilon) * gamma + beta
+  Expr epsilon = MakeConstantScalar(attrs->epsilon, sinfo->dtype);
+  Expr sqrt_var = sqrt(add(data_var, epsilon));
+  Expr out = divide(subtract(data, data_mean), sqrt_var);
+
+  if (attrs->scale) {
+    out = multiply(out, gamma);
+  }
+  if (attrs->center) {
+    out = add(out, beta);
+  }
+
   return out;
 }
 
-/*! \brief A mutator to simplify the normalization inference. */
-class NormInferenceSimplifier : public ExprMutator {
+/*! \brief A mutator to simplify the normalization. */
+class NormSimplifier : public ExprMutator {
  public:
-  static Expr Simplify(Expr expr) { return NormInferenceSimplifier()(expr); }
+  constexpr static const char* kModeEval = "eval";
+  constexpr static const char* kModeTraining = "training";
 
- private:
-  using ExprMutator::VisitExpr_;
-  Expr VisitExpr_(const TupleGetItemNode* op) final {
-    Expr expr = ExprMutator::VisitExpr_(op);
-    op = expr.as<TupleGetItemNode>();
-    ICHECK_NOTNULL(op);
-
-    auto it = batch_norm_map_.find(op->tuple);
-    if (it != batch_norm_map_.end() && op->index == 0) {
-      return (*it).second;
-    } else {
-      return expr;
-    }
-  }
-
-  void VisitBinding_(const VarBindingNode* binding, const CallNode* val) final {
-    ExprMutator::VisitBinding_(binding, val);
-    if (val->op == Op::Get("relax.nn.batch_norm")) {
-      // NOTE: we won't directly replace the batch_norm call since
-      // the following bindings may depend on the returned moving_mean and moving_var.
-      // Instead, we will store the unpacked value in the batch_norm_map_, and replace it
-      // at the TupleGetItemNode. And the original batch_norm call will be removed in the
-      // follow-up pass `RemoveAllUnused`
-      batch_norm_map_.Set(binding->var, SimplifyBatchNorm(val));
-    }
+  explicit NormSimplifier(String mode) : ExprMutator(), mode_(mode) {
+    CHECK(mode == kModeEval || mode == kModeTraining)
+        << "The argument mode must be one of the following values: \"eval\", \"training\".";
   }
 
  private:
-  /*! \brief The mapping from binding var of batch_norm to the unpacked value. */
-  Map<Expr, Expr> batch_norm_map_;
+  Expr VisitExpr_(const CallNode* call) final {
+    if (call->op == Op::Get("relax.nn.batch_norm")) {
+      if (mode_ == kModeEval) {
+        return SimplifyBatchNormInference(call);
+      } else {
+        ICHECK_EQ(mode_, kModeTraining);
+        return SimplifyBatchNormTraining(call);
+      }
+    } else if (call->op == Op::Get("relax.nn.layer_norm")) {
+      return SimplifyLayerNorm(call);
+    }
+    return GetRef<Call>(call);
+  }
+
+  const String mode_;
 };
 
 class OpDecomposer : public ExprMutator {
@@ -152,19 +217,42 @@ class OpDecomposer : public ExprMutator {
   const Op& tensor_to_shape_op_ = Op::Get("relax.tensor_to_shape");
 };
 
+IRModule Decompose(IRModule mod, Optional<String> func_name, String mode) {
+  auto norm_simplifier = NormSimplifier(mode);
+  auto op_decomposer = OpDecomposer();
+
+  IRModuleNode* new_module = mod.CopyOnWrite();
+
+  if (!func_name.defined()) {  // simplify all functions
+    Map<GlobalVar, BaseFunc> functions = mod->functions;
+    for (const auto& func_pr : functions) {
+      if (const auto* relax_f = func_pr.second.as<FunctionNode>()) {
+        Function f = Downcast<Function>(norm_simplifier(GetRef<Function>(relax_f)));
+        f = Downcast<Function>(op_decomposer(f));
+        new_module->Update(func_pr.first, f);
+      }
+    }
+  } else {  // simplify specified function
+    auto* func_ptr = mod->Lookup(func_name.value()).as<FunctionNode>();
+    CHECK(func_ptr) << func_name.value() << "is not a Relax Function";
+    auto gvar = mod->GetGlobalVar(func_name.value());
+    auto func = GetRef<Function>(func_ptr);
+    func = Downcast<Function>(norm_simplifier(func));
+    func = Downcast<Function>(op_decomposer(func));
+    new_module->Update(gvar, func);
+  }
+
+  return GetRef<IRModule>(new_module);
+}
+
 namespace transform {
-Pass DecomposeCompositeOps() {
-  runtime::TypedPackedFunc<Function(Function, IRModule, PassContext)> pass_func =
-      [=](Function f, IRModule m, PassContext pc) {
-        f = Downcast<Function>(NormInferenceSimplifier::Simplify(f));
-        f = Downcast<Function>(OpDecomposer::Decompose(f));
-        // Remove original ops if it's not used.
-        return RemoveAllUnused(f);
-      };
-  return CreateFunctionPass(/*pass_function=*/pass_func,            //
-                            /*opt_level=*/0,                        //
-                            /*pass_name=*/"DecomposeCompositeOps",  //
-                            /*required=*/{});
+Pass DecomposeCompositeOps(Optional<String> func_name, String mode) {
+  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
+      [=](IRModule mod, PassContext pc) { return Decompose(mod, func_name, mode); };
+  return CreateModulePass(/*pass_function=*/pass_func,
+                          /*opt_level=*/0,
+                          /*pass_name=*/"DecomposeCompositeOps",
+                          /*required=*/{});
 }
 
 TVM_REGISTER_GLOBAL("relax.transform.DecomposeCompositeOps").set_body_typed(DecomposeCompositeOps);
