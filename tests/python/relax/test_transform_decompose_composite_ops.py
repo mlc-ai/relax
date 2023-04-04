@@ -88,7 +88,7 @@ def test_batch_norm_inference():
                 R.output(gv)
             return gv
 
-    After = relax.transform.DecomposeCompositeOps("main", "eval")(Before)
+    After = relax.transform.DecomposeCompositeOpsForInference("main")(Before)
     tvm.ir.assert_structural_equal(Expected, After)
 
 
@@ -178,7 +178,7 @@ def test_batch_norm_training():
                 R.output(gv0, gv1, gv2)
             return (gv0, gv1, gv2)
 
-    After = relax.transform.DecomposeCompositeOps("main", "training")(Before)
+    After = relax.transform.DecomposeCompositeOpsForTraining("main")(Before)
     tvm.ir.assert_structural_equal(Expected, After)
 
 
@@ -305,7 +305,7 @@ def test_batch_norm_multiple_functions():
                 R.output(gv)
             return gv
 
-    After = relax.transform.DecomposeCompositeOps(mode="eval")(Before)
+    After = relax.transform.DecomposeCompositeOpsForInference()(Before)
     tvm.ir.assert_structural_equal(Expected, After)
 
 
@@ -357,7 +357,7 @@ def test_layer_norm():
                 R.output(ln)
             return ln
 
-    After = relax.transform.DecomposeCompositeOps(mode="eval")(Before)
+    After = relax.transform.DecomposeCompositeOpsForInference()(Before)
     tvm.ir.assert_structural_equal(Expected, After)
 
 
@@ -383,7 +383,7 @@ def test_op_tensor_to_shape():
             gv_1: R.Shape([x, x_1, x_2]) = R.shape([x, x_1, x_2])
             return gv_1
 
-    After = relax.transform.DecomposeCompositeOps(mode="eval")(Before)
+    After = relax.transform.DecomposeCompositeOpsForInference()(Before)
     tvm.ir.assert_structural_equal(Expected, After)
 
 

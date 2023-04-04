@@ -21,9 +21,6 @@ import inspect
 import types
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
-# isort: off
-from typing_extensions import Literal
-
 import numpy as np  # type: ignore
 
 import tvm.ir
@@ -776,9 +773,7 @@ def MetaScheduleTuneIRMod(
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
 
 
-def DecomposeCompositeOps(
-    func_name: Optional[str] = None, mode: Literal["eval", "training"] = "eval"
-) -> tvm.ir.transform.Pass:
+def DecomposeCompositeOpsForInference(func_name: Optional[str] = None) -> tvm.ir.transform.Pass:
     """Decompose composite operators that are composed by other operators during inference.
     For example, the result of batch norm (a triple) will be simplified. Attention, tensor_to_shape,
     etc. can be also decomposed into a number of simplified operators as well.
@@ -789,15 +784,31 @@ def DecomposeCompositeOps(
         The name of the specified function. If not specified, the pass will run in
         all functions.
 
-    mode: Literal["eval", "training"]
-        The mode of simplification. Can be `"eval"` or `"training"`.
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass
+    """
+    return _ffi_api.DecomposeCompositeOpsForInference(func_name)  # type: ignore
+
+
+def DecomposeCompositeOpsForTraining(func_name: Optional[str] = None) -> tvm.ir.transform.Pass:
+    """Decompose composite operators that are composed by other operators during training.
+    For example, the result of batch norm (a triple) will be simplified. Attention, tensor_to_shape,
+    etc. can be also decomposed into a number of simplified operators as well.
+
+    Parameters
+    ----------
+    func_name: Optional[str]
+        The name of the specified function. If not specified, the pass will run in
+        all functions.
 
     Returns
     -------
     ret : tvm.transform.Pass
         The registered pass
     """
-    return _ffi_api.DecomposeCompositeOps(func_name, mode)  # type: ignore
+    return _ffi_api.DecomposeCompositeOpsForTraining(func_name)  # type: ignore
 
 
 def AlterOpImpl(

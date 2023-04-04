@@ -246,16 +246,33 @@ IRModule Decompose(IRModule mod, Optional<String> func_name, String mode) {
 }
 
 namespace transform {
-Pass DecomposeCompositeOps(Optional<String> func_name, String mode) {
-  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
-      [=](IRModule mod, PassContext pc) { return Decompose(mod, func_name, mode); };
+Pass DecomposeCompositeOpsForInference(Optional<String> func_name) {
+  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule mod,
+                                                                            PassContext pc) {
+    return Decompose(mod, func_name, NormSimplifier::kModeEval);
+  };
   return CreateModulePass(/*pass_function=*/pass_func,
                           /*opt_level=*/0,
-                          /*pass_name=*/"DecomposeCompositeOps",
+                          /*pass_name=*/"DecomposeCompositeOpsForInference",
                           /*required=*/{});
 }
 
-TVM_REGISTER_GLOBAL("relax.transform.DecomposeCompositeOps").set_body_typed(DecomposeCompositeOps);
+Pass DecomposeCompositeOpsForTraining(Optional<String> func_name) {
+  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule mod,
+                                                                            PassContext pc) {
+    return Decompose(mod, func_name, NormSimplifier::kModeTraining);
+  };
+  return CreateModulePass(/*pass_function=*/pass_func,
+                          /*opt_level=*/0,
+                          /*pass_name=*/"DecomposeCompositeOpsForTraining",
+                          /*required=*/{});
+}
+
+TVM_REGISTER_GLOBAL("relax.transform.DecomposeCompositeOpsForInference")
+    .set_body_typed(DecomposeCompositeOpsForInference);
+
+TVM_REGISTER_GLOBAL("relax.transform.DecomposeCompositeOpsForTraining")
+    .set_body_typed(DecomposeCompositeOpsForTraining);
 
 }  // namespace transform
 }  // namespace relax
