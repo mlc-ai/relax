@@ -429,7 +429,7 @@ TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_opt
  * \param func_name The name of the specified function. If not specified, the pass will run in
  * all functions.
  */
-TVM_DLL Pass DecomposeCompositeOpsForInference(Optional<String> func_name);
+TVM_DLL Pass DecomposeOpsForInference(Optional<String> func_name);
 
 /*!
  * \brief Decompose composite operators during training. For example, The result of batch norm (a
@@ -439,7 +439,7 @@ TVM_DLL Pass DecomposeCompositeOpsForInference(Optional<String> func_name);
  * \param func_name The name of the specified function. If not specified, the pass will run in
  * all functions.
  */
-TVM_DLL Pass DecomposeCompositeOpsForTraining(Optional<String> func_name);
+TVM_DLL Pass DecomposeOpsForTraining(Optional<String> func_name);
 
 /*!
  * \brief Returns a pass which replaces PrimFuncs which have matching kOperatorName attribute in \p

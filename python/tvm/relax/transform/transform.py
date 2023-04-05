@@ -773,7 +773,7 @@ def MetaScheduleTuneIRMod(
     return _ffi_api.MetaScheduleTuneIRMod(params, work_dir, max_trials_global)  # type: ignore
 
 
-def DecomposeCompositeOpsForInference(func_name: Optional[str] = None) -> tvm.ir.transform.Pass:
+def DecomposeOpsForInference(func_name: Optional[str] = None) -> tvm.ir.transform.Pass:
     """Decompose composite operators that are composed by other operators during inference.
     For example, the result of batch norm (a triple) will be simplified. Attention, tensor_to_shape,
     etc. can be also decomposed into a number of simplified operators as well.
@@ -789,10 +789,10 @@ def DecomposeCompositeOpsForInference(func_name: Optional[str] = None) -> tvm.ir
     ret : tvm.transform.Pass
         The registered pass
     """
-    return _ffi_api.DecomposeCompositeOpsForInference(func_name)  # type: ignore
+    return _ffi_api.DecomposeOpsForInference(func_name)  # type: ignore
 
 
-def DecomposeCompositeOpsForTraining(func_name: Optional[str] = None) -> tvm.ir.transform.Pass:
+def DecomposeOpsForTraining(func_name: Optional[str] = None) -> tvm.ir.transform.Pass:
     """Decompose composite operators that are composed by other operators during training.
     For example, the result of batch norm (a triple) will be simplified. Attention, tensor_to_shape,
     etc. can be also decomposed into a number of simplified operators as well.
@@ -808,7 +808,7 @@ def DecomposeCompositeOpsForTraining(func_name: Optional[str] = None) -> tvm.ir.
     ret : tvm.transform.Pass
         The registered pass
     """
-    return _ffi_api.DecomposeCompositeOpsForTraining(func_name)  # type: ignore
+    return _ffi_api.DecomposeOpsForTraining(func_name)  # type: ignore
 
 
 def AlterOpImpl(

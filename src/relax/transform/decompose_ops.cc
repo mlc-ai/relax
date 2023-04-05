@@ -17,7 +17,7 @@
  * under the License.
  */
 
-/*! \file src/relax/transform/simplify_norm_inference.cc */
+/*! \file src/relax/transform/decompose_ops.cc */
 
 #include <tvm/relax/analysis.h>
 #include <tvm/relax/attrs/nn.h>
@@ -48,7 +48,7 @@ Expr ExpandToMatchInput(Expr data, int ndim, Array<Integer> axes) {
   return expand_dims(data, expand_axes);
 }
 
-Tuple SimplifyBatchNormInference(const CallNode* call) {
+Tuple SimplifyBatchNormInference(const Call& call) {
   auto attrs = call->attrs.as<BatchNormAttrs>();
   ICHECK_NOTNULL(attrs);
 
@@ -75,7 +75,7 @@ Tuple SimplifyBatchNormInference(const CallNode* call) {
   return Tuple({out, call->args[3], call->args[4]});
 }
 
-Tuple SimplifyBatchNormTraining(const CallNode* call) {
+Tuple SimplifyBatchNormTraining(const Call& call) {
   auto attrs = call->attrs.as<BatchNormAttrs>();
   ICHECK_NOTNULL(attrs);
 
@@ -120,7 +120,7 @@ Tuple SimplifyBatchNormTraining(const CallNode* call) {
   });
 }
 
-Expr SimplifyLayerNorm(const CallNode* call) {
+Expr SimplifyLayerNorm(const Call& call) {
   auto attrs = call->attrs.as<LayerNormAttrs>();
   ICHECK_NOTNULL(attrs);
 
@@ -147,79 +147,69 @@ Expr SimplifyLayerNorm(const CallNode* call) {
   return out;
 }
 
-/*! \brief A mutator to simplify the normalization. */
-class NormSimplifier : public ExprMutator {
+Expr TensorToShape(const Call& call_node, const BlockBuilder& builder) {
+  ICHECK(call_node->struct_info_.defined());
+  Expr expr = call_node->args[0];
+  const ShapeStructInfoNode* sinfo = GetStructInfoAs<ShapeStructInfoNode>(call_node);
+  ICHECK(sinfo);
+  // call builtin function that converts tensor to shape tuple
+  // TODO(@sunggg): Register operator for "vm.builtin.tensor_to_shape"
+  Var call = builder->Emit(
+      Call(ExternFunc("vm.builtin.tensor_to_shape"), {expr}, {}, {GetRef<ShapeStructInfo>(sinfo)}));
+
+  // Operators like reshape take the output of `TensorToShape` as their output shape.
+  // Because TOPI expects to have such output shape in symbolic shape at least (i.e.,
+  // Array<PrimExpr>), we define symbolic variables and returns them as a ShapeExpr.
+  Array<PrimExpr> shape_var;
+  for (int i = 0; i < sinfo->ndim; i++) {
+    shape_var.push_back(tir::Var("x", DataType::Int(64)));
+  }
+  // bind symbolic variables to the shape tuple
+  relax::Var var("y", ShapeStructInfo(shape_var));
+  builder->EmitNormalized(MatchCast(var, call, ShapeStructInfo(shape_var)));
+  return ShapeExpr(shape_var);
+}
+
+class OpDecomposer : public ExprMutator {
  public:
   constexpr static const char* kModeEval = "eval";
   constexpr static const char* kModeTraining = "training";
 
-  explicit NormSimplifier(String mode) : ExprMutator(), mode_(mode) {
+  explicit OpDecomposer(String mode) : ExprMutator(), mode_(mode) {
     CHECK(mode == kModeEval || mode == kModeTraining)
         << "The argument mode must be one of the following values: \"eval\", \"training\".";
   }
 
  private:
-  Expr VisitExpr_(const CallNode* call) final {
-    if (call->op == Op::Get("relax.nn.batch_norm")) {
+  using ExprMutator::VisitExpr_;
+
+  Expr VisitExpr_(const CallNode* call_node) final {
+    Call call = Downcast<Call>(VisitExprPostOrder_(call_node));
+    if (call->op == batch_norm_op_) {
       if (mode_ == kModeEval) {
         return SimplifyBatchNormInference(call);
       } else {
         ICHECK_EQ(mode_, kModeTraining);
         return SimplifyBatchNormTraining(call);
       }
-    } else if (call->op == Op::Get("relax.nn.layer_norm")) {
+    } else if (call->op == layer_norm_op_) {
       return SimplifyLayerNorm(call);
+    } else if (call->op == tensor_to_shape_op_) {
+      return TensorToShape(call, builder_);
     }
-    return GetRef<Call>(call);
+    return call;
   }
 
   const String mode_;
-};
 
-class OpDecomposer : public ExprMutator {
- public:
-  static Expr Decompose(Expr expr) { return OpDecomposer()(expr); }
-
- private:
-  using ExprMutator::VisitExpr_;
-  Expr TensorToShape(const Call& call_node) {
-    ICHECK(call_node->struct_info_.defined());
-    Expr expr = call_node->args[0];
-    const ShapeStructInfoNode* sinfo = GetStructInfoAs<ShapeStructInfoNode>(call_node);
-    ICHECK(sinfo);
-    // call builtin function that converts tensor to shape tuple
-    // TODO(@sunggg): Register operator for "vm.builtin.tensor_to_shape"
-    Var call = builder_->Emit(Call(ExternFunc("vm.builtin.tensor_to_shape"), {expr}, {},
-                                   {GetRef<ShapeStructInfo>(sinfo)}));
-
-    // Operators like reshape take the output of `TensorToShape` as their output shape.
-    // Because TOPI expects to have such output shape in symbolic shape at least (i.e.,
-    // Array<PrimExpr>), we define symbolic variables and returns them as a ShapeExpr.
-    Array<PrimExpr> shape_var;
-    for (int i = 0; i < sinfo->ndim; i++) {
-      shape_var.push_back(tir::Var("x", DataType::Int(64)));
-    }
-    // bind symbolic variables to the shape tuple
-    relax::Var var("y", ShapeStructInfo(shape_var));
-    builder_->EmitNormalized(MatchCast(var, call, ShapeStructInfo(shape_var)));
-    return ShapeExpr(shape_var);
-  }
-
-  Expr VisitExpr_(const CallNode* call_node) final {
-    Call call = Downcast<Call>(VisitExprPostOrder_(call_node));
-    if (call->op == tensor_to_shape_op_) {
-      return TensorToShape(call);
-    } else {
-      return call;
-    }
-  }
-
+  /* composite opeartor list */
+  const Op& batch_norm_op_ = Op::Get("relax.nn.batch_norm");
+  const Op& layer_norm_op_ = Op::Get("relax.nn.layer_norm");
   const Op& tensor_to_shape_op_ = Op::Get("relax.tensor_to_shape");
 };
 
 IRModule Decompose(IRModule mod, Optional<String> func_name, String mode) {
-  auto norm_simplifier = NormSimplifier(mode);
-  auto op_decomposer = OpDecomposer();
+  auto op_decomposer = OpDecomposer(mode);
 
   IRModuleNode* new_module = mod.CopyOnWrite();
 
@@ -227,8 +217,7 @@ IRModule Decompose(IRModule mod, Optional<String> func_name, String mode) {
     Map<GlobalVar, BaseFunc> functions = mod->functions;
     for (const auto& func_pr : functions) {
       if (const auto* relax_f = func_pr.second.as<FunctionNode>()) {
-        Function f = Downcast<Function>(norm_simplifier(GetRef<Function>(relax_f)));
-        f = Downcast<Function>(op_decomposer(f));
+        Function f = Downcast<Function>(op_decomposer(GetRef<Function>(relax_f)));
         new_module->Update(func_pr.first, f);
       }
     }
@@ -237,7 +226,6 @@ IRModule Decompose(IRModule mod, Optional<String> func_name, String mode) {
     CHECK(func_ptr) << func_name.value() << "is not a Relax Function";
     auto gvar = mod->GetGlobalVar(func_name.value());
     auto func = GetRef<Function>(func_ptr);
-    func = Downcast<Function>(norm_simplifier(func));
     func = Downcast<Function>(op_decomposer(func));
     new_module->Update(gvar, func);
   }
@@ -246,33 +234,33 @@ IRModule Decompose(IRModule mod, Optional<String> func_name, String mode) {
 }
 
 namespace transform {
-Pass DecomposeCompositeOpsForInference(Optional<String> func_name) {
+Pass DecomposeOpsForInference(Optional<String> func_name) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule mod,
                                                                             PassContext pc) {
-    return Decompose(mod, func_name, NormSimplifier::kModeEval);
+    return Decompose(mod, func_name, OpDecomposer::kModeEval);
   };
   return CreateModulePass(/*pass_function=*/pass_func,
                           /*opt_level=*/0,
-                          /*pass_name=*/"DecomposeCompositeOpsForInference",
+                          /*pass_name=*/"DecomposeOpsForInference",
                           /*required=*/{});
 }
 
-Pass DecomposeCompositeOpsForTraining(Optional<String> func_name) {
+Pass DecomposeOpsForTraining(Optional<String> func_name) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule mod,
                                                                             PassContext pc) {
-    return Decompose(mod, func_name, NormSimplifier::kModeTraining);
+    return Decompose(mod, func_name, OpDecomposer::kModeTraining);
   };
   return CreateModulePass(/*pass_function=*/pass_func,
                           /*opt_level=*/0,
-                          /*pass_name=*/"DecomposeCompositeOpsForTraining",
+                          /*pass_name=*/"DecomposeOpsForTraining",
                           /*required=*/{});
 }
 
-TVM_REGISTER_GLOBAL("relax.transform.DecomposeCompositeOpsForInference")
-    .set_body_typed(DecomposeCompositeOpsForInference);
+TVM_REGISTER_GLOBAL("relax.transform.DecomposeOpsForInference")
+    .set_body_typed(DecomposeOpsForInference);
 
-TVM_REGISTER_GLOBAL("relax.transform.DecomposeCompositeOpsForTraining")
-    .set_body_typed(DecomposeCompositeOpsForTraining);
+TVM_REGISTER_GLOBAL("relax.transform.DecomposeOpsForTraining")
+    .set_body_typed(DecomposeOpsForTraining);
 
 }  // namespace transform
 }  // namespace relax
