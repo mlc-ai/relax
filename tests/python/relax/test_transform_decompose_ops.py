@@ -22,7 +22,7 @@ import tvm.script
 import tvm.testing
 from tvm import IRModule, relax
 from tvm.relax import Function
-from tvm.script import relax as R, ir as I
+from tvm.script import relax as R, tir as T, ir as I
 
 
 def test_batch_norm_inference():
@@ -88,7 +88,7 @@ def test_batch_norm_inference():
                 R.output(gv)
             return gv
 
-    After = relax.transform.SimplifyNorm("main", "eval")(Before)
+    After = relax.transform.DecomposeOpsForInference("main")(Before)
     tvm.ir.assert_structural_equal(Expected, After)
 
 
@@ -178,7 +178,7 @@ def test_batch_norm_training():
                 R.output(gv0, gv1, gv2)
             return (gv0, gv1, gv2)
 
-    After = relax.transform.SimplifyNorm("main", "training")(Before)
+    After = relax.transform.DecomposeOpsForTraining("main")(Before)
     tvm.ir.assert_structural_equal(Expected, After)
 
 
@@ -305,7 +305,7 @@ def test_batch_norm_multiple_functions():
                 R.output(gv)
             return gv
 
-    After = relax.transform.SimplifyNorm(mode="eval")(Before)
+    After = relax.transform.DecomposeOpsForInference()(Before)
     tvm.ir.assert_structural_equal(Expected, After)
 
 
@@ -357,7 +357,33 @@ def test_layer_norm():
                 R.output(ln)
             return ln
 
-    After = relax.transform.SimplifyNorm(mode="eval")(Before)
+    After = relax.transform.DecomposeOpsForInference()(Before)
+    tvm.ir.assert_structural_equal(Expected, After)
+
+
+def test_op_tensor_to_shape():
+    @I.ir_module
+    class Before:
+        @R.function
+        def main(t: R.Tensor(ndim=1, dtype="int64")):
+            gv: R.Shape(ndim=3) = R.tensor_to_shape(t)
+            return gv
+
+    @I.ir_module
+    class Expected:
+        @R.function
+        def main(t: R.Tensor(dtype="int64", ndim=1)) -> R.Shape(ndim=3):
+            x = T.int64()
+            x_1 = T.int64()
+            x_2 = T.int64()
+            gv: R.Shape(ndim=3) = R.call_packed(
+                "vm.builtin.tensor_to_shape", t, sinfo_args=(R.Shape(ndim=3),)
+            )
+            y: R.Shape([x, x_1, x_2]) = R.match_cast(gv, R.Shape([x, x_1, x_2]))
+            gv_1: R.Shape([x, x_1, x_2]) = R.shape([x, x_1, x_2])
+            return gv_1
+
+    After = relax.transform.DecomposeOpsForInference()(Before)
     tvm.ir.assert_structural_equal(Expected, After)
 
 

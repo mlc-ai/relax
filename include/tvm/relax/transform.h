@@ -336,16 +336,6 @@ class PatternCheckContext : public ObjectRef {
 };
 
 /*!
- * \brief Simplify normalization operators.
- * The result of batch norm (a triple) will be simplified.
- * \param func_name The name of the specified function. If not specified, the pass will run in
- * all functions.
- * \param mode The mode of simplification. Can be `eval` or `training`.
- * \return The Pass.
- */
-TVM_DLL Pass SimplifyNorm(Optional<String> func_name, String mode = "eval");
-
-/*!
  * \brief Returns a pass which replaces PrimFuncs which have matching kOperatorName attribute in \p
  * op_impl_map, with replacement PrimFunc that could possibly have different layouts on i/o
  * buffers. The layout transformations on i/o buffers is present in the \p op_buffer_transforms. The
@@ -432,13 +422,24 @@ TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_opt
                         Array<runtime::String> entry_functions);
 
 /*!
- * \brief Decompose composite operators during inference. For example, the result
- * of a batch norm which is indexed at tuple index 0 will be unpacked into a
- * number of simplified operators. Operators like Attention, Erf, etc. can be also
- * simplified into several operators as well.
- * \return The Pass.
+ * \brief Decompose composite operators during inference. For example, The result of batch norm (a
+ * triple) will be simplified. Operators like Attention, Erf, etc. can be also simplified into
+ * several operators as well.
+ *
+ * \param func_name The name of the specified function. If not specified, the pass will run in
+ * all functions.
  */
-TVM_DLL Pass DecomposeCompositeOperator();
+TVM_DLL Pass DecomposeOpsForInference(Optional<String> func_name);
+
+/*!
+ * \brief Decompose composite operators during training. For example, The result of batch norm (a
+ * triple) will be simplified. Operators like Attention, Erf, etc. can be also simplified into
+ * several operators as well.
+ *
+ * \param func_name The name of the specified function. If not specified, the pass will run in
+ * all functions.
+ */
+TVM_DLL Pass DecomposeOpsForTraining(Optional<String> func_name);
 
 /*!
  * \brief Returns a pass which replaces PrimFuncs which have matching kOperatorName attribute in \p
