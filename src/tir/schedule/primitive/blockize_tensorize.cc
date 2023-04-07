@@ -229,8 +229,10 @@ Map<Var, PrimExpr> DeriveBlockBinding(const Array<IterVar>& iter_vars,          
     IterVar outer_iter(/*dom=*/RangeFromExtent(outer_mark->extent),
                        /*var=*/iter_var->var.copy_with_suffix("_o"),
                        /*iter_type=*/iter_var->iter_type);
-    outer_bindings->push_back(NormalizeIterMapToExpr(outer_binding));
-    outer_iter_vars->push_back(outer_iter);
+    if (!is_one(outer_mark->extent)) {
+      outer_bindings->push_back(NormalizeIterMapToExpr(outer_binding));
+      outer_iter_vars->push_back(outer_iter);
+    }
     // create iter var for the inner block
     IterVar inner_iter(/*dom=*/RangeFromExtent(inner_mark->extent),
                        /*var=*/iter_var->var.copy_with_suffix("_i"),
@@ -266,7 +268,7 @@ BlockRealize GenerateInner(bool is_write_reduction,
                            Block block) {
   BlockNode* n = block.CopyOnWrite();
   n->iter_vars = iter_vars;
-  n->init = NullOpt;
+  n->init = is_write_reduction ? NullOpt : std::move(block->init);
   if (is_write_reduction) {
     Array<BufferRegion> reads;
     reads.reserve(block->writes.size() + block->reads.size());
@@ -493,7 +495,7 @@ BlockRealize BlockizeImpl(const ScheduleState& self, const StmtSRef& loop_sref,
             /*name_hint=*/block_subst->name_hint + "_o",
             /*body=*/MakeLoopNest(inner_realize, loops),
             /*init=*/
-            block_subst->init.defined()  //
+            block_subst->init.defined() && has_outer_reduction  //
                 ? GenerateOuterInit(block_subst->init.value(), inner_realize, loops,
                                     block_subst->name_hint + "_init")
                 : Optional<Stmt>(NullOpt)));
