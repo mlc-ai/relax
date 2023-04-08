@@ -171,26 +171,28 @@ class NonSingleProducerError : public ScheduleError {
    */
   static StmtSRef Check(const ScheduleState& self, const StmtSRef& consumer_block_sref,
                         const StmtSRef& scope_root_sref) {
-    
     const BlockNode* scope_block = TVM_SREF_TO_BLOCK(scope_root_sref);
     const BlockNode* consumer_block = TVM_SREF_TO_BLOCK(consumer_block_sref);
-    Buffer consumer_buffer = NotSingleReadWriteBuffer::GetSingleRead(self, GetRef<Block>(consumer_block), scope_root_sref);
-    class ProducerFinder: public StmtVisitor{
-      public:
-      static std::vector<Block> GetProducer(const Buffer& buffer, const Block& scope_block){
+    Buffer consumer_buffer = NotSingleReadWriteBuffer::GetSingleRead(
+        self, GetRef<Block>(consumer_block), scope_root_sref);
+    class ProducerFinder : public StmtVisitor {
+     public:
+      static std::vector<Block> GetProducer(const Buffer& buffer, const Block& scope_block) {
         ProducerFinder finder(buffer);
         finder(scope_block);
         return finder.producer_across_scope_.back();
       }
-      
-      private:
-      explicit ProducerFinder(const Buffer& buffer) : buffer_(buffer) { producer_across_scope_.push_back({});}
+
+     private:
+      explicit ProducerFinder(const Buffer& buffer) : buffer_(buffer) {
+        producer_across_scope_.push_back({});
+      }
 
       void VisitStmt_(const BlockNode* node) final {
         producer_across_scope_.push_back({});
         StmtVisitor::VisitStmt_(node);
-        //not a leaf block
-        if(!producer_across_scope_.back().empty()){
+        // not a leaf block
+        if (!producer_across_scope_.back().empty()) {
           auto producer_under_block = producer_across_scope_.back();
           producer_across_scope_.pop_back();
           producer_across_scope_.back().insert(producer_across_scope_.back().end(),
@@ -198,7 +200,7 @@ class NonSingleProducerError : public ScheduleError {
                                                producer_under_block.end());
           return;
         }
-        //leaf block
+        // leaf block
         producer_across_scope_.pop_back();
         for (const auto& write : node->writes) {
           if (write->buffer.same_as(buffer_)) {
