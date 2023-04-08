@@ -171,20 +171,51 @@ class NonSingleProducerError : public ScheduleError {
    */
   static StmtSRef Check(const ScheduleState& self, const StmtSRef& consumer_block_sref,
                         const StmtSRef& scope_root_sref) {
-    BlockScope scope = self->GetBlockScope(scope_root_sref);
-    Array<Dependency> producers = scope->GetDepsByDst(consumer_block_sref);
-    StmtSRef producer_block_sref{nullptr};
-    if (producers.size() == 1 && producers[0]->kind == DepKind::kRAW) {
-      producer_block_sref = producers[0]->src;
-      if (IsCompleteBlock(self, producer_block_sref, scope_root_sref)) {
-        Array<Dependency> consumers = scope->GetDepsBySrc(producer_block_sref);
-        if (consumers.size() == 1) {
-          return producer_block_sref;
+    
+    const BlockNode* scope_block = TVM_SREF_TO_BLOCK(scope_root_sref);
+    const BlockNode* consumer_block = TVM_SREF_TO_BLOCK(consumer_block_sref);
+    Buffer consumer_buffer = NotSingleReadWriteBuffer::GetSingleRead(self, GetRef<Block>(consumer_block), scope_root_sref);
+    class ProducerFinder: public StmtVisitor{
+      public:
+      static std::vector<Block> GetProducer(const Buffer& buffer, const Block& scope_block){
+        ProducerFinder finder(buffer);
+        finder(scope_block);
+        return finder.producer_across_scope_.back();
+      }
+      
+      private:
+      explicit ProducerFinder(const Buffer& buffer) : buffer_(buffer) { producer_across_scope_.push_back({});}
+
+      void VisitStmt_(const BlockNode* node) final {
+        producer_across_scope_.push_back({});
+        StmtVisitor::VisitStmt_(node);
+        //not a leaf block
+        if(!producer_across_scope_.back().empty()){
+          auto producer_under_block = producer_across_scope_.back();
+          producer_across_scope_.pop_back();
+          producer_across_scope_.back().insert(producer_across_scope_.back().end(),
+                                               producer_under_block.begin(),
+                                               producer_under_block.end());
+          return;
+        }
+        //leaf block
+        producer_across_scope_.pop_back();
+        for (const auto& write : node->writes) {
+          if (write->buffer.same_as(buffer_)) {
+            producer_across_scope_.back().push_back(GetRef<Block>(node));
+            break;
+          }
         }
       }
+      Buffer buffer_;
+      std::vector<std::vector<Block>> producer_across_scope_;
+    };
+    std::vector<Block> producer_across_scope =
+        ProducerFinder::GetProducer(consumer_buffer, GetRef<Block>(scope_block));
+    if (producer_across_scope.size() != 1) {
+      throw NonSingleProducerError(self->mod, GetRef<Block>(consumer_block));
     }
-    const BlockNode* block = TVM_SREF_TO_BLOCK(consumer_block_sref);
-    throw NonSingleProducerError(self->mod, GetRef<Block>(block));
+    return self->stmt2ref.at(producer_across_scope[0].get());
   }
 };
 
@@ -528,7 +559,9 @@ class ReverseComputeInliner : public BaseInliner {
    private:
     PrimExpr VisitExpr_(const VarNode* var) final {
       auto it = self_->idx_sub_.find(var);
-      ICHECK(it != self_->idx_sub_.end());
+      if (it == self_->idx_sub_.end()) {
+        return GetRef<Var>(var);
+      }
       return (*it).second;
     }
 
