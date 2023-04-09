@@ -341,20 +341,6 @@ void PadEinsum(ScheduleState self, StmtSRef block_sref, Array<Integer> padding) 
 
   Einsum einsum = ExtractEinsum(self, GetRef<Block>(block));
 
-  // Check input and output buffers are all allocated in the current scope.
-  {
-    auto f_check_buffer_allocated = [&](const Buffer& buffer) {
-      auto [defining_site_sref, is_allocate] = GetBufferDefiningSite(block_sref, buffer);
-      if (!defining_site_sref.defined() || !is_allocate) {
-        throw BufferNotAllocatedInScopeError(self->mod, buffer);
-      }
-    };
-    f_check_buffer_allocated(einsum.output_buffer);
-    for (const auto& buffer_indices_pair : einsum.input_indices) {
-      f_check_buffer_allocated(buffer_indices_pair.first);
-    }
-  }
-
   // Step 2: Prepare buffer and variable remapping. Infer the new shape of the input and the output
   // buffers. Infer the new extent of the block iters of the computation block and the producer
   // block.

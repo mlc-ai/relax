@@ -41,47 +41,6 @@ def matmul_before(
             C[i, j] = C[i, j] + A[i, k] * B[k, j]
 
 
-@T.prim_func
-def matmul_expected(
-    A: T.Buffer((128, 127), "float32"),
-    B: T.Buffer((127, 127), "float32"),
-    C: T.Buffer((128, 127), "float32"),
-) -> None:
-    A_shared_padded = T.alloc_buffer([128, 128], dtype="float32", scope="shared")
-    B_shared_padded = T.alloc_buffer([128, 128], dtype="float32", scope="shared")
-    C_shared_padded = T.alloc_buffer([128, 128], dtype="float32", scope="shared")
-    for i0, i1 in T.grid(128, 128):
-        with T.block("A"):
-            i, j = T.axis.remap("SS", [i0, i1])
-            T.reads(A[i, j])
-            T.writes(A_shared_padded[i, j])
-            A_shared_padded[i, j] = T.if_then_else(j < 127, A[i, j], T.float32(0), dtype="float32")
-    for i0, i1 in T.grid(128, 128):
-        with T.block("B"):
-            i, j = T.axis.remap("SS", [i0, i1])
-            T.reads(B[i, j])
-            T.writes(B_shared_padded[i, j])
-            B_shared_padded[i, j] = T.if_then_else(
-                i < 127 and j < 127, B[i, j], T.float32(0), dtype="float32"
-            )
-    for i0, i1, i2 in T.grid(128, 128, 128):
-        with T.block("C_shared"):
-            i, j, k = T.axis.remap("SSR", [i0, i1, i2])
-            T.reads(A_shared_padded[i, k], B_shared_padded[k, j])
-            T.writes(C_shared_padded[i, j])
-            with T.init():
-                C_shared_padded[i, j] = T.float32(0)
-            C_shared_padded[i, j] = (
-                C_shared_padded[i, j] + A_shared_padded[i, k] * B_shared_padded[k, j]
-            )
-    for i0, i1 in T.grid(128, 127):
-        with T.block("C"):
-            i, j = T.axis.remap("SS", [i0, i1])
-            T.reads(C_shared_padded[i, j])
-            T.writes(C[i, j])
-            C[i, j] = C_shared_padded[i, j]
-
-
 # pylint: enable=no-member,invalid-name,unused-variable,unexpected-keyword-arg
 
 
