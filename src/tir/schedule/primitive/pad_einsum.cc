@@ -46,7 +46,7 @@ class InvalidPaddingError : public ScheduleError {
       throw InvalidPaddingError(self->mod, block, padding);
     }
     for (const auto& pad : padding) {
-      if (pad->value < 0) {
+      if (pad->value <= 0) {
         throw InvalidPaddingError(self->mod, block, padding);
       }
     }
@@ -307,7 +307,7 @@ class InvalidProducerError : public ScheduleError {
   Block producer_;
 };
 
-void PadEinsum(ScheduleState self, const StmtSRef& block_sref, const Array<Integer>& padding) {
+void PadEinsum(ScheduleState self, StmtSRef block_sref, Array<Integer> padding) {
   arith::Analyzer analyzer;
   // Step 1: Input checking and error handling
   const BlockNode* block = TVM_SREF_TO_BLOCK(block_sref);
@@ -316,7 +316,7 @@ void PadEinsum(ScheduleState self, const StmtSRef& block_sref, const Array<Integ
   const StmtSRef& scope_sref = GetScopeRoot(self, block_sref, /*require_stage_pipeline=*/true);
   InvalidPaddingError::Check(self, GetRef<Block>(block), padding);
 
-  const Array<StmtSRef> producers = GetProducers(self, block_sref);
+  Array<StmtSRef> producers = GetProducers(self, block_sref);
   {
     auto f_check_block_properties = [&](const StmtSRef& block_sref, bool is_producer) {
       CheckBlockHasTrivialBinding(self, block_sref);
@@ -364,10 +364,10 @@ void PadEinsum(ScheduleState self, const StmtSRef& block_sref, const Array<Integ
   // Convert the input padding array to a map from variables to the padded extents
   for (int i = 0, n = padding.size(); i < n; ++i) {
     const IterVar& iter = block->iter_vars[i];
-    PrimExpr new_extent =
-        IntImm(iter->var->dtype, Downcast<Integer>(iter->dom->extent)->value + padding[i]->value);
-    padded_iter_extents.Set(iter->var, new_extent);
-    padded_iter_extents.Set(Downcast<Var>(realize->iter_values[i]), new_extent);
+    PrimExpr dom = iter->dom->extent;
+    PrimExpr new_dom = analyzer.Simplify(ceildiv(dom, padding[i]) * padding[i]);
+    padded_iter_extents.Set(iter->var, new_dom);
+    padded_iter_extents.Set(Downcast<Var>(realize->iter_values[i]), new_dom);
   }
 
   Map<Buffer, Buffer> buffer_remap;  // mapping from buffers to new buffers with padded shapes

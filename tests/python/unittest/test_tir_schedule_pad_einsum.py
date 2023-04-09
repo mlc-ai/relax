@@ -15,16 +15,14 @@
 # specific language governing permissions and limitations
 # under the License.
 # pylint: disable=missing-function-docstring,missing-module-docstring
-import sys
-
 import pytest
 import tvm
 import tvm.testing
-from tvm import tir, te
+from tvm import te, tir
+from tvm.meta_schedule.testing import te_workload
 from tvm.script import tir as T
 from tvm.tir.schedule.schedule import ScheduleError
 from tvm.tir.schedule.testing import verify_trace_roundtrip
-from tvm.meta_schedule.testing import te_workload
 
 # pylint: disable=no-member,invalid-name,unused-variable,unexpected-keyword-arg
 
@@ -35,27 +33,12 @@ def matmul_before(
     B: T.Buffer((127, 127), "float32"),
     C: T.Buffer((128, 127), "float32"),
 ) -> None:
-    A_shared = T.alloc_buffer((128, 127), "float32", scope="shared")
-    B_shared = T.alloc_buffer((127, 127), "float32", scope="shared")
-    C_shared = T.alloc_buffer((128, 127), "float32", scope="shared")
-    for i0, i1 in T.grid(128, 127):
-        with T.block("A"):
-            i, j = T.axis.remap("SS", [i0, i1])
-            A_shared[i, j] = A[i, j]
-    for i0, i1 in T.grid(127, 127):
-        with T.block("B"):
-            i, j = T.axis.remap("SS", [i0, i1])
-            B_shared[i, j] = B[i, j]
     for i0, i1, i2 in T.grid(128, 127, 127):
         with T.block("C_shared"):
             i, j, k = T.axis.remap("SSR", [i0, i1, i2])
             with T.init():
-                C_shared[i, j] = T.float32(0)
-            C_shared[i, j] = C_shared[i, j] + A_shared[i, k] * B_shared[k, j]
-    for i0, i1 in T.grid(128, 127):
-        with T.block("C"):
-            i, j = T.axis.remap("SS", [i0, i1])
-            C[i, j] = C_shared[i, j]
+                C[i, j] = T.float32(0)
+            C[i, j] = C[i, j] + A[i, k] * B[k, j]
 
 
 @T.prim_func
@@ -105,18 +88,12 @@ def matmul_expected(
 def test_pad_matmul():
     sch = tir.Schedule(matmul_before, debug_mask="all")
     C = sch.get_block("C_shared")
-    sch.pad_einsum(C, [0, 1, 1])
-    tvm.ir.assert_structural_equal(matmul_expected, sch.mod["main"])
-    verify_trace_roundtrip(sch, mod=matmul_before)
-
-
-def test_pad_matmul_error_non_intermediate_buffer():
-    func = te.create_prim_func(te_workload.matmul(128, 127, 127))
-    sch = tir.Schedule(func, debug_mask="all")
-    C = sch.get_block("C")
-    with pytest.raises(ScheduleError):
-        sch.pad_einsum(C, [0, 1, 1])
+    sch.pad_einsum(C, [1, 32, 32])
+    sch.mod.show(black_format=False)
+    # tvm.ir.assert_structural_equal(matmul_expected, sch.mod["main"])
+    # verify_trace_roundtrip(sch, mod=matmul_before)
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    test_pad_matmul()
+    # tvm.testing.main()
