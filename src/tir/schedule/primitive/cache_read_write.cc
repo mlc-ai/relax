@@ -80,6 +80,8 @@ struct CacheStageInfo {
   Map<Block, Block> block_reuse;
   /*! \brief A set of blocks that will consume the new cache. */
   std::unordered_set<StmtSRef, ObjectHash, ObjectEqual> consumer_blocks;
+  /*! \brief cache region for the buffer to be cached */
+  BufferRegion cache_region;
 };
 
 /*! \brief Return the buffer region realted with the buffer */
@@ -241,22 +243,36 @@ Block MakeCacheStage(const BufferRegion& cache_region, CacheStageInfo* info,
   for (const Range& axis_range : cache_region->region) {
     Var loop_var("ax" + std::to_string(loop_vars.size()), axis_range->extent.dtype());
     loop_vars.push_back(loop_var);
-    iter_values.push_back(axis_range->min + loop_var);
+    iter_values.push_back(loop_var);
   }
   // block variables
   Array<IterVar> block_vars;
   // block access region for read/write buffers
-  Region access_region;
+  Region read_access_region, write_access_region;
   // indices used in block body
-  Array<PrimExpr> access_indices;
+  Array<PrimExpr> read_access_indices, write_access_indices;
   // Create block vars, block's accessed region and accessing indices
-  for (const PrimExpr& dim : cache_region->buffer->shape) {
-    Var var("v" + std::to_string(access_indices.size()), dim.dtype());
-    block_vars.push_back(IterVar(/*dom=*/Range::FromMinExtent(make_zero(dim->dtype), dim),
-                                 /*var=*/var,
-                                 /*IterVarType=*/kDataPar));
-    access_indices.push_back(var);
-    access_region.push_back(Range::FromMinExtent(var, make_const(var.dtype(), 1)));
+  for (const Range& axis_range : cache_region->region) {
+    Var var("v" + std::to_string(read_access_indices.size()), axis_range->extent.dtype());
+    block_vars.push_back(IterVar(
+        /*dom=*/Range::FromMinExtent(make_zero(axis_range->extent.dtype()), axis_range->extent),
+        /*var=*/var,
+        /*IterVarType=*/kDataPar));
+    if (cache_region->buffer.same_as(info->read_buffer)) {
+      // cache_read
+      read_access_indices.push_back(axis_range->min + var);
+      read_access_region.push_back(
+          Range::FromMinExtent(axis_range->min + var, make_const(var.dtype(), 1)));
+      write_access_indices.push_back(var);
+      write_access_region.push_back(Range::FromMinExtent(var, make_const(var.dtype(), 1)));
+    } else {
+      // cache_write
+      write_access_indices.push_back(axis_range->min + var);
+      write_access_region.push_back(
+          Range::FromMinExtent(axis_range->min + var, make_const(var.dtype(), 1)));
+      read_access_indices.push_back(var);
+      read_access_region.push_back(Range::FromMinExtent(var, make_const(var.dtype(), 1)));
+    }
   }
 
   // Create the body block:
@@ -265,12 +281,12 @@ Block MakeCacheStage(const BufferRegion& cache_region, CacheStageInfo* info,
   //     write_buffer[access_indices] = read_buffer[access_indices]
   Block block(
       /*iter_vars=*/std::move(block_vars),
-      /*reads=*/{BufferRegion(info->read_buffer, access_region)},
-      /*writes=*/{BufferRegion(info->write_buffer, access_region)},
+      /*reads=*/{BufferRegion(info->read_buffer, read_access_region)},
+      /*writes=*/{BufferRegion(info->write_buffer, write_access_region)},
       /*name_hint=*/cache_region->buffer->name + "_" + storage_scope,
       /*body=*/
-      BufferStore(info->write_buffer, BufferLoad(info->read_buffer, access_indices),
-                  access_indices),
+      BufferStore(info->write_buffer, BufferLoad(info->read_buffer, read_access_indices),
+                  write_access_indices),
       /*init=*/NullOpt,
       /*alloc_buffers=*/{},
       /*match_buffers=*/{},
@@ -758,11 +774,42 @@ class CacheReadRewriter : public StmtExprMutator {
  private:
   explicit CacheReadRewriter(const StmtSRef& scope_sref, CacheStageInfo* info)
       : scope_sref_(scope_sref), info_(info) {
+    auto update_region = [&](const Region& region, const Region& offset) -> Region {
+      arith::Analyzer ana;
+      ICHECK_EQ(region.size(), offset.size());
+      std::vector<Range> ret;
+      for (size_t i = 0; i < region.size(); ++i) {
+        ret.push_back(
+            Range::FromMinExtent(ana.Simplify(region[i]->min - offset[i]->min), region[i]->extent));
+      }
+      return ret;
+    };
+
     update_access_regions = [&](Array<BufferRegion> regions) {
-      return ReplaceBuffer(std::move(regions), info_->read_buffer, info_->write_buffer);
+      std::vector<BufferRegion> ret;
+      for (const BufferRegion& region : regions) {
+        if (region->buffer.same_as(info_->read_buffer)) {
+          ret.push_back(BufferRegion(info_->write_buffer,
+                                     update_region(region->region, info_->cache_region->region)));
+        } else {
+          ret.push_back(region);
+        }
+      }
+      return ret;
     };
     update_match_buffers = [&](Array<MatchBufferRegion> match_buffers) {
-      return ReplaceBuffer(std::move(match_buffers), info_->read_buffer, info_->write_buffer);
+      std::vector<MatchBufferRegion> ret;
+      for (const MatchBufferRegion& match_buffer : match_buffers) {
+        if (match_buffer->source->buffer.same_as(info_->read_buffer)) {
+          ret.push_back(MatchBufferRegion(
+              match_buffer->buffer,
+              BufferRegion(info_->write_buffer, update_region(match_buffer->source->region,
+                                                              info_->cache_region->region))));
+        } else {
+          ret.push_back(match_buffer);
+        }
+      }
+      return ret;
     };
   }
 
@@ -838,6 +885,12 @@ class CacheReadRewriter : public StmtExprMutator {
     if (load->buffer.same_as(info_->read_buffer) && current_block_consumes) {
       ObjectPtr<BufferLoadNode> n = make_object<BufferLoadNode>(*load);
       n->buffer = info_->write_buffer;
+      std::vector<PrimExpr> indices;
+      arith::Analyzer ana;
+      for (size_t i = 0; i < load->indices.size(); ++i) {
+        indices.push_back(ana.Simplify(load->indices[i] - info_->cache_region->region[i]->min));
+      }
+      n->indices = std::move(indices);
       return PrimExpr(n);
     }
     return ExprMutator::VisitExpr_(load);
@@ -1477,10 +1530,6 @@ StmtSRef CacheRead(ScheduleState self, const StmtSRef& block_sref, int read_buff
   // Step 2. Create CacheStageInfo
   CacheStageInfo info;
   info.read_buffer = read_buffer;
-  // Create the corresponding buffer to be written, i.e. result of cache_read
-  info.write_buffer = WithScope(read_buffer, storage_scope);
-  // Create the corresponding buffer allocation
-  info.alloc = info.write_buffer;
 
   // info.consumer_blocks indicates which buffers should consume the cache.
   for (auto consumer : consumer_blocks) {
@@ -1516,6 +1565,15 @@ StmtSRef CacheRead(ScheduleState self, const StmtSRef& block_sref, int read_buff
   }
 
   // Step 4. Making new cache stage block and rewrite readers.
+  info.cache_region = cache_region;
+  info.write_buffer = WithScope(read_buffer, storage_scope);
+  auto* write_buffer = info.write_buffer.CopyOnWrite();
+  std::vector<PrimExpr> shape;
+  for (auto cache_range : info.cache_region->region) {
+    shape.push_back(cache_range->extent);
+  }
+  write_buffer->shape = std::move(shape);
+  info.alloc = info.write_buffer;
   Block cache_read_stage = MakeCacheStage(/*cache_region=*/cache_region, /*info=*/&info,
                                           /*storage_scope=*/storage_scope);
   Stmt new_scope = CacheReadRewriter::Rewrite(/*scope_sref=*/scope_sref, /*info=*/&info);
@@ -1842,7 +1900,6 @@ StmtSRef ReindexCacheWrite(ScheduleState self, const StmtSRef& block_sref, int w
   // Step 2. Creating CacheStageInfo
   ReindexCacheStageInfo info;
   info.write_buffer = write_buffer;
-  LOG(INFO) << block->name_hint;
   info.consumer_blocks.insert(block_sref);
 
   // Step 3. Check the only writer block.
