@@ -301,7 +301,7 @@ class BaseInliner : public StmtExprMutator {
     return StmtExprMutator::VisitStmt_(loop);
   }
 
-  Stmt VisitStmt_(const BlockNode* block) final {
+  Stmt VisitStmt_(const BlockNode* block) {
     CheckMatchBufferRegion(block);
     AddBuffersInBlockSignature(block);
     Block src_block = GetRef<Block>(block);
@@ -657,39 +657,29 @@ class ReverseComputeInliner : public BaseInliner {
   using BaseInliner::VisitStmt_;
 
   /*! \brief Generate the predicate after inlining based on the consumer predicate */
-  PrimExpr BuildInlinedConsumerPredicate(const BlockRealizeNode* producer_block_realize) {
+  PrimExpr BuildInlinedConsumerPredicate(const BlockNode* producer_block) {
     // Bind the producer block iter domains for simplification
     Map<Var, PrimExpr> subst_map;
-    for (int i = 0, n = producer_block_realize->iter_values.size(); i < n; ++i) {
-      const IterVar& iter = producer_block_realize->block->iter_vars[i];
+    for (int i = 0, n = producer_block->iter_vars.size(); i < n; ++i) {
+      const IterVar& iter = producer_block->iter_vars[i];
       analyzer_.Bind(iter->var, Range::FromMinExtent(iter->dom->min, iter->dom->extent));
-      subst_map.Set(iter->var, producer_block_realize->iter_values[i]);
     }
     // Substitute the consumer block iters with the corresponding iters in the producer blocks
     PrimExpr predicate = Substituter(this)(consumer_iter_in_bound_);
     // Simplify the predicate using the producer block iter domains
     predicate = analyzer_.Simplify(predicate);
-    // Substitute the producer block iters with the its bindings since the predicate in BlockRealize
-    // should not contain the block iters
-    predicate = Substitute(predicate, subst_map);
-    predicate = analyzer_.Simplify(predicate);
     return predicate;
   }
 
-  Stmt VisitStmt_(const BlockRealizeNode* op) final {
-    BlockRealize new_block_realize = Downcast<BlockRealize>(StmtMutator::VisitStmt_(op));
-    if (op->block.get() == producer_block_) {
-      auto new_predicate = BuildInlinedConsumerPredicate(new_block_realize.get());
-
-      With<arith::ConstraintContext> ctx(&analyzer_, new_predicate);
-      if (!analyzer_.CanProve(op->predicate)) {
-        // We do not allow cases where the new predicate for the inlined block cannot
-        // imply the original predicate in the producer block.
-        throw ProducerHasNonTrivialPredicateError(mod_, GetRef<BlockRealize>(op), new_predicate);
-      }
-      new_block_realize.CopyOnWrite()->predicate = new_predicate;
+  Stmt VisitStmt_(const BlockNode* op) final {
+    Block src_block = GetRef<Block>(op);
+    Block tgt_block = Downcast<Block>(BaseInliner::VisitStmt_(op));
+    if (op == producer_block_) {
+      auto new_predicate = BuildInlinedConsumerPredicate(tgt_block.get());
+      tgt_block.CopyOnWrite()->body = IfThenElse(new_predicate, tgt_block->body);
+      block_reuse.Set(src_block, tgt_block);
     }
-    return std::move(new_block_realize);
+    return std::move(tgt_block);
   }
 
   Stmt VisitStmt_(const BufferStoreNode* _store) final {

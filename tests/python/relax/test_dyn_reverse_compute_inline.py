@@ -133,13 +133,13 @@ def test_matmul():
                         v1 = T.axis.spatial(32, ax1)
                         T.reads(C_pad_local[v0, v1])
                         T.writes(C[v_i0_o * 32 + v0, v_i1_o * 32 + v1])
-                        T.where(
-                            0 <= v_i0_o * 32 + ax0
-                            and v_i0_o * 32 + ax0 < n
-                            and 0 <= v_i1_o * 32 + ax1
-                            and v_i1_o * 32 + ax1 < n
-                        )
-                        C[v_i0_o * 32 + v0, v_i1_o * 32 + v1] = C_pad_local[v0, v1]
+                        if (
+                            0 <= v_i0_o * 32 + v0
+                            and v_i0_o * 32 + v0 < n
+                            and 0 <= v_i1_o * 32 + v1
+                            and v_i1_o * 32 + v1 < n
+                        ):
+                            C[v_i0_o * 32 + v0, v_i1_o * 32 + v1] = C_pad_local[v0, v1]
 
     sch = tir.Schedule(main, debug_mask="all")
     b0 = sch.get_block(name="matmul", func_name="main")
@@ -280,13 +280,13 @@ def test_norm_s4():
                             v_i_i = T.axis.remap("S", [i_1])
                             T.reads(sq_sum_pad_local[v_i_i])
                             T.writes(sq_sum[v_bsz, v_i_o * T.int64(32) + v_i_i])
-                            T.where(
+                            if (
                                 T.int64(0) <= v_bsz
                                 and v_bsz < T.int64(1)
-                                and T.int64(0) <= v_i_o * T.int64(32) + i_1
-                                and v_i_o * T.int64(32) + i_1 < n
-                            )
-                            sq_sum[v_bsz, v_i_o * T.int64(32) + v_i_i] = sq_sum_pad_local[v_i_i]
+                                and T.int64(0) <= v_i_o * T.int64(32) + v_i_i
+                                and v_i_o * T.int64(32) + v_i_i < n
+                            ):
+                                sq_sum[v_bsz, v_i_o * T.int64(32) + v_i_i] = sq_sum_pad_local[v_i_i]
 
             for bsz, i, k in T.grid(T.int64(1), n, T.int64(4096)):
                 with T.block("rms_norm"):
