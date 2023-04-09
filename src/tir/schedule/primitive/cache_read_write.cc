@@ -881,16 +881,20 @@ class CacheReadRewriter : public StmtExprMutator {
     return std::move(stmt);
   }
 
+  Array<PrimExpr> RewriteIndices(const Array<PrimExpr>& indices) {
+    arith::Analyzer ana;
+    std::vector<PrimExpr> ret;
+    for (size_t i = 0; i < indices.size(); ++i) {
+      ret.push_back(ana.Simplify(indices[i] - info_->cache_region->region[i]->min));
+    }
+    return ret;
+  }
+
   PrimExpr VisitExpr_(const BufferLoadNode* load) override {
     if (load->buffer.same_as(info_->read_buffer) && current_block_consumes) {
       ObjectPtr<BufferLoadNode> n = make_object<BufferLoadNode>(*load);
       n->buffer = info_->write_buffer;
-      std::vector<PrimExpr> indices;
-      arith::Analyzer ana;
-      for (size_t i = 0; i < load->indices.size(); ++i) {
-        indices.push_back(ana.Simplify(load->indices[i] - info_->cache_region->region[i]->min));
-      }
-      n->indices = std::move(indices);
+      n->indices = std::move(RewriteIndices(load->indices));
       return PrimExpr(n);
     }
     return ExprMutator::VisitExpr_(load);
@@ -1006,11 +1010,42 @@ class CacheWriteRewriter : public StmtExprMutator {
   explicit CacheWriteRewriter(const StmtSRef& scope_sref, const StmtSRef& writer_block_sref,
                               CacheStageInfo* info)
       : scope_sref_(scope_sref), writer_block_sref_(writer_block_sref), info_(info) {
+    auto update_region = [&](const Region& region, const Region& offset) -> Region {
+      arith::Analyzer ana;
+      ICHECK_EQ(region.size(), offset.size());
+      std::vector<Range> ret;
+      for (size_t i = 0; i < region.size(); ++i) {
+        ret.push_back(
+            Range::FromMinExtent(ana.Simplify(region[i]->min - offset[i]->min), region[i]->extent));
+      }
+      return ret;
+    };
+
     update_access_regions = [&](Array<BufferRegion> regions) {
-      return ReplaceBuffer(regions, info_->write_buffer, info_->read_buffer);
+      std::vector<BufferRegion> ret;
+      for (const BufferRegion& region : regions) {
+        if (region->buffer.same_as(info_->write_buffer)) {
+          ret.push_back(BufferRegion(info_->read_buffer,
+                                     update_region(region->region, info_->cache_region->region)));
+        } else {
+          ret.push_back(region);
+        }
+      }
+      return ret;
     };
     update_match_buffers = [&](Array<MatchBufferRegion> match_buffers) {
-      return ReplaceBuffer(match_buffers, info_->write_buffer, info_->read_buffer);
+      std::vector<MatchBufferRegion> ret;
+      for (const MatchBufferRegion& match_buffer : match_buffers) {
+        if (match_buffer->source->buffer.same_as(info_->write_buffer)) {
+          ret.push_back(MatchBufferRegion(
+              match_buffer->buffer,
+              BufferRegion(info_->read_buffer, update_region(match_buffer->source->region,
+                                                             info_->cache_region->region))));
+        } else {
+          ret.push_back(match_buffer);
+        }
+      }
+      return ret;
     };
   }
 
@@ -1096,11 +1131,21 @@ class CacheWriteRewriter : public StmtExprMutator {
     return std::move(stmt);
   }
 
+  Array<PrimExpr> RewriteIndices(const Array<PrimExpr>& indices) {
+    arith::Analyzer ana;
+    std::vector<PrimExpr> ret;
+    for (size_t i = 0; i < indices.size(); ++i) {
+      ret.push_back(ana.Simplify(indices[i] - info_->cache_region->region[i]->min));
+    }
+    return ret;
+  }
+
   Stmt VisitStmt_(const BufferStoreNode* store) override {
     BufferStore stmt = Downcast<BufferStore>(StmtMutator::VisitStmt_(store));
     if (stmt->buffer.same_as(info_->write_buffer)) {
       auto n = CopyOnWrite(stmt.get());
       n->buffer = info_->read_buffer;
+      n->indices = std::move(RewriteIndices(n->indices));
       return Stmt(n);
     } else {
       return std::move(stmt);
@@ -1111,6 +1156,7 @@ class CacheWriteRewriter : public StmtExprMutator {
     if (load->buffer.same_as(info_->write_buffer)) {
       ObjectPtr<BufferLoadNode> n = make_object<BufferLoadNode>(*load);
       n->buffer = info_->read_buffer;
+      n->indices = std::move(RewriteIndices(n->indices));
       return PrimExpr(n);
     }
     return ExprMutator::VisitExpr_(load);
@@ -1574,6 +1620,7 @@ StmtSRef CacheRead(ScheduleState self, const StmtSRef& block_sref, int read_buff
   }
   write_buffer->shape = std::move(shape);
   info.alloc = info.write_buffer;
+
   Block cache_read_stage = MakeCacheStage(/*cache_region=*/cache_region, /*info=*/&info,
                                           /*storage_scope=*/storage_scope);
   Stmt new_scope = CacheReadRewriter::Rewrite(/*scope_sref=*/scope_sref, /*info=*/&info);
@@ -1612,11 +1659,8 @@ StmtSRef CacheWrite(ScheduleState self, const StmtSRef& block_sref, int write_bu
 
   // Step 2. Creating CacheStageInfo
   CacheStageInfo info;
-  info.read_buffer = WithScope(write_buffer, storage_scope);
   // Create the corresponding buffer to be written, i.e. result of cache_write
   info.write_buffer = write_buffer;
-  // Create the corresponding buffer allocation
-  info.alloc = info.read_buffer;
 
   // info.consumer_blocks indicates which buffers should consume the cache.
   for (auto consumer : consumer_blocks) {
@@ -1636,6 +1680,16 @@ StmtSRef CacheWrite(ScheduleState self, const StmtSRef& block_sref, int write_bu
   CacheLocDetector::Detect</*is_cache_read=*/false>(self, block_sref, scope_sref, &info);
   BufferRegion cache_region =
       RelaxBufferRegion(self, region, block_sref, parent_sref, info.loc_sref);
+
+  info.cache_region = cache_region;
+  info.read_buffer = WithScope(write_buffer, storage_scope);
+  auto* read_buffer = info.read_buffer.CopyOnWrite();
+  std::vector<PrimExpr> shape;
+  for (auto cache_range : info.cache_region->region) {
+    shape.push_back(cache_range->extent);
+  }
+  read_buffer->shape = std::move(shape);
+  info.alloc = info.read_buffer;
 
   // Step 5. Making new cache stage block and rewrite readers.
   Block cache_write_stage = MakeCacheStage(/*cache_region=*/cache_region, /*info=*/&info,
