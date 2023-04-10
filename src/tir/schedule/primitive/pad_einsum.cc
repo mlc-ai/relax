@@ -183,10 +183,12 @@ struct BufferPadding {
     } else {
       body = BufferStore(buffer, BufferLoad(padded_buffer, indices), indices);
     }
-    Block new_block(iter_vars,                                                //
-                    Array<BufferRegion>{BufferRegion(buffer, instance_dom)},  //
-                    Array<BufferRegion>{BufferRegion(padded_buffer, instance_dom)},
-                    padded_buffer->name, std::move(body));
+    BufferRegion read_region(buffer, instance_dom);
+    BufferRegion write_region(padded_buffer, instance_dom);
+    if (!is_read) {
+      std::swap(read_region, write_region);
+    }
+    Block new_block(iter_vars, {read_region}, {write_region}, padded_buffer->name, std::move(body));
     blocks->push_back(new_block);
     body = BlockRealize(Array<PrimExpr>{loop_vars.begin(), loop_vars.end()}, Bool(true), new_block);
     for (int i = ndim - 1; i >= 0; --i) {
