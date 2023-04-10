@@ -462,6 +462,13 @@ PrimExpr if_then_else(PrimExpr cond, PrimExpr true_value, PrimExpr false_value, 
                    {cond, true_value, false_value}, span);
 }
 
+TVM_TIR_REGISTER_OP("protected_write");
+
+PrimExpr protected_write(PrimExpr expr) {
+  static const Op& op = Op::Get("tir.protected_write");
+  return tir::Call(expr.dtype(), op, {expr}, Span());
+}
+
 // likely
 PrimExpr likely(PrimExpr cond, Span span) {
   if (is_const_int(cond)) return cond;
