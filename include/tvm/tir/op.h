@@ -494,6 +494,13 @@ TVM_DLL PrimExpr bitwise_neg(PrimExpr a, Span span = Span());
 TVM_DLL PrimExpr if_then_else(PrimExpr cond, PrimExpr true_value, PrimExpr false_value,
                               Span span = Span());
 /*!
+ * \brief Protected write. This is only used on BufferStore's immediate RHS to indicate that
+ * out-of-bound access will not be performed.
+ * \param expr The expression to be protected.
+ * \return The result expression.
+ */
+TVM_DLL PrimExpr protected_write(PrimExpr expr);
+/*!
  * \brief Mark condition as likely.
  * \param cond The condition
  * \param span The location of this operation in the source.

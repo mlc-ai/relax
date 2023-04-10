@@ -625,8 +625,7 @@ TVM_DLL StmtSRef DecomposePadding(ScheduleState self, const StmtSRef& block_sref
  * \param block_sref The block sref that matches the Einsum pattern.
  * \param padding The padding for each block iter.
  */
-TVM_DLL void PadEinsum(ScheduleState self, const StmtSRef& block_sref,
-                       const Array<Integer>& padding);
+TVM_DLL void PadEinsum(ScheduleState self, StmtSRef block_sref, Array<Integer> padding);
 
 /******** Schedule: Buffer transformation ********/
 /*!
