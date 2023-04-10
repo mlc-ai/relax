@@ -29,26 +29,34 @@ from tvm.tir.schedule.testing import verify_trace_roundtrip
 
 @T.prim_func
 def matmul_before(
-    A: T.Buffer((128, 127), "float32"),
-    B: T.Buffer((127, 127), "float32"),
-    C: T.Buffer((128, 127), "float32"),
+    a: T.handle,
+    b: T.handle,
+    c: T.handle,
 ) -> None:
-    for i0, i1, i2 in T.grid(128, 127, 127):
-        with T.block("C_shared"):
+    n = T.int32()
+    A = T.match_buffer(a, (128, 128), "float32")
+    B = T.match_buffer(b, (n, 128), "float32")
+    C = T.match_buffer(c, (128, n), "float32")
+    for i0, i1, i2 in T.grid(128, n, 128):
+        with T.block("C"):
             i, j, k = T.axis.remap("SSR", [i0, i1, i2])
             with T.init():
                 C[i, j] = T.float32(0)
-            C[i, j] = C[i, j] + A[i, k] * B[k, j]
+            C[i, j] = C[i, j] + A[i, k] * B[j, k]
 
 
 # pylint: enable=no-member,invalid-name,unused-variable,unexpected-keyword-arg
 
 
 def test_pad_matmul():
+    print("########### Before: ###########")
+    matmul_before.show(black_format=False)
     sch = tir.Schedule(matmul_before, debug_mask="all")
-    C = sch.get_block("C_shared")
+    C = sch.get_block("C")
     sch.pad_einsum(C, [1, 32, 32])
+    print("########### After: ###########")
     sch.mod.show(black_format=False)
+
     # tvm.ir.assert_structural_equal(matmul_expected, sch.mod["main"])
     # verify_trace_roundtrip(sch, mod=matmul_before)
 
