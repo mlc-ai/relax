@@ -19,8 +19,6 @@
 
 #include <tvm/tir/op.h>
 
-#include <optional>
-
 #include "../utils.h"
 
 namespace tvm {
@@ -318,7 +316,7 @@ class BufferReplacer : public StmtExprMutator {
         writes.push_back(write);
       }
     }
-    Block new_block = Block(iter_vars, reads, writes, block->name_hint, block->body);
+    Block new_block = Block(iter_vars, reads, writes, block->name_hint, block->body, block->init);
     block_sref_reuse_.Set(old_block, new_block);
     return new_block;
   }
@@ -417,12 +415,14 @@ void PadEinsum(ScheduleState self, StmtSRef block_sref, Array<Integer> padding) 
   Array<Stmt> read_blocks;
   Array<Stmt> write_blocks;
   Array<Block> new_copy_blocks;
+  Array<Buffer> alloc_buffers;
   for (const BufferRegion& buffer_region : block->reads) {
     if (f_needs_padding(buffer_region->region)) {
       BufferPadding bp =
           BufferPadding::FromBufferRegion(buffer_region, replacer.iter2padded_extents);
       replacer.buffer_map_.Set(bp.buffer, bp.padded_buffer);
       read_blocks.push_back(bp.MakeCopyBlock(true, &new_copy_blocks, &analyzer));
+      alloc_buffers.push_back(bp.padded_buffer);
     }
   }
   for (const BufferRegion& buffer_region : block->writes) {
@@ -431,6 +431,7 @@ void PadEinsum(ScheduleState self, StmtSRef block_sref, Array<Integer> padding) 
           BufferPadding::FromBufferRegion(buffer_region, replacer.iter2padded_extents);
       replacer.buffer_map_.Set(bp.buffer, bp.padded_buffer);
       write_blocks.push_back(bp.MakeCopyBlock(false, &new_copy_blocks, &analyzer));
+      alloc_buffers.push_back(bp.padded_buffer);
     }
   }
   // Step 6. Create new scope body
@@ -449,6 +450,7 @@ void PadEinsum(ScheduleState self, StmtSRef block_sref, Array<Integer> padding) 
   {
     ObjectPtr<BlockNode> n = make_object<BlockNode>(*scope_block);
     n->body = SeqStmt::Flatten(new_scope_body);
+    n->alloc_buffers.insert(n->alloc_buffers.end(), alloc_buffers.begin(), alloc_buffers.end());
     new_scope_block = Block(n);
   }
   replacer.block_sref_reuse_.Set(GetRef<Block>(scope_block), new_scope_block);
