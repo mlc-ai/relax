@@ -157,7 +157,12 @@ struct BufferPadding {
     Array<PrimExpr> indices;
     int ndim = buffer->shape.size();
     for (int i = 0; i < ndim; ++i) {
-      PrimExpr dim = padded_buffer->shape[i];
+      PrimExpr dim{nullptr};
+      if (is_read) {
+        dim = padded_buffer->shape[i];
+      } else {
+        dim = buffer->shape[i];
+      }
       Range dom = Range::FromMinExtent(IntImm(dim->dtype, 0), dim);
       loop_vars.push_back(Var("i" + std::to_string(i), dim->dtype));
       loop_doms.push_back(dom);
@@ -178,7 +183,7 @@ struct BufferPadding {
       body =
           BufferStore(padded_buffer, if_then_else(predicate, rhs, make_zero(rhs->dtype)), indices);
     } else {
-      body = BufferStore(buffer, tvm::protected_write(BufferLoad(padded_buffer, indices)), indices);
+      body = BufferStore(buffer, BufferLoad(padded_buffer, indices), indices);
     }
     Block new_block(iter_vars,                                                //
                     Array<BufferRegion>{BufferRegion(buffer, instance_dom)},  //
