@@ -140,7 +140,7 @@ Array<Buffer> MakeScratchpads(const Array<Buffer>& reduction_buffers, bool is_cr
  * \brief Substitute given source buffers with given target buffers respectively in the input
  * statement
  */
-class BufferReplacer : private StmtExprMutator {
+class InThreadBufferReplacer : private StmtExprMutator {
  public:
   static Stmt Run(Array<Buffer> src_buffers, Array<Buffer> tgt_buffers, Stmt stmt) {
     Map<Buffer, Buffer> buffer_map;
@@ -149,11 +149,12 @@ class BufferReplacer : private StmtExprMutator {
     for (int i = 0; i < n_buffers; ++i) {
       buffer_map.Set(src_buffers[i], tgt_buffers[i]);
     }
-    return BufferReplacer(buffer_map)(std::move(stmt));
+    return InThreadBufferReplacer(buffer_map)(std::move(stmt));
   }
 
  private:
-  explicit BufferReplacer(Map<Buffer, Buffer> buffer_map) : buffer_map_(std::move(buffer_map)) {}
+  explicit InThreadBufferReplacer(Map<Buffer, Buffer> buffer_map)
+      : buffer_map_(std::move(buffer_map)) {}
 
   PrimExpr VisitExpr_(const BufferLoadNode* load) final {
     auto it = buffer_map_.find(load->buffer);
@@ -298,7 +299,7 @@ Stmt TransformReductionBlock(const BlockRealizeNode* realize,            //
       new_block->writes = it_buffer_regions.value();
       new_block->name_hint = new_block->name_hint + "_in_thread";
       new_block->body =
-          BufferReplacer::Run(wb_buffers, it_buffers.value(), std::move(new_block->body));
+          InThreadBufferReplacer::Run(wb_buffers, it_buffers.value(), std::move(new_block->body));
       new_block->init = NullOpt;
       ObjectPtr<BlockRealizeNode> n = make_object<BlockRealizeNode>(*realize);
       n->block = Block(new_block);
