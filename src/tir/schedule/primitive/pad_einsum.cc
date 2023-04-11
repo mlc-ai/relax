@@ -284,7 +284,7 @@ class InvalidProducerError : public ScheduleError {
   Block producer_;
 };
 
-class BufferReplacer : public StmtExprMutator {
+class PadEinsumBufferReplacer : public StmtExprMutator {
  public:
   Stmt VisitStmt_(const BlockNode* old_block_ptr) final {
     Block old_block = GetRef<Block>(old_block_ptr);
@@ -369,7 +369,7 @@ void PadEinsum(ScheduleState self, StmtSRef block_sref, Array<Integer> padding) 
   // Step 2. Extract the Einsum pattern
   Einsum einsum = ExtractEinsum(self, GetRef<Block>(block));
   // Step 3. Figure out the padding needed
-  BufferReplacer replacer;
+  PadEinsumBufferReplacer replacer;
   for (int i = 0, n = padding.size(); i < n; ++i) {
     const IterVar& iter = block->iter_vars[i];
     Var loop_var = Downcast<Var>(realize->iter_values[i]);
