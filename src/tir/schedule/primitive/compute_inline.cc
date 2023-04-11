@@ -676,7 +676,11 @@ class ReverseComputeInliner : public BaseInliner {
     Block tgt_block = Downcast<Block>(BaseInliner::VisitStmt_(op));
     if (op == producer_block_) {
       auto new_predicate = BuildInlinedConsumerPredicate(tgt_block.get());
-      tgt_block.CopyOnWrite()->body = IfThenElse(new_predicate, tgt_block->body);
+      if (!is_one(new_predicate)) {
+        tgt_block.CopyOnWrite()->body = IfThenElse(new_predicate, tgt_block->body);
+      } else {
+        tgt_block.CopyOnWrite()->body = tgt_block->body;
+      }
       block_reuse.Set(src_block, tgt_block);
     }
     return std::move(tgt_block);
