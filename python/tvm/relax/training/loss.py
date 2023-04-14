@@ -358,11 +358,8 @@ class CategoricalCrossEntropyLoss(Loss):
         with bb.function(self._loss_name, arg_list):
             with bb.dataflow():
                 logits = bb.emit(log_softmax(predictions))
-                targets = bb.emit(
-                    reshape(argmax(targets, axis=1), shape=(targets.struct_info.shape[0],))
-                )
                 loss = bb.emit_output(
-                    nll_loss(logits, targets, weights, self._reduction, self.ignore_index)
+                    sum(-logits * targets.astype("float32"), axis=-1)
                 )
             bb.emit_func_output(loss)
 
