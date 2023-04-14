@@ -106,10 +106,6 @@ class LegalizeMutator : public ExprMutator {
       return legalize_map[op](this->builder_, visited_call);
     }
 
-    // No legalization.
-    if (op != call_tir_op && op != call_dps_packed_op) {
-      LOG(WARNING) << "No legalization func for " << op->name << " is found.";
-    }
     return visited_call;
   }
 

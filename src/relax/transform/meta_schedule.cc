@@ -123,8 +123,6 @@ Pass MetaScheduleApplyDatabase(Optional<String> work_dir) {
           new_prim_func = WithAttr(std::move(new_prim_func), tir::attr::kIsScheduled, Bool(true));
           result.Set(gv, new_prim_func);
           continue;
-        } else {
-          LOG(WARNING) << "Tuning record is not found for primfunc: " << gv->name_hint;
         }
       }
       result.Set(gv, base_func);
