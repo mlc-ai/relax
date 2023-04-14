@@ -17,8 +17,10 @@
  * under the License.
  */
 /*!
- * \file src/runtime/relax_vm/attention_kv_cache.cc
- * \brief A simple implementation of inplace attention kv cache for runtime.
+ * \file src/runtime/relax_vm/lm_support.cc
+ * \brief Runtime to support language model related task
+ *
+ * Including inplace attention kv cache for runtime and simple sampler.
  *
  * This file provides a simple implementation of inplace attention
  * kv cache for relax runtime. The main goal here is to help us enable
@@ -40,6 +42,8 @@
 #include <tvm/runtime/memory.h>
 #include <tvm/runtime/ndarray.h>
 #include <tvm/runtime/relax_vm/vm.h>
+
+#include <cmath>
 
 namespace tvm {
 namespace runtime {
@@ -78,6 +82,9 @@ class AttentionKVCacheObj : public Object {
     }
     return data.CreateView(shape, data->dtype);
   }
+
+  /** Clear the cache */
+  void Clear() { this->fill_count = 0; }
 
   /*!
    * \brief Append value to the cache.
@@ -124,12 +131,16 @@ class AttentionKVCache : public ObjectRef {
  public:
   /*!
    * \brief Create the attention kv cache.
-   * \param init_reserve The initial reserved.
+   * \param init_data The initial reserved.
    */
-  static AttentionKVCache Create(NDArray init_data) {
+  static AttentionKVCache Create(NDArray init_data, ShapeTuple reserve_shape, int init_fill_count) {
     auto n = make_object<AttentionKVCacheObj>();
-    n->data = std::move(init_data);
+    n->data = NDArray::Empty(reserve_shape, init_data->dtype, init_data->device);
     n->fill_count = 0;
+    n->Append(init_data);
+    if (init_fill_count >= 0) {
+      n->fill_count = init_fill_count;
+    }
     return AttentionKVCache(n);
   }
 
@@ -156,6 +167,72 @@ NDArray AttentionKVCacheView(AttentionKVCache cache, ShapeTuple shape) {
 }
 
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_view").set_body_typed(AttentionKVCacheView);
+
+void AttentionKVCacheArrayClear(Array<AttentionKVCache> caches) {
+  for (AttentionKVCache cache : caches) {
+    cache->Clear();
+  }
+}
+
+TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_array_clear")
+    .set_body_typed(AttentionKVCacheArrayClear);
+
+// NOTE this is a built-in highly related to LM so we put it here.
+int SampleTopPFromLogits(NDArray logits, double temperature, double top_p, double uniform_sample) {
+  ICHECK(logits.IsContiguous());
+  ICHECK(logits.DataType() == DataType::Float(32));
+
+  if (logits->device.device_type != kDLCPU) {
+    logits = logits.CopyTo(DLDevice{kDLCPU, 0});
+  }
+
+  ICHECK(logits->device.device_type == kDLCPU);
+
+  for (int i = 0; i < logits->ndim - 1; ++i) {
+    ICHECK_EQ(logits->shape[i], 1) << "The leading dimensions of logits must be 1";
+  }
+
+  std::vector<std::pair<float, int>> data;
+  data.resize(logits->shape[logits->ndim - 1]);
+  const float* plogits = static_cast<float*>(logits->data);
+  for (int64_t i = 0; i < static_cast<int64_t>(data.size()); ++i) {
+    data[i] = std::make_pair(plogits[i], i);
+  }
+  // sort by logits from smallest to largest
+  std::sort(data.begin(), data.end());
+  float max_value = data.back().first;
+  // argmax
+  if (temperature < 1e-6f) {
+    return data.back().second;
+  }
+  // compute expf
+  float sum = 0.0f;
+  for (int64_t i = 0; i < static_cast<int64_t>(data.size()); ++i) {
+    data[i].first = expf(data[i].first - max_value);
+    sum += data[i].first;
+  }
+  // do a cumsum in order of data
+  float cum_sum_prob = 0.0f;
+  float top_p_sum = 0.0f;
+  for (auto rit = data.rbegin(); rit != data.rend(); ++rit) {
+    float prob = rit->first / sum;
+    if (cum_sum_prob < top_p) {
+      top_p_sum += prob;
+    }
+    cum_sum_prob += prob;
+    rit->first = cum_sum_prob;
+  }
+  // pick a number based on random in (0, 1)
+  for (auto rit = data.rbegin(); rit != data.rend(); ++rit) {
+    if (uniform_sample < rit->first / top_p_sum) {
+      return rit->second;
+    }
+  }
+  ICHECK_LE(uniform_sample, data[0].first);
+  return data[0].second;
+}
+
+TVM_REGISTER_GLOBAL("vm.builtin.sample_top_p_from_logits").set_body_typed(SampleTopPFromLogits);
 
 }  // namespace relax_vm
 }  // namespace runtime
