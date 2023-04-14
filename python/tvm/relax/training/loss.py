@@ -317,7 +317,7 @@ class CategoricalCrossEntropyLoss(Loss):
         reduction: Literal["mean", "sum", "none"] = "mean",
         ignore_index: int = -100,
     ) -> None:
-        super().__init__("cross_entropy_loss", 1, reduction)
+        super().__init__("categorical_cross_entropy_loss", 1, reduction)
         self.ignore_index = ignore_index
 
     def __call__(
@@ -358,9 +358,14 @@ class CategoricalCrossEntropyLoss(Loss):
         with bb.function(self._loss_name, arg_list):
             with bb.dataflow():
                 logits = bb.emit(log_softmax(predictions))
-                loss = bb.emit_output(
-                    sum(-logits * targets.astype("float32"), axis=-1)
+                lv = bb.emit(
+                    -logits * targets.astype("float32")
                 )
+                if weights:
+                    lv = bb.emit(
+                        lv * weights
+                    )
+                loss = bb.emit_output(self._with_reduction(lv))
             bb.emit_func_output(loss)
 
         return bb.get()[self._loss_name]

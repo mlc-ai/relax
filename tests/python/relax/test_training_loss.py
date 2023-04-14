@@ -223,10 +223,11 @@ def test_categorical_cross_entropy_loss():
         predictions: R.Tensor((3, 5), "float32"),
         targets: R.Tensor((3, 5), "int64"),
         weights: R.Tensor((5,), "float32"),
-    ) -> R.Tensor((3,), "float32"):
+    ) -> R.Tensor((), "float32"):
         with R.dataflow():
             lv: R.Tensor((3, 5), "float32") = R.nn.log_softmax(predictions, axis=-1)
-            gv: R.Tensor((3,), "float32") = R.sum(-lv * targets.astype("float32"), axis=-1)
+            lv: R.Tensor((), "float32") = -lv * targets.astype("float32")
+            gv: R.Tensor((), "float32") = R.sum(lv * weights)
             R.output(gv)
         return gv
 
@@ -243,10 +244,10 @@ def test_categorical_cross_entropy_loss_without_weights():
     @R.function
     def expected(
         predictions: R.Tensor((3, 5), "float32"), targets: R.Tensor((3, 5), "int64")
-    ) -> R.Tensor((3,), "float32"):
+    ) -> R.Tensor((), "float32"):
         with R.dataflow():
             lv: R.Tensor((3, 5), "float32") = R.nn.log_softmax(predictions, axis=-1)
-            gv: R.Tensor((), "float32") = R.sum(-lv * targets.astype("float32"), axis=-1)
+            gv: R.Tensor((), "float32") = R.mean(-lv * targets.astype("float32"))
             R.output(gv)
         return gv
 
