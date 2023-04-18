@@ -355,17 +355,29 @@ class CategoricalCrossEntropyLoss(Loss):
             weights = _create_param_var(weights, "weights")
             arg_list.append(weights)
 
-        with bb.function(self._loss_name, arg_list):
-            with bb.dataflow():
-                logits = bb.emit(log_softmax(predictions))
-                lv = bb.emit(
-                    -logits * targets.astype("float32")
-                )
-                if weights:
-                    lv = bb.emit(
-                        lv * weights
+        if self.ignore_index >= 0:
+            with bb.function(self._loss_name, arg_list):
+                with bb.dataflow():
+                    logits = bb.emit(log_softmax(predictions))
+                    targets = bb.emit(
+                        reshape(argmax(targets, axis=1), shape=(targets.struct_info.shape[0],))
                     )
-                loss = bb.emit_output(self._with_reduction(lv))
-            bb.emit_func_output(loss)
+                    loss = bb.emit_output(
+                        nll_loss(logits, targets, weights, self._reduction, self.ignore_index)
+                    )
+                bb.emit_func_output(loss)
+        else:
+            with bb.function(self._loss_name, arg_list):
+                with bb.dataflow():
+                    logits = bb.emit(log_softmax(predictions))
+                    lv = bb.emit(
+                        -logits * targets.astype("float32")
+                    )
+                    if weights:
+                        lv = bb.emit(
+                            lv * weights
+                        )
+                    loss = bb.emit_output(self._with_reduction(lv))
+                bb.emit_func_output(loss)
 
         return bb.get()[self._loss_name]
