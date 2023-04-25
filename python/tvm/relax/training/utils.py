@@ -22,6 +22,7 @@ from typing import Optional, Callable
 import tvm
 from tvm import TVMError
 from tvm.ir import IRModule
+from tvm.error import TVMError
 
 from ..expr import Function
 from . import _ffi_api
@@ -192,7 +193,7 @@ def bind_te_grad_func(mod: IRModule, func_name: str, te_grad_func: Callable):
     if previous_grad_dict is None:
         return mod.with_attr(attr_key, {func_name: wrap_func})
 
-    assert type(previous_grad_dict) == dict
+    assert isinstance(previous_grad_dict, dict)
     if func_name in previous_grad_dict:
         raise TVMError(f"Grad func has already been bound to the function {func_name}")
     previous_grad_dict[func_name] = wrap_func
