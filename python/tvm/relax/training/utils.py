@@ -163,7 +163,7 @@ def bind_te_grad_func(mod: IRModule, func_name: str, te_grad_func: Callable):
 
     Parameters
     ----------
-    bb : BlockBuilder
+    builder : BlockBuilder
         The block builder.
 
     func_name : str
@@ -182,9 +182,9 @@ def bind_te_grad_func(mod: IRModule, func_name: str, te_grad_func: Callable):
 
     attr_key = "te_grad_bind_handler"
 
-    def wrap_func(bb, output_grad_var, relax_call):
+    def wrap_func(builder, output_grad_var, relax_call):
         args = relax_call.args[1]
-        return bb.emit_te(
+        return builder.emit_te(
             te_grad_func, output_grad_var, *args, primfunc_name_hint=func_name + "_grad"
         )
 
