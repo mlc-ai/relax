@@ -350,7 +350,8 @@ class GradientMutator : private ExprMutator {
     GradientMutator mutator(mod, require_grads_value, target_index);
     Function new_func_transformed = Downcast<Function>(mutator.VisitExpr(new_func));
 
-    IRModule new_module = std::move(mutator.GetContextIRModule());
+    IRModule new_module = mutator.GetContextIRModule();
+    new_module.CopyOnWrite();
     new_module->Add(GlobalVar(func_name + "_adjoint"), new_func_transformed);
     return new_module;
   }
