@@ -30,20 +30,7 @@ Module MetalModuleCreate(std::unordered_map<std::string, std::string> smap,
                          std::unordered_map<std::string, FunctionInfo> fmap, std::string fmt,
                          std::string source) {
   LOG(WARNING) << "Metal runtime not enabled, return a source module...";
-  std::ostringstream oss;
-  {
-    std::vector<std::string> keys;
-    keys.reserve(smap.size());
-    for (const auto& kv : smap) {
-      keys.push_back(kv.first);
-    }
-    std::sort(keys.begin(), keys.end());
-    for (const auto& k : keys) {
-      oss << "//" << k << "\n";
-      oss << smap[k];
-    }
-  }
-  return codegen::DeviceSourceModuleCreate(oss.str(), fmt, fmap, "metal");
+  return codegen::DeviceSourceModuleCreate(source, fmt, fmap, "metal");
 }
 
 }  // namespace runtime
