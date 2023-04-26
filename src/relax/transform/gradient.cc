@@ -118,6 +118,9 @@ class BackwardBindingGenerator : private ExprVisitor {
 
     if (call_op == Op::Get("relax.call_tir") && te_grad_bind_map_.defined()) {
       GlobalVar call_gvar = Downcast<GlobalVar>(call->args[0]);
+      CHECK(te_grad_bind_map_.value().count(call_gvar->name_hint))
+          << "The TIR prim func name: " << call_gvar->name_hint
+          << " has not TE gradient handler bound.";
       auto handler = te_grad_bind_map_.value()[call_gvar->name_hint];
       Var result_var = handler(builder_, adjoint_var, GetRef<Call>(call));
       Tuple args = Downcast<Tuple>(call->args[1]);

@@ -183,7 +183,12 @@ def bind_te_grad_func(mod: IRModule, func_name: str, te_grad_func: Callable):
 
     attr_key = "te_grad_bind_handler"
 
-    def wrap_func(builder, output_grad_var, relax_call):
+    # The handler function is used to let the backend (cpp side) to emit_te.
+    # It's a wrapper of the te_grad_func.
+    # It takes the blockbuilder, the gradient var of the output and the forward call expr.
+    # It will return the emitted var.
+
+    def handler(builder, output_grad_var, relax_call):
         args = relax_call.args[1]
         return builder.emit_te(
             te_grad_func, output_grad_var, *args, primfunc_name_hint=func_name + "_grad"
@@ -191,10 +196,10 @@ def bind_te_grad_func(mod: IRModule, func_name: str, te_grad_func: Callable):
 
     previous_grad_dict = mod.get_attr(attr_key)
     if previous_grad_dict is None:
-        return mod.with_attr(attr_key, {func_name: wrap_func})
+        return mod.with_attr(attr_key, {func_name: handler})
 
     assert isinstance(previous_grad_dict, dict)
     if func_name in previous_grad_dict:
         raise TVMError(f"Grad func has already been bound to the function {func_name}")
-    previous_grad_dict[func_name] = wrap_func
+    previous_grad_dict[func_name] = handler
     return mod.with_attr(attr_key, previous_grad_dict)
