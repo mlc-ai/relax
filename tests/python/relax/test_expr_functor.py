@@ -680,6 +680,7 @@ def dummy(x: R.Tensor((10, 10))):
     lv = R.add(x, R.const(1))
     return lv
 
+
 def test_call_visitor_super():
     @relax.expr_functor.visitor
     class InternalVisitor(PyExprVisitor):
@@ -720,6 +721,7 @@ def test_call_visitor_super():
     lv.visit_expr(dummy)
     assert str(lv.log) == "\n".join(["VarBinding", "LeafCall", "InternalCall", "Op", "Var", "Var"])
 
+
 def test_call_mutator_super():
     @relax.expr_functor.mutator
     class InternalMutator(PyExprMutator):
@@ -730,7 +732,7 @@ def test_call_mutator_super():
         def visit_var_binding_(self, binding: relax.VarBinding) -> None:
             self.log.add("VarBinding")
             super().visit_var_binding_(binding)
-        
+
         def visit_call_(self, op: Call) -> None:
             self.log.add("InternalCall")
             return super().visit_call_(op)  # call PyExprMutator.visit_call_
@@ -761,6 +763,7 @@ def test_call_mutator_super():
     lm = LeafMutator()
     lm.visit_expr(dummy)
     assert str(lm.log) == "\n".join(["VarBinding", "LeafCall", "InternalCall", "Op", "Var", "Var"])
+
 
 if __name__ == "__main__":
     tvm.testing.main()
