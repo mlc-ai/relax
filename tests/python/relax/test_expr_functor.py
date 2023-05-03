@@ -41,7 +41,7 @@ from tvm.relax.expr import (
     Var,
     VarBinding,
 )
-from tvm.script import relax as R, ir as I
+from tvm.script import relax as R
 import pytest
 import tvm.testing
 
