@@ -16,23 +16,22 @@
 # under the License.
 
 """Pattern table for CUTLASS backend"""
-
 from typing import Mapping, Sequence
 
 from tvm.contrib.cutlass.build import is_shape_valid_for_cutlass_matmul
-from tvm.relax import DataflowVar, Var, transform, Call
-from tvm.relax.transform import PatternCheckContext
+from tvm.relax import Call, DataflowVar, Function, Var, transform
 from tvm.relax.dpl import rewrite_call
+from tvm.relax.transform import PatternCheckContext
 
 from ..pattern_registry import get_patterns_with_prefix, register_patterns
 from ..patterns import (
     make_attention_pattern,
+    make_attention_rewrite_pattern,
     make_fused_bias_activation_pattern,
+    make_layer_norm_pattern,
     make_matmul_pattern,
     make_residual_block_pattern,
     make_stacked_attention_pattern,
-    make_layer_norm_pattern,
-    make_attention_rewrite_pattern,
 )
 
 
@@ -393,8 +392,10 @@ def partition_for_cutlass(mod, annotate_codegen=True):
         The resulting IRModule, containing partitioned subgraphs to be
         compiled by the CUTLASS backend.
     """
-    for pattern, rewriter in _REWRITE_PATTERNS:
-        mod["main"] = rewrite_call(pattern, rewriter, mod["main"])
+    for gv, func in mod.functions.items():
+        if isinstance(func, Function):
+            for pattern, rewriter in _REWRITE_PATTERNS:
+                mod[gv] = rewrite_call(pattern, rewriter, func)
     patterns = get_patterns_with_prefix("cutlass")
     return transform.FuseOpsByPattern(
         patterns, bind_constants=False, annotate_codegen=annotate_codegen
