@@ -107,7 +107,7 @@ class RPCConfig(NamedTuple):
             config = RPCConfig()
         config = RPCConfig(
             tracker_host=config.tracker_host or os.environ.get("TVM_TRACKER_HOST", None),
-            tracker_port=config.tracker_port or os.environ.get("TVM_TRACKER_PORT", None),
+            tracker_port=int(config.tracker_port or os.environ.get("TVM_TRACKER_PORT", None)),
             tracker_key=config.tracker_key or os.environ.get("TVM_TRACKER_KEY", None),
             session_priority=config.session_priority,
             session_timeout_sec=config.session_timeout_sec,

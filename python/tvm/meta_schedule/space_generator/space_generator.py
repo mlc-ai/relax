@@ -126,6 +126,8 @@ class SpaceGenerator(Object):
             return PostOrderApply(*args, **kwargs)
         if kind == "union":
             return SpaceGeneratorUnion(*args, **kwargs)
+        if isinstance(kind, str):
+            return PostOrderApply(sch_rules=kind, postprocs=kind, mutator_probs=kind)
         raise ValueError(f"Unknown SpaceGenerator: {kind}")
 
 
@@ -201,7 +203,9 @@ class _PySpaceGenerator(SpaceGenerator):
         f_clone: Optional[Callable] = None,
     ):
         """Constructor."""
-        sch_rules, postprocs, mutator_probs = _normalize_rules(sch_rules, postprocs, mutator_probs)
+        sch_rules, postprocs, mutator_probs = _normalize_rules(
+            sch_rules, postprocs, mutator_probs
+        )
 
         self.__init_handle_by_constructor__(
             _ffi_api.SpaceGeneratorPySpaceGenerator,  # type: ignore # pylint: disable=no-member

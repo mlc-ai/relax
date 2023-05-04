@@ -178,6 +178,8 @@ class TuningRecord : public runtime::ObjectRef {
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(TuningRecord, runtime::ObjectRef, TuningRecordNode);
 };
 
+class Database;
+
 /* \brief The abstract interface of database. */
 class DatabaseNode : public runtime::Object {
  public:
@@ -258,7 +260,12 @@ class DatabaseNode : public runtime::Object {
    */
   virtual Optional<IRModule> QueryIRModule(const IRModule& mod, const Target& target,
                                            const String& workload_name);
-
+  /*!
+   * \brief Prune the database and dump it to a JSON file.
+   * \param path_workload The path to the workload JSON file.
+   * \param path_tuning_record The path to the tuning record JSON file.
+   */
+  Database DumpPruned(const String& path_workload, const String& path_tuning_record);
   /*! \brief Return a reference to the owned module equality method instance. */
   const ModuleEquality& GetModuleEquality() const {
     ICHECK(mod_eq_);

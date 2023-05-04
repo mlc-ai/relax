@@ -16,13 +16,11 @@
 # under the License.
 # pylint: disable=invalid-name, no-member
 """VM build logics"""
-from typing import List, Optional, Union, Dict, Any
+from typing import Any, Dict, List, Optional, Union
 
 import tvm
 from tvm import relax
-
 from tvm.contrib import utils as _utils
-
 from tvm.ir.module import IRModule
 from tvm.tir.function import PrimFunc
 
@@ -80,6 +78,7 @@ class Executable:
             rt_mod = ex.jit()
             vm = tvm.relax.VirtualMachine(rt_mod, tvm.cuda())
         """
+
         # TODO(tvm-team): Update runtime.Module interfac
         # to query these properties as bitmask.
         def _not_runnable(x):
@@ -309,6 +308,9 @@ def build(
     passes.append(relax.transform.ToNonDataflow())
     passes.append(relax.transform.CallTIRRewrite())
     passes.append(relax.transform.StaticPlanBlockMemory())
+
+    seq = tvm.transform.Sequential(passes)
+    print(relax.analysis.estimate_memory_usage(seq(mod)))
 
     if tvm.transform.PassContext.current().config.get("relax.backend.use_cuda_graph", False):
         passes.append(relax.transform.RewriteCUDAGraph())

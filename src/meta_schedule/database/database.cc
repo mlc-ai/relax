@@ -210,6 +210,31 @@ Optional<IRModule> DatabaseNode::QueryIRModule(const IRModule& mod, const Target
   }
 }
 
+Database DatabaseNode::DumpPruned(const String& path_workload, const String& path_tuning_record) {
+  std::unordered_map<Workload, TuningRecord, ObjectPtrHash, ObjectPtrEqual> workload2record;
+  for (const TuningRecord& record : this->GetAllTuningRecords()) {
+    if (record->IsValid()) {
+      auto it = workload2record.find(record->workload);
+      if (it == workload2record.end()) {
+        workload2record.insert({record->workload, record});
+      } else if (SortTuningRecordByMeanRunSecs()(record, it->second)) {
+        it->second = record;
+      }
+    }
+  }
+  Database db =
+      Database::JSONDatabase(path_workload, path_tuning_record, true, this->mod_eq_->GetName());
+  for (auto& kv : workload2record) {
+    Workload workload = kv.first;
+    TuningRecord record = kv.second;
+    workload = db->CommitWorkload(workload->mod);
+    db->CommitTuningRecord(TuningRecord(/*trace=*/record->trace, /*workload=*/workload,
+                                        /*run_secs=*/record->run_secs, /*target=*/record->target,
+                                        /*args_info=*/record->args_info));
+  }
+  return db;
+}
+
 std::vector<Database>* ThreadLocalDatabases() {
   static thread_local std::vector<Database> tls;
   return &tls;
@@ -297,6 +322,8 @@ TVM_REGISTER_GLOBAL("meta_schedule.DatabaseQuerySchedule")
     .set_body_method<Database>(&DatabaseNode::QuerySchedule);
 TVM_REGISTER_GLOBAL("meta_schedule.DatabaseQueryIRModule")
     .set_body_method<Database>(&DatabaseNode::QueryIRModule);
+TVM_REGISTER_GLOBAL("meta_schedule.DatabaseDumpPruned")
+    .set_body_method<Database>(&DatabaseNode::DumpPruned);
 TVM_REGISTER_GLOBAL("meta_schedule.DatabasePyDatabase").set_body_typed(Database::PyDatabase);
 
 }  // namespace meta_schedule
