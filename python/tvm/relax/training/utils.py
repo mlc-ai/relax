@@ -197,7 +197,8 @@ def bind_te_grad_func(mod: IRModule, func_name: str, te_grad_func: Callable):
     if previous_grad_dict is None:
         return mod.with_attr(attr_key, {func_name: handler})
 
-    assert isinstance(previous_grad_dict, dict)
+    # tvm.container.Map -> dict
+    previous_grad_dict = dict(previous_grad_dict)
     if func_name in previous_grad_dict:
         raise TVMError(f"Grad func has already been bound to the function {func_name}")
     previous_grad_dict[func_name] = handler
