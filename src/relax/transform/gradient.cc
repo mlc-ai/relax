@@ -111,19 +111,37 @@ class BackwardBindingGenerator : private ExprVisitor {
 
     Var adjoint_var = adjoint_var_map_[binding->var];
     const Op& call_op = Downcast<Op>(call->op);
-    const Array<Expr>& partials =
-        gradient_op_map[call_op](binding->var, GetRef<Call>(call), adjoint_var, builder_);
-    ICHECK(partials.size() == call->args.size()) << "partials number != inputs number";
+    Array<Expr> partials;
 
-    for (size_t i = 0; i < partials.size(); ++i) {
-      Expr partial = partials[i];
-      if (IsCallNoGrad(partial)) {  // no grad: don't update
-        continue;
+    Optional<Map<String, PackedFunc>> te_grad_bind_map_ =
+        builder_->GetContextIRModule()->GetAttr<Map<String, PackedFunc>>("te_grad_bind_handler");
+
+    if (call_op == Op::Get("relax.call_tir") && te_grad_bind_map_.defined()) {
+      GlobalVar call_gvar = Downcast<GlobalVar>(call->args[0]);
+      CHECK(te_grad_bind_map_.value().count(call_gvar->name_hint))
+          << "The TIR prim func name: " << call_gvar->name_hint
+          << " has not TE gradient handler bound.";
+      auto handler = te_grad_bind_map_.value()[call_gvar->name_hint];
+      Var result_var = handler(builder_, adjoint_var, GetRef<Call>(call));
+      Tuple args = Downcast<Tuple>(call->args[1]);
+      for (int i = 0; i < static_cast<int>(args->fields.size()); ++i) {
+        Expr partial = TupleGetItem(result_var, i);
+        UpdateStructInfo(partial, GetStructInfo(args->fields[i]));
+        partials.push_back(partial);
+        UpdateAdjoint(args->fields[i], partial);
       }
-      if (!partial->struct_info_.defined()) {
-        UpdateStructInfo(partial, GetStructInfo(call->args[i]));
+    } else {
+      partials = gradient_op_map[call_op](binding->var, GetRef<Call>(call), adjoint_var, builder_);
+      ICHECK(partials.size() == call->args.size()) << "partials number != inputs number";
+      for (size_t i = 0; i < partials.size(); ++i) {
+        if (IsCallNoGrad(partials[i])) {  // no grad: don't update
+          continue;
+        }
+        if (!partials[i]->struct_info_.defined()) {
+          UpdateStructInfo(partials[i], GetStructInfo(call->args[i]));
+        }
+        UpdateAdjoint(call->args[i], partials[i]);
       }
-      UpdateAdjoint(call->args[i], partial);
     }
   }
 
@@ -335,7 +353,8 @@ class GradientMutator : private ExprMutator {
     GradientMutator mutator(mod, require_grads_value, target_index);
     Function new_func_transformed = Downcast<Function>(mutator.VisitExpr(new_func));
 
-    IRModule new_module = GetRef<IRModule>(mod.CopyOnWrite());
+    IRModule new_module = mutator.GetContextIRModule();
+    new_module.CopyOnWrite();
     new_module->Add(GlobalVar(func_name + "_adjoint"), new_func_transformed);
     return new_module;
   }
@@ -343,6 +362,8 @@ class GradientMutator : private ExprMutator {
  private:
   GradientMutator(const IRModule& module, const Array<Var>& require_grads, int target_index)
       : ExprMutator(module), require_grads_(require_grads), target_index_(target_index) {}
+
+  IRModule GetContextIRModule() const { return builder_->GetContextIRModule(); }
 
   Expr VisitExpr_(const FunctionNode* func) final {
     CHECK(func->body->IsInstance<SeqExprNode>()) << "The body of the function must be SeqExpr.";
