@@ -15,7 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 """Unit tests for relax training utils."""
-import pytest
 import tvm
 import tvm.testing
 from tvm import relax
@@ -136,7 +135,8 @@ def test_bind_tir_grad_func():
 
     mod = bb.get()
     mod = bind_te_grad_func(mod, "f_mul", f_mul_grad)
-    After = Gradient("main")(mod)
+    with tvm.transform.PassContext():
+        After = Gradient("main")(mod)
 
     # remove the module attr to pass the assert structrual equal
     After = After.without_attr("te_grad_bind_handler")
