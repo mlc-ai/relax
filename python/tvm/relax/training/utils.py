@@ -20,7 +20,6 @@
 from typing import Optional, Callable
 
 import tvm
-from tvm import TVMError
 from tvm.ir import IRModule
 from tvm.error import TVMError
 
