@@ -17,9 +17,12 @@
 # pylint: disable=invalid-name
 """Utility functions for relax training."""
 
-from typing import Optional
+from typing import Optional, Callable
 
 import tvm
+from tvm.ir import IRModule
+from tvm.error import TVMError
+
 from ..expr import Function
 from . import _ffi_api
 
@@ -153,3 +156,49 @@ def AppendLoss(
         num_backbone_outputs,
         new_func_name,
     )
+
+
+def bind_te_grad_func(mod: IRModule, func_name: str, te_grad_func: Callable):
+    """Bind te grad function to an existing tir PrimFunc name.
+
+    Parameters
+    ----------
+    builder : BlockBuilder
+        The block builder.
+
+    func_name : str
+        The name of the forward tir function.
+
+    grad_func : Callable
+        The te grad function.
+        It must be a function which takes (output_grad: Tensor, arg1: Tensor, arg2: Tensor, ...)
+        as inputs and return a list of Tensor created by te.compute.
+
+    Returns
+    -------
+    mod : IRModule
+        The mod with corresponding attributes attached.
+    """
+
+    attr_key = "te_grad_bind_handler"
+
+    # The handler function is used to let the backend (cpp side) to emit_te.
+    # It's a wrapper of the te_grad_func.
+    # It takes the blockbuilder, the gradient var of the output and the forward call expr.
+    # It will return the emitted var.
+
+    def handler(builder, output_grad_var, relax_call):
+        args = relax_call.args[1]
+        return builder.emit_te(
+            te_grad_func, output_grad_var, *args, primfunc_name_hint=func_name + "_grad"
+        )
+
+    previous_grad_dict = mod.get_attr(attr_key)
+    if previous_grad_dict is None:
+        return mod.with_attr(attr_key, {func_name: handler})
+
+    assert isinstance(previous_grad_dict, dict)
+    if func_name in previous_grad_dict:
+        raise TVMError(f"Grad func has already been bound to the function {func_name}")
+    previous_grad_dict[func_name] = handler
+    return mod.with_attr(attr_key, previous_grad_dict)
