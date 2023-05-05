@@ -106,6 +106,11 @@ class BackwardBindingGenerator : private ExprVisitor {
   // Handle the adjoint expr of the inputs of binding
   // For call node, we would call the registered gradient functions
   void VisitBinding_(const VarBindingNode* binding, const CallNode* call) final {
+    // Skip if it is not an Op
+    if (!call->op->IsInstance<OpNode>()) {
+      return;
+    }
+
     static const OpAttrMap<FPrimalGradient>& gradient_op_map =
         Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
 
