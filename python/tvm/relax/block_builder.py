@@ -314,7 +314,9 @@ class BlockBuilder(Object):
                   that gets generated.
                 - 'primfunc_attrs' is reserved for passing func attributes to
                   be added to the PrimFunc that gets created.
-
+                - 'te_grad_name' is the registered name of the te gradient function associated with
+                  the call_tir node.
+                - 'te_grad_kwargs' is the keyword arguments passed to the te gradient function.
 
         Returns
         -------
@@ -323,13 +325,15 @@ class BlockBuilder(Object):
         """
 
         primfunc_name = kwargs.pop("primfunc_name_hint", None)
+        te_grad_name = kwargs.pop("te_grad_name", None)
+        te_grad_kwargs = kwargs.pop("te_grad_kwargs", None)
         tir_func, call_args, output_sinfo, tir_vars = gen_call_tir_inputs(func, *args, **kwargs)
 
         if not primfunc_name:
             primfunc_name = func.__name__
         gvar = self.add_func(tir_func, primfunc_name)
 
-        return call_tir(gvar, call_args, output_sinfo, tir_vars)
+        return call_tir(gvar, call_args, output_sinfo, tir_vars, te_grad_name, te_grad_kwargs)
 
     def emit_te(self, func: Callable, *args: Any, **kwargs: Any) -> Var:
         """Emit a call node according to the te function.
