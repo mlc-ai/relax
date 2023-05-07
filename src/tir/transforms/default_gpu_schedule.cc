@@ -79,6 +79,7 @@ IRModule MarkScheduled(const IRModule& mod) {
 
   for (const auto& [gv, base_func] : mod->functions) {
     if (const auto* prim_func_node = base_func.as<tir::PrimFuncNode>()) {
+      LOG(INFO) << "Apply Default GPU schedule to: " << gv->name_hint;
       tir::PrimFunc prim_func = GetRef<tir::PrimFunc>(prim_func_node);
       tir::PrimFunc new_prim_func =
           WithAttr(std::move(prim_func), tir::attr::kIsScheduled, Bool(true));
