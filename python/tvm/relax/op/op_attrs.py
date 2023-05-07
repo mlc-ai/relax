@@ -19,6 +19,11 @@ from tvm.ir import Attrs
 import tvm._ffi
 
 
+@tvm._ffi.register_object("relax.attrs.CallTIRAttrs")
+class CallTIRAttrs(Attrs):
+    """Attributes used in call_tir operator"""
+
+
 @tvm._ffi.register_object("relax.attrs.InitAttrs")
 class InitAttrs(Attrs):
     """Attributes used in full/full_like, ones/ones_like, and zeros/zeros_like operator"""
