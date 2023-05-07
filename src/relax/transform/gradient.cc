@@ -150,10 +150,13 @@ class BackwardBindingGenerator : private ExprVisitor {
     }
   }
 
-  // For Tuple nodes, we would iterate over the input tuple and update adjoint exprs for each
-  // input e.g. a = (b, c) b_adjoint += a_adjoint_var[0], c_adjoint += a_adjoint_var[1] a = ((b,
-  // c), d) b_adjoint += a_adjoint_var[0][0], c_adjoint += a_adjoint_var[0][1], d_adjoint +=
-  // a_adjoint_var[1]
+  // For Tuple nodes, we would iterate over the input tuple and update adjoint exprs for each input
+  // e.g.
+  // a = (b, c)
+  // b_adjoint += a_adjoint_var[0], c_adjoint += a_adjoint_var[1]
+  // a = ((b, c), d)
+  // b_adjoint += a_adjoint_var[0][0], c_adjoint += a_adjoint_var[0][1],
+  // d_adjoint += a_adjoint_var[1]
   //
   // Here we use adjoint_var to simplify calculation
   void VisitBinding_(const VarBindingNode* binding, const TupleNode* tuple) final {
