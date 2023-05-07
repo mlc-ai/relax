@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#include <tvm/relax/attrs/op.h>
 #include <tvm/relax/distributed/struct_info.h>
 
 #include "./utils.h"
@@ -129,6 +130,17 @@ Optional<ExprDoc> PrintCallTIRDPSPacked(const relax::Call& n, const ObjectPath& 
       is_dtensor = true;
     }
     kwargs_values.push_back(d->AsDoc<ExprDoc>(o_sinfo, o_sinfo_p));
+  }
+  auto call_tir_attrs = n->attrs.as<relax::CallTIRAttrs>();
+  if (call_tir_attrs && call_tir_attrs->te_grad_name) {
+    kwargs_keys.push_back("te_grad_name");
+    kwargs_values.push_back(LiteralDoc::Str(call_tir_attrs->te_grad_name.value(),
+                                            n_p->Attr("attrs")->Attr("te_grad_name")));
+    if (!call_tir_attrs->te_grad_kwargs.empty()) {
+      kwargs_keys.push_back("te_grad_kwargs");
+      kwargs_values.push_back(d->AsDoc<ExprDoc>(call_tir_attrs->te_grad_kwargs,
+                                                n_p->Attr("attrs")->Attr("te_grad_kwargs")));
+    }
   }
   if (n->op.same_as(call_dps_packed_op)) {
     return Relax(d, "call_dps_packed")->Call(args, kwargs_keys, kwargs_values);
