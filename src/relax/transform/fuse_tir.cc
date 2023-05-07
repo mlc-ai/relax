@@ -17,6 +17,7 @@
  * under the License.
  */
 #include <tvm/relax/analysis.h>
+#include <tvm/relax/attrs/op.h>
 #include <tvm/relax/expr_functor.h>
 #include <tvm/relax/struct_info.h>
 #include <tvm/relax/transform.h>
@@ -947,7 +948,8 @@ class TIRFuseMutator : public ExprMutator {
         if (!tir_vars.empty()) {
           call_args.push_back(ShapeExpr(tir_vars));
         }
-        return Call(call_tir_op_, call_args, call->attrs, {GetStructInfo(call)});
+        return Call(call_tir_op_, call_args, Attrs(make_object<CallTIRAttrs>()),
+                    {GetStructInfo(call)});
       } else {
         // Case 1.2. The callee function is not primitive, nothing to do.
         return call;

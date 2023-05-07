@@ -17,6 +17,7 @@
  * under the License.
  */
 #include <tvm/relax/analysis.h>
+#include <tvm/relax/attrs/op.h>
 #include <tvm/relax/expr.h>
 #include <tvm/relax/utils.h>
 #include <tvm/relay/op.h>
@@ -122,6 +123,8 @@ TVM_REGISTER_GLOBAL("relax.op.call_pure_packed").set_body_typed(MakeCallPurePack
 
 // call_tir
 
+TVM_REGISTER_NODE_TYPE(CallTIRAttrs);
+
 StructInfo InferStructInfoCallTIR(const Call& call, const BlockBuilder& ctx) {
   if (call->sinfo_args.size() != 1) {
     ctx->ReportFatal(Diagnostic::Error(call)
@@ -135,6 +138,7 @@ StructInfo InferStructInfoCallTIR(const Call& call, const BlockBuilder& ctx) {
 
 RELAY_REGISTER_OP("relax.call_tir")
     .set_num_inputs(3)
+    .set_attrs_type<CallTIRAttrs>()
     .add_argument("func", "Expr", "The destination-passing-style function.")
     .add_argument("args", "Tuple", "The input arguments.")
     .add_argument("packed_ints", "Expr",
@@ -144,7 +148,8 @@ RELAY_REGISTER_OP("relax.call_tir")
     .set_attr<Bool>("FPurity", Bool(true));
 
 Expr MakeCallTIR(Expr func, Tuple args, Array<TensorStructInfo> out_sinfo_list,
-                 Optional<Expr> packed_ints) {
+                 Optional<Expr> packed_ints, Optional<String> te_grad_name,
+                 Optional<Map<String, ObjectRef>> te_grad_kwargs) {
   for (const TensorStructInfo& sinfo : out_sinfo_list) {
     const auto* shape = sinfo->shape.as<ShapeExprNode>();
     CHECK(shape != nullptr) << "out_sinfo of call_tir should have defined ShapeExpr as shape. "
@@ -159,13 +164,17 @@ Expr MakeCallTIR(Expr func, Tuple args, Array<TensorStructInfo> out_sinfo_list,
     out_sinfo = TupleStructInfo({out_sinfo_list.begin(), out_sinfo_list.end()});
   }
 
+  ObjectPtr<CallTIRAttrs> attrs = make_object<CallTIRAttrs>();
+  attrs->te_grad_name = te_grad_name;
+  attrs->te_grad_kwargs = te_grad_kwargs.value_or(Map<String, ObjectRef>());
+
   static const Op& op = Op::Get("relax.call_tir");
   Call call;
   if (!packed_ints) {
     // don't use additional optional argument
-    call = Call(op, {func, args}, {}, {out_sinfo});
+    call = Call(op, {func, args}, Attrs(attrs), {out_sinfo});
   } else {
-    call = Call(op, {func, args, packed_ints.value()}, {}, {out_sinfo});
+    call = Call(op, {func, args, packed_ints.value()}, Attrs(attrs), {out_sinfo});
   }
   return call;
 }
