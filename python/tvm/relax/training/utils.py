@@ -160,7 +160,8 @@ def AppendLoss(
 
 
 def register_te_gradient(te_grad_name: str, te_grad_func: Callable = None):
-    """Bind te grad function to an existing tir PrimFunc name.
+    """Register a te gradient function bind with name te_grad_name. te_grad_name can be referenced
+    later in call_tir nodes.
 
     Parameters
     ----------
