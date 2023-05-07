@@ -25,6 +25,7 @@
  * with respect to the only return value of the function, which needs to be scalar.
  */
 
+#include <tvm/relax/attrs/op.h>
 #include <tvm/relax/expr_functor.h>
 #include <tvm/relax/nested_msg.h>
 #include <tvm/relax/op_attr_types.h>
@@ -113,30 +114,29 @@ class BackwardBindingGenerator : private ExprVisitor {
 
     static const OpAttrMap<FPrimalGradient>& gradient_op_map =
         Op::GetAttrMap<FPrimalGradient>("FPrimalGradient");
+    static const constexpr char* te_grad_func_prefix = "tvm.relax.te_grad._register.";
 
     Var adjoint_var = adjoint_var_map_[binding->var];
     const Op& call_op = Downcast<Op>(call->op);
-    Array<Expr> partials;
 
-    Optional<Map<String, PackedFunc>> te_grad_bind_map_ =
-        builder_->GetContextIRModule()->GetAttr<Map<String, PackedFunc>>("te_grad_bind_handler");
-
-    if (call_op == Op::Get("relax.call_tir") && te_grad_bind_map_.defined()) {
-      GlobalVar call_gvar = Downcast<GlobalVar>(call->args[0]);
-      CHECK(te_grad_bind_map_.value().count(call_gvar->name_hint))
-          << "The TIR prim func name: " << call_gvar->name_hint
-          << " has not TE gradient handler bound.";
-      auto handler = te_grad_bind_map_.value()[call_gvar->name_hint];
-      Var result_var = handler(builder_, adjoint_var, GetRef<Call>(call));
-      Tuple args = Downcast<Tuple>(call->args[1]);
-      for (int i = 0; i < static_cast<int>(args->fields.size()); ++i) {
-        Expr partial = TupleGetItem(result_var, i);
-        UpdateStructInfo(partial, GetStructInfo(args->fields[i]));
-        partials.push_back(partial);
-        UpdateAdjoint(args->fields[i], partial);
+    if (call_op == Op::Get("relax.call_tir")) {
+      auto te_grad_name = call->attrs.as<CallTIRAttrs>()->te_grad_name;
+      if (te_grad_name) {
+        auto func = tvm::runtime::Registry::Get(te_grad_func_prefix + te_grad_name.value());
+        CHECK(func) << "te grad function " << te_grad_name.value() << " not registered";
+        Var result_var = (*func)(builder_, adjoint_var, GetRef<Call>(call));
+        Tuple args = Downcast<Tuple>(call->args[1]);
+        for (int i = 0; i < static_cast<int>(args->fields.size()); ++i) {
+          Expr partial = TupleGetItem(result_var, i);
+          UpdateStructInfo(partial, GetStructInfo(args->fields[i]));
+          UpdateAdjoint(args->fields[i], partial);
+        }
+      } else {
+        LOG(FATAL) << "Differentiation of call_tir op without te_grad_name is not supported yet.";
       }
     } else {
-      partials = gradient_op_map[call_op](binding->var, GetRef<Call>(call), adjoint_var, builder_);
+      Array<Expr> partials =
+          gradient_op_map[call_op](binding->var, GetRef<Call>(call), adjoint_var, builder_);
       ICHECK(partials.size() == call->args.size()) << "partials number != inputs number";
       for (size_t i = 0; i < partials.size(); ++i) {
         if (IsCallNoGrad(partials[i])) {  // no grad: don't update
@@ -150,13 +150,10 @@ class BackwardBindingGenerator : private ExprVisitor {
     }
   }
 
-  // For Tuple nodes, we would iterate over the input tuple and update adjoint exprs for each input
-  // e.g.
-  // a = (b, c)
-  // b_adjoint += a_adjoint_var[0], c_adjoint += a_adjoint_var[1]
-  // a = ((b, c), d)
-  // b_adjoint += a_adjoint_var[0][0], c_adjoint += a_adjoint_var[0][1],
-  // d_adjoint += a_adjoint_var[1]
+  // For Tuple nodes, we would iterate over the input tuple and update adjoint exprs for each
+  // input e.g. a = (b, c) b_adjoint += a_adjoint_var[0], c_adjoint += a_adjoint_var[1] a = ((b,
+  // c), d) b_adjoint += a_adjoint_var[0][0], c_adjoint += a_adjoint_var[0][1], d_adjoint +=
+  // a_adjoint_var[1]
   //
   // Here we use adjoint_var to simplify calculation
   void VisitBinding_(const VarBindingNode* binding, const TupleNode* tuple) final {

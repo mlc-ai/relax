@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # pylint: disable=redefined-builtin
 """The base Relax operators."""
-from typing import Union, List, Tuple, Optional, Callable
+from typing import Dict, Union, List, Tuple, Optional, Callable
 
 
 import tvm
@@ -72,6 +72,8 @@ def call_tir(
     args: Expr,
     out_sinfo: Union[TensorStructInfo, List[TensorStructInfo]],
     tir_vars: Optional[Union[ShapeExpr, Tuple[PrimExpr], List[PrimExpr]]] = None,
+    te_grad_name: Optional[str] = None,
+    te_grad_kwargs: Optional[Dict[str, Object]] = None,
 ) -> Call:
     """
     Call a tir.prim_func and return the output.
@@ -92,6 +94,13 @@ def call_tir(
     tir_vars : Optional[Union[ShapeExpr, Tuple[PrimExpr], List[PrimExpr]]]
         ShapeExpr representing a tuple of integers to unpack when calling func. Is null if not used
 
+    te_grad_name : Optional[str]
+        The registered name of the te gradient function associated with the call_tir node. See
+        tvm.relax.training.utils.register_te_gradient.
+
+    te_grad_kwargs : Optional[Dict[str, Object]]
+        The keyword arguments passed to the te gradient function.
+
     Returns
     -------
     ret: Call
@@ -106,7 +115,9 @@ def call_tir(
     if isinstance(tir_vars, (list, tuple)):
         tir_vars = ShapeExpr(tir_vars)
 
-    return _ffi_api.call_tir(gvar, args, out_sinfo, tir_vars)  # type: ignore
+    return _ffi_api.call_tir(  # type: ignore
+        gvar, args, out_sinfo, tir_vars, te_grad_name, te_grad_kwargs
+    )
 
 
 @args_converter.auto
