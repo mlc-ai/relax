@@ -21,8 +21,8 @@
  * \file tvm/relax/attrs/op.h
  * \brief Attributes for relax specific operators.
  */
-#ifndef TVM_RELAX_ATTRS_CREATE_H_
-#define TVM_RELAX_ATTRS_CREATE_H_
+#ifndef TVM_RELAX_ATTRS_OP_H_
+#define TVM_RELAX_ATTRS_OP_H_
 
 #include <tvm/relax/expr.h>
 
