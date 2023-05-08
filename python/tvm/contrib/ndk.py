@@ -81,7 +81,7 @@ def create_staticlib(output, objects):
     cmd = [ar_path]
     cmd += ["qc", output]
     cmd += objects
-    
+
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     (out, _) = proc.communicate()
     if proc.returncode != 0:
@@ -89,5 +89,6 @@ def create_staticlib(output, objects):
         msg += py_str(out)
         msg += "\nCommand line: " + " ".join(cmd)
         raise RuntimeError(msg)
+
 
 create_staticlib.output_format = "a"
