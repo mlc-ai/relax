@@ -71,6 +71,16 @@ create_shared.get_target_triple = (
 
 
 def create_staticlib(output, objects):
+    """Create static library:
+
+    Parameters
+    ----------
+    output : str
+        The target static library.
+
+    objects : list
+        List of object files.
+    """
     if "TVM_NDK_CC" not in os.environ:
         raise RuntimeError(
             "Require environment variable TVM_NDK_CC" " to be the NDK standalone compiler"
