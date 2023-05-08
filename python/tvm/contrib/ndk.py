@@ -68,3 +68,37 @@ create_shared.output_format = "so"
 create_shared.get_target_triple = (
     get_target_by_dump_machine(os.environ["TVM_NDK_CC"]) if "TVM_NDK_CC" in os.environ else None
 )
+
+
+def create_staticlib(output, objects):
+    """Create static library:
+
+    Parameters
+    ----------
+    output : str
+        The target static library.
+
+    objects : list
+        List of object files.
+    """
+    if "TVM_NDK_CC" not in os.environ:
+        raise RuntimeError(
+            "Require environment variable TVM_NDK_CC" " to be the NDK standalone compiler"
+        )
+    compiler = os.environ["TVM_NDK_CC"]
+    base_path = os.path.dirname(compiler)
+    ar_path = os.path.join(base_path, "llvm-ar")
+    cmd = [ar_path]
+    cmd += ["qc", output]
+    cmd += objects
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    (out, _) = proc.communicate()
+    if proc.returncode != 0:
+        msg = "AR error:\n"
+        msg += py_str(out)
+        msg += "\nCommand line: " + " ".join(cmd)
+        raise RuntimeError(msg)
+
+
+create_staticlib.output_format = "a"
