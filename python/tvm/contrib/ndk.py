@@ -16,7 +16,6 @@
 # under the License.
 """Util to invoke NDK compiler toolchain."""
 # pylint: disable=invalid-name
-from __future__ import absolute_import as _abs
 
 import subprocess
 import os
