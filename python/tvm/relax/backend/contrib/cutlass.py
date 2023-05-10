@@ -392,10 +392,10 @@ def partition_for_cutlass(mod, annotate_codegen=True):
         The resulting IRModule, containing partitioned subgraphs to be
         compiled by the CUTLASS backend.
     """
-    for gv, func in mod.functions.items():
+    for func_name, func in mod.functions.items():
         if isinstance(func, Function):
             for pattern, rewriter in _REWRITE_PATTERNS:
-                mod[gv] = rewrite_call(pattern, rewriter, func)
+                mod[func_name] = rewrite_call(pattern, rewriter, func)
     patterns = get_patterns_with_prefix("cutlass")
     return transform.FuseOpsByPattern(
         patterns, bind_constants=False, annotate_codegen=annotate_codegen
