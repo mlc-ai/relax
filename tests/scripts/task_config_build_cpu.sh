@@ -19,6 +19,7 @@
 set -euxo pipefail
 
 BUILD_DIR=$1
+rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 cp ../cmake/config.cmake .
