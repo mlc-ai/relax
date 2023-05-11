@@ -19,7 +19,7 @@ import pytest
 
 import tvm
 import tvm.testing
-from tvm import relax, tir
+from tvm import relax
 from tvm.ir.base import assert_structural_equal
 from tvm.script.parser import relax as R, tir as T, ir as I
 
