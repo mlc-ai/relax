@@ -220,12 +220,20 @@ class BackwardBindingGenerator : private ExprVisitor {
     if (call_op == Op::Get("relax.call_tir")) {
       auto te_grad_name = call->attrs.as<CallTIRAttrs>()->te_grad_name;
       if (te_grad_name) {
-        auto grad_func = tvm::runtime::Registry::Get(te_grad_func_prefix + te_grad_name.value());
+        auto* grad_func = tvm::runtime::Registry::Get(te_grad_func_prefix + te_grad_name.value());
         CHECK(grad_func) << "te grad function " << te_grad_name.value() << " not registered";
         Var result_var = (*grad_func)(builder_, adjoint_var, checkpoint_call);
         Tuple args = Downcast<Tuple>(call->args[1]);
-        for (int i = 0; i < static_cast<int>(args->fields.size()); ++i) {
-          UpdateAdjoint(args->fields[i], TupleGetItem(result_var, i));
+        auto* tuple_sinfo = GetStructInfoAs<TupleStructInfoNode>(result_var);
+        if (!tuple_sinfo) {
+          // result_var is a tensor
+          ICHECK(args->fields.size() == 1);
+          UpdateAdjoint(args->fields[0], result_var);
+        } else {
+          ICHECK(args->fields.size() == tuple_sinfo->fields.size());
+          for (int i = 0; i < static_cast<int>(args->fields.size()); ++i) {
+            UpdateAdjoint(args->fields[i], TupleGetItem(result_var, i));
+          }
         }
       } else {
         LOG(FATAL) << "Differentiation of call_tir op without te_grad_name is not supported yet.";

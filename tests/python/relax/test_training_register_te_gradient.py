@@ -98,8 +98,10 @@ def get_expected_1():
                 lv_1 = R.call_tir(cls.f_mul_grad, (lv_adjoint, a, b), out_sinfo=[R.Tensor((5, 5), dtype="float32"), R.Tensor((5, 5), dtype="float32")])
                 a_adjoint: R.Tensor((5, 5), dtype="float32") = lv_1[0]
                 b_adjoint: R.Tensor((5, 5), dtype="float32") = lv_1[1]
-                R.output(gv, a_adjoint, b_adjoint)
-            return (gv, (a_adjoint, b_adjoint))
+                a_adjoint_out: R.Tensor((5, 5), dtype="float32") = a_adjoint
+                b_adjoint_out: R.Tensor((5, 5), dtype="float32") = b_adjoint
+                R.output(gv, a_adjoint_out, b_adjoint_out)
+            return (gv, (a_adjoint_out, b_adjoint_out))
 
         @R.function
         def main(a: R.Tensor((5, 5), dtype="float32"), b: R.Tensor((5, 5), dtype="float32")) -> R.Tensor((), dtype="float32"):
@@ -131,15 +133,15 @@ def test_emit_te(register_te_grads):
             out = bb.emit_output(R.sum(d))
         bb.emit_func_output(out)
 
-    Module = bb.get()
-    After = Gradient("main")(Module)
+    Before = bb.get()
+    After = Gradient("main")(Before)
     assert_structural_equal(After, get_expected_1())
 
 
 def test_call_tir(register_te_grads):
     # fmt: off
     @I.ir_module
-    class Module:
+    class Before:
         @T.prim_func
         def f_mul(A: T.Buffer((T.int64(5), T.int64(5)), "float32"), B: T.Buffer((T.int64(5), T.int64(5)), "float32"), f_mul_1: T.Buffer((T.int64(5), T.int64(5)), "float32")):
             T.func_attr({"tir.noalias": T.bool(True)})
@@ -153,7 +155,7 @@ def test_call_tir(register_te_grads):
 
         @R.function
         def main(a: R.Tensor((5, 5), dtype="float32"), b: R.Tensor((5, 5), dtype="float32")) -> R.Tensor((), dtype="float32"):
-            cls = Module
+            cls = Before
             with R.dataflow():
                 lv = R.call_tir(cls.f_mul, (a, b), out_sinfo=R.Tensor((5, 5), dtype="float32"), te_grad_name="f_mul_grad")
                 gv: R.Tensor((), dtype="float32") = R.sum(lv, axis=None, keepdims=False)
@@ -161,33 +163,11 @@ def test_call_tir(register_te_grads):
             return gv
     # fmt: off
 
-    After = Gradient("main")(Module)
+    After = Gradient("main")(Before)
     assert_structural_equal(After, get_expected_1())
 
 
-def test_emit_te_kwargs(register_te_grads):
-    # Build the target module using emit_te
-    def f_mul2(src):
-        return tvm.te.compute(src.shape, lambda *idx: src[idx] * T.float32(2), name="f_mul2")
-
-    a = relax.Var("a", relax.TensorStructInfo([5, 5], "float32"))
-
-    bb = relax.BlockBuilder()
-    with bb.function("main", [a]):
-        with bb.dataflow():
-            d = bb.emit_te(
-                f_mul2,
-                a,
-                primfunc_name_hint="f_mul",
-                te_grad_name="f_mulk_grad",
-                te_grad_kwargs={"k": T.float32(2)},
-            )
-            out = bb.emit_output(R.sum(d))
-        bb.emit_func_output(out)
-
-    Module = bb.get()
-    After = Gradient("main")(Module)
-
+def get_expected_2():
     # fmt: off
     @I.ir_module
     class Expected:
@@ -222,9 +202,10 @@ def test_emit_te_kwargs(register_te_grads):
                 gv_adjoint: R.Tensor((), dtype="float32") = R.ones(R.shape([]), dtype="float32")
                 lv_adjoint: R.Tensor((5, 5), dtype="float32") = R.broadcast_to(gv_adjoint, R.shape([5, 5]))
                 lv_1 = R.call_tir(cls.f_mulk_grad, (lv_adjoint, a), out_sinfo=R.Tensor((5, 5), dtype="float32"))
-                a_adjoint: R.Tensor((5, 5), dtype="float32") = lv_1[0]
-                R.output(gv, a_adjoint)
-            return (gv, (a_adjoint,))
+                a_adjoint: R.Tensor((5, 5), dtype="float32") = lv_1
+                a_adjoint_out: R.Tensor((5, 5), dtype="float32") = a_adjoint
+                R.output(gv, a_adjoint_out)
+            return (gv, (a_adjoint_out,))
 
         @R.function
         def main(a: R.Tensor((5, 5), dtype="float32")) -> R.Tensor((), dtype="float32"):
@@ -235,7 +216,62 @@ def test_emit_te_kwargs(register_te_grads):
                 R.output(gv)
             return gv
     # fmt: on
-    assert_structural_equal(After, Expected)
+    return Expected
+
+
+def test_emit_te_kwargs(register_te_grads):
+    # Build the target module using emit_te
+    def f_mul2(src):
+        return tvm.te.compute(src.shape, lambda *idx: src[idx] * T.float32(2), name="f_mul2")
+
+    a = relax.Var("a", relax.TensorStructInfo([5, 5], "float32"))
+
+    bb = relax.BlockBuilder()
+    with bb.function("main", [a]):
+        with bb.dataflow():
+            d = bb.emit_te(
+                f_mul2,
+                a,
+                primfunc_name_hint="f_mul",
+                te_grad_name="f_mulk_grad",
+                te_grad_kwargs={"k": T.float32(2)},
+            )
+            out = bb.emit_output(R.sum(d))
+        bb.emit_func_output(out)
+
+    Before = bb.get()
+    After = Gradient("main")(Before)
+
+    assert_structural_equal(After, get_expected_2())
+
+
+def test_call_tir_kwargs(register_te_grads):
+    # fmt: off
+    @I.ir_module
+    class Before:
+        @T.prim_func
+        def f_mul(A: T.Buffer((T.int64(5), T.int64(5)), "float32"), f_mul2: T.Buffer((T.int64(5), T.int64(5)), "float32")):
+            T.func_attr({"tir.noalias": T.bool(True)})
+            # with T.block("root"):
+            for i0, i1 in T.grid(T.int64(5), T.int64(5)):
+                with T.block("f_mul2"):
+                    v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+                    T.reads(A[v_i0, v_i1])
+                    T.writes(f_mul2[v_i0, v_i1])
+                    f_mul2[v_i0, v_i1] = A[v_i0, v_i1] * T.float32(2)
+
+        @R.function
+        def main(a: R.Tensor((5, 5), dtype="float32")) -> R.Tensor((), dtype="float32"):
+            cls = Before
+            with R.dataflow():
+                lv = R.call_tir(cls.f_mul, (a,), out_sinfo=R.Tensor((5, 5), dtype="float32"), te_grad_name="f_mulk_grad", te_grad_kwargs={"k": T.float32(2)})
+                gv: R.Tensor((), dtype="float32") = R.sum(lv, axis=None, keepdims=False)
+                R.output(gv)
+            return gv
+    # fmt: on
+
+    After = Gradient("main")(Before)
+    assert_structural_equal(After, get_expected_2())
 
 
 if __name__ == "__main__":
