@@ -86,7 +86,7 @@ def Gradient(
     ```
 
     The uncheckpointed Vars in the function will be computed again from the checkpointed Vars in the
-    backward process. The input of the function is unconditionally checkpointed (and does not need
+    backward process. The inputs of the function are unconditionally checkpointed (and do not need
     to be specified in the attribute). By default, ALL intermediate results are checkpointed
     (meaning they will not be computed again in the backward process).
 
