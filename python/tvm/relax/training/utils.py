@@ -200,5 +200,6 @@ def register_te_gradient(te_grad_name: str, te_grad_func: Callable = None):
             )
 
         register_func(func_prefix + te_grad_name, handler)
+        return func
 
     return register(te_grad_func) if te_grad_func else register
