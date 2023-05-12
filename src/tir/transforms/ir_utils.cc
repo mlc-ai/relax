@@ -75,11 +75,6 @@ Stmt MergeNest(const std::vector<Stmt>& nest, Stmt body) {
       ICHECK(is_no_op(n->body));
       n->body = body;
       body = Stmt(n);
-    } else if (const auto* decl_buffer = s.as<DeclBufferNode>()) {
-      auto n = make_object<DeclBufferNode>(*decl_buffer);
-      ICHECK(is_no_op(n->body));
-      n->body = body;
-      body = Stmt(n);
     } else {
       LOG(FATAL) << "not supported nest type";
     }
@@ -392,18 +387,6 @@ String GetPtrStorageScope(Var buffer_var) {
   return ptr_type->storage_scope;
 }
 
-Array<PrimExpr> GetBufferAllocationShape(const Buffer& buffer) {
-  Array<PrimExpr> alloc_shape = buffer->shape;
-  if (buffer->strides.size()) {
-    ICHECK_EQ(buffer->shape.size(), buffer->strides.size());
-    for (size_t i = buffer->strides.size() - 1; i > 0; --i) {
-      ICHECK(is_zero(floormod(buffer->strides[i - 1], buffer->strides[i])));
-      alloc_shape.Set(i, buffer->strides[i - 1] / buffer->strides[i]);
-    }
-  }
-  return alloc_shape;
-}
-
 Array<PrimExpr> ConvertIndices(const MatchBufferRegion& match_buffer,
                                const Array<PrimExpr>& indices) {
   const Buffer& target = match_buffer->buffer;
@@ -455,14 +438,11 @@ Bool IsFromLegacyTESchedule(PrimFunc f) {
   return from_legacy_te_schedule.value();
 }
 
-Optional<arith::IntConstraints> ConditionalBoundsContext::TrySolveCondition() {
+Map<Var, Range> ConditionalBoundsContext::GetVarBoundsFromCondition() {
   // extract equations and related vars from condition expression.
   // currently only extract simple integral equations which could be solvable.
   arith::Analyzer analyzer;
-  PrimExpr condition = analyzer.Simplify(condition_);
-  if (is_const_int(condition)) {
-    return NullOpt;
-  }
+  PrimExpr condition = is_true_branch_ ? condition_ : analyzer.Simplify(!condition_);
   Array<PrimExpr> equations;
   Array<Var> vars;
   std::function<void(const PrimExpr&)> fvisit = [&equations, &vars, &fvisit](const PrimExpr& e) {
@@ -505,7 +485,7 @@ Optional<arith::IntConstraints> ConditionalBoundsContext::TrySolveCondition() {
   };
   fvisit(condition);
   if (equations.empty() || vars.empty()) {
-    return NullOpt;
+    return Map<Var, Range>();
   }
   // build dom ranges for related vars
   Map<Var, Range> ranges;
@@ -526,35 +506,22 @@ Optional<arith::IntConstraints> ConditionalBoundsContext::TrySolveCondition() {
   }
   // solve constraints
   arith::IntConstraints constraint(vars, ranges, equations);
-  arith::IntConstraints result = arith::SolveInequalitiesToRange(constraint);
-  return std::move(result);
+  auto result = arith::SolveInequalitiesToRange(constraint);
+  return result->ranges;
 }
 
 ConditionalBoundsContext::ConditionalBoundsContext(
     const PrimExpr& condition, std::unordered_map<const VarNode*, arith::IntSet>* relax_map,
-    std::unordered_map<const VarNode*, arith::IntSet>* hint_map,
-    std::vector<PrimExpr>* pending_conditions)
+    std::unordered_map<const VarNode*, arith::IntSet>* hint_map, bool is_true_branch)
     : condition_(condition),
       relax_map_(relax_map),
       hint_map_(hint_map),
-      pending_conditions_(pending_conditions),
-      origin_pending_conditions_num_(pending_conditions->size()) {}
+      is_true_branch_(is_true_branch) {}
 
 void ConditionalBoundsContext::EnterWithScope() {
-  Optional<arith::IntConstraints> constraints = TrySolveCondition();
-  if (!constraints.defined()) {
-    // fail to process the condition, add to unresolved
-    pending_conditions_->push_back(condition_);
-    return;
-  }
-  for (const PrimExpr& unresolved : constraints.value()->relations) {
-    // add partially unresolved conditions
-    pending_conditions_->push_back(unresolved);
-  }
-  // update solved var ranges
-  for (const auto& kv : constraints.value()->ranges) {
-    const VarNode* var = kv.first.get();
-    arith::IntSet new_dom = arith::IntSet::FromRange(kv.second);
+  for (const auto& p : GetVarBoundsFromCondition()) {
+    const auto* var = p.first.get();
+    arith::IntSet new_dom = arith::IntSet::FromRange(p.second);
     auto relax_it = relax_map_->find(var);
     if (relax_it != relax_map_->end()) {
       // this is a bound for relaxed var
@@ -575,7 +542,6 @@ void ConditionalBoundsContext::EnterWithScope() {
 }
 
 void ConditionalBoundsContext::ExitWithScope() {
-  pending_conditions_->resize(origin_pending_conditions_num_);
   for (const auto& p : origin_map_) {
     const auto* var = p.first;
     auto relax_it = relax_map_->find(var);
@@ -600,53 +566,6 @@ std::pair<PrimExpr, PrimExpr> GetAsyncWaitAttributes(const AttrStmtNode* op) {
   auto inner = op->body.as<AttrStmtNode>();
   ICHECK(inner && inner->attr_key == tir::attr::async_wait_inflight_count);
   return std::make_pair(op->value, inner->value);
-}
-
-/*! \brief Collect storage alignment information from annotations. */
-class StorageAlignCollector : public StmtVisitor {
- private:
-  friend std::unordered_map<Var, StorageAlignAnnotation, ObjectPtrHash, ObjectPtrEqual>
-  CollectStorageAlignAnnotation(const Stmt& body);
-
-  /*! \brief For s-stir, the alignment annotations reside in block annotations. */
-  void VisitStmt_(const BlockNode* op) final {
-    auto it = op->annotations.find(attr::buffer_dim_align);
-    if (it != op->annotations.end()) {
-      auto storage_align_annotation = Downcast<StorageAlignAnnotation>((*it).second);
-      for (const auto& storage_align_tuple : storage_align_annotation) {
-        int buffer_index = storage_align_tuple[0]->value;
-        const Buffer& buffer = op->writes[buffer_index]->buffer;
-        storage_align_[buffer->data].push_back(storage_align_tuple);
-      }
-    }
-    StmtVisitor::VisitStmt_(op);
-  }
-
-  /*! \brief For lowered tir, the alignment annotations reside in allocate annotations. */
-  void VisitStmt_(const AllocateNode* op) final {
-    auto it = op->annotations.find(attr::buffer_dim_align);
-    if (it != op->annotations.end()) {
-      auto storage_align_annotation = Downcast<StorageAlignAnnotation>((*it).second);
-      for (const auto& storage_align_tuple : storage_align_annotation) {
-        int buffer_index = storage_align_tuple[0]->value;
-        // the first buffer idx info is meaningless for allocate
-        // stmt and should set as negative intentionally.
-        ICHECK_EQ(buffer_index, -1);
-        storage_align_[op->buffer_var].push_back(storage_align_tuple);
-      }
-    }
-    StmtVisitor::VisitStmt_(op);
-  }
-
-  /*! \brief The map from buffer var to its storage alignment information. */
-  std::unordered_map<Var, StorageAlignAnnotation, ObjectPtrHash, ObjectPtrEqual> storage_align_;
-};
-
-std::unordered_map<Var, StorageAlignAnnotation, ObjectPtrHash, ObjectPtrEqual>
-CollectStorageAlignAnnotation(const Stmt& body) {
-  StorageAlignCollector collector;
-  collector(body);
-  return std::move(collector.storage_align_);
 }
 
 namespace transform {

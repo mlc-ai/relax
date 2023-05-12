@@ -464,11 +464,10 @@ TVM_DLL Pass ConvertBlocksToOpaque();
  *
  *  \endcode
  *
- * \param is_strict ensure the compacted shape always smaller than the original shape.
- *   otherwise it allows to grow the shape to match actual accessed buffer regions.
+ *
  * \return The pass.
  */
-TVM_DLL Pass CompactBufferAllocation(bool is_strict = true);
+TVM_DLL Pass CompactBufferAllocation();
 
 /*!
  * This pass legalizes packed calls by wrapping their arguments into TVMValues
