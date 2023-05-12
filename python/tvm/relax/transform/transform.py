@@ -75,6 +75,22 @@ def Gradient(
                 R.output(original_outputs, grad_1, grad_2, ...)
             return (original_return_value, (grad_1, grad_2, ...))
 
+    This AD pass also supports checkpointing as described in
+    "Training deep nets with sublinear memory cost." - Chen, Tianqi, et al. (2016).
+    You can add a checkpoint attribute, whose value
+    is a list of intermediate Vars in the function, to the given function to specify which Vars
+    should be checkpointed. E.g.
+
+    ```
+    func: relax.Function
+    func_with_checkpoint_attr: relax.Function = func.with_attr("checkpoint", [b, c, d])
+    ```
+
+    The uncheckpointed Vars in the function will be computed again from the checkpointed Vars. The
+    input of the function is unconditionally checkpointed (and does not need to be specified in the
+    attribute). By default, ALL intermediate results are checkpointed (meaning they will not be
+    computed again).
+
     Parameters
     ----------
     func_name : str
