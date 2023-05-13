@@ -62,8 +62,6 @@ class BlockReadWriteDetector : public StmtExprVisitor {
   std::unordered_map<const VarNode*, arith::IntSet> dom_map_;
   /*! \brief Extra iteration range hint for free vars */
   std::unordered_map<const VarNode*, arith::IntSet> hint_map_;
-  /*! \brief Unresolved conditions within current scope. */
-  std::vector<PrimExpr> pending_conditions_;
   /*! \brief The buffers that the current block reads */
   std::vector<Buffer> read_buffers_;
   /*! \brief The buffers that the current block writes */
@@ -172,12 +170,12 @@ void BlockReadWriteDetector::VisitStmt_(const IfThenElseNode* op) {
   VisitExpr(op->condition);
   {
     // Visit then branch
-    With<ConditionalBoundsContext> ctx(op->condition, &dom_map_, &hint_map_, &pending_conditions_);
+    With<ConditionalBoundsContext> ctx(op->condition, &dom_map_, &hint_map_, true);
     StmtExprVisitor::VisitStmt(op->then_case);
   }
   if (op->else_case) {
     // Visit else branch
-    With<ConditionalBoundsContext> ctx(!op->condition, &dom_map_, &hint_map_, &pending_conditions_);
+    With<ConditionalBoundsContext> ctx(op->condition, &dom_map_, &hint_map_, false);
     StmtExprVisitor::VisitStmt(op->else_case.value());
   }
 }
@@ -217,12 +215,12 @@ void BlockReadWriteDetector::VisitExpr_(const CallNode* op) {
     VisitExpr(op->args[0]);
     {
       // Visit then branch
-      With<ConditionalBoundsContext> ctx(op->args[0], &dom_map_, &hint_map_, &pending_conditions_);
+      With<ConditionalBoundsContext> ctx(op->args[0], &dom_map_, &hint_map_, true);
       StmtExprVisitor::VisitExpr(op->args[1]);
     }
     {
       // Visit else branch
-      With<ConditionalBoundsContext> ctx(!op->args[0], &dom_map_, &hint_map_, &pending_conditions_);
+      With<ConditionalBoundsContext> ctx(op->args[0], &dom_map_, &hint_map_, false);
       StmtExprVisitor::VisitExpr(op->args[2]);
     }
     return;
