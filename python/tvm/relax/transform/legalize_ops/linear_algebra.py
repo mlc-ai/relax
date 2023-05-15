@@ -16,9 +16,10 @@
 # under the License.
 # pylint: disable=invalid-name
 """Default legalization function for linear algebra operators."""
-from tvm import topi, tir, relax, te
+from tvm import relax, te, tir, topi
+
 from ...block_builder import BlockBuilder
-from ...expr import Call, Expr, Var, Tuple, TupleGetItem
+from ...expr import Call, Expr, Tuple, TupleGetItem, Var
 from .common import register_legalize
 
 
@@ -89,7 +90,13 @@ def _matmul(bb: BlockBuilder, call: Call) -> Expr:
             name="matmul",
         )
 
-    return bb.call_te(te_matmul, call.args[0], call.args[1], primfunc_name_hint="matmul")
+    return bb.call_te(
+        te_matmul,
+        call.args[0],
+        call.args[1],
+        primfunc_name_hint="matmul",
+        primfunc_attrs={"op_pattern": 4},
+    )
 
 
 @register_legalize("relax.einsum")
