@@ -157,6 +157,7 @@ Pass MetaScheduleApplyDatabase(Optional<String> work_dir, bool enable_warning = 
           new_prim_func = WithAttrs(std::move(new_prim_func), {prim_func->attrs->dict});
           new_prim_func = WithAttr(std::move(new_prim_func), tir::attr::kIsScheduled, Bool(true));
           result.Set(gv, new_prim_func);
+          LOG(INFO) << "Apply MetaSchedule record to PrimFunc: " << gv->name_hint;
           continue;
         } else if (enable_warning) {
           LOG(WARNING) << "Tuning record is not found for primfunc: " << gv->name_hint;

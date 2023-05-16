@@ -115,6 +115,7 @@ Pass DefaultGPUSchedule() {
             for (const tir::BlockRV& block : blocks) {
               ThreadBind(sch, block, max_thread_per_block);
             }
+            LOG(INFO) << "Apply default GPU schedule to PrimFunc: " << gv->name_hint;
           }
         }
         return MarkScheduled(sch->mod());
