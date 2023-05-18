@@ -326,7 +326,7 @@ void ApplyRepetitionPenalty(NDArray logits, NDArray token_ids, double penalty) {
   }
   float* logits_raw_data = static_cast<float*>(logits->data);
   int* token_ids_data = static_cast<int*>(token_ids->data);
-  int num_token_ids = token_ids->shape[0];
+  size_t num_token_ids = token_ids->shape[0];
   for (size_t i = 0; i < num_token_ids; ++i) {
     int token_id = token_ids_data[i];
     if (logits_raw_data[token_id] <= 0) {
