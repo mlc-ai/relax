@@ -318,15 +318,11 @@ void ApplyRepetitionPenalty(NDArray logits, NDArray token_ids, double penalty) {
   ICHECK(token_ids.IsContiguous());
   ICHECK(logits.DataType() == DataType::Float(32)) << "Logits data type is not float32!";
   ICHECK(token_ids.DataType() == DataType::Int(32)) << "token ids must be int32!";
-  if (logits->device.device_type != kDLCPU) {
-    logits = logits.CopyTo(DLDevice{kDLCPU, 0});
-  }
-  if (token_ids->device.device_type != kDLCPU) {
-    token_ids = token_ids.CopyTo(DLDevice{kDLCPU, 0});
-  }
+  ICHECK(logits->device.device_type == kDLCPU) << "logits device must be CPU!";
+  ICHECK(token_ids->device.device_type == kDLCPU) << "token_ids device must be CPU!";
   float* logits_raw_data = static_cast<float*>(logits->data);
   int* token_ids_data = static_cast<int*>(token_ids->data);
-  size_t num_token_ids = token_ids->shape[0];
+  size_t num_token_ids = token_ids->shape[token_ids->ndim - 1];
   for (size_t i = 0; i < num_token_ids; ++i) {
     int token_id = token_ids_data[i];
     if (logits_raw_data[token_id] <= 0) {
@@ -343,10 +339,8 @@ TVM_REGISTER_GLOBAL("vm.builtin.apply_repetition_penalty").set_body_typed(ApplyR
 void ApplySoftmaxWithTemperature(NDArray logits, double temperature) {
   ICHECK(logits.IsContiguous());
   ICHECK(logits.DataType() == DataType::Float(32)) << "Logits data type is not float32!";
+  ICHECK(logits->device.device_type == kDLCPU) << "logits device must be CPU!";
   int vocab_size = logits->shape[logits->ndim - 1];
-  if (logits->device.device_type != kDLCPU) {
-    logits = logits.CopyTo(DLDevice{kDLCPU, 0});
-  }
   float* logits_raw_data = static_cast<float*>(logits->data);
   float inv_temp = 1.0f / temperature;
   float m = std::numeric_limits<float>::min();
