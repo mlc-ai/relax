@@ -70,6 +70,7 @@ REQUIREMENTS_BY_PIECE: RequirementsByPieceType = [
                 "psutil",
                 "scipy",
                 "tornado",
+                "typing_extensions",
             ],
         ),
     ),
