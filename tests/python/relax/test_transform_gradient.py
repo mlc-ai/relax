@@ -1454,8 +1454,9 @@ def test_mlp_script():
                 out_adjoint: R.Tensor((3, 5), dtype="float32") = R.subtract(logits_adjoint, lv5)
                 lv0_adjoint: R.Tensor((3, 5), dtype="float32") = out_adjoint
                 b0_adjoint: R.Tensor((5,), dtype="float32") = R.collapse_sum_to(out_adjoint, R.shape([5]))
-                lv7: R.Tensor((10, 3), dtype="float32") = R.permute_dims(x, axes=[1, 0])
-                w0_adjoint: R.Tensor((10, 5), dtype="float32") = R.matmul(lv7, lv0_adjoint, out_dtype="void")
+                lv8: R.Tensor((10, 3), dtype="float32") = R.permute_dims(x, axes=[1, 0])
+                lv9: R.Tensor((10, 5), dtype="float32") = R.matmul(lv8, lv0_adjoint, out_dtype="void")
+                w0_adjoint: R.Tensor((10, 5), dtype="float32") = R.collapse_sum_to(lv9, R.shape([10, 5]))
                 w0_adjoint_out: R.Tensor((10, 5), dtype="float32") = w0_adjoint
                 b0_adjoint_out: R.Tensor((5,), dtype="float32") = b0_adjoint
                 R.output(loss, w0_adjoint_out, b0_adjoint_out)
