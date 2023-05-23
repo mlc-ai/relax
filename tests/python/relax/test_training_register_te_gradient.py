@@ -369,5 +369,6 @@ def test_tir_var(register_te_grads):
     assert_structural_equal(After, get_expected_3())
     assert relax.analysis.well_formed(After)
 
+
 if __name__ == "__main__":
     tvm.testing.main()
