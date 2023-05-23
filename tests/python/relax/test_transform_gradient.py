@@ -1223,6 +1223,29 @@ def test_function_copy():
     old_bindings_len = len(old_bindings)
     new_bindings = After["main_adjoint"].body.blocks[0].bindings[:old_bindings_len]
     assert_structural_equal(old_bindings, new_bindings, True)
+    assert relax.analysis.well_formed(After)
+
+
+def test_tir_copy():
+    @I.ir_module
+    class Before:
+        @R.function
+        def main(
+            x0: R.Tensor(("n", "n"), "float32"),
+            x1: R.Tensor(("n", "n"), "float32"),
+            x2: R.Tensor(("n", "n"), "float32"),
+            x3: R.Tensor(("n", "n"), "float32"),
+        ):
+            with R.dataflow():
+                lv0 = R.add(x0, x1)
+                lv1 = R.add(x2, x3)
+                lv2 = R.add(lv0, lv1)
+                gv = R.sum(lv2)
+                R.output(gv)
+            return gv
+
+    After = relax.transform.Gradient("main")(Before)
+    assert relax.analysis.well_formed(After)
 
 
 def test_report_error():
@@ -1431,9 +1454,8 @@ def test_mlp_script():
                 out_adjoint: R.Tensor((3, 5), dtype="float32") = R.subtract(logits_adjoint, lv5)
                 lv0_adjoint: R.Tensor((3, 5), dtype="float32") = out_adjoint
                 b0_adjoint: R.Tensor((5,), dtype="float32") = R.collapse_sum_to(out_adjoint, R.shape([5]))
-                lv8: R.Tensor((10, 3), dtype="float32") = R.permute_dims(x, axes=[1, 0])
-                lv9: R.Tensor((10, 5), dtype="float32") = R.matmul(lv8, lv0_adjoint, out_dtype="void")
-                w0_adjoint: R.Tensor((10, 5), dtype="float32") = R.collapse_sum_to(lv9, R.shape([10, 5]))
+                lv7: R.Tensor((10, 3), dtype="float32") = R.permute_dims(x, axes=[1, 0])
+                w0_adjoint: R.Tensor((10, 5), dtype="float32") = R.matmul(lv7, lv0_adjoint, out_dtype="void")
                 w0_adjoint_out: R.Tensor((10, 5), dtype="float32") = w0_adjoint
                 b0_adjoint_out: R.Tensor((5,), dtype="float32") = b0_adjoint
                 R.output(loss, w0_adjoint_out, b0_adjoint_out)

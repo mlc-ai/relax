@@ -282,6 +282,7 @@ class SymbolicVarRenewMutator : public ExprMutator, tir::ExprMutator {
 
  private:
   Map<tir::Var, tir::Var> var_map_;
+  friend class FunctionCopier;
 };
 
 /*!
@@ -292,15 +293,29 @@ class SymbolicVarRenewMutator : public ExprMutator, tir::ExprMutator {
 class FunctionCopier : public ExprMutator {
  public:
   Function Copy(Function func) {
-    auto new_func = Downcast<Function>(VisitExpr(func));
-    return SymbolicVarRenewMutator::Renew(new_func);
+    auto var_copied_func = Downcast<Function>(VisitExpr(func));
+    SymbolicVarRenewMutator mutator;
+    auto tir_copied_func = Downcast<Function>(mutator.VisitExpr(var_copied_func));
+    tir_var_map = mutator.var_map_;
+    // SymbolicVarRenewMutator may still copy vars. We need to combine the two var mappings
+    for (auto& [old_var, new_var] : mutator.var_remap_) {
+      auto it = var_reverse_map_.find(old_var);
+      ICHECK(it != var_reverse_map_.end());
+      var_map.Set((*it).second, new_var);
+    }
+    return tir_copied_func;
   }
 
+  Map<Var, Var> var_map;
+  Map<tir::Var, tir::Var> tir_var_map;
+
+ private:
   Var VisitVarDef_(const DataflowVarNode* var) override {
     Var new_var = ExprMutator::VisitVarDef_(var);
     Var copied_var = DataflowVar(new_var->name_hint(), GetStructInfo(new_var), new_var->span);
     var_remap_[var->vid] = copied_var;
     var_map.Set(GetRef<Var>(var), copied_var);
+    var_reverse_map_.Set(copied_var->vid, GetRef<Var>(var));
     return copied_var;
   }
 
@@ -309,10 +324,11 @@ class FunctionCopier : public ExprMutator {
     Var copied_var = Var(new_var->name_hint(), GetStructInfo(new_var), new_var->span);
     var_remap_[var->vid] = copied_var;
     var_map.Set(GetRef<Var>(var), copied_var);
+    var_reverse_map_.Set(copied_var->vid, GetRef<Var>(var));
     return copied_var;
   }
 
-  Map<Var, Var> var_map;
+  Map<Id, Var> var_reverse_map_;
 };
 
 /*!
