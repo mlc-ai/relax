@@ -17,11 +17,11 @@
 # pylint: disable=invalid-name, exec-used
 """Setup TVM package."""
 import os
+import pathlib
+import platform
 import shutil
 import sys
 import sysconfig
-import pathlib
-import platform
 
 from setuptools import find_packages
 from setuptools.dist import Distribution
@@ -77,6 +77,21 @@ def get_lib_path():
                 libs.append(candidate_path)
                 break
 
+        # Add 3rdparty configuration json files
+        for name in lib_path:
+            candidate_path = os.path.abspath(
+                os.path.join(os.path.dirname(name), "..", "..", "3rdparty")
+            )
+            if os.path.isdir(candidate_path):
+                libs.append(candidate_path)
+                break
+
+        # Add jvm configuration json files
+        for name in lib_path:
+            candidate_path = os.path.abspath(os.path.join(os.path.dirname(name), "..", "..", "jvm"))
+            if os.path.isdir(candidate_path):
+                libs.append(candidate_path)
+                break
     else:
         libs = None
 
