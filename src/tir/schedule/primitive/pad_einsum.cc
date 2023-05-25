@@ -32,6 +32,9 @@ namespace tir {
 Optional<Array<Var>> CheckTrivialBufferIndices(const Array<PrimExpr>& buffer_access) {
   Array<Var> indices;
   for (const PrimExpr& index : buffer_access) {
+    if (index->IsInstance<IntImmNode>()) {
+      continue;
+    }
     const VarNode* var = index.as<VarNode>();
     if (var == nullptr) {
       return NullOpt;
@@ -47,6 +50,9 @@ Optional<Array<Var>> CheckTrivialBufferAccess(const BufferRegion& buffer_region)
   for (const Range& range : buffer_region->region) {
     if (!tir::is_one(range->extent)) {
       return NullOpt;
+    }
+    if (range->min->IsInstance<IntImmNode>()) {
+      continue;
     }
     if (const auto* var = range->min.as<VarNode>()) {
       indices.push_back(GetRef<Var>(var));
@@ -135,8 +141,11 @@ struct BufferPadding {
     shape.reserve(buffer_region->region.size());
     int ndim = buffer_region->region.size();
     for (int i = 0; i < ndim; ++i) {
-      Var var = Downcast<Var>(buffer_region->region[i]->min);
-      if (Optional<PrimExpr> extent = iter_extents.Get(var)) {
+      PrimExpr pos = buffer_region->region[i]->min;
+      ICHECK(pos->IsInstance<IntImmNode>() || pos->IsInstance<VarNode>());
+      if (pos->IsInstance<IntImmNode>()) {
+        shape.push_back(IntImm(pos->dtype, 1));
+      } else if (Optional<PrimExpr> extent = iter_extents.Get(Downcast<Var>(pos))) {
         shape.push_back(extent.value());
       } else {
         shape.push_back(buffer_region->buffer->shape[i]);
@@ -367,18 +376,19 @@ void PadEinsum(ScheduleState self, StmtSRef block_sref, Array<Integer> padding) 
   const BlockNode* scope_block = TVM_SREF_TO_BLOCK(scope_sref);
   InvalidPaddingError::Check(self, GetRef<Block>(block), padding);
   // Step 2. Extract the Einsum pattern
-  Einsum einsum = ExtractEinsum(self, GetRef<Block>(block));
+  ExtractEinsum(self, GetRef<Block>(block));
   // Step 3. Figure out the padding needed
   PadEinsumBufferReplacer replacer;
   for (int i = 0, n = padding.size(); i < n; ++i) {
     const IterVar& iter = block->iter_vars[i];
-    Var loop_var = Downcast<Var>(realize->iter_values[i]);
     PrimExpr dom = iter->dom->extent;
     PrimExpr new_dom = analyzer.Simplify(ceildiv(dom, padding[i]) * padding[i]);
     if (!analyzer.CanProveEqual(new_dom, dom)) {
       replacer.iter2padded_extents.Set(iter->var, new_dom);
-      replacer.iter2padded_extents.Set(Downcast<Var>(realize->iter_values[i]), new_dom);
-      replacer.loop_var2padded_extent.Set(loop_var, new_dom);
+      if (const auto* loop_var = realize->iter_values[i].as<VarNode>()) {
+        replacer.iter2padded_extents.Set(GetRef<Var>(loop_var), new_dom);
+        replacer.loop_var2padded_extent.Set(GetRef<Var>(loop_var), new_dom);
+      }
     }
   }
   auto f_needs_padding = [&replacer](const Array<Range>& region) {
