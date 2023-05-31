@@ -16,11 +16,12 @@
 # under the License.
 """Util to invoke NDK compiler toolchain."""
 # pylint: disable=invalid-name
-from __future__ import absolute_import as _abs
 
 import subprocess
 import os
+import shutil
 from .._ffi.base import py_str
+from . import utils as _utils, tar as _tar
 from .cc import get_target_by_dump_machine
 
 
@@ -70,7 +71,7 @@ create_shared.get_target_triple = (
 )
 
 
-def create_staticlib(output, objects):
+def create_staticlib(output, inputs):
     """Create static library:
 
     Parameters
@@ -78,15 +79,18 @@ def create_staticlib(output, objects):
     output : str
         The target static library.
 
-    objects : list
-        List of object files.
+    inputs : list
+        List of object files or tar files
     """
     if "TVM_NDK_CC" not in os.environ:
         raise RuntimeError(
             "Require environment variable TVM_NDK_CC" " to be the NDK standalone compiler"
         )
     output_name = os.path.basename(output)
-    tmp_output = os.path.join(os.path.dirname(output), "lib" + output_name)
+
+    temp = _utils.tempdir()
+    tmp_output = temp.relpath("lib" + output_name)
+    objects = _tar.normalize_file_list_by_unpacking_tars(temp, inputs)
 
     compiler = os.environ["TVM_NDK_CC"]
     base_path = os.path.dirname(compiler)
@@ -114,15 +118,7 @@ def create_staticlib(output, objects):
         msg += "\nCommand line: " + " ".join(cmd)
         raise RuntimeError(msg)
 
-    proc = subprocess.Popen(
-        ["mv", tmp_output, output], stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-    )
-    (out, _) = proc.communicate()
-    if proc.returncode != 0:
-        msg = "Move error:\n"
-        msg += py_str(out)
-        msg += "\nCommand line: " + f"mv {tmp_output} {output}"
-        raise RuntimeError(msg)
+    shutil.move(tmp_output, output)
 
 
 create_staticlib.output_format = "a"
