@@ -85,7 +85,7 @@ def get_lib_path():
             "include",
             "src",
             "cmake",
-            "CMakeList.txt",
+            "CMakeLists.txt",
         ]:
             for name in lib_path:
                 candidate_path = os.path.abspath(os.path.join(os.path.dirname(name), "..", dir))
