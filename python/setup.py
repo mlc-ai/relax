@@ -76,10 +76,20 @@ def get_lib_path():
                 libs.append(candidate_path)
                 break
 
-        for dir in ["3rdparty", "jvm", "web", "rust", "golang", "include"]:
+        for dir in [
+            "3rdparty",
+            "jvm",
+            "web",
+            "rust",
+            "golang",
+            "include",
+            "src",
+            "cmake",
+            "CMakeLists.txt",
+        ]:
             for name in lib_path:
                 candidate_path = os.path.abspath(os.path.join(os.path.dirname(name), "..", dir))
-                if os.path.isdir(candidate_path):
+                if os.path.exists(candidate_path):
                     libs.append(candidate_path)
                     if dir == "3rdparty":
                         # remove large files
