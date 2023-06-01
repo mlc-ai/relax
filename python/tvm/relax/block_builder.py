@@ -107,15 +107,16 @@ class BlockBuilder(Object):
     --------
     .. code-block:: python
 
-        m = tir.Var("m", "int32")
-        n = tir.Var("n", "int32")
+        m = tir.Var("m", "int64")
+        n = tir.Var("n", "int64")
         x = rx.Var("x", rx.TensorStructInfo([m, n], "float16"))
-        y = rx.Var("y", rx.TensorStructInfo([n], "float16")
+        y = rx.Var("y", rx.TensorStructInfo([n], "float16"))
+
         bb = rx.BlockBuilder()
-        with bb.function([x, y], "func"):
+        with bb.function( "func",[x, y]):
             with bb.dataflow() as df:
-                lv0 = bb.emit(rx.add(x, y))
-                lv1 = bb.emit(rx.multiply(lv0, y))
+                lv0 = bb.emit(rx.op.multiply(x, y))
+                lv1 = bb.emit(rx.op.multiply(lv0, y))
                 gv0 = bb.emit_output(lv1)
             bb.emit_func_output(gv0)
         mod = bb.get()
@@ -144,7 +145,7 @@ class BlockBuilder(Object):
             data = nn.Placeholder((n, input_size), name="data")
             output = model(data)
             params = [data] + model.parameters()
-            builder.emit_func_output(output, params=params)
+            bb.emit_func_output(output, params=params)
         mod = bb.get()
     """
 
@@ -361,7 +362,7 @@ class BlockBuilder(Object):
                 B = args_dict["B"]
                 return te.compute((128, 128), lambda i, j: A[i, j] + B[i, j])
 
-            with bb.function([x, y], "rx_func"):
+            with bb.function("rx_func", [x, y]):
                 out = bb.emit_te(te_func, [x], {"B": y}, msg="hello")
                 bb.emit_func_output(out)
 
@@ -369,31 +370,32 @@ class BlockBuilder(Object):
 
         .. code-block:: python
 
-            @tvm.script.ir_module
+            # from tvm.script import ir as I
+            # from tvm.script import tir as T
+            # from tvm.script import relax as R
+
+            @I.ir_module
             class Module:
                 @T.prim_func
-                def te_func(var_rxplaceholder: T.handle, var_rxplaceholder_1: T.handle,
-                            var_compute: T.handle) -> None:
-                    # function attr dict
-                    T.func_attr({"tir.noalias": True})
-                    m = T.int64()
-                    n = T.int64()
-                    rxplaceholder = T.match_buffer(var_rxplaceholder, [n, m], dtype="float32")
-                    rxplaceholder_1 = T.match_buffer(var_rxplaceholder_1, [n, m], dtype="float32")
-                    compute = T.match_buffer(var_compute, [128, 128], dtype="float32")
-                    # body
-                    # with T.block("root")
-                    for i0, i1 in T.grid(128, 128):
+                def te_func(var_A: T.handle, var_B: T.handle, compute: T.Buffer((T.int64(128), T.int64(128)), "float32")):
+                    T.func_attr({"tir.noalias": T.bool(True)})
+                    n, m = T.int64(), T.int64()
+                    A = T.match_buffer(var_A, (n, m))
+                    B = T.match_buffer(var_B, (n, m))
+                    # with T.block("root"):
+                    for i, j in T.grid(T.int64(128), T.int64(128)):
                         with T.block("compute"):
-                            i, j = T.axis.remap("SS", [i0, i1])
-                            T.reads([rxplaceholder[i, j], rxplaceholder_1[i, j]])
-                            T.writes([compute[i, j]])
-                            compute[i, j] = rxplaceholder[i, j] + rxplaceholder_1[i, j]
+                            v_i, v_j = T.axis.remap("SS", [i, j])
+                            T.reads(A[v_i, v_j], B[v_i, v_j])
+                            T.writes(compute[v_i, v_j])
+                            compute[v_i, v_j] = A[v_i, v_j] + B[v_i, v_j]
 
                 @R.function
-                def rx_func(x: Tensor((n, m), "float32"), y: Tensor((n, m), "float32")) -> Tensor:
-                    # block 0
-                    gv = relax.call_tir("te_func", (x, y), R.Tensor((128, 128), "float32"))
+                def rx_func(x: R.Tensor(("n", "m"), dtype="float32"), y: R.Tensor(("n", "m"), dtype="float32")) -> R.Tensor((128, 128), dtype="float32"):
+                    n = T.int64()
+                    m = T.int64()
+                    cls = Module
+                    gv = R.call_tir(cls.te_func, (x, y), out_sinfo=R.Tensor((128, 128), dtype="float32"))
                     return gv
 
         Example
@@ -418,27 +420,30 @@ class BlockBuilder(Object):
 
         .. code-block:: python
 
-            @tvm.script.ir_module
+            # from tvm.script import ir as I
+            # from tvm.script import tir as T
+            # from tvm.script import relax as R
+
+            @I.ir_module
             class Module:
                 @T.prim_func
-                def te_func(var_rxplaceholder: T.handle, var_compute: T.handle, n: T.int64) -> None:
-                    rxplaceholder = T.match_buffer(var_rxplaceholder, [n + T.int64(1)],
-                                                   dtype="float32")
-                    compute = T.match_buffer(var_compute, [n + T.int64(1)], dtype="float32")
-                    # body
-                    # with T.block("root")
-                    for i0 in T.serial(0, n + T.int64(1)):
+                def te_func(var_A: T.handle, var_compute: T.handle, n: T.int64, n_1: T.int64):
+                    T.func_attr({"tir.noalias": T.bool(True)})
+                    A = T.match_buffer(var_A, (n + T.int64(1),))
+                    compute = T.match_buffer(var_compute, (n_1 + T.int64(1),))
+                    # with T.block("root"):
+                    for i in range(n_1 + T.int64(1)):
                         with T.block("compute"):
-                            i = T.axis.spatial(n + T.int64(1), i0)
-                            T.reads([rxplaceholder[i]])
-                            T.writes([compute[i]])
-                            compute[i] = rxplaceholder[i]
+                            v_i = T.axis.spatial(n_1 + T.int64(1), i)
+                            T.reads(A[v_i])
+                            T.writes(compute[v_i])
+                            compute[v_i] = A[v_i]
 
                 @R.function
-                def rx_func(x: Tensor((n,), "float32"), y: Tensor(((n + 1),), "float32"))
-                    -> Tensor(None, "float32", ndim=-1):
-                    # block 0
-                    gv = relax.call_tir(te_func, (y,), R.Tensor((n + 1,), "float32"), (n,))
+                def rx_func(x: R.Tensor(("n",), dtype="float32"), y: R.Tensor(("n + 1",), dtype="float32")) -> R.Tensor(("n + 1",), dtype="float32"):
+                    n = T.int64()
+                    cls = Module
+                    gv = R.call_tir(cls.te_func, (y,), out_sinfo=R.Tensor((n + 1,), dtype="float32"), tir_vars=R.shape([n, n]))
                     return gv
         """
         return self.emit(self.call_te(func, *args, **kwargs))
