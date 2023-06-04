@@ -17,6 +17,10 @@
 # under the License.
 set -euxo pipefail
 
+python3 -m pip install "cmake>=3.24"  # HACK: needs to upgrade cmake in host image
+python3 -m pip show cmake
+
 cd build
+cmake --version
 cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 make -j8
