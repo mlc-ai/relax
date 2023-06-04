@@ -17,6 +17,8 @@
 # under the License.
 set -euxo pipefail
 
+pip install "cmake>=3.24"  # HACK: needs to upgrade cmake in host image
+
 cd build
 cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 make -j8
