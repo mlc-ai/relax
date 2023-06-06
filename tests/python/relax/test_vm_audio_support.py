@@ -23,6 +23,7 @@ import tvm.testing
 import numpy as np
 
 
+@tvm.testing.requires_package("transformers")
 def test_whisper_preprocess_audio():
     from transformers.models.whisper.feature_extraction_whisper import WhisperFeatureExtractor
 
