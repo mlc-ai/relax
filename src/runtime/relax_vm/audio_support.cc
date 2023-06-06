@@ -23,6 +23,8 @@
 #include <tvm/runtime/ndarray.h>
 #include <tvm/runtime/relax_vm/vm.h>
 
+#include <cmath>
+
 namespace tvm {
 namespace runtime {
 namespace relax_vm {
@@ -30,7 +32,7 @@ namespace relax_vm {
 std::vector<double> hanning_window(int M, int window_size) {
   std::vector<double> window;
   window.resize(window_size);
-  for (size_t i = 0; i < window_size; i++) {
+  for (int i = 0; i < window_size; i++) {
     window[i] = 0.5 - 0.5 * std::cos(2 * M_PI * i / (M - 1));
   }
 
@@ -49,8 +51,8 @@ std::vector<double> dft(const std::vector<double>& in) {
 
     for (int n = 0; n < N; n++) {
       double angle = 2 * M_PI * k * n / N;
-      re += in[n] * cos(angle);
-      im -= in[n] * sin(angle);
+      re += in[n] * std::cos(angle);
+      im -= in[n] * std::sin(angle);
     }
 
     out[k * 2 + 0] = re;
@@ -95,8 +97,8 @@ std::vector<double> fft(const std::vector<double>& in) {
   for (int k = 0; k < N / 2; k++) {
     double theta = 2 * M_PI * k / N;
 
-    double re = cos(theta);
-    double im = -sin(theta);
+    double re = std::cos(theta);
+    double im = -std::sin(theta);
 
     double re_odd = odd_fft[2 * k + 0];
     double im_odd = odd_fft[2 * k + 1];
@@ -116,7 +118,7 @@ std::vector<std::vector<double>> get_mel_filters(int sr, int n_fft, int n_mels) 
   double val = 1.0 / (n_fft * 1.0 / sr);
   int N = n_fft / 2 + 1;
   fftfreqs.resize(N);
-  for (size_t i = 0; i < N; ++i) {
+  for (int i = 0; i < N; ++i) {
     fftfreqs[i] = i * val;
   }
 
@@ -126,7 +128,7 @@ std::vector<std::vector<double>> get_mel_filters(int sr, int n_fft, int n_mels) 
 
   std::vector<double> mels;
   mels.resize(n_mels + 2);
-  for (size_t i = 0; i < n_mels + 2; ++i) {
+  for (int i = 0; i < n_mels + 2; ++i) {
     mels[i] = min_mel + i * melstep;
   }
 
@@ -134,7 +136,7 @@ std::vector<std::vector<double>> get_mel_filters(int sr, int n_fft, int n_mels) 
   double f_sp = 200.0 / 3;
   std::vector<double> freqs;
   freqs.resize(n_mels + 2);
-  for (size_t i = 0; i < n_mels + 2; ++i) {
+  for (int i = 0; i < n_mels + 2; ++i) {
     freqs[i] = f_min + f_sp * mels[i];
   }
 
@@ -142,7 +144,7 @@ std::vector<std::vector<double>> get_mel_filters(int sr, int n_fft, int n_mels) 
   double min_log_mel = (min_log_hz - f_min) / f_sp;
   double logstep = std::log(6.4) / 27.0;
 
-  for (size_t i = 0; i < n_mels + 2; ++i) {
+  for (int i = 0; i < n_mels + 2; ++i) {
     if (mels[i] >= min_log_mel) {
       freqs[i] = min_log_hz * std::exp(logstep * (mels[i] - min_log_mel));
     }
@@ -150,7 +152,7 @@ std::vector<std::vector<double>> get_mel_filters(int sr, int n_fft, int n_mels) 
 
   std::vector<double> fdiff;
   fdiff.resize(n_mels + 1);
-  for (size_t i = 0; i < n_mels + 1; ++i) {
+  for (int i = 0; i < n_mels + 1; ++i) {
     fdiff[i] = freqs[i + 1] - freqs[i];
   }
 
@@ -184,24 +186,24 @@ void log_mel_spec(const std::vector<double>& sample_data, int num_id,
   std::vector<double> frame;
 
   frame.resize(n_fft);
-  for (size_t i = 0; i < n_fft; i++) {
+  for (int i = 0; i < n_fft; i++) {
     frame[i] = sample_data[num_id * hop_length + i] * window[i];
   }
 
   std::vector<double> fft_out = fft(frame);
 
-  for (size_t i = 0; i < n_fft; i++) {
+  for (int i = 0; i < n_fft; i++) {
     fft_out[i] = fft_out[2 * i] * fft_out[2 * i] + fft_out[2 * i + 1] * fft_out[2 * i + 1];
   }
 
-  for (size_t i = 0; i < n_fft / 2 + 1; i++) {
+  for (int i = 0; i < n_fft / 2 + 1; i++) {
     fft_out[i] = 0.5 * (fft_out[i] + fft_out[n_fft - i]);
   }
 
   int n_mels = mel_filters.size();
-  for (size_t i = 0; i < n_mels; i++) {
+  for (int i = 0; i < n_mels; i++) {
     double matmul_result = 0.0;
-    for (size_t k = 0; k < n_fft / 2 + 1; k++) {
+    for (int k = 0; k < n_fft / 2 + 1; k++) {
       matmul_result += fft_out[k] * mel_filters[i][k];
     }
     matmul_result = std::max(matmul_result, 1e-10);
@@ -230,13 +232,13 @@ NDArray WhisperProcessAudio(NDArray raw_speech) {
 
   std::vector<double> pad_data;
   pad_data.resize(max_length + n_fft);
-  for (size_t i = 0; i < n_fft / 2; ++i) {
+  for (int i = 0; i < n_fft / 2; ++i) {
     pad_data[n_fft / 2 - 1 - i] = p_data[i + 1];
   }
-  for (size_t i = 0; i < max_length; ++i) {
+  for (int i = 0; i < max_length; ++i) {
     pad_data[n_fft / 2 + i] = p_data[i];
   }
-  for (size_t i = 0; i < n_fft / 2; ++i) {
+  for (int i = 0; i < n_fft / 2; ++i) {
     pad_data[n_fft / 2 + max_length + i] = p_data[max_length - 2 - i];
   }
 
@@ -244,20 +246,20 @@ NDArray WhisperProcessAudio(NDArray raw_speech) {
   double* log_specs;
   int output_num_frames = (num_frames - 1);
   log_specs = new double[output_num_frames * n_mels];
-  for (size_t i = 0; i < output_num_frames; ++i) {
+  for (int i = 0; i < output_num_frames; ++i) {
     log_mel_spec(pad_data, i, window, n_fft, hop_length, mel_filters, log_specs);
   }
 
   double log_specs_max = std::numeric_limits<float>::min();
-  for (size_t i = 0; i < output_num_frames; i++) {
-    for (size_t j = 0; j < n_mels; ++j) {
+  for (int i = 0; i < output_num_frames; i++) {
+    for (int j = 0; j < n_mels; ++j) {
       log_specs_max = std::max(log_specs_max, log_specs[i * n_mels + j]);
     }
   }
 
   log_specs_max -= 8.0;
-  for (size_t i = 0; i < output_num_frames; i++) {
-    for (size_t j = 0; j < n_mels; ++j) {
+  for (int i = 0; i < output_num_frames; i++) {
+    for (int j = 0; j < n_mels; ++j) {
       log_specs[i * n_mels + j] = std::max(log_specs_max, log_specs[i * n_mels + j]);
       log_specs[i * n_mels + j] = (log_specs[i * n_mels + j] + 4.0) / 4.0;
     }
@@ -266,8 +268,8 @@ NDArray WhisperProcessAudio(NDArray raw_speech) {
   auto ret_value = runtime::NDArray::Empty({output_num_frames, n_mels}, DataType::Float(32),
                                            DLDevice{kDLCPU, 0});
   float* p_ret = static_cast<float*>(ret_value->data);
-  for (size_t i = 0; i < output_num_frames; i++) {
-    for (size_t j = 0; j < n_mels; ++j) {
+  for (int i = 0; i < output_num_frames; i++) {
+    for (int j = 0; j < n_mels; ++j) {
       p_ret[i * n_mels + j] = static_cast<float>(log_specs[i * n_mels + j]);
     }
   }
