@@ -182,7 +182,7 @@ std::vector<std::vector<double>> get_mel_filters(int sr, int n_fft, int n_mels) 
 
 void log_mel_spec(const std::vector<double>& sample_data, int num_id,
                   const std::vector<double>& window, int n_fft, int hop_length,
-                  const std::vector<std::vector<double>> mel_filters, double* log_specs) {
+                  const std::vector<std::vector<double>>& mel_filters, double* log_specs) {
   std::vector<double> frame;
 
   frame.resize(n_fft);
