@@ -27,23 +27,28 @@ namespace tvm {
 namespace runtime {
 namespace relax_vm {
 
-void hanning_window(std::vector<double>& window, int M) {
-  for (size_t i = 0; i < window.size(); i++) {
+std::vector<double> hanning_window(int M, int window_size) {
+  std::vector<double> window;
+  window.resize(window_size);
+  for (size_t i = 0; i < window_size; i++) {
     window[i] = 0.5 - 0.5 * std::cos(2 * M_PI * i / (M - 1));
   }
+
+  return window;
 }
 
-void dft(const std::vector<double>& in, std::vector<double>& out) {
+std::vector<double> dft(const std::vector<double>& in) {
   int N = in.size();
 
+  std::vector<double> out;
   out.resize(N * 2);
 
   for (int k = 0; k < N; k++) {
-    float re = 0;
-    float im = 0;
+    double re = 0;
+    double im = 0;
 
     for (int n = 0; n < N; n++) {
-      float angle = 2 * M_PI * k * n / N;
+      double angle = 2 * M_PI * k * n / N;
       re += in[n] * cos(angle);
       im -= in[n] * sin(angle);
     }
@@ -51,9 +56,11 @@ void dft(const std::vector<double>& in, std::vector<double>& out) {
     out[k * 2 + 0] = re;
     out[k * 2 + 1] = im;
   }
+  return out;
 }
 
-void fft(const std::vector<double>& in, std::vector<double>& out) {
+std::vector<double> fft(const std::vector<double>& in) {
+  std::vector<double> out;
   out.resize(in.size() * 2);
 
   int N = in.size();
@@ -61,12 +68,11 @@ void fft(const std::vector<double>& in, std::vector<double>& out) {
   if (N == 1) {
     out[0] = in[0];
     out[1] = 0;
-    return;
+    return out;
   }
 
   if (N % 2 == 1) {
-    dft(in, out);
-    return;
+    return dft(in);
   }
 
   std::vector<double> even;
@@ -83,20 +89,17 @@ void fft(const std::vector<double>& in, std::vector<double>& out) {
     }
   }
 
-  std::vector<double> even_fft;
-  std::vector<double> odd_fft;
-
-  fft(even, even_fft);
-  fft(odd, odd_fft);
+  std::vector<double> even_fft = fft(even);
+  std::vector<double> odd_fft = fft(odd);
 
   for (int k = 0; k < N / 2; k++) {
-    float theta = 2 * M_PI * k / N;
+    double theta = 2 * M_PI * k / N;
 
-    float re = cos(theta);
-    float im = -sin(theta);
+    double re = cos(theta);
+    double im = -sin(theta);
 
-    float re_odd = odd_fft[2 * k + 0];
-    float im_odd = odd_fft[2 * k + 1];
+    double re_odd = odd_fft[2 * k + 0];
+    double im_odd = odd_fft[2 * k + 1];
 
     out[2 * k + 0] = even_fft[2 * k + 0] + re * re_odd - im * im_odd;
     out[2 * k + 1] = even_fft[2 * k + 1] + re * im_odd + im * re_odd;
@@ -104,9 +107,11 @@ void fft(const std::vector<double>& in, std::vector<double>& out) {
     out[2 * (k + N / 2) + 0] = even_fft[2 * k + 0] - re * re_odd + im * im_odd;
     out[2 * (k + N / 2) + 1] = even_fft[2 * k + 1] - re * im_odd - im * re_odd;
   }
+
+  return out;
 }
 
-void get_mel_filters(int sr, int n_fft, int n_mels, std::vector<std::vector<double>>& filters) {
+std::vector<std::vector<double>> get_mel_filters(int sr, int n_fft, int n_mels) {
   std::vector<double> fftfreqs;
   double val = 1.0 / (n_fft * 1.0 / sr);
   int N = n_fft / 2 + 1;
@@ -117,7 +122,7 @@ void get_mel_filters(int sr, int n_fft, int n_mels, std::vector<std::vector<doub
 
   double min_mel = 0.0;
   double max_mel = 45.245640471924965;
-  double melstep = (max_mel - min_mel) / double(n_mels + 1);
+  double melstep = (max_mel - min_mel) / (n_mels + 1.0);
 
   std::vector<double> mels;
   mels.resize(n_mels + 2);
@@ -159,6 +164,7 @@ void get_mel_filters(int sr, int n_fft, int n_mels, std::vector<std::vector<doub
     }
   }
 
+  std::vector<std::vector<double>> filters;
   filters.resize(ramps.size() - 2);
   for (size_t i = 0; i < ramps.size() - 2; i++) {
     filters[i].resize(ramps[0].size());
@@ -169,11 +175,12 @@ void get_mel_filters(int sr, int n_fft, int n_mels, std::vector<std::vector<doub
       filters[i][j] = enorm * std::max(0.0, std::min(lower, upper));
     }
   }
+  return filters;
 }
 
-void log_mel_spec(std::vector<double>& sample_data, int num_id, std::vector<double>& window,
-                  int n_fft, int hop_length, std::vector<std::vector<double>> mel_filters,
-                  std::vector<std::vector<double>>& log_mel_spec) {
+void log_mel_spec(const std::vector<double>& sample_data, int num_id,
+                  const std::vector<double>& window, int n_fft, int hop_length,
+                  const std::vector<std::vector<double>> mel_filters, double* log_specs) {
   std::vector<double> frame;
 
   frame.resize(n_fft);
@@ -181,8 +188,7 @@ void log_mel_spec(std::vector<double>& sample_data, int num_id, std::vector<doub
     frame[i] = sample_data[num_id * hop_length + i] * window[i];
   }
 
-  std::vector<double> fft_out;
-  fft(frame, fft_out);
+  std::vector<double> fft_out = fft(frame);
 
   for (size_t i = 0; i < n_fft; i++) {
     fft_out[i] = fft_out[2 * i] * fft_out[2 * i] + fft_out[2 * i + 1] * fft_out[2 * i + 1];
@@ -192,14 +198,15 @@ void log_mel_spec(std::vector<double>& sample_data, int num_id, std::vector<doub
     fft_out[i] = 0.5 * (fft_out[i] + fft_out[n_fft - i]);
   }
 
-  for (size_t i = 0; i < mel_filters.size(); i++) {
+  int n_mels = mel_filters.size();
+  for (size_t i = 0; i < n_mels; i++) {
     double matmul_result = 0.0;
     for (size_t k = 0; k < n_fft / 2 + 1; k++) {
       matmul_result += fft_out[k] * mel_filters[i][k];
     }
     matmul_result = std::max(matmul_result, 1e-10);
     matmul_result = std::log10(matmul_result);
-    log_mel_spec[num_id][i] = matmul_result;
+    log_specs[num_id * n_mels + i] = matmul_result;
   }
 }
 
@@ -217,12 +224,9 @@ NDArray WhisperProcessAudio(NDArray raw_speech) {
   int max_length = 480000;
   int hop_length = 160;
 
-  std::vector<std::vector<double>> mel_filters;
-  get_mel_filters(sampling_rate, n_fft, n_mels, mel_filters);
+  std::vector<std::vector<double>> mel_filters = get_mel_filters(sampling_rate, n_fft, n_mels);
 
-  std::vector<double> window;
-  window.resize(n_fft);
-  hanning_window(window, n_fft + 1);
+  std::vector<double> window = hanning_window(n_fft + 1, n_fft);
 
   std::vector<double> pad_data;
   pad_data.resize(max_length + n_fft);
@@ -237,34 +241,34 @@ NDArray WhisperProcessAudio(NDArray raw_speech) {
   }
 
   int num_frames = 1 + (pad_data.size() - n_fft) / hop_length;
-  std::vector<std::vector<double>> log_specs;
-  log_specs.resize(num_frames - 1);
-  for (size_t i = 0; i < num_frames - 1; ++i) {
-    log_specs[i].resize(n_mels);
+  double* log_specs;
+  int output_num_frames = (num_frames - 1);
+  log_specs = new double[output_num_frames * n_mels];
+  for (size_t i = 0; i < output_num_frames; ++i) {
     log_mel_spec(pad_data, i, window, n_fft, hop_length, mel_filters, log_specs);
   }
 
   double log_specs_max = std::numeric_limits<float>::min();
-  for (size_t i = 0; i < log_specs.size(); i++) {
+  for (size_t i = 0; i < output_num_frames; i++) {
     for (size_t j = 0; j < n_mels; ++j) {
-      log_specs_max = std::max(log_specs_max, log_specs[i][j]);
+      log_specs_max = std::max(log_specs_max, log_specs[i * n_mels + j]);
     }
   }
 
   log_specs_max -= 8.0;
-  for (size_t i = 0; i < log_specs.size(); i++) {
+  for (size_t i = 0; i < output_num_frames; i++) {
     for (size_t j = 0; j < n_mels; ++j) {
-      log_specs[i][j] = std::max(log_specs_max, log_specs[i][j]);
-      log_specs[i][j] = (log_specs[i][j] + 4.0) / 4.0;
+      log_specs[i * n_mels + j] = std::max(log_specs_max, log_specs[i * n_mels + j]);
+      log_specs[i * n_mels + j] = (log_specs[i * n_mels + j] + 4.0) / 4.0;
     }
   }
 
-  auto ret_value =
-      runtime::NDArray::Empty({num_frames - 1, n_mels}, DataType::Float(32), DLDevice{kDLCPU, 0});
+  auto ret_value = runtime::NDArray::Empty({output_num_frames, n_mels}, DataType::Float(32),
+                                           DLDevice{kDLCPU, 0});
   float* p_ret = static_cast<float*>(ret_value->data);
-  for (size_t i = 0; i < log_specs.size(); i++) {
+  for (size_t i = 0; i < output_num_frames; i++) {
     for (size_t j = 0; j < n_mels; ++j) {
-      p_ret[i * n_mels + j] = (float)log_specs[i][j];
+      p_ret[i * n_mels + j] = static_cast<float>(log_specs[i * n_mels + j]);
     }
   }
   return ret_value;
