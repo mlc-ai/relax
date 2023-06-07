@@ -157,6 +157,8 @@ class RuntimeContext implements Disposable {
   sampleTopPFromLogits: PackedFunc;
   applyRepetitionPenalty: PackedFunc;
   applySoftmaxWithTemperature: PackedFunc;
+  whisperProcessAudio: PackedFunc;
+  whisperProcessLogits: PackedFunc;
 
   private autoDisposeScope: Array<Array<Disposable | undefined>> = [];
 
@@ -178,6 +180,8 @@ class RuntimeContext implements Disposable {
     this.sampleTopPFromLogits = getGlobalFunc("vm.builtin.sample_top_p_from_logits");
     this.applyRepetitionPenalty = getGlobalFunc("vm.builtin.apply_repetition_penalty");
     this.applySoftmaxWithTemperature = getGlobalFunc("vm.builtin.apply_softmax_with_temperature");
+    this.whisperProcessAudio = getGlobalFunc("vm.builtin.whisper_process_audio");
+    this.whisperProcessLogits = getGlobalFunc("vm.builtin.whisper_process_logits;")
   }
 
   dispose(): void {
@@ -199,6 +203,8 @@ class RuntimeContext implements Disposable {
     this.sampleTopPFromLogits.dispose();
     this.applyRepetitionPenalty.dispose();
     this.applySoftmaxWithTemperature.dispose();
+    this.whisperProcessAudio.dispose();
+    this.whisperProcessLogits.dispose();
   }
 
   beginScope(): void {
@@ -1725,6 +1731,14 @@ export class Instance implements Disposable {
    */
   applySoftmaxWithTemperature(logits: NDArray, temperature: number) {
     return this.ctx.applySoftmaxWithTemperature(logits, temperature);
+  }
+
+  whisperProcessAudio(raw_speech: NDArray) {
+    return this.ctx.whisperProcessAudio(raw_speech);
+  }
+
+  whisperProcessLogits(logits: NDArray, cur_len: number) {
+    return this.ctx.whisperProcessLogits(logits, cur_len);
   }
 
   /**
