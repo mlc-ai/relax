@@ -265,12 +265,12 @@ NDArray WhisperProcessAudio(NDArray raw_speech) {
     }
   }
 
-  auto ret_value = runtime::NDArray::Empty({output_num_frames, n_mels}, DataType::Float(32),
+  auto ret_value = runtime::NDArray::Empty({1, n_mels, output_num_frames}, DataType::Float(32),
                                            DLDevice{kDLCPU, 0});
   float* p_ret = static_cast<float*>(ret_value->data);
   for (int i = 0; i < output_num_frames; i++) {
     for (int j = 0; j < n_mels; ++j) {
-      p_ret[i * n_mels + j] = static_cast<float>(log_specs[i * n_mels + j]);
+      p_ret[j * output_num_frames + i] = static_cast<float>(log_specs[i * n_mels + j]);
     }
   }
   return ret_value;

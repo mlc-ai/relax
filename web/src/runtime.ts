@@ -181,7 +181,7 @@ class RuntimeContext implements Disposable {
     this.applyRepetitionPenalty = getGlobalFunc("vm.builtin.apply_repetition_penalty");
     this.applySoftmaxWithTemperature = getGlobalFunc("vm.builtin.apply_softmax_with_temperature");
     this.whisperProcessAudio = getGlobalFunc("vm.builtin.whisper_process_audio");
-    this.whisperProcessLogits = getGlobalFunc("vm.builtin.whisper_process_logits;")
+    this.whisperProcessLogits = getGlobalFunc("vm.builtin.whisper_process_logits");
   }
 
   dispose(): void {

@@ -34,7 +34,7 @@ def test_whisper_preprocess_audio():
     out = f(samples_nd)
     std_out = WhisperFeatureExtractor()._np_extract_fbank_features(samples)
 
-    assert np.allclose(out.numpy(), std_out.T, atol=1e-4)
+    assert np.allclose(out.numpy(), std_out[None, :], atol=1e-4)
 
 
 @tvm.testing.requires_package("transformers")
