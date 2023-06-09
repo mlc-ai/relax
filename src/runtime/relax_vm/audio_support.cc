@@ -236,7 +236,11 @@ NDArray WhisperProcessAudio(NDArray raw_speech) {
     pad_data[n_fft / 2 - 1 - i] = p_data[i + 1];
   }
   for (int i = 0; i < max_length; ++i) {
-    pad_data[n_fft / 2 + i] = p_data[i];
+    if (i >= raw_speech->shape[0]) {
+      pad_data[n_fft / 2 + i] = 0.0;
+    } else {
+      pad_data[n_fft / 2 + i] = p_data[i];
+    }
   }
   for (int i = 0; i < n_fft / 2; ++i) {
     pad_data[n_fft / 2 + max_length + i] = p_data[max_length - 2 - i];
