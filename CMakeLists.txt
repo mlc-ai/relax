@@ -12,8 +12,6 @@ include(cmake/utils/FindLLVM.cmake)
 include(cmake/utils/FindROCM.cmake)
 include(cmake/utils/FindEthosN.cmake)
 
-find_package(LibXml2 REQUIRED)
-
 if(EXISTS ${CMAKE_BINARY_DIR}/config.cmake)
   include(${CMAKE_BINARY_DIR}/config.cmake)
 else()
