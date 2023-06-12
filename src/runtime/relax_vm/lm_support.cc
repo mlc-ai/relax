@@ -316,7 +316,7 @@ int SampleTopPFromProb(NDArray prob, double top_p, double uniform_sample) {
   auto sample_top_p_with_filter = [&](float cuttoff) -> int64_t {
     data.clear();
     // filter the data with cuttoff
-    for (size_t i = 0; i < ndata; ++i) {
+    for (int64_t i = 0; i < ndata; ++i) {
       if (p_prob[i] >= cuttoff) {
         data.emplace_back(std::make_pair(p_prob[i], static_cast<int>(i)));
       }
