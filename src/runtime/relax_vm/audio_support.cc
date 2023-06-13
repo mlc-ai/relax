@@ -212,13 +212,14 @@ void log_mel_spec(const std::vector<double>& sample_data, int num_id,
   }
 }
 
-NDArray WhisperProcessAudio(NDArray raw_speech) {
+void WhisperProcessAudio(NDArray raw_speech, NDArray out_features) {
   ICHECK(raw_speech.IsContiguous());
   ICHECK(raw_speech.DataType() == DataType::Float(32)) << "raw speech data type is not float32!";
   ICHECK(raw_speech->device.device_type == kDLCPU) << "raw speech device must be CPU!";
   ICHECK_EQ(raw_speech->ndim, 1);
 
   const float* p_data = static_cast<float*>(raw_speech->data);
+  float* p_out = static_cast<float*>(out_features->data);
 
   int sampling_rate = 16000;
   int n_fft = 400;
@@ -243,7 +244,7 @@ NDArray WhisperProcessAudio(NDArray raw_speech) {
     }
   }
   for (int i = 0; i < n_fft / 2; ++i) {
-    pad_data[n_fft / 2 + max_length + i] = p_data[max_length - 2 - i];
+    pad_data[n_fft / 2 + max_length + i] = pad_data[n_fft / 2 + max_length - 2 - i];
   }
 
   int num_frames = 1 + (pad_data.size() - n_fft) / hop_length;
@@ -269,15 +270,11 @@ NDArray WhisperProcessAudio(NDArray raw_speech) {
     }
   }
 
-  auto ret_value = runtime::NDArray::Empty({1, n_mels, output_num_frames}, DataType::Float(32),
-                                           DLDevice{kDLCPU, 0});
-  float* p_ret = static_cast<float*>(ret_value->data);
   for (int i = 0; i < output_num_frames; i++) {
     for (int j = 0; j < n_mels; ++j) {
-      p_ret[j * output_num_frames + i] = static_cast<float>(log_specs[i * n_mels + j]);
+      p_out[j * output_num_frames + i] = static_cast<float>(log_specs[i * n_mels + j]);
     }
   }
-  return ret_value;
 }
 
 TVM_REGISTER_GLOBAL("vm.builtin.whisper_process_audio").set_body_typed(WhisperProcessAudio);

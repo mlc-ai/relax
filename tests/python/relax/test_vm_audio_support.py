@@ -27,11 +27,13 @@ import numpy as np
 def test_whisper_preprocess_audio():
     from transformers.models.whisper.feature_extraction_whisper import WhisperFeatureExtractor
 
-    samples = np.random.uniform(-0.5, 0.5, 480000).astype(np.float32)
+    samples = np.random.uniform(-0.5, 0.5, 96000).astype(np.float32)
+    out = tvm.nd.empty(shape=(1,80,3000), dtype="float32")
     f = tvm.get_global_func("vm.builtin.whisper_process_audio")
 
     samples_nd = tvm.nd.array(samples)
-    out = f(samples_nd)
+    f(samples_nd, out)
+    samples = np.pad(samples, (0, 480000 - len(samples)))
     std_out = WhisperFeatureExtractor()._np_extract_fbank_features(samples)
 
     assert np.allclose(out.numpy(), std_out[None, :], atol=1e-4)

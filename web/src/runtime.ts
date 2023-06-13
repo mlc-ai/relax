@@ -999,6 +999,7 @@ export class ArtifactCache {
     if (this.cache === undefined) {
       this.cache = await caches.open(this.scope);
     }
+    this.cache.delete(request);
     let result = await this.cache.match(request);
     if (result === undefined) {
       await this.cache.add(request);
@@ -1733,8 +1734,8 @@ export class Instance implements Disposable {
     return this.ctx.applySoftmaxWithTemperature(logits, temperature);
   }
 
-  whisperProcessAudio(raw_speech: NDArray) {
-    return this.ctx.whisperProcessAudio(raw_speech);
+  async whisperProcessAudio(raw_speech: NDArray, out_features: NDArray) {
+    return await this.ctx.whisperProcessAudio(raw_speech, out_features);
   }
 
   whisperProcessLogits(logits: NDArray, cur_len: number) {
