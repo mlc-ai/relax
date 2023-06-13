@@ -20,8 +20,8 @@
 #
 #  This file is used to override the build options in build.
 #  If you want to change the configuration, please use the following
-#  steps. Assume you are on the root directory. First copy the this
-#  file so that any local changes will be ignored by git
+#  steps. Assuming you are in the root directory, first copy this
+#  file into the build directory where git will ignore any local changes.
 #
 #  $ mkdir build
 #  $ cp cmake/config.cmake build
@@ -71,7 +71,7 @@ set(USE_AOCL OFF)
 # - /path/to/opencl-sdk: use specific path to opencl-sdk
 set(USE_OPENCL OFF)
 
-# Wheather to allow OPENCL cl_mem access to host
+# Whether to allow OPENCL cl_mem access to host
 # cl_mem will be allocated with CL_MEM_ALLOC_HOST_PTR
 # OpenCLWorkspace->GetHostPtr API returns the host accessible pointer
 set(USE_OPENCL_ENABLE_HOST_PTR OFF)
