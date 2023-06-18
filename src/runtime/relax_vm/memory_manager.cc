@@ -29,6 +29,7 @@
 
 #include "naive_allocator.h"
 #include "pooled_allocator.h"
+#include "tvm/runtime/memory.h"
 
 namespace tvm {
 namespace runtime {
@@ -57,6 +58,12 @@ void StorageObj::Deleter(Object* obj) {
   StorageObj* storage = reinterpret_cast<StorageObj*>(ptr->manager_ctx);
   storage->DecRef();
   delete ptr;
+}
+
+Storage::Storage(Buffer buffer) {
+  auto n = make_object<StorageObj>();
+  n->buffer = std::move(buffer);
+  data_ = std::move(n);
 }
 
 inline void VerifyDataType(DLDataType dtype) {

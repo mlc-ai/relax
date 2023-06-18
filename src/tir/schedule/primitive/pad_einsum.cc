@@ -473,7 +473,7 @@ void PadEinsum(ScheduleState self, StmtSRef block_sref, Array<Integer> padding) 
     BlockInfo& block_info = self->block_info[block_sref];
     block_info.affine_binding = true;
     block_info.region_cover = true;
-    block_info.scope->stage_pipeline = true;
+    block_info.stage_pipeline = true;
   }
 }
 
