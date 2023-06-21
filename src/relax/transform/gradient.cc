@@ -432,7 +432,6 @@ class BackwardBindingGenerator : private ExprVisitor {
         field = expr_tuple->fields[i];
       } else {
         field = TupleGetItem(tuple, i);
-        UpdateStructInfo(field, sinfo->fields[i]);
       }
       if (static_cast<int>(i) == index) {
         field = TupleAwareAdd(field, increment);

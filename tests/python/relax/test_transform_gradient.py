@@ -371,7 +371,6 @@ def test_tuple():
     assert_structural_equal(After, Expected)
 
 
-@pytest.mark.skip("skip merge")
 def test_tuple_assignment():
     # fmt: off
     @I.ir_module
@@ -440,7 +439,6 @@ def test_tuple_assignment():
     assert_structural_equal(After, Expected)
 
 
-@pytest.mark.skip("skip merge")
 def test_tuple_nested():
     # fmt: off
     @I.ir_module
@@ -534,7 +532,6 @@ def test_tuple_nested():
     assert_structural_equal(After, Expected)
 
 
-@pytest.mark.skip("skip merge")
 def test_tuple_update():
     """One tensor `x` is used in and out of tuple many times."""
     # fmt: off
