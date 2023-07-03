@@ -330,6 +330,7 @@ class DistributedIRBuilder : public ExprMutator {
     int ndim = sinfo->ndim;
     DeviceMesh device_mesh =
         std::get<0>(axis_group_graph_.GetAxisShardingSpec({tensor.get(), -1})).first;
+    ICHECK(device_mesh.defined()) << tensor << " is not assigned device mesh";
     Array<PlacementSpec> placement_specs(
         std::vector<PlacementSpec>(device_mesh->shape.size(), PlacementSpec::Replica()));
     for (int i = 0; i < ndim; i++) {
