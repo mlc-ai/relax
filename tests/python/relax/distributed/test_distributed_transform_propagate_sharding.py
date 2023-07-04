@@ -23,6 +23,7 @@ from tvm.script.parser import tir as T
 import tvm
 from tvm import relax
 from tvm.ir import assert_structural_equal
+import tvm.testing
 
 
 @I.ir_module
@@ -72,6 +73,59 @@ class ShardedMLP:
             lv2, weight2, out_dtype="void"
         )
         return lv3
+
+
+@I.ir_module
+class MLPWithConst:
+    I.module_attrs({"device_num": 10})
+    I.module_global_infos(
+        {
+            "mesh": [
+                R.device_mesh((2,), I.Range(0, 2)),  # mesh[0]
+                R.device_mesh((1,), I.Range(4, 5)),  # mesh[1]
+            ]
+        }
+    )
+
+    @R.function
+    def foo(
+        x: R.Tensor((128, 128), "float32"),
+        weight1: R.Tensor((128, 128), "float32"),
+        weight2: R.Tensor((128, 128), "float32"),
+    ) -> R.Tensor((128, 128), "float32"):
+        lv0 = R.matmul(x, weight1)
+        lv1 = R.nn.gelu(lv0)
+        lv2 = R.add(lv1, R.const(2, "float32"))
+        lv3 = R.annotate_sharding(lv2, device_mesh="mesh[0]", placement="S[1]")
+        lv4 = R.matmul(lv3, weight2)
+        return lv4
+
+
+@I.ir_module
+class ShardedMLPWithConst:
+    I.module_attrs({"device_num": 10})
+    I.module_global_infos(
+        {"mesh": [R.device_mesh((2,), I.Range(0, 2)), R.device_mesh((1,), I.Range(4, 5))]}
+    )
+
+    @R.function
+    def foo(
+        x: R.DTensor((128, 128), "float32", "mesh[0]", "R"),
+        weight1: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]"),
+        weight2: R.DTensor((128, 128), "float32", "mesh[0]", "S[0]"),
+    ) -> R.DTensor((128, 128), "float32", "mesh[0]", "R"):
+        lv0: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]") = R.matmul(
+            x, weight1, out_dtype="void"
+        )
+        lv1: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]") = R.nn.gelu(lv0)
+        lv2: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]") = R.add(
+            lv1, R.dist.const(2, R.DTensor((), "float32", "mesh[0]", "R"))
+        )
+        lv3: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]") = lv2
+        lv4: R.DTensor((128, 128), "float32", "mesh[0]", "R") = R.matmul(
+            lv3, weight2, out_dtype="void"
+        )
+        return lv4
 
 
 # only have static shape support for now
@@ -241,7 +295,6 @@ class LlamaAttentionLayer:
         lv30: R.Tensor((1, 32, 256, 128), dtype="float16") = R.permute_dims(lv27, axes=[0, 2, 1, 3])
         lv31: R.Tensor((1, 32, 128, 256), dtype="float16") = R.permute_dims(lv29, axes=[0, 1, 3, 2])
         lv32: R.Tensor((1, 32, 256, 256), dtype="float16") = R.matmul(lv28, lv31, out_dtype="void")
-        # constant is not currently supported
         lv33: R.Tensor((1, 32, 256, 256), dtype="float16") = R.divide(lv32, div_const)
         lv34: R.Tensor((1, 32, 256, 256), dtype="float16") = R.maximum(lv33, maximum_const)
         lv35: R.Tensor((1, 32, 256, 256), dtype="float16") = R.minimum(lv34, mask)
@@ -483,6 +536,11 @@ def test_mlp():
     assert_structural_equal(after, ShardedMLP)
 
 
+def test_const():
+    after = relax.distributed.transform.PropagateSharding()(MLPWithConst)
+    assert_structural_equal(after, ShardedMLPWithConst)
+
+
 def test_decoder_layer():
     # mod = relax.transform.LegalizeOps({"relax.reshape": lambda bb, call: bb.normalize(call)})(LlamaAttentionLayer)
     mod = LlamaAttentionLayer
@@ -491,5 +549,4 @@ def test_decoder_layer():
 
 
 if __name__ == "__main__":
-    test_mlp()
-    test_decoder_layer()
+    tvm.testing.main()
