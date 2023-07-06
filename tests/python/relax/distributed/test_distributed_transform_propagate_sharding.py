@@ -759,10 +759,14 @@ class LlamaAttentionLayerDynamicShape:
 
         return gv
 
+
 @I.ir_module
 class ShardedLlamaAttentionLayerDynamicShape:
     I.module_attrs({"device_num": 10})
-    I.module_global_infos({"mesh": [R.device_mesh((2,), I.Range(0, 2)), R.device_mesh((1,), I.Range(4, 5))]})
+    I.module_global_infos(
+        {"mesh": [R.device_mesh((2,), I.Range(0, 2)), R.device_mesh((1,), I.Range(4, 5))]}
+    )
+
     @T.prim_func
     def rms_norm(var_A: T.handle, B: T.Buffer((T.int64(4096),), "float16"), var_rms_norm: T.handle):
         T.func_attr({"tir.noalias": T.bool(True)})
@@ -778,16 +782,34 @@ class ShardedLlamaAttentionLayerDynamicShape:
                 T.writes(Ared_temp[v_bsz, v_i])
                 with T.init():
                     Ared_temp[v_bsz, v_i] = T.float32(0)
-                Ared_temp[v_bsz, v_i] = Ared_temp[v_bsz, v_i] + T.Cast("float32", A[v_bsz, v_i, v_k]) * T.Cast("float32", A[v_bsz, v_i, v_k])
+                Ared_temp[v_bsz, v_i] = Ared_temp[v_bsz, v_i] + T.Cast(
+                    "float32", A[v_bsz, v_i, v_k]
+                ) * T.Cast("float32", A[v_bsz, v_i, v_k])
         for bsz, i, k in T.grid(T.int64(1), n, T.int64(4096)):
             with T.block("rms_norm"):
                 v_bsz, v_i, v_k = T.axis.remap("SSS", [bsz, i, k])
                 T.reads(B[v_k], A[v_bsz, v_i, v_k], Ared_temp[v_bsz, v_i])
                 T.writes(rms_norm_1[v_bsz, v_i, v_k])
-                rms_norm_1[v_bsz, v_i, v_k] = T.Cast("float16", T.Cast("float32", B[v_k]) * (T.Cast("float32", A[v_bsz, v_i, v_k]) / T.sqrt(Ared_temp[v_bsz, v_i] * T.float32(0.000244140625) + T.float32(9.9999999999999995e-07))))
+                rms_norm_1[v_bsz, v_i, v_k] = T.Cast(
+                    "float16",
+                    T.Cast("float32", B[v_k])
+                    * (
+                        T.Cast("float32", A[v_bsz, v_i, v_k])
+                        / T.sqrt(
+                            Ared_temp[v_bsz, v_i] * T.float32(0.000244140625)
+                            + T.float32(9.9999999999999995e-07)
+                        )
+                    ),
+                )
 
     @T.prim_func
-    def rotary_embedding(var_A: T.handle, B: T.Buffer((T.int64(2048), T.int64(128)), "float16"), C: T.Buffer((T.int64(2048), T.int64(128)), "float16"), var_rotary: T.handle, m: T.int64):
+    def rotary_embedding(
+        var_A: T.handle,
+        B: T.Buffer((T.int64(2048), T.int64(128)), "float16"),
+        C: T.Buffer((T.int64(2048), T.int64(128)), "float16"),
+        var_rotary: T.handle,
+        m: T.int64,
+    ):
         T.func_attr({"tir.noalias": T.bool(True)})
         n = T.int64()
         A = T.match_buffer(var_A, (T.int64(1), n, T.int64(32), T.int64(128)), "float16")
@@ -796,54 +818,153 @@ class ShardedLlamaAttentionLayerDynamicShape:
         for i0, i1, i2, i3 in T.grid(T.int64(1), n, T.int64(32), T.int64(128)):
             with T.block("rotary"):
                 v_i0, v_i1, v_i2, v_i3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
-                T.reads(B[m + v_i1 - n, v_i3], A[v_i0, v_i1, v_i2, v_i3 - T.int64(64):v_i3 - T.int64(64) + T.int64(129)], C[m + v_i1 - n, v_i3])
+                T.reads(
+                    B[m + v_i1 - n, v_i3],
+                    A[v_i0, v_i1, v_i2, v_i3 - T.int64(64) : v_i3 - T.int64(64) + T.int64(129)],
+                    C[m + v_i1 - n, v_i3],
+                )
                 T.writes(rotary[v_i0, v_i1, v_i2, v_i3])
-                rotary[v_i0, v_i1, v_i2, v_i3] = B[m + v_i1 - n, v_i3] * A[v_i0, v_i1, v_i2, v_i3] + C[m + v_i1 - n, v_i3] * T.Select(T.int64(64) <= v_i3, A[v_i0, v_i1, v_i2, v_i3 - T.int64(64)], A[v_i0, v_i1, v_i2, v_i3 + T.int64(64)] * T.float16(-1))
+                rotary[v_i0, v_i1, v_i2, v_i3] = B[m + v_i1 - n, v_i3] * A[
+                    v_i0, v_i1, v_i2, v_i3
+                ] + C[m + v_i1 - n, v_i3] * T.Select(
+                    T.int64(64) <= v_i3,
+                    A[v_i0, v_i1, v_i2, v_i3 - T.int64(64)],
+                    A[v_i0, v_i1, v_i2, v_i3 + T.int64(64)] * T.float16(-1),
+                )
 
     @R.function(pure=False)
-    def foo(input_tokens: R.DTensor((1, "n", 4096), "float16", "mesh[0]", "R"), mask: R.DTensor((1, 1, "n", "m"), "float16", "mesh[0]", "R"), kv_cache: R.Tuple(R.Object, R.Object), linear_weight: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[0]"), linear_weight1: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[0]"), linear_weight2: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[0]"), linear_weight3: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]"), rms_norm_weight: R.DTensor((4096,), "float16", "mesh[0]", "R"), cos_cached: R.DTensor((2048, 128), "float16", "mesh[0]", "R"), sin_cached: R.DTensor((2048, 128), "float16", "mesh[0]", "R")) -> R.DTensor((1, "n", 4096), "float16", "mesh[0]", "R"):
+    def foo(
+        input_tokens: R.DTensor((1, "n", 4096), "float16", "mesh[0]", "R"),
+        mask: R.DTensor((1, 1, "n", "m"), "float16", "mesh[0]", "R"),
+        kv_cache: R.Tuple(R.Object, R.Object),
+        linear_weight: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[0]"),
+        linear_weight1: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[0]"),
+        linear_weight2: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[0]"),
+        linear_weight3: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]"),
+        rms_norm_weight: R.DTensor((4096,), "float16", "mesh[0]", "R"),
+        cos_cached: R.DTensor((2048, 128), "float16", "mesh[0]", "R"),
+        sin_cached: R.DTensor((2048, 128), "float16", "mesh[0]", "R"),
+    ) -> R.DTensor((1, "n", 4096), "float16", "mesh[0]", "R"):
         n = T.int64()
         m = T.int64()
         cls = ShardedLlamaAttentionLayerDynamicShape
-        lv6 = R.dist.call_tir(cls.rms_norm, (input_tokens, rms_norm_weight), out_sinfo=R.DTensor((1, n, 4096), "float16", "mesh[0]", "R"))
-        lv7: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]") = R.permute_dims(linear_weight, axes=None)
+        lv6 = R.dist.call_tir(
+            cls.rms_norm,
+            (input_tokens, rms_norm_weight),
+            out_sinfo=R.DTensor((1, n, 4096), "float16", "mesh[0]", "R"),
+        )
+        lv7: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]") = R.permute_dims(
+            linear_weight, axes=None
+        )
         lv7_copy: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]") = lv7
-        lv8: R.DTensor((1, n, 4096), "float16", "mesh[0]", "S[2]") = R.matmul(lv6, lv7_copy, out_dtype="void")
-        lv9: R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(lv8, R.shape([1, n, 32, 128]))
-        lv10: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]") = R.permute_dims(linear_weight1, axes=None)
+        lv8: R.DTensor((1, n, 4096), "float16", "mesh[0]", "S[2]") = R.matmul(
+            lv6, lv7_copy, out_dtype="void"
+        )
+        lv9: R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(
+            lv8, R.shape([1, n, 32, 128])
+        )
+        lv10: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]") = R.permute_dims(
+            linear_weight1, axes=None
+        )
         lv10_copy: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]") = lv10
-        lv11: R.DTensor((1, n, 4096), "float16", "mesh[0]", "S[2]") = R.matmul(lv6, lv10_copy, out_dtype="void")
-        lv12: R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(lv11, R.shape([1, n, 32, 128]))
-        lv13: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]") = R.permute_dims(linear_weight2, axes=None)
+        lv11: R.DTensor((1, n, 4096), "float16", "mesh[0]", "S[2]") = R.matmul(
+            lv6, lv10_copy, out_dtype="void"
+        )
+        lv12: R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(
+            lv11, R.shape([1, n, 32, 128])
+        )
+        lv13: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]") = R.permute_dims(
+            linear_weight2, axes=None
+        )
         lv13_copy: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[1]") = lv13
-        lv14: R.DTensor((1, n, 4096), "float16", "mesh[0]", "S[2]") = R.matmul(lv6, lv13_copy, out_dtype="void")
-        lv15: R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(lv14, R.shape([1, n, 32, 128]))
-        lv16 = R.dist.call_tir(cls.rotary_embedding, (lv9, cos_cached, sin_cached), out_sinfo=R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]"), tir_vars=R.shape([m]))
-        lv17 = R.dist.call_tir(cls.rotary_embedding, (lv12, cos_cached, sin_cached), out_sinfo=R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]"), tir_vars=R.shape([m]))
-        lv18: R.DTensor((n, 32, 128), "float16", "mesh[0]", "S[1]") = R.reshape(lv17, R.shape([n, 32, 128]))
-        lv19: R.DTensor((n, 32, 128), "float16", "mesh[0]", "S[1]") = R.reshape(lv15, R.shape([n, 32, 128]))
+        lv14: R.DTensor((1, n, 4096), "float16", "mesh[0]", "S[2]") = R.matmul(
+            lv6, lv13_copy, out_dtype="void"
+        )
+        lv15: R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(
+            lv14, R.shape([1, n, 32, 128])
+        )
+        lv16 = R.dist.call_tir(
+            cls.rotary_embedding,
+            (lv9, cos_cached, sin_cached),
+            out_sinfo=R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]"),
+            tir_vars=R.shape([m]),
+        )
+        lv17 = R.dist.call_tir(
+            cls.rotary_embedding,
+            (lv12, cos_cached, sin_cached),
+            out_sinfo=R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]"),
+            tir_vars=R.shape([m]),
+        )
+        lv18: R.DTensor((n, 32, 128), "float16", "mesh[0]", "S[1]") = R.reshape(
+            lv17, R.shape([n, 32, 128])
+        )
+        lv19: R.DTensor((n, 32, 128), "float16", "mesh[0]", "S[1]") = R.reshape(
+            lv15, R.shape([n, 32, 128])
+        )
         lv20: R.Object = kv_cache[0]
-        lv21: R.Object = R.call_packed("vm.builtin.distributed.attention_kv_cache_append", lv20, lv18, sinfo_args=(R.Object,))
+        lv21: R.Object = R.call_packed(
+            "vm.builtin.distributed.attention_kv_cache_append", lv20, lv18, sinfo_args=(R.Object,)
+        )
         lv22: R.Object = kv_cache[1]
-        lv23: R.Object = R.call_packed("vm.builtin.distributed.attention_kv_cache_append", lv22, lv19, sinfo_args=(R.Object,))
-        lv24: R.DTensor((m, 32, 128), "float16", "mesh[0]", "S[1]") = R.call_packed("vm.builtin.distributed.attention_kv_cache_view", lv21, R.shape([m, 32, 128]), sinfo_args=(R.DTensor((m, 32, 128), "float16", "mesh[0]", "S[1]"),))
-        lv25: R.DTensor((m, 32, 128), "float16", "mesh[0]", "S[1]") = R.call_packed("vm.builtin.distributed.attention_kv_cache_view", lv23, R.shape([m, 32, 128]), sinfo_args=(R.DTensor((m, 32, 128), "float16", "mesh[0]", "S[1]"),))
-        lv26: R.DTensor((1, m, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(lv24, R.shape([1, m, 32, 128]))
-        lv27: R.DTensor((1, m, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(lv25, R.shape([1, m, 32, 128]))
-        lv28: R.DTensor((1, 32, n, 128), "float16", "mesh[0]", "S[1]") = R.permute_dims(lv16, axes=[0, 2, 1, 3])
-        lv29: R.DTensor((1, 32, m, 128), "float16", "mesh[0]", "S[1]") = R.permute_dims(lv26, axes=[0, 2, 1, 3])
-        lv30: R.DTensor((1, 32, m, 128), "float16", "mesh[0]", "S[1]") = R.permute_dims(lv27, axes=[0, 2, 1, 3])
-        lv31: R.DTensor((1, 32, 128, m), "float16", "mesh[0]", "S[1]") = R.permute_dims(lv29, axes=[0, 1, 3, 2])
-        lv32: R.DTensor((1, 32, n, m), "float16", "mesh[0]", "S[1]") = R.matmul(lv28, lv31, out_dtype="void")
-        lv33: R.DTensor((1, 32, n, m), "float16", "mesh[0]", "S[1]") = R.divide(lv32, R.dist.const(8, R.DTensor((), "float16", "mesh[0]", "R")))
-        lv34: R.DTensor((1, 32, n, m), "float16", "mesh[0]", "S[1]") = R.maximum(lv33, R.dist.const(1, R.DTensor((), "float16", "mesh[0]", "R")))
+        lv23: R.Object = R.call_packed(
+            "vm.builtin.distributed.attention_kv_cache_append", lv22, lv19, sinfo_args=(R.Object,)
+        )
+        lv24: R.DTensor((m, 32, 128), "float16", "mesh[0]", "S[1]") = R.call_packed(
+            "vm.builtin.distributed.attention_kv_cache_view",
+            lv21,
+            R.shape([m, 32, 128]),
+            sinfo_args=(R.DTensor((m, 32, 128), "float16", "mesh[0]", "S[1]"),),
+        )
+        lv25: R.DTensor((m, 32, 128), "float16", "mesh[0]", "S[1]") = R.call_packed(
+            "vm.builtin.distributed.attention_kv_cache_view",
+            lv23,
+            R.shape([m, 32, 128]),
+            sinfo_args=(R.DTensor((m, 32, 128), "float16", "mesh[0]", "S[1]"),),
+        )
+        lv26: R.DTensor((1, m, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(
+            lv24, R.shape([1, m, 32, 128])
+        )
+        lv27: R.DTensor((1, m, 32, 128), "float16", "mesh[0]", "S[2]") = R.reshape(
+            lv25, R.shape([1, m, 32, 128])
+        )
+        lv28: R.DTensor((1, 32, n, 128), "float16", "mesh[0]", "S[1]") = R.permute_dims(
+            lv16, axes=[0, 2, 1, 3]
+        )
+        lv29: R.DTensor((1, 32, m, 128), "float16", "mesh[0]", "S[1]") = R.permute_dims(
+            lv26, axes=[0, 2, 1, 3]
+        )
+        lv30: R.DTensor((1, 32, m, 128), "float16", "mesh[0]", "S[1]") = R.permute_dims(
+            lv27, axes=[0, 2, 1, 3]
+        )
+        lv31: R.DTensor((1, 32, 128, m), "float16", "mesh[0]", "S[1]") = R.permute_dims(
+            lv29, axes=[0, 1, 3, 2]
+        )
+        lv32: R.DTensor((1, 32, n, m), "float16", "mesh[0]", "S[1]") = R.matmul(
+            lv28, lv31, out_dtype="void"
+        )
+        lv33: R.DTensor((1, 32, n, m), "float16", "mesh[0]", "S[1]") = R.divide(
+            lv32, R.dist.const(8, R.DTensor((), "float16", "mesh[0]", "R"))
+        )
+        lv34: R.DTensor((1, 32, n, m), "float16", "mesh[0]", "S[1]") = R.maximum(
+            lv33, R.dist.const(1, R.DTensor((), "float16", "mesh[0]", "R"))
+        )
         lv35: R.DTensor((1, 32, n, m), "float16", "mesh[0]", "S[1]") = R.minimum(lv34, mask)
         lv37: R.DTensor((1, 32, n, m), "float16", "mesh[0]", "S[1]") = R.nn.softmax(lv35, axis=-1)
-        lv39: R.DTensor((1, 32, n, 128), "float16", "mesh[0]", "S[1]") = R.matmul(lv37, lv30, out_dtype="void")
-        lv40: R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]") = R.permute_dims(lv39, axes=[0, 2, 1, 3])
-        lv41: R.DTensor((1, n, 4096), "float16", "mesh[0]", "S[2]") = R.reshape(lv40, R.shape([1, n, 4096]))
-        lv42: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[0]") = R.permute_dims(linear_weight3, axes=None)
-        lv43: R.DTensor((1, n, 4096), "float16", "mesh[0]", "R") = R.matmul(lv41, lv42, out_dtype="void")
+        lv39: R.DTensor((1, 32, n, 128), "float16", "mesh[0]", "S[1]") = R.matmul(
+            lv37, lv30, out_dtype="void"
+        )
+        lv40: R.DTensor((1, n, 32, 128), "float16", "mesh[0]", "S[2]") = R.permute_dims(
+            lv39, axes=[0, 2, 1, 3]
+        )
+        lv41: R.DTensor((1, n, 4096), "float16", "mesh[0]", "S[2]") = R.reshape(
+            lv40, R.shape([1, n, 4096])
+        )
+        lv42: R.DTensor((4096, 4096), "float16", "mesh[0]", "S[0]") = R.permute_dims(
+            linear_weight3, axes=None
+        )
+        lv43: R.DTensor((1, n, 4096), "float16", "mesh[0]", "R") = R.matmul(
+            lv41, lv42, out_dtype="void"
+        )
         lv44: R.DTensor((1, n, 4096), "float16", "mesh[0]", "R") = R.add(input_tokens, lv43)
         gv: R.DTensor((1, n, 4096), "float16", "mesh[0]", "R") = lv44
         return gv
