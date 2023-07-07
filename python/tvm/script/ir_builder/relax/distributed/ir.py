@@ -39,6 +39,7 @@ from ..ir import py_str
 from ...ir import IRModuleFrame
 from ... import IRBuilder
 
+
 @args_converter.auto
 def call_tir(
     func: Union[str, Expr],
@@ -123,6 +124,7 @@ def const(
         raise ValueError("value has to be scalar or NDArray")
 
     return Constant(value, struct_info)
+
 
 def _lookup_device_mesh(device_mesh_str: py_str) -> DeviceMesh:
     if not IRBuilder.is_in_scope():

@@ -74,6 +74,7 @@ class ShardedMLP:
         )
         return lv3
 
+
 @I.ir_module
 class PipelineMLP:
     I.module_attrs({"device_num": 10})
@@ -105,22 +106,43 @@ class PipelineMLP:
         lv8 = R.matmul(lv7, weight4)
         return lv8
 
+
 @I.ir_module
 class ShardedPipelineMLP:
     I.module_attrs({"device_num": 10})
-    I.module_global_infos({"mesh": [R.device_mesh((2,), I.Range(0, 2)), R.device_mesh((2,), I.Range(4, 6))]})
+    I.module_global_infos(
+        {"mesh": [R.device_mesh((2,), I.Range(0, 2)), R.device_mesh((2,), I.Range(4, 6))]}
+    )
+
     @R.function
-    def foo(x: R.DTensor((128, 128), "float32", "mesh[0]", "R"), weight1: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]"), weight2: R.DTensor((128, 128), "float32", "mesh[0]", "S[0]"), weight3: R.DTensor((128, 128), "float32", "mesh[1]", "S[1]"), weight4: R.DTensor((128, 128), "float32", "mesh[1]", "S[0]")) -> R.DTensor((128, 128), "float32", "mesh[1]", "R"):
-        lv0: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]") = R.matmul(x, weight1, out_dtype="void")
+    def foo(
+        x: R.DTensor((128, 128), "float32", "mesh[0]", "R"),
+        weight1: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]"),
+        weight2: R.DTensor((128, 128), "float32", "mesh[0]", "S[0]"),
+        weight3: R.DTensor((128, 128), "float32", "mesh[1]", "S[1]"),
+        weight4: R.DTensor((128, 128), "float32", "mesh[1]", "S[0]"),
+    ) -> R.DTensor((128, 128), "float32", "mesh[1]", "R"):
+        lv0: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]") = R.matmul(
+            x, weight1, out_dtype="void"
+        )
         lv1: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]") = R.nn.gelu(lv0)
         lv2: R.DTensor((128, 128), "float32", "mesh[0]", "S[1]") = lv1
-        lv3: R.DTensor((128, 128), "float32", "mesh[0]", "R") = R.matmul(lv2, weight2, out_dtype="void")
-        lv4: R.DTensor((128, 128), "float32", "mesh[1]", "R") = R.dist.redistribute(lv3, device_mesh="mesh[1]", placement="R")
-        lv5: R.DTensor((128, 128), "float32", "mesh[1]", "S[1]") = R.matmul(lv4, weight3, out_dtype="void")
+        lv3: R.DTensor((128, 128), "float32", "mesh[0]", "R") = R.matmul(
+            lv2, weight2, out_dtype="void"
+        )
+        lv4: R.DTensor((128, 128), "float32", "mesh[1]", "R") = R.dist.redistribute(
+            lv3, device_mesh="mesh[1]", placement="R"
+        )
+        lv5: R.DTensor((128, 128), "float32", "mesh[1]", "S[1]") = R.matmul(
+            lv4, weight3, out_dtype="void"
+        )
         lv6: R.DTensor((128, 128), "float32", "mesh[1]", "S[1]") = R.nn.gelu(lv5)
         lv7: R.DTensor((128, 128), "float32", "mesh[1]", "S[1]") = lv6
-        lv8: R.DTensor((128, 128), "float32", "mesh[1]", "R") = R.matmul(lv7, weight4, out_dtype="void")
+        lv8: R.DTensor((128, 128), "float32", "mesh[1]", "R") = R.matmul(
+            lv7, weight4, out_dtype="void"
+        )
         return lv8
+
 
 @I.ir_module
 class MLPWithConst:
@@ -1031,9 +1053,11 @@ def test_mlp_dynamic_shape():
     after = relax.distributed.transform.PropagateSharding()(MLPDynamicShape)
     assert_structural_equal(after, ShardedMLPDynamicShape)
 
+
 def test_mlp_pipeline_parallelism():
     after = relax.distributed.transform.PropagateSharding()(PipelineMLP)
     assert_structural_equal(after, ShardedPipelineMLP)
+
 
 def test_decoder_layer():
     # mod = relax.transform.LegalizeOps({"relax.reshape": lambda bb, call: bb.normalize(call)})(LlamaAttentionLayer)

@@ -458,7 +458,9 @@ class DistributedIRBuilder : public ExprMutator {
     Expr new_value = builder_->Normalize(new_call);
     const auto* inferred_dtensor_sinfo = GetStructInfoAs<DTensorStructInfoNode>(new_value);
     ICHECK(inferred_dtensor_sinfo);
-    if (!StructuralEqual()(DTensorStructInfo(inferred_dtensor_sinfo->tensor_sinfo, device_mesh, Placement(placement_specs)), GetRef<DTensorStructInfo>(inferred_dtensor_sinfo))) {
+    if (!StructuralEqual()(DTensorStructInfo(inferred_dtensor_sinfo->tensor_sinfo, device_mesh,
+                                             Placement(placement_specs)),
+                           GetRef<DTensorStructInfo>(inferred_dtensor_sinfo))) {
       insert_redistribute = true;
     }
 

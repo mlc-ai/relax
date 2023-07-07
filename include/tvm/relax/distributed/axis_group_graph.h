@@ -144,21 +144,18 @@ class AxisGroupGraph {
   struct Path {
     int direction = 0;
 
-    Path AddEdge(EdgeType type) {
-      return {direction |= (1 << GetEdgePriority(type))};
-    }
+    Path AddEdge(EdgeType type) { return {direction |= (1 << GetEdgePriority(type))}; }
 
     int GetPriority() const {
-      switch (direction)
-      {
-      case 1: // ascend only
-        return 0;
-      case 4: // descend only
-        return 2;
-      case 0: // empty path (source node)
-        return 3; // source node must have max priority
-      default: // mixed path
-        return 1;
+      switch (direction) {
+        case 1:  // ascend only
+          return 0;
+        case 4:  // descend only
+          return 2;
+        case 0:      // empty path (source node)
+          return 3;  // source node must have max priority
+        default:     // mixed path
+          return 1;
       }
     }
   };
@@ -248,8 +245,7 @@ class AxisGroupGraph {
     }
     axis_sharding_specs_priority_[axis][spec] = path.GetPriority();
     for (auto edge : graph_[axis]) {
-      PropagateShardingSpec(edge.dst, spec, path.AddEdge(edge.type),
-                            visited);
+      PropagateShardingSpec(edge.dst, spec, path.AddEdge(edge.type), visited);
     }
   }
 
@@ -269,7 +265,7 @@ class AxisGroupGraph {
         }
       }
       ICHECK(specs.size() == 1) << "multiple possible sharding for axis: ("
-                                << GetRef<Expr>(axis.tensor) << ", " << axis.dim<<")";
+                                << GetRef<Expr>(axis.tensor) << ", " << axis.dim << ")";
     }
   }
 

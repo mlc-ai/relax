@@ -556,7 +556,6 @@ def dtype(value: Union[py_str, DataType]) -> Expr:
     return relax.DataTypeImm(value)  # type: ignore[attr-defined] # pylint: disable=no-member
 
 
-
 ############################### Importer ###############################
 
 __all__ = [
