@@ -220,6 +220,43 @@ def conv2d(
     )
 
 
+def conv1d_transpose(
+    data: Expr,
+    weight: Expr,
+    strides: Union[int, Tuple[int]] = 1,
+    padding: Union[int, Tuple[int, ...]] = 0,
+    output_padding: Union[int, Tuple[int]] = 0,
+    dilation: Union[int, Tuple[int]] = 1,
+    groups: int = 1,
+    data_layout: str = "NCW",
+    kernel_layout: str = "IOW",
+    out_layout: Optional[str] = None,
+    out_dtype: Optional[Union[str, DataType]] = None,
+) -> Expr:
+    if isinstance(strides, int):
+        strides = (strides,)
+    if isinstance(dilation, int):
+        dilation = (dilation,)
+    if isinstance(padding, int):
+        padding = (padding, padding)
+    if isinstance(output_padding, int):
+        output_padding = (output_padding,)
+
+    return _ffi_api.conv1d_transpose(  # type: ignore
+        data,
+        weight,
+        strides,
+        padding,
+        output_padding,
+        dilation,
+        groups,
+        data_layout,
+        kernel_layout,
+        out_layout,
+        out_dtype,
+    )
+
+
 def conv2d_transpose(
     data: Expr,
     weight: Expr,
