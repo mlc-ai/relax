@@ -468,7 +468,7 @@ StructInfo InferStructInfoConv1dTranspose(const Call& call, const BlockBuilder& 
   return TensorStructInfo(ShapeExpr(out_shape), out_dtype);
 }
 
-// TODO(relax-team): implement FInferMixedPrecision and FRelaxInferLayout for conv2d_transpose
+// TODO(relax-team): implement FInferMixedPrecision and FRelaxInferLayout for conv1d_transpose
 // and unit test for mixed_precision
 TVM_REGISTER_OP("relax.nn.conv1d_transpose")
     .set_num_inputs(2)
