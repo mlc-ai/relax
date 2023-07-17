@@ -27,6 +27,7 @@ def test_conv1d_op_correctness():
     x = relax.Var("x", R.Tensor((2, 3, 28), "float32"))
     w = relax.Var("w", R.Tensor((4, 3, 3), "float32"))
     assert relax.op.nn.conv1d(x, w).op == Op.get("relax.nn.conv1d")
+    assert relax.op.nn.conv1d_transpose(x, w).op == Op.get("relax.nn.conv1d_transpose")
 
 
 def test_conv2d_op_correctness():
@@ -409,6 +410,91 @@ def test_conv1d_infer_struct_info_wrong_input_type():
         bb.normalize(relax.op.nn.conv1d(x0, w1))
     with pytest.raises(TVMError):
         bb.normalize(relax.op.nn.conv1d(x1, w0))
+
+
+def test_conv1d_transpose_infer_struct_info():
+    bb = relax.BlockBuilder()
+    x0 = relax.Var("x", R.Tensor((2, 3, 28), "float32"))
+    x1 = relax.Var("x", R.Tensor((2, 28, 3), "float32"))
+    x2 = relax.Var("x", R.Tensor("float32", ndim=3))
+    x3 = relax.Var("x", R.Tensor("float32"))
+    x4 = relax.Var("x", R.Tensor())
+    x5 = relax.Var("x", R.Tensor((2, 4, 28, 16), "float32"))
+    w0 = relax.Var("w", R.Tensor((3, 4, 3), "float32"))
+    w1 = relax.Var("w", R.Tensor((4, 3, 3), "float32"))
+    w2 = relax.Var("w", R.Tensor("float32", ndim=3))
+    w3 = relax.Var("w", R.Tensor("float32"))
+    w4 = relax.Var("w", R.Tensor((4, 48, 3, 16), "float32"))
+
+    _check_inference(bb, relax.op.nn.conv1d_transpose(x0, w0), relax.TensorStructInfo((2, 4, 30), "float32"))
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(x0, w0, out_dtype="float16"),
+        relax.TensorStructInfo((2, 4, 30), "float16"),
+    )
+    _check_inference(
+        bb, relax.op.nn.conv1d_transpose(x0, w0, padding=1), relax.TensorStructInfo((2, 4, 28), "float32")
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(x0, w0, padding=[1, 3]),
+        relax.TensorStructInfo((2, 4, 26), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(x0, w0, strides=3, output_padding=1),
+        relax.TensorStructInfo((2, 4, 85), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(x0, w0, strides=2),
+        relax.TensorStructInfo((2, 4, 57), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(x0, w0, dilation=2),
+        relax.TensorStructInfo((2, 4, 32), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(x0, w0, dilation=(2,)),
+        relax.TensorStructInfo((2, 4, 32), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(x1, w0, data_layout="NWC"),
+        relax.TensorStructInfo((2, 30, 4), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(x0, w0, out_layout="NWC"),
+        relax.TensorStructInfo((2, 30, 4), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(x0, w1, kernel_layout="OIW"),
+        relax.TensorStructInfo((2, 4, 30), "float32"),
+    )
+    _check_inference(
+        bb,
+        relax.op.nn.conv1d_transpose(
+            x5, w4, data_layout="NCW16c", kernel_layout="IOW16i", out_layout="NWC16c"
+        ),
+        relax.TensorStructInfo((2, 30, 3, 16), "float32"),
+    )
+    _check_inference(
+        bb, relax.op.nn.conv1d_transpose(x2, w0), relax.TensorStructInfo(dtype="float32", ndim=3)
+    )
+    _check_inference(
+        bb, relax.op.nn.conv1d_transpose(x3, w0), relax.TensorStructInfo(dtype="float32", ndim=3)
+    )
+    _check_inference(
+        bb, relax.op.nn.conv1d_transpose(x0, w2), relax.TensorStructInfo(dtype="float32", ndim=3)
+    )
+    _check_inference(
+        bb, relax.op.nn.conv1d_transpose(x0, w3), relax.TensorStructInfo(dtype="float32", ndim=3)
+    )
+    _check_inference(bb, relax.op.nn.conv1d_transpose(x4, w0), relax.TensorStructInfo(dtype="", ndim=3))
 
 
 def test_conv2d_infer_struct_info():
