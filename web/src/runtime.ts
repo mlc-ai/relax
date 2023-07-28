@@ -896,7 +896,7 @@ export class TVMString extends TVMObject {
   }
 }
 
-export const enum VMAllocatorKind {
+export enum VMAllocatorKind {
   NAIVE_ALLOCATOR = 1,
   POOLED_ALLOCATOR = 2,
 }
