@@ -7,7 +7,7 @@
 		"sourceMap": true,
 		"skipLibCheck": true,
 		"lib": ["DOM", "ESNext"],
-		"types": ["node"]
+		"types": ["node", "@webgpu/types"]
 	},
     "include": ["src"],
     "exclude": ["**/node_modules/**"]
