@@ -949,7 +949,7 @@ export class VirtualMachine implements Disposable {
 }
 
 /** Code used as the first argument of the async callback. */
-const enum AyncCallbackCode {
+export enum AsyncCallbackCode {
   kReturn = 4,
   kException = 5,
 }
