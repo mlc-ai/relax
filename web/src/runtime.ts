@@ -374,7 +374,7 @@ export class DLDevice {
 /**
  * The data type code in DLDataType
  */
-export const enum DLDataTypeCode {
+export enum DLDataTypeCode {
   Int = 0,
   UInt = 1,
   Float = 2,
@@ -992,6 +992,7 @@ export class ArtifactCache {
   async fetchWithCache(url: string) {
     const request = new Request(url);
     if (this.cache === undefined) {
+      // caches is not a global variable, seems like a typo, which will cause crash once called this method
       this.cache = await caches.open(this.scope);
     }
     let result = await this.cache.match(request);
