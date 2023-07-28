@@ -6,6 +6,7 @@
 		"declaration": true,
 		"sourceMap": true,
 		"skipLibCheck": true,
+		"lib": ["DOM", "ESNext"],
 		"typeRoots": [ "./node_modules/@webgpu/types", "./node_modules/@types"]
 	},
     "include": ["src"],
