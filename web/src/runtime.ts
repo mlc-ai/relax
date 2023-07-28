@@ -992,7 +992,6 @@ export class ArtifactCache {
   async fetchWithCache(url: string) {
     const request = new Request(url);
     if (this.cache === undefined) {
-      // caches is not a global variable, seems like a typo, which will cause crash once called this method
       this.cache = await caches.open(this.scope);
     }
     let result = await this.cache.match(request);
