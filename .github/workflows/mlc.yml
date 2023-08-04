@@ -49,13 +49,13 @@ jobs:
       - name: Conda info
         shell: pwsh
         run: |
-          micromamba info
-          micromamba list
+          mamba info
+          mamba list
       - name: Conda Build
         shell: bash -l {0}
         run: >-
-          micromamba build --output-folder=conda/pkg  conda/recipe &&
-          micromamba install tvm -c ./conda/pkg
+          mamba build --output-folder=conda/pkg  conda/recipe &&
+          mamba install tvm -c ./conda/pkg
       - name: Build iOS RPC
         run: |
           IOS_VERSION="14.0"
