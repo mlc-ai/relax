@@ -47,15 +47,14 @@ jobs:
           environment-file: conda/build-environment.yaml
           condarc-file: conda/condarc
       - name: Conda info
-        shell: pwsh
         run: |
-          mamba info
-          mamba list
+          $MAMBA_EXE info
+          $MAMBA_EXE list
       - name: Conda Build
         shell: bash -l {0}
         run: >-
-          mamba build --output-folder=conda/pkg  conda/recipe &&
-          mamba install tvm -c ./conda/pkg
+          conda-build --output-folder=conda/pkg conda/recipe &&
+          conda-build install tvm -c ./conda/pkg
       - name: Build iOS RPC
         run: |
           IOS_VERSION="14.0"
