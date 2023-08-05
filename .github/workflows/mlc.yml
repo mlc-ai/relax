@@ -59,7 +59,7 @@ jobs:
                 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
                 -DUSE_RPC=ON \
                 -DUSE_LLVM=ON \
-                -DUSE_LIBBACKTRACE=AUTO \
+                -DUSE_LIBBACKTRACE=OFF \
                 -DUSE_METAL=ON \
                 ..
           cmake --build . --parallel $(nproc)
@@ -106,8 +106,8 @@ jobs:
       - name: Conda info
         shell: cmd /C call {0}
         run: |
-          $MAMBA_EXE info
-          $MAMBA_EXE list
+          %MAMBA_EXE% info
+          %MAMBA_EXE% list
       - name: Conda Build
         shell: cmd /C call {0}
         run: |
