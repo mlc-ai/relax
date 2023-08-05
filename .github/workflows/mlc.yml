@@ -47,6 +47,7 @@ jobs:
           environment-file: conda/build-environment.yaml
           condarc-file: conda/condarc
       - name: Conda info
+        shell: bash -l {0}
         run: |
           $MAMBA_EXE info
           $MAMBA_EXE list
@@ -55,64 +56,72 @@ jobs:
         run: |
           rm -rf config.cmake build && mkdir -p build && cd build
           cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
                 -DUSE_RPC=ON \
-                -DUSE_CPP_RPC=OFF \
-                -DUSE_MICRO=ON \
-                -DUSE_SORT=ON \
-                -DUSE_RANDOM=ON \
-                -DUSE_PROFILER=ON \
                 -DUSE_LLVM=ON \
-                -DINSTALL_DEV=ON \
                 -DUSE_LIBBACKTRACE=AUTO \
                 -DUSE_METAL=ON \
-                -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
                 ..
-          make -j${nproc}
+          cmake --build . --parallel $(nproc)
           cd ..
-      # - name: Build iOS RPC
-      #   run: |
-      #     IOS_VERSION="14.0"
-      #     CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release \
-      #                  -DCMAKE_SYSTEM_NAME=iOS \
-      #                  -DCMAKE_SYSTEM_VERSION=${IOS_VERSION} \
-      #                  -DCMAKE_OSX_SYSROOT=iphonesimulator \
-      #                  -DCMAKE_OSX_ARCHITECTURES=x86_64 \
-      #                  -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
-      #                  -DCMAKE_BUILD_WITH_INSTALL_NAME_DIR=ON \
-      #                  -DUSE_IOS_RPC=ON"
-      #
-      #     mkdir build-ios-simulator
-      #     cd build-ios-simulator
-      #     cmake .. ${CMAKE_FLAGS}
-      #     cmake --build . --target ios_rpc
       - name: Test
         shell: bash -l {0}
         run: >-
           python -m pytest -v tests/python/all-platform-minimal-test
-      # - name: Test iOS RPC
-      #   shell: bash -l {0}
-      #   run: >-
-      #     python -m pip install tornado psutil cloudpickle &&
-      #     export PYTHONPATH=tests/python/contrib:${PYTHONPATH} &&
-      #     export BUNDLE_ID=org.apache.tvmrpc &&
-      #     export BUNDLE_PATH=build-ios-simulator/apps/ios_rpc/ios_rpc/src/ios_rpc-build/Release-iphonesimulator/tvmrpc.app &&
-      #     python -m pytest -v tests/python/contrib/test_rpc_server_device.py
+      - name: Build iOS RPC
+        shell: bash -l {0}
+        run: |
+          rm -rf config.cmake build-ios-simulator && mkdir build-ios-simulator && cd build-ios-simulator
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_SYSTEM_NAME=iOS \
+                -DCMAKE_SYSTEM_VERSION=14.0 \
+                -DCMAKE_OSX_SYSROOT=iphonesimulator \
+                -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+                -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+                -DCMAKE_BUILD_WITH_INSTALL_NAME_DIR=ON \
+                -DUSE_IOS_RPC=ON \
+                ..
+          cmake --build . --parallel $(nproc) --target ios_rpc
+          cd ..
+      - name: Test iOS RPC
+        shell: bash -l {0}
+        run: |
+          python -m pip install tornado psutil cloudpickle
+          export PYTHONPATH=tests/python/contrib:${PYTHONPATH}
+          export BUNDLE_ID=org.apache.tvmrpc
+          export BUNDLE_PATH=build-ios-simulator/apps/ios_rpc/ios_rpc/src/ios_rpc-build/Release-iphonesimulator/tvmrpc.app
+          python -m pytest -v tests/python/contrib/test_rpc_server_device.py
 
-  # Windows:
-  #   if: ${{ github.repository == 'mlc-ai/relax' }}
-  #   runs-on: windows-2019
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #       with:
-  #         submodules: 'recursive'
-  #     - name: Set up environment
-  #       uses: ./.github/actions/setup
-  #     - name: Conda Build
-  #       shell: cmd /C call {0}
-  #       run: >-
-  #         conda build --output-folder=conda/pkg conda/recipe &&
-  #         conda install tvm -c ./conda/pkg
-  #     - name: Test
-  #       shell: cmd /C call {0}
-  #       run: >-
-  #         python -m pytest -v tests/python/all-platform-minimal-test
+  Windows:
+    if: ${{ github.repository == 'mlc-ai/relax' }}
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: conda/build-environment.yaml
+          condarc-file: conda/condarc
+      - name: Conda info
+        shell: cmd /C call {0}
+        run: |
+          $MAMBA_EXE info
+          $MAMBA_EXE list
+      - name: Conda Build
+        shell: cmd /C call {0}
+        run: |
+          rd /s /q build
+          mkdir build
+          cd build
+          cmake -G "Visual Studio 16 2019" ^
+                -DUSE_LLVM=ON ^
+                -DUSE_RPC=ON ^
+                -DUSE_CPP_RPC=ON ^
+                ..
+          cmake --build . --parallel 3 --config Release -- /m
+          cd ..
+      - name: Test
+        shell: cmd /C call {0}
+        run: >-
+          python -m pytest -v tests/python/all-platform-minimal-test
