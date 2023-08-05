@@ -64,7 +64,7 @@ jobs:
                 -DUSE_LIBBACKTRACE=OFF \
                 -DUSE_METAL=ON \
                 ..
-          make -j $(nproc)
+          make -j3
           cd ..
       - name: Test
         shell: bash -l {0}
@@ -84,7 +84,7 @@ jobs:
                 -DCMAKE_BUILD_WITH_INSTALL_NAME_DIR=ON \
                 -DUSE_IOS_RPC=ON \
                 ..
-          cmake --build . --parallel $(nproc) --target ios_rpc
+          cmake --build . --parallel 3 --target ios_rpc
           cd ..
       - name: Test iOS RPC
         shell: bash -l {0}
@@ -127,6 +127,6 @@ jobs:
           cd ..
       - name: Test
         shell: cmd /C call {0}
-        run: >-
+        run: |
           set PYTHONPATH=.\python;%PYTHONPATH%
           python -m pytest -v tests/python/all-platform-minimal-test
