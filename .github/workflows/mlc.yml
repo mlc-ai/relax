@@ -101,6 +101,7 @@ jobs:
           submodules: 'recursive'
       - uses: mamba-org/setup-micromamba@v1
         with:
+          init-shell: bash powershell cmd.exe
           environment-file: conda/build-environment.yaml
           condarc-file: conda/condarc
       - name: Conda info
