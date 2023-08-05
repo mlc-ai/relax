@@ -68,7 +68,7 @@ jobs:
           cd ..
       - name: Test
         shell: bash -l {0}
-        run: >-
+        run: |
           export PYTHONPATH=./python:${PYTHONPATH}
           python -m pytest -v tests/python/all-platform-minimal-test
       - name: Build iOS RPC
