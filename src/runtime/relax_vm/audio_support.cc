@@ -22,6 +22,7 @@
  */
 #include <tvm/runtime/ndarray.h>
 #include <tvm/runtime/relax_vm/vm.h>
+#include <tvm/tir/expr.h>
 
 #include <cmath>
 #include <complex>
@@ -268,17 +269,14 @@ void WhisperProcessAudio(NDArray raw_speech, NDArray out_features) {
 TVM_REGISTER_GLOBAL("vm.builtin.whisper_process_audio").set_body_typed(WhisperProcessAudio);
 
 // This is an inplace operation.
-void WhisperProcessLogits(NDArray logits, double cur_len) {
-  std::vector<int> suppress_tokens = {
-      1,     2,     7,     8,     9,     10,    14,    25,    26,    27,    28,    29,    31,
-      58,    59,    60,    61,    62,    63,    90,    91,    92,    93,    359,   503,   522,
-      542,   873,   893,   902,   918,   922,   931,   1350,  1853,  1982,  2460,  2627,  3246,
-      3253,  3268,  3536,  3846,  3961,  4183,  4667,  6585,  6647,  7273,  9061,  9383,  10428,
-      10929, 11938, 12033, 12331, 12562, 13793, 14157, 14635, 15265, 15618, 16553, 16604, 18362,
-      18956, 20075, 21675, 22520, 26130, 26161, 26435, 28279, 29464, 31650, 32302, 32470, 36865,
-      42863, 47425, 49870, 50254, 50258, 50358, 50359, 50360, 50361, 50362};
-  std::vector<int> begin_suppress_tokens = {220, 50257};
-  std::unordered_map<int, int> forced_decoder_ids = {{1, 50259}, {2, 50359}, {3, 50363}};
+void WhisperProcessLogits(NDArray logits, double cur_len, Array<Integer> suppress_tokens,
+                          Array<Integer> begin_suppress_tokens,
+                          Array<Array<Integer>> forced_decoder_ids) {
+  std::unordered_map<int, int> forced_decoder_ids_map = {};
+  for (size_t i = 0; i < forced_decoder_ids.size(); i++) {
+    forced_decoder_ids_map[forced_decoder_ids[i][0].IntValue()] =
+        forced_decoder_ids[i][1].IntValue();
+  }
   ICHECK(logits.IsContiguous());
   ICHECK(logits.DataType() == DataType::Float(32)) << "Logits data type is not float32!";
   ICHECK(logits->device.device_type == kDLCPU) << "logits device must be CPU!";
@@ -288,18 +286,18 @@ void WhisperProcessLogits(NDArray logits, double cur_len) {
   float neg_inf = std::numeric_limits<float>::lowest();
 
   for (size_t i = 0; i < suppress_tokens.size(); ++i) {
-    logits_raw_data[suppress_tokens[i]] = neg_inf;
+    logits_raw_data[suppress_tokens[i].IntValue()] = neg_inf;
   }
 
   int generated_length = cur_len;
   if (generated_length == 4) {
     for (size_t i = 0; i < begin_suppress_tokens.size(); ++i) {
-      logits_raw_data[begin_suppress_tokens[i]] = neg_inf;
+      logits_raw_data[begin_suppress_tokens[i].IntValue()] = neg_inf;
     }
   }
 
-  if (forced_decoder_ids.count(generated_length) > 0) {
-    int current_token = forced_decoder_ids[generated_length];
+  if (forced_decoder_ids_map.count(generated_length) > 0) {
+    int current_token = forced_decoder_ids_map[generated_length];
     for (auto i = 0; i < logits->shape[logits->ndim - 1]; ++i) {
       if (i == current_token) {
         logits_raw_data[i] = 0;

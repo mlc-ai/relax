@@ -93,12 +93,17 @@ def test_whisper_process_logits(input_ids):
     processor_list.append(ForceTokensLogitsProcessor(config.forced_decoder_ids))
 
     input_ids = [input_ids]
-    print(input_ids)
     next_token_logits = np.random.rand(1, 51865).astype(np.float32)
 
     nd_next_token_logits = tvm.nd.array(next_token_logits)
     f = tvm.get_global_func("vm.builtin.whisper_process_logits")
-    f(nd_next_token_logits, len(input_ids[0]))
+    f(
+        nd_next_token_logits,
+        len(input_ids[0]),
+        config.suppress_tokens,
+        config.begin_suppress_tokens,
+        config.forced_decoder_ids,
+    )
 
     pt_input_ids = torch.tensor(input_ids, dtype=torch.long)
     pt_next_token_logits = torch.from_numpy(next_token_logits)
