@@ -32,6 +32,7 @@ namespace runtime {
 namespace relax_vm {
 
 std::vector<double> hanning_window(int M, int window_size) {
+  // Return the Hanning window.
   std::vector<double> window;
   window.resize(window_size);
   for (int i = 0; i < window_size; i++) {
@@ -42,6 +43,7 @@ std::vector<double> hanning_window(int M, int window_size) {
 }
 
 std::vector<double> dft(const std::vector<double>& x) {
+  // Discrete Fourier transform(https://en.wikipedia.org/wiki/Discrete_Fourier_transform)
   int N = x.size();
 
   std::vector<double> result;
@@ -58,6 +60,7 @@ std::vector<double> dft(const std::vector<double>& x) {
 }
 
 std::vector<double> fft(const std::vector<double>& x) {
+  // Cooley–Tukey FFT algorithm(https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm)
   int N = x.size();
 
   if (N % 2 == 1) {
