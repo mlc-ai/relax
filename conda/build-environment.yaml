@@ -39,3 +39,8 @@ dependencies:
   - scipy
   - pip
   - cython
+  - decorator
+  - psutil
+  - cloudpickle
+  - tornado
+  - attrs
