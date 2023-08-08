@@ -21,7 +21,6 @@ if(USE_CUDA AND USE_CUTLASS)
 
   set(CUTLASS_DIR ${PROJECT_SOURCE_DIR}/3rdparty/cutlass)
   add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/cutlass_fpA_intB_gemm)
-  add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/libflash_attn)
   list(APPEND RUNTIME_SRCS src/runtime/contrib/cutlass/weight_preprocess.cc)
 
   message(STATUS "Build with CUTLASS")
