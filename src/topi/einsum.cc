@@ -223,7 +223,7 @@ class EinsumBuilder {
   }
 
   Array<PrimExpr> BuildOutputExpr(const Array<Tensor> inputs, const Array<Var>& indices,
-                                  PackedFunc fcompute) {
+                                  PackedFunc fcompute, PackedFunc fcombine, PackedFunc fidentity) {
     std::unordered_map<EinsumEquation::Label, Var> label_to_index;
     Array<Var> ellipsis_indices;
     Array<IterVar> reduce_axes;
@@ -264,25 +264,38 @@ class EinsumBuilder {
       }
     }
     if (reduce_axes.size() > 0) {
-      results = CreateDefaultReduce(results, reduce_axes, zero);
+      // init zero?
+      results = CreateDefaultReduce(results, reduce_axes, fcombine, fidentity);
     }
     return results;
   }
 
  private:
-  Array<PrimExpr> CreateDefaultReduce(Array<PrimExpr> source, Array<IterVar> rdom, PrimExpr init,
+  Array<PrimExpr> CreateDefaultReduce(Array<PrimExpr> source, Array<IterVar> rdom,
+                                      PackedFunc fcombine, PackedFunc fidentity,
                                       Span span = Span()) {
     Array<Var> x_;
     Array<Var> y_;
     Array<PrimExpr> results;
     Array<PrimExpr> identity_elements;
-    Array<PrimExpr> inits;
+    Array<PrimExpr> inits = {};
+    Array<String> data_types;
     for (size_t i = 0; i < source.size(); ++i) {
       x_.push_back(Var("x_" + std::to_string(i), source[i].dtype(), span));
       y_.push_back(Var("y_" + std::to_string(i), source[i].dtype(), span));
-      results.push_back(tir::Add(x_[i], y_[i], span));
-      identity_elements.push_back(make_zero(source[i].dtype(), span));
-      inits.push_back(init);
+      data_types.push_back(DLDataType2String(source[i].dtype()));
+      // inits.push_back(init);
+    }
+    if (fcombine == nullptr && fidentity == nullptr) {
+      for (size_t i = 0; i < source.size(); ++i) {
+        results.push_back(tir::Add(x_[i], y_[i], span));
+        identity_elements.push_back(make_zero(source[i].dtype(), span));
+      }
+    } else if (fcombine != nullptr && fidentity != nullptr) {
+      results = fcombine(x_, y_);
+      identity_elements = fidentity(data_types);
+    } else {
+      // assert false
     }
     tir::CommReducer combiner = tir::CommReducer(x_, y_, results, identity_elements, span);
     Array<PrimExpr> outputs;
@@ -397,7 +410,8 @@ class EinsumBuilder {
 };
 
 Array<Tensor> einsum(const std::string& subscripts_str, const Array<Tensor> inputs,
-                     PackedFunc fcompute, std::string name, std::string tag) {
+                     PackedFunc fcompute, PackedFunc fcombine, PackedFunc fidentity,
+                     std::string name, std::string tag) {
   EinsumEquation equation = EinsumEquation::FromString(subscripts_str);
   Array<Array<PrimExpr>> input_shapes;
   for (const Tensor& input : inputs) {
@@ -408,7 +422,7 @@ Array<Tensor> einsum(const std::string& subscripts_str, const Array<Tensor> inpu
   return te::compute(
       output_shape,
       [&](const Array<Var>& indices) {
-        return einsum_builder.BuildOutputExpr(inputs, indices, fcompute);
+        return einsum_builder.BuildOutputExpr(inputs, indices, fcompute, fcombine, fidentity);
       },
       name, tag);
 }
@@ -421,7 +435,7 @@ Array<PrimExpr> InferEinsumShape(const std::string& subscripts,
 }
 
 TVM_REGISTER_GLOBAL("topi.einsum").set_body([](TVMArgs args, TVMRetValue* rv) {
-  *rv = einsum(args[0], args[1], args[2]);
+  *rv = einsum(args[0], args[1], args[2], args[3], args[4]);
 });
 
 }  // namespace topi
