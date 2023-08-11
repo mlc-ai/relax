@@ -45,10 +45,17 @@ EinsumEquation EinsumEquation::FromString(const std::string& equation) {
             << "Cannot parse the Einsum equation: invalid arrow";
         i++;
         has_arrow = true;
-        [[fallthrough]];
+        result.inputs.emplace_back(current);
+        current.clear();
+        has_ellipsis = false;
+        break;
       case ',':
         // Delimiter between inputs, push current and start a new one
-        result.inputs.emplace_back(current);
+        if (has_arrow) {
+          result.SetOutput(current);
+        } else {
+          result.inputs.emplace_back(current);
+        }
         current.clear();
         has_ellipsis = false;
         break;
@@ -72,7 +79,7 @@ EinsumEquation EinsumEquation::FromString(const std::string& equation) {
 
   if (has_arrow) {
     // If there is an arrow, the last subscript is the output
-    result.output = current;
+    result.SetOutput(current);
   } else {
     // Otherwise, the equation is in implicit mode, and the last subscript is an input
     result.inputs.emplace_back(current);
@@ -224,18 +231,40 @@ class EinsumBuilder {
 
     auto zero = make_zero(inputs[0]->dtype);
 
-    Array<PrimExpr> result;
+    Array<PrimExpr> results;
+    PrimExpr result;
     Array<PrimExpr> operands;
     for (int i = 0, n = static_cast<int>(inputs.size()); i < n; ++i) {
       tvm::PrimExpr term = inputs[i](GetIndicesForOperand(i, label_to_index, ellipsis_indices));
       operands.push_back(term);
     }
 
-    result = fcompute(operands);
+    if (fcompute != nullptr) {
+      if (equation_.num_outputs == 1) {
+        // expect return one PrimExpr
+        result = fcompute(operands);
+        results.push_back(result);
+      } else {
+        // expect return N PrimExpr
+        // do check
+        results = fcompute(operands);
+      }
+    } else {
+      for (int i = 0, n = static_cast<int>(inputs.size()); i < n; ++i) {
+        if (i == 0) {
+          result = operands[i];
+        } else {
+          result = result * operands[i];
+        }
+      }
+      for (int i = 0; i < equation_.num_outputs; ++i) {
+        results.push_back(result);
+      }
+    }
     // if (reduce_axes.size() > 0) {
     //   result = sum(result, reduce_axes, {zero});
     // }
-    return result;
+    return results;
   }
 
  private:
