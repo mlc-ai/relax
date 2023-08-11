@@ -17,11 +17,12 @@
 # pylint: disable=invalid-name,consider-using-enumerate,redefined-outer-name
 """Einsum operator"""
 import inspect
+from tvm.runtime import convert
 
 from . import cpp
 
 
-def einsum(subscripts, *operand, fcompute=None):
+def einsum(subscripts, *operand, fcompute=None, fcombine=None, fidentity=None):
     """Evaluates the Einstein summation convention on the operands.
 
     Parameters
@@ -46,16 +47,55 @@ def einsum(subscripts, *operand, fcompute=None):
     def wrap_fcompute(fcompute):
         if fcompute is None:
             return None
-        argspec = inspect.getfullargspec(fcompute)
-        numOfarg = len(argspec.args)
 
         def wrapped_fcompute(arrayOfOperands):
-            if numOfarg > 0:
-                args = [arrayOfOperands[i] for i in range(numOfarg)]
-                return fcompute(*args)
-            else:
-                return fcompute()
+            args = [arrayOfOperands[i] for i in range(len(arrayOfOperands))]
+
+            body = fcompute(*args)
+            if not isinstance(body, (list, tuple)):
+                body = [body]
+            body = convert(body)
+            return body
 
         return wrapped_fcompute
 
-    return cpp.einsum(subscripts, operand, wrap_fcompute(fcompute))
+    def wrap_fcombine(fcombine):
+        if fcombine is None:
+            return None
+
+        def wrapped_fcombine(x, y):
+            ret = fcombine(x, y)
+            if not isinstance(ret, (list, tuple)):
+                ret = [ret]
+            ret = convert(ret)
+            return ret
+
+        return wrapped_fcombine
+
+    def wrap_fidentity(fidentity):
+        if fidentity is None:
+            return None
+
+        def wrapped_fidentity(arrayOfString):
+            dtypes = [arrayOfString[i] for i in range(len(arrayOfString))]
+
+            ret = fidentity(*dtypes)
+            if not isinstance(ret, (list, tuple)):
+                ret = [ret]
+            ret = convert(ret)
+            return ret
+
+        return wrapped_fidentity
+
+    # check fcombine and fid should be consisstent
+
+    result = cpp.einsum(
+        subscripts,
+        operand,
+        wrap_fcompute(fcompute),
+        wrap_fcombine(fcombine),
+        wrap_fidentity(fidentity),
+    )
+    if len(result) == 1:
+        result = result[0]
+    return result
