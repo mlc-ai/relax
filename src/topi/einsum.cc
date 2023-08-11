@@ -204,7 +204,8 @@ class EinsumBuilder {
     return output_shape_;
   }
 
-  PrimExpr BuildOutputExpr(const Array<Tensor> inputs, const Array<Var>& indices) {
+  PrimExpr BuildOutputExpr(const Array<Tensor> inputs, const Array<Var>& indices,
+                           PackedFunc fcompute) {
     std::unordered_map<EinsumEquation::Label, Var> label_to_index;
     Array<Var> ellipsis_indices;
     Array<IterVar> reduce_axes;
@@ -215,12 +216,20 @@ class EinsumBuilder {
     auto zero = make_zero(inputs[0]->dtype);
 
     PrimExpr result = zero;
+    Array<PrimExpr> operands;
     for (int i = 0, n = static_cast<int>(inputs.size()); i < n; ++i) {
-      auto term = inputs[i](GetIndicesForOperand(i, label_to_index, ellipsis_indices));
-      if (i == 0) {
-        result = term;
-      } else {
-        result = result * term;
+      tvm::PrimExpr term = inputs[i](GetIndicesForOperand(i, label_to_index, ellipsis_indices));
+      operands.push_back(term);
+    }
+    if (fcompute != nullptr) {
+      result = fcompute(operands);
+    } else {
+      for (int i = 0, n = static_cast<int>(inputs.size()); i < n; ++i) {
+        if (i == 0) {
+          result = operands[i];
+        } else {
+          result = result * operands[i];
+        }
       }
     }
     if (reduce_axes.size() > 0) {
@@ -333,8 +342,8 @@ class EinsumBuilder {
   Optional<Array<PrimExpr>> ellipsis_shape_;
 };
 
-Tensor einsum(const std::string& subscripts_str, const Array<Tensor> inputs, std::string name,
-              std::string tag) {
+Tensor einsum(const std::string& subscripts_str, const Array<Tensor> inputs, PackedFunc fcompute,
+              std::string name, std::string tag) {
   EinsumEquation equation = EinsumEquation::FromString(subscripts_str);
   Array<Array<PrimExpr>> input_shapes;
   for (const Tensor& input : inputs) {
@@ -344,7 +353,9 @@ Tensor einsum(const std::string& subscripts_str, const Array<Tensor> inputs, std
   auto output_shape = einsum_builder.InferShape();
   return te::compute(
       output_shape,
-      [&](const Array<Var>& indices) { return einsum_builder.BuildOutputExpr(inputs, indices); },
+      [&](const Array<Var>& indices) {
+        return einsum_builder.BuildOutputExpr(inputs, indices, fcompute);
+      },
       name, tag);
 }
 
@@ -356,7 +367,7 @@ Array<PrimExpr> InferEinsumShape(const std::string& subscripts,
 }
 
 TVM_REGISTER_GLOBAL("topi.einsum").set_body([](TVMArgs args, TVMRetValue* rv) {
-  *rv = einsum(args[0], args[1]);
+  *rv = einsum(args[0], args[1], args[2]);
 });
 
 }  // namespace topi

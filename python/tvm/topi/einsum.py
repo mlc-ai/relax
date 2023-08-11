@@ -16,10 +16,12 @@
 # under the License.
 # pylint: disable=invalid-name,consider-using-enumerate,redefined-outer-name
 """Einsum operator"""
+import inspect
+
 from . import cpp
 
 
-def einsum(subscripts, *operand):
+def einsum(subscripts, *operand, fcompute=None):
     """Evaluates the Einstein summation convention on the operands.
 
     Parameters
@@ -41,4 +43,19 @@ def einsum(subscripts, *operand):
         The calculation based on the Einstein summation convention.
     """
 
-    return cpp.einsum(subscripts, operand)
+    def wrap_fcompute(fcompute):
+        if fcompute is None:
+            return None
+        argspec = inspect.getfullargspec(fcompute)
+        numOfarg = len(argspec.args)
+
+        def wrapped_fcompute(arrayOfOperands):
+            if numOfarg > 0:
+                args = [arrayOfOperands[i] for i in range(numOfarg)]
+                return fcompute(*args)
+            else:
+                return fcompute()
+
+        return wrapped_fcompute
+
+    return cpp.einsum(subscripts, operand, wrap_fcompute(fcompute))
