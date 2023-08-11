@@ -87,6 +87,7 @@ EinsumEquation EinsumEquation::FromString(const std::string& equation) {
 
   // Convert the equation to explicit mode if it is in implicit mode
   if (!has_arrow) {
+    Subscript output;
     // The output of the implicit mode is all repeated labels sorted in alphabetical order and the
     // ellipsis in the leftmost if it exists in the inputs.
     std::map<char, int> label_counts;
@@ -97,9 +98,10 @@ EinsumEquation EinsumEquation::FromString(const std::string& equation) {
     }
     for (auto [label, count] : label_counts) {
       if (label == kEllipsis || count == 1) {
-        result.output.emplace_back(label);
+        output.emplace_back(label);
       }
     }
+    result.SetOutput(output);
   }
   return result;
 }
@@ -261,13 +263,36 @@ class EinsumBuilder {
         results.push_back(result);
       }
     }
-    // if (reduce_axes.size() > 0) {
-    //   result = sum(result, reduce_axes, {zero});
-    // }
+    if (reduce_axes.size() > 0) {
+      results = CreateDefaultReduce(results, reduce_axes, zero);
+    }
     return results;
   }
 
  private:
+  Array<PrimExpr> CreateDefaultReduce(Array<PrimExpr> source, Array<IterVar> rdom, PrimExpr init,
+                                      Span span = Span()) {
+    Array<Var> x_;
+    Array<Var> y_;
+    Array<PrimExpr> results;
+    Array<PrimExpr> identity_elements;
+    Array<PrimExpr> inits;
+    for (size_t i = 0; i < source.size(); ++i) {
+      x_.push_back(Var("x_" + std::to_string(i), source[i].dtype(), span));
+      y_.push_back(Var("y_" + std::to_string(i), source[i].dtype(), span));
+      results.push_back(tir::Add(x_[i], y_[i], span));
+      identity_elements.push_back(make_zero(source[i].dtype(), span));
+      inits.push_back(init);
+    }
+    tir::CommReducer combiner = tir::CommReducer(x_, y_, results, identity_elements, span);
+    Array<PrimExpr> outputs;
+    PrimExpr condition = make_const(DataType::Bool(1), true);
+    for (size_t i = 0; i < source.size(); ++i) {
+      outputs.push_back(tir::Reduce(combiner, source, rdom, condition, i, inits, span));
+    }
+    return outputs;
+  }
+
   /*!
    * \brief Prepare mapping from label (including ellipsis) to the output indices
    */
