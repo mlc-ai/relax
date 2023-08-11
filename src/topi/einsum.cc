@@ -97,6 +97,15 @@ EinsumEquation EinsumEquation::FromString(const std::string& equation) {
   return result;
 }
 
+void EinsumEquation::SetOutput(Subscript output_subscript) {
+  if (num_outputs == 0) {
+    output = output_subscript;
+  } else {
+    // CHECK_EQ(output, output_subscript) << "The output subscript should be the same.";
+  }
+  num_outputs++;
+}
+
 PrimExpr GetBroadcastedExtent(const PrimExpr& extent1, const PrimExpr& extent2) {
   const IntImmNode* extent1_imm = extent1.as<IntImmNode>();
   const IntImmNode* extent2_imm = extent2.as<IntImmNode>();
@@ -204,8 +213,8 @@ class EinsumBuilder {
     return output_shape_;
   }
 
-  PrimExpr BuildOutputExpr(const Array<Tensor> inputs, const Array<Var>& indices,
-                           PackedFunc fcompute) {
+  Array<PrimExpr> BuildOutputExpr(const Array<Tensor> inputs, const Array<Var>& indices,
+                                  PackedFunc fcompute) {
     std::unordered_map<EinsumEquation::Label, Var> label_to_index;
     Array<Var> ellipsis_indices;
     Array<IterVar> reduce_axes;
@@ -215,26 +224,17 @@ class EinsumBuilder {
 
     auto zero = make_zero(inputs[0]->dtype);
 
-    PrimExpr result = zero;
+    Array<PrimExpr> result;
     Array<PrimExpr> operands;
     for (int i = 0, n = static_cast<int>(inputs.size()); i < n; ++i) {
       tvm::PrimExpr term = inputs[i](GetIndicesForOperand(i, label_to_index, ellipsis_indices));
       operands.push_back(term);
     }
-    if (fcompute != nullptr) {
-      result = fcompute(operands);
-    } else {
-      for (int i = 0, n = static_cast<int>(inputs.size()); i < n; ++i) {
-        if (i == 0) {
-          result = operands[i];
-        } else {
-          result = result * operands[i];
-        }
-      }
-    }
-    if (reduce_axes.size() > 0) {
-      result = sum(result, reduce_axes, {zero});
-    }
+
+    result = fcompute(operands);
+    // if (reduce_axes.size() > 0) {
+    //   result = sum(result, reduce_axes, {zero});
+    // }
     return result;
   }
 
@@ -342,8 +342,8 @@ class EinsumBuilder {
   Optional<Array<PrimExpr>> ellipsis_shape_;
 };
 
-Tensor einsum(const std::string& subscripts_str, const Array<Tensor> inputs, PackedFunc fcompute,
-              std::string name, std::string tag) {
+Array<Tensor> einsum(const std::string& subscripts_str, const Array<Tensor> inputs,
+                     PackedFunc fcompute, std::string name, std::string tag) {
   EinsumEquation equation = EinsumEquation::FromString(subscripts_str);
   Array<Array<PrimExpr>> input_shapes;
   for (const Tensor& input : inputs) {

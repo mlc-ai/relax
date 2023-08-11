@@ -70,9 +70,9 @@ Array<PrimExpr> InferEinsumShape(const std::string& subscripts,
  *
  * \return The calculation based on the Einstein summation convention.
  */
-Tensor einsum(const std::string& subscripts_str, const Array<Tensor> inputs,
-              PackedFunc fcompute = nullptr, std::string name = "T_einsum",
-              std::string tag = kEinsum);
+Array<Tensor> einsum(const std::string& subscripts_str, const Array<Tensor> inputs,
+                     PackedFunc fcompute = nullptr, std::string name = "T_einsum",
+                     std::string tag = kEinsum);
 
 struct EinsumEquation {
   /*!
@@ -90,6 +90,10 @@ struct EinsumEquation {
   std::vector<Subscript> inputs;
   // The output subscript of the Einsum equation.
   Subscript output;
+  //
+  int num_outputs = 0;
+
+  void SetOutput(Subscript output_subscript);
 };
 
 }  // namespace topi
