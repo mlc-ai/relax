@@ -178,7 +178,9 @@ def verify_einsum(subscripts, shapes, fcompute, fcombine, fidentity, np_lambda, 
         ),
     ],
 )
-def test_multi_outputs(equation, shapes, fcompute, fcombine, fidentity, np_lambda):
+def test_multi_outputs_without_reduction(
+    equation, shapes, fcompute, fcombine, fidentity, np_lambda
+):
     verify_einsum(equation, shapes, fcompute, fcombine, fidentity, np_lambda)
 
 
@@ -446,22 +448,6 @@ def test_customize_compute(equation, shapes, fcompute, fcombine, fidentity, np_l
 )
 def test_customize_combine(equation, shapes, fcompute, fcombine, fidentity, np_lambda):
     verify_einsum(equation, shapes, fcompute, fcombine, fidentity, np_lambda)
-
-
-def test_gemv():
-    pass
-
-
-def test_gemm():
-    pass
-
-
-def test_layernorm():
-    pass
-
-
-def test_attention_with_online_softmax():
-    pass
 
 
 if __name__ == "__main__":

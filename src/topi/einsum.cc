@@ -101,6 +101,10 @@ EinsumEquation EinsumEquation::FromString(const std::string& equation) {
         output.emplace_back(label);
       }
     }
+    std::cout << "output implicit" << std::endl;
+    for (int i = 0; i < output.size(); i++) {
+      std::cout << output[i] << std::endl;
+    }
     result.SetOutput(output);
   }
   return result;
@@ -242,15 +246,9 @@ class EinsumBuilder {
     }
 
     if (fcompute != nullptr) {
-      if (equation_.num_outputs == 1) {
-        // expect return one PrimExpr
-        result = fcompute(operands);
-        results.push_back(result);
-      } else {
-        // expect return N PrimExpr
-        // do check
-        results = fcompute(operands);
-      }
+      // expect return N PrimExpr
+      // do check
+      results = fcompute(operands);
     } else {
       for (int i = 0, n = static_cast<int>(inputs.size()); i < n; ++i) {
         if (i == 0) {
@@ -292,7 +290,11 @@ class EinsumBuilder {
         identity_elements.push_back(make_zero(source[i].dtype(), span));
       }
     } else if (fcombine != nullptr && fidentity != nullptr) {
-      results = fcombine(x_, y_);
+      if (x_.size() == 1) {
+        results = fcombine(x_[0], y_[0]);
+      } else {
+        results = fcombine(x_, y_);
+      }
       identity_elements = fidentity(data_types);
     } else {
       // assert false
