@@ -65,6 +65,10 @@ Array<PrimExpr> InferEinsumShape(const std::string& subscripts,
  * \param subscripts_str Specifies the subscripts for summation as comma separated list of
  * subscript labels.
  * \param inputs Arrays for the operation.
+ * \param fcompute Specifies the computation expression of the innermost loop.
+ * \param fcombine Specifies the associative computation involved in constructing
+ * the commutative reduction.
+ * \param fidentity Establishes the identity elements for the commutative reduction process.
  * \param name The name of the operation.
  * \param tag The tag to mark the operation.
  *
