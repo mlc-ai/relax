@@ -39,7 +39,7 @@ EinsumEquation EinsumEquation::FromString(const std::string& equation) {
         // Ignore spaces
         break;
       case '-':
-        // Arrow
+        // Arrow, end of inputs, push current
         CHECK(!has_arrow) << "Equation can only have one arrow";
         CHECK(i + 1 < n && equation[i + 1] == '>')
             << "Cannot parse the Einsum equation: invalid arrow";
@@ -50,10 +50,11 @@ EinsumEquation EinsumEquation::FromString(const std::string& equation) {
         has_ellipsis = false;
         break;
       case ',':
-        // Delimiter between inputs, push current and start a new one
         if (has_arrow) {
+          // Delimiter between outputs, push current and start a new one
           result.SetOutput(current);
         } else {
+          // Delimiter between inputs, push current and start a new one
           result.inputs.emplace_back(current);
         }
         current.clear();
@@ -101,10 +102,6 @@ EinsumEquation EinsumEquation::FromString(const std::string& equation) {
         output.emplace_back(label);
       }
     }
-    std::cout << "output implicit" << std::endl;
-    for (int i = 0; i < output.size(); i++) {
-      std::cout << output[i] << std::endl;
-    }
     result.SetOutput(output);
   }
   return result;
@@ -114,7 +111,7 @@ void EinsumEquation::SetOutput(Subscript output_subscript) {
   if (num_outputs == 0) {
     output = output_subscript;
   } else {
-    // CHECK_EQ(output, output_subscript) << "The output subscript should be the same.";
+    CHECK(output == output_subscript) << "The output subscript should be the same.";
   }
   num_outputs++;
 }
@@ -238,7 +235,6 @@ class EinsumBuilder {
     auto zero = make_zero(inputs[0]->dtype);
 
     Array<PrimExpr> results;
-    PrimExpr result;
     Array<PrimExpr> operands;
     for (int i = 0, n = static_cast<int>(inputs.size()); i < n; ++i) {
       tvm::PrimExpr term = inputs[i](GetIndicesForOperand(i, label_to_index, ellipsis_indices));
@@ -246,10 +242,14 @@ class EinsumBuilder {
     }
 
     if (fcompute != nullptr) {
-      // expect return N PrimExpr
-      // do check
+      // Call customized fcompute
       results = fcompute(operands);
+      CHECK(results.size() == equation_.num_outputs)
+          << "fcompute is intended to produce " << equation_.num_outputs
+          << " outputs, but only returns " << results.size();
     } else {
+      // Default computation: multiply all the operands together.
+      PrimExpr result;
       for (int i = 0, n = static_cast<int>(inputs.size()); i < n; ++i) {
         if (i == 0) {
           result = operands[i];
@@ -261,17 +261,19 @@ class EinsumBuilder {
         results.push_back(result);
       }
     }
+
     if (reduce_axes.size() > 0) {
-      // init zero?
-      results = CreateDefaultReduce(results, reduce_axes, fcombine, fidentity);
+      results = CreateReduce(results, reduce_axes, fcombine, fidentity);
     }
     return results;
   }
 
  private:
-  Array<PrimExpr> CreateDefaultReduce(Array<PrimExpr> source, Array<IterVar> rdom,
-                                      PackedFunc fcombine, PackedFunc fidentity,
-                                      Span span = Span()) {
+  /*!
+   * \brief Construct reduce: default is sum.
+   */
+  Array<PrimExpr> CreateReduce(Array<PrimExpr> source, Array<IterVar> rdom, PackedFunc fcombine,
+                               PackedFunc fidentity, Span span = Span()) {
     Array<Var> x_;
     Array<Var> y_;
     Array<PrimExpr> results;
@@ -282,14 +284,16 @@ class EinsumBuilder {
       x_.push_back(Var("x_" + std::to_string(i), source[i].dtype(), span));
       y_.push_back(Var("y_" + std::to_string(i), source[i].dtype(), span));
       data_types.push_back(DLDataType2String(source[i].dtype()));
-      // inits.push_back(init);
     }
+
     if (fcombine == nullptr && fidentity == nullptr) {
+      // Default reduction: sum
       for (size_t i = 0; i < source.size(); ++i) {
         results.push_back(tir::Add(x_[i], y_[i], span));
         identity_elements.push_back(make_zero(source[i].dtype(), span));
       }
     } else if (fcombine != nullptr && fidentity != nullptr) {
+      // Call customized fcombine and fidentity
       if (x_.size() == 1) {
         results = fcombine(x_[0], y_[0]);
       } else {
@@ -297,7 +301,7 @@ class EinsumBuilder {
       }
       identity_elements = fidentity(data_types);
     } else {
-      // assert false
+      CHECK(false) << "Define both fcombine and fidentity simultaneously.";
     }
     tir::CommReducer combiner = tir::CommReducer(x_, y_, results, identity_elements, span);
     Array<PrimExpr> outputs;
