@@ -94,6 +94,10 @@ struct EinsumEquation {
   // The number of outputs.
   int num_outputs = 0;
 
+  /*!
+   * \brief Set output subscript of the Einsum equation, and ensure that
+   * all output subscripts are identical.
+   */
   void SetOutput(Subscript output_subscript);
 };
 
