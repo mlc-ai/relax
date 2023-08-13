@@ -91,7 +91,7 @@ struct EinsumEquation {
   std::vector<Subscript> inputs;
   // The output subscript of the Einsum equation.
   Subscript output;
-  //
+  // The number of outputs.
   int num_outputs = 0;
 
   void SetOutput(Subscript output_subscript);
