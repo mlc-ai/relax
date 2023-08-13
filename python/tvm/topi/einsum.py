@@ -37,7 +37,7 @@ def einsum(subscripts, *operand, fcompute=None, fcombine=None, fidentity=None):
         The only difference of einsum between in tvm and numpy is it needs an extra brackets
         for the tensors. For example, topi.einsum("ij, jk -> ik", (A, B)).
 
-    fcompute : function(List[value] -> List[value]) 
+    fcompute : function(List[value] -> List[value])
         Specifies the computation expression of the innermost loop.
 
     fcombine : function(Expr, Expr -> Expr)
