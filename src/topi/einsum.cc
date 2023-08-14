@@ -257,7 +257,7 @@ class EinsumBuilder {
           result = result * operands[i];
         }
       }
-      for (int i = 0; i < equation_.num_outputs; ++i) {
+      for (size_t i = 0; i < equation_.num_outputs; ++i) {
         results.push_back(result);
       }
     }

@@ -96,7 +96,7 @@ struct EinsumEquation {
   // The output subscript of the Einsum equation.
   Subscript output;
   // The number of outputs.
-  int num_outputs = 0;
+  size_t num_outputs = 0;
 
   /*!
    * \brief Set output subscript of the Einsum equation, and ensure that
