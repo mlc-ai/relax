@@ -65,13 +65,19 @@ Array<PrimExpr> InferEinsumShape(const std::string& subscripts,
  * \param subscripts_str Specifies the subscripts for summation as comma separated list of
  * subscript labels.
  * \param inputs Arrays for the operation.
+ * \param fcompute Specifies the computation expression of the innermost loop.
+ * \param fcombine Specifies the associative computation involved in constructing
+ * the commutative reduction.
+ * \param fidentity Establishes the identity elements for the commutative reduction process.
  * \param name The name of the operation.
  * \param tag The tag to mark the operation.
  *
  * \return The calculation based on the Einstein summation convention.
  */
-Tensor einsum(const std::string& subscripts_str, const Array<Tensor> inputs,
-              std::string name = "T_einsum", std::string tag = kEinsum);
+Array<Tensor> einsum(const std::string& subscripts_str, const Array<Tensor> inputs,
+                     PackedFunc fcompute = nullptr, PackedFunc fcombine = nullptr,
+                     PackedFunc fidentity = nullptr, std::string name = "T_einsum",
+                     std::string tag = kEinsum);
 
 struct EinsumEquation {
   /*!
@@ -89,6 +95,14 @@ struct EinsumEquation {
   std::vector<Subscript> inputs;
   // The output subscript of the Einsum equation.
   Subscript output;
+  // The number of outputs.
+  size_t num_outputs = 0;
+
+  /*!
+   * \brief Set output subscript of the Einsum equation, and ensure that
+   * all output subscripts are identical.
+   */
+  void SetOutput(Subscript output_subscript);
 };
 
 }  // namespace topi
