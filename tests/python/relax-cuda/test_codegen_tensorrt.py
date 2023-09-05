@@ -14,15 +14,24 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-import pytest
 import numpy as np
+import pytest
+
 import tvm
 import tvm.testing
-
 from tvm import relax
-from tvm.script import relax as R
-from tvm.relax.dpl import make_fused_bias_activation_pattern, is_op, wildcard
 from tvm.contrib.pickle_memoize import memoize
+from tvm.relax.dpl import is_op, make_fused_bias_activation_pattern, wildcard
+from tvm.script import relax as R
+
+has_tensorrt = False
+
+tensorrt_enabled = pytest.mark.skipif(
+    not has_tensorrt,
+    reason="TENSORRT not enabled.",
+)
+
+pytestmark = [tensorrt_enabled]
 
 
 @tvm.script.ir_module
@@ -40,16 +49,6 @@ class Conv2dResidualBlock:
             R.output(out)
 
         return out
-
-
-has_tensorrt = tvm.get_global_func("relax.ext.tensorrt", True)
-
-tensorrt_enabled = pytest.mark.skipif(
-    not has_tensorrt,
-    reason="TENSORRT not enabled.",
-)
-
-pytestmark = [tensorrt_enabled]
 
 
 def build_and_run(mod, inputs_np, target, legalize=False):

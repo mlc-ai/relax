@@ -18,4 +18,6 @@
 
 set -e
 
-python3 -m flake8 . --count --select=E9,F63,F7 --show-source --statistics --exclude 3rdparty
+FLAKE8_THREADS="${FLAKE8_THREADS:-"auto"}"
+
+python3 -m flake8 . -j ${FLAKE8_THREADS} --count --select=E9,F63,F7 --show-source --statistics --exclude 3rdparty

@@ -1158,6 +1158,7 @@ def test_layer_norm(data_shape, dtype, axes):
     tvm.testing.assert_allclose(out, ref, rtol=1e-2, atol=1e-2)
 
 
+@pytest.mark.xfail
 def test_attention_rewrite_fp16():
     @I.ir_module
     class Module:

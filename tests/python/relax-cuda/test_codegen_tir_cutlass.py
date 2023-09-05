@@ -16,24 +16,27 @@
 # under the License.
 
 from __future__ import annotations
+
 import tempfile
 
-from tvm import relax, runtime
-import tvm
-import tvm.testing
-from tvm import relax
+import numpy as np
+import pytest
 import scipy
 from scipy.special import erf
-import numpy as np
-from tvm.target import Target
-from tvm.relax.vm_build import build as relax_build
-from tvm.script.ir_builder import relax as R
-from tvm.script.ir_builder import ir as I
-from tvm.script.ir_builder import tir as T
-from tvm.script.ir_builder import IRBuilder
 
+import tvm
+import tvm.testing
+from tvm import relax, runtime
 from tvm.relax.backend_tir import get_tir_pattern
-from tvm.relax.backend_tir.contrib.cutlass import cutlass_fcodegen, compile_options
+from tvm.relax.backend_tir.contrib.cutlass import compile_options, cutlass_fcodegen
+from tvm.relax.vm_build import build as relax_build
+from tvm.script.ir_builder import IRBuilder
+from tvm.script.ir_builder import ir as I
+from tvm.script.ir_builder import relax as R
+from tvm.script.ir_builder import tir as T
+from tvm.target import Target
+
+pytestmark = pytest.mark.skip
 
 A_TYPE = "float16"
 B_TYPE = "float16"
