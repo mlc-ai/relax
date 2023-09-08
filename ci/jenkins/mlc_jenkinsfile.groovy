@@ -247,48 +247,48 @@ fi
 }
 
 stage('Unittest') {
-  parallel 'Relax Core IR': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/relax-core-ir')) {
+  parallel 'Relax Core IR': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/relax-core-ir')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-ir",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-ir",
       label: "Relax IR",
     )
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-op",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-op",
       label: "Relax Operators",
     )
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-pass",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-pass",
       label: "Relax Pass",
     )
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-nn-module",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-nn-module",
       label: "Relax nn.Module",
     )
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-dist",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-dist",
       label: "Relax DistIR",
     )
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-pattern-lang",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-pattern-lang",
       label: "Relax Pattern Lang",
     )
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-training",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-training",
       label: "Relax Training",
     )
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-tvmscript",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-tvmscript",
       label: "Relax TVMScript",
     )
   }}},
 
-  'Relax Runtime': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/relax-vm')) {
+  'Relax Runtime': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/relax-vm')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-vm",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-vm",
       label: "Relax VM",
     )
   }}},
@@ -302,60 +302,60 @@ stage('Unittest') {
     )
   }}},
 
-  'Relax Integration': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/relax-meta-schedule')) {
+  'Relax Integration': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/relax-meta-schedule')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 8 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-meta-schedule",
+      script: "${docker_run} --cpus 8 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-meta-schedule",
       label: "Relax MetaSchedule",
     )
     sh (
-      script: "${docker_run} --cpus 8 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-relay",
+      script: "${docker_run} --cpus 8 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-relay",
       label: "Relax Relay",
     )
   }}},
 
-  'Relax DNNL': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/relax-dnnl')) {
+  'Relax DNNL': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/relax-dnnl')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-dnnl",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-dnnl",
       label: "Relax DNNL",
     )
   }}},
 
-  'Relax ONNX': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/relax-onnx')) {
+  'Relax ONNX': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/relax-onnx')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-onnx",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-onnx",
       label: "Relax ONNX",
     )
   }}},
 
-  'Relax StableHLO': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/relax-stablehlo')) {
+  'Relax StableHLO': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/relax-stablehlo')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-stablehlo",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-stablehlo",
       label: "Relax StableHLO",
     )
   }}},
 
-  'Relax Torch': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/relax-torch')) {
+  'Relax Torch': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/relax-torch')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh relax-torch",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh relax-torch",
       label: "Relax Torch",
     )
   }}},
 
-  'Arith': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/arith')) {
+  'Arith': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/arith')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh arith",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh arith",
       label: "Arith",
     )
   }}},
@@ -369,11 +369,11 @@ stage('Unittest') {
   //   )
   // }}},
 
-  'Dlight': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/dlight')) {
+  'Dlight': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/dlight')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh dlight",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh dlight",
       label: "Dlight",
     )
   }}},
@@ -405,48 +405,48 @@ stage('Unittest') {
   //   )
   // }}},
 
-  'Codegen': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/codegen')) {
+  'Codegen': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/codegen')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh codegen",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh codegen",
       label: "Codegen",
     )
   }}},
 
-  'Uncategorized': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/uncategorized')) {
+  'Uncategorized': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/uncategorized')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh unittest",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh unittest",
       label: "Uncategorized",
     )
   }}},
 
 
-  'TIR TVMScript': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/tir-tvmscript')) {
+  'TIR TVMScript': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/tir-tvmscript')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh tir-tvmscript",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh tir-tvmscript",
       label: "TIR TVMScript",
     )
   }}},
 
-  'TIR Pass': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/tir-pass')) {
+  'TIR Pass': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/tir-pass')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh tir-pass",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh tir-pass",
       label: "TIR Pass",
     )
   }}},
 
-  'TIR Schedule': { node('JUNRU-CPU-SMALL') { ws(per_exec_ws('tvm/unittest/tir-schedule')) {
+  'TIR Schedule': { node('JUNRU-GPU') { ws(per_exec_ws('tvm/unittest/tir-schedule')) {
     init_git()
-    unpack_lib("cpu", tvm_lib)
+    unpack_lib("cuda", tvm_lib)
     sh (
-      script: "${docker_run} --cpus 1 ${ci_cpu} ./tests/scripts/unity/task_python_relax.sh tir-schedule",
+      script: "${docker_run} --cpus 1 ${ci_cuda} ./tests/scripts/unity/task_python_relax.sh tir-schedule",
       label: "TIR Schedule",
     )
   }}}
