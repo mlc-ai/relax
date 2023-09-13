@@ -237,7 +237,7 @@ class SessionObj : public Object {
  * \brief Managed reference to SessionObj
  * \sa SessionObj
  */
-class Session : public ObjectRef {
+class TVM_DLL Session : public ObjectRef {
  public:
   /*! \brief Create a session backed by a thread pool of workers */
   static TVM_DLL Session ThreadedSession(int num_workers);
