@@ -240,7 +240,7 @@ class SessionObj : public Object {
 class Session : public ObjectRef {
  public:
   /*! \brief Create a session backed by a thread pool of workers */
-  static Session ThreadedSession(int num_workers);
+  static TVM_DLL Session ThreadedSession(int num_workers);
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(Session, ObjectRef, SessionObj);
 };
 
