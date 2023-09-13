@@ -237,10 +237,10 @@ class SessionObj : public Object {
  * \brief Managed reference to SessionObj
  * \sa SessionObj
  */
-class TVM_DLL Session : public ObjectRef {
+class Session : public ObjectRef {
  public:
   /*! \brief Create a session backed by a thread pool of workers */
-  static TVM_DLL Session ThreadedSession(int num_workers);
+  TVM_DLL static Session ThreadedSession(int num_workers);
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(Session, ObjectRef, SessionObj);
 };
 
