@@ -137,7 +137,7 @@ cancel_previous_build()
 
 def lint() {
 stage('Prepare') {
-  node('CPU-SMALL') {
+  node('JUNRU-CPU-SMALL') {
     // When something is provided in ci_*_param, use it, otherwise default with ci_*
     ci_lint = params.ci_lint_param ?: ci_lint
     ci_cpu = params.ci_cpu_param ?: ci_cpu
@@ -164,7 +164,7 @@ stage('Prepare') {
 
 stage('Sanity Check') {
   timeout(time: max_time, unit: 'MINUTES') {
-    node('CPU-SMALL') {
+    node('JUNRU-CPU-SMALL') {
       ws(per_exec_ws('tvm/sanity')) {
         init_git()
         is_docs_only_build = sh (
@@ -311,7 +311,7 @@ def add_hexagon_permissions() {
 stage('Build and Test') {
   if (is_docs_only_build != 1) {
     parallel 'BUILD: GPU': {
-      node('GPU') {
+      node('JUNRU-GPU') {
         ws(per_exec_ws('tvm/build-gpu')) {
           init_git()
           sh "${docker_run} ${ci_gpu} nvidia-smi"
@@ -322,7 +322,7 @@ stage('Build and Test') {
       }
     },
     'BUILD: CPU': {
-      node('CPU-SMALL') {
+      node('JUNRU-CPU-LARGE') {
         ws(per_exec_ws('tvm/build-cpu')) {
           init_git()
           sh "${docker_run} ${ci_cpu} ./tests/scripts/task_config_build_cpu.sh build"

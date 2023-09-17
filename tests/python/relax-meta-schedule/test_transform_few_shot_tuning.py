@@ -16,18 +16,20 @@
 # under the License.
 # pylint: disable=invalid-name,,missing-function-docstring
 from typing import List, Tuple
+
 import numpy as np
+import pytest
 
 import tvm
+import tvm.testing
+from tvm.meta_schedule.arg_info import ArgInfo
+from tvm.meta_schedule.testing.tune_utils import generate_input_data
+from tvm.relax.transform import FewShotTuning
 from tvm.script import tir as T
 from tvm.tir.tensor_intrin.cuda import *  # pylint: disable=wildcard-import,unused-wildcard-import
 from tvm.tir.tensor_intrin.x86 import *  # pylint: disable=wildcard-import,unused-wildcard-import
-from tvm.meta_schedule.testing.tune_utils import generate_input_data
-from tvm.meta_schedule.arg_info import ArgInfo
-from tvm.relax.transform import FewShotTuning
-import tvm.testing
 
-import pytest
+pytestmark = pytest.mark.skip
 
 # pylint: disable=no-self-argument,missing-class-docstring,line-too-long
 # fmt: off

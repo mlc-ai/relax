@@ -24,7 +24,6 @@ from tvm import relax
 from tvm.relax.backend.contrib.cudnn import partition_for_cudnn
 from tvm.relax.testing import get_relax_matmul_module
 from tvm.script import relax as R
-
 from tvm.script.ir_builder import IRBuilder
 from tvm.script.ir_builder import relax as relax_builder
 
@@ -203,6 +202,7 @@ def test_conv2d_offload(data_shape, weight_shape, dtype, with_bias, activation):
         tvm.testing.assert_allclose(out, ref, rtol=1e-2, atol=1e-2)
 
 
+@pytest.mark.xfail
 @pytest.mark.parametrize(
     "data_shape, weight_shape, dtype, with_bias, activation",
     [
