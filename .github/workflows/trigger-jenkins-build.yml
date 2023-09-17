@@ -1,0 +1,55 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+name: Trigger Jenkins Build
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+ trigger-jenkins-test:
+   if: github.event.issue.pull_request && contains(github.event.comment.body, '\test')
+   runs-on: ubuntu-latest
+   steps:
+     - name: Get PR branch
+       uses: xt0rted/pull-request-comment-branch@v2
+       id: comment-branch
+     - name: Set latest commit status as pending
+       uses: myrotvorets/set-commit-status-action@master
+       with:
+         sha: ${{ steps.comment-branch.outputs.head_sha }}
+         token: ${{ secrets.GITHUB_TOKEN }}
+         status: pending
+     - name: Checkout PR branch
+       uses: actions/checkout@v3
+       with:
+         ref: ${{ steps.comment-branch.outputs.head_ref }}
+     - name: Trigger
+       env:
+        JENKINS_URL=https://ci.mlc.ai/job/mlc/
+        JENKINS_USER=junrushao
+        JENKINS_TOKEN=${{ secrets.JENKINS_TOKEN }}
+        JENKINS_JOB=$JENKINS_URL/job/PR-${{ github.event.issue.number }}
+       run: |
+        bash ./ci/jenkins-remote/command-test.sh
+     - name: Set latest commit status as ${{ job.status }}
+       uses: myrotvorets/set-commit-status-action@master
+       if: always()
+       with:
+         sha: ${{ steps.comment-branch.outputs.head_sha }}
+         token: ${{ secrets.GITHUB_TOKEN }}
+         status: ${{ job.status }}

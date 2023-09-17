@@ -17,17 +17,5 @@
 # under the License.
 set -euxo pipefail
 
-source tests/scripts/setup-pytest-env.sh
-export PYTHONPATH=${PYTHONPATH}:${TVM_PATH}/apps/extension/python
-export LD_LIBRARY_PATH="build:${LD_LIBRARY_PATH:-}"
-
-# to avoid CI CPU thread throttling.
-export TVM_BIND_THREADS=0
-export TVM_NUM_THREADS=2
-
-make cython3
-
-# Run Relax tests
-export TEST_DIRECTORY=$1
-python3 -m pip install pytest-durations
-python3 -m pytest -vv --durations 0 tests/python/${TEST_DIRECTORY}/
+cd build
+cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..

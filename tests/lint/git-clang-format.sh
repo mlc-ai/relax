@@ -48,13 +48,17 @@ while (( $# )); do
     esac
 done
 
+if [ -f ./.git/clang-format-index.lock ]; then
+    echo "Found .git/clang-format-index.lock file, removing it"
+    rm -rf .git/clang-format-index.lock
+fi
 
 cleanup()
 {
     if [ -f /tmp/$$.clang-format.txt ]; then
        echo ""
        echo "---------clang-format log----------"
-        cat /tmp/$$.clang-format.txt
+       cat /tmp/$$.clang-format.txt
     fi
     rm -rf /tmp/$$.clang-format.txt
 }

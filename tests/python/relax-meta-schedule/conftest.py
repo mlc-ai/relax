@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -14,20 +13,11 @@
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
-# under the License.
-set -euxo pipefail
 
-source tests/scripts/setup-pytest-env.sh
-export PYTHONPATH=${PYTHONPATH}:${TVM_PATH}/apps/extension/python
-export LD_LIBRARY_PATH="build:${LD_LIBRARY_PATH:-}"
+import pytest
 
-# to avoid CI CPU thread throttling.
-export TVM_BIND_THREADS=0
-export TVM_NUM_THREADS=2
+import tvm
+from tvm.relax.ir.instrument import WellFormedInstrument
 
-make cython3
 
-# Run Relax tests
-export TEST_DIRECTORY=$1
-python3 -m pip install pytest-durations
-python3 -m pytest -vv --durations 0 tests/python/${TEST_DIRECTORY}/
+tvm.transform.PassContext.current().override_instruments([WellFormedInstrument()])
