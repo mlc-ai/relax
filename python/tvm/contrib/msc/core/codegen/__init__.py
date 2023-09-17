@@ -15,5 +15,4 @@
 # specific language governing permissions and limitations
 # under the License.
 """tvm.contrib.msc.core.codegen"""
-
 from .codegen import *

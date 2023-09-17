@@ -45,6 +45,7 @@ if(USE_CCACHE) # True for AUTO, ON, /path/to/ccache
     endif()
     # Set the flag for ccache
     if(DEFINED PATH_TO_CCACHE)
+      set(CMAKE_CUDA_COMPILER_LAUNCHER "${PATH_TO_CCACHE}")
       set(CMAKE_CXX_COMPILER_LAUNCHER "${PATH_TO_CCACHE}")
       set(CMAKE_C_COMPILER_LAUNCHER "${PATH_TO_CCACHE}")
     endif()
