@@ -113,6 +113,10 @@ def unpack_lib(name, libs) {
 
 cancel_previous_build()
 
+stage('Approval') {
+  input id: '1', message: 'Pending. Please reply "\\test" on GitHub to continue.'
+}
+
 stage('Prepare') {
   node('JUNRU-CPU-SMALL') {
     // When something is provided in ci_*_param, use it, otherwise default with ci_*
