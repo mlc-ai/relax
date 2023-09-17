@@ -16,22 +16,35 @@
 # under the License.
 name: Trigger Jenkins Build
 
+# on:
+#   issue_comment:
+#     types: [created]
+#
 on:
   issue_comment:
     types: [created]
-
 jobs:
- trigger-jenkins-test:
-   if: contains(github.event.comment.html_url, '/pull/')
-   runs-on: ubuntu-latest
-   steps:
-    - name: Trigger Jenkins Test
-      if: startsWith(github.event.comment.body, '\test')
-      run: |
-       echo say hello
-       JENKINS_URL=https://ci.mlc.ai/job/mlc/
-       JENKINS_USER=junrushao
-       JENKINS_TOKEN=119c459c1b1c53d0e584cbaabe9e2de2cc
-       JENKINS_JOB=$JENKINS_URL/job/PR-${{ github.event.pull_request.number }}
-       BUILD_NUMBER=$(curl -s -X GET $JENKINS_JOB/lastBuild/buildNumber)
-       curl -X POST -u $JENKINS_USER:$JENKINS_TOKEN $JENKINS_JOB/$BUILD_NUMBER/input/1/proceedEmpty
+  example:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute for pull request comments only
+        if: github.event.issue.pull_request
+        run: echo "This is a pull request comment event"
+
+#
+# jobs:
+#  trigger-jenkins-test:
+#    if: contains(github.event.comment.html_url, '/pull/')
+#    runs-on: ubuntu-latest
+#    steps:
+#     - name: Trigger Jenkins Test
+#       if: startsWith(github.event.comment.body, '\test')
+#       run: |
+#        echo say hello
+#        JENKINS_URL=https://ci.mlc.ai/job/mlc/
+#        JENKINS_USER=junrushao
+#        JENKINS_TOKEN=119c459c1b1c53d0e584cbaabe9e2de2cc
+#        JENKINS_JOB=$JENKINS_URL/job/PR-${{ github.event.pull_request.number }}
+#        BUILD_NUMBER=$(curl -s -X GET $JENKINS_JOB/lastBuild/buildNumber)
+#        curl -X POST -u $JENKINS_USER:$JENKINS_TOKEN $JENKINS_JOB/$BUILD_NUMBER/input/1/proceedEmpty
+#
