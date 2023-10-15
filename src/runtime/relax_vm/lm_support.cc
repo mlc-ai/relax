@@ -169,11 +169,12 @@ class AttentionKVCacheObj : public Object {
       copy_dst.shape = &shape[0];
 
       DLTensor copy_src = *(value.operator->());
-      copy_src.byte_offset = num_filled_elements * ((value->dtype.bits * value->dtype.lanes + 7) / 8);
+      copy_src.byte_offset =
+          num_filled_elements * ((value->dtype.bits * value->dtype.lanes + 7) / 8);
       copy_src.shape = &shape[0];
 
       NDArray::CopyFromTo(&copy_src, &copy_dst);
-      this->current_pos = value->shape[0] - num_elements_to_copy;;
+      this->current_pos = value->shape[0] - num_elements_to_copy;
     }
   }
 
@@ -231,7 +232,7 @@ class AttentionKVCache : public ObjectRef {
     n->Append(init_data);
     if (init_fill_count >= 0) {
       n->fill_count = init_fill_count;
-      n->current_pos = init_fill_count; // sliding window attention only
+      n->current_pos = init_fill_count;  // sliding window attention only
     }
     return AttentionKVCache(n);
   }
@@ -305,12 +306,14 @@ AttentionKVCache AttentionKVCacheAppend(AttentionKVCache cache, NDArray value) {
 
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_append").set_body_typed(AttentionKVCacheAppend);
 
-AttentionKVCache AttentionKVCacheOverwrite(AttentionKVCache cache, NDArray value, int64_t max_cache_size) {
+AttentionKVCache AttentionKVCacheOverwrite(AttentionKVCache cache, NDArray value,
+                                           int64_t max_cache_size) {
   cache->Overwrite(value, max_cache_size);
   return cache;
 }
 
-TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_overwrite").set_body_typed(AttentionKVCacheOverwrite);
+TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_overwrite")
+    .set_body_typed(AttentionKVCacheOverwrite);
 
 NDArray AttentionKVCacheView(AttentionKVCache cache, ShapeTuple shape) {
   return cache->View(shape);
