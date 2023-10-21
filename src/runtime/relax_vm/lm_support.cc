@@ -307,7 +307,7 @@ AttentionKVCache AttentionKVCacheAppend(AttentionKVCache cache, NDArray value) {
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_append").set_body_typed(AttentionKVCacheAppend);
 
 AttentionKVCache AttentionKVCacheWindowOverride(AttentionKVCache cache, NDArray value,
-                                           int64_t max_cache_size) {
+                                                int64_t max_cache_size) {
   cache->WindowOverride(value, max_cache_size);
   return cache;
 }
