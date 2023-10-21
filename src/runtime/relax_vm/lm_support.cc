@@ -110,10 +110,10 @@ class AttentionKVCacheObj : public Object {
   }
 
   /*!
-   * \brief Append value to the cache.
-   * \param value The value to overwrite previous elements.
+   * \brief Append value to the cache, overrides if full.
+   * \param value The value to override previous elements.
    */
-  void Overwrite(NDArray value, int64_t max_cache_size) {
+  void WindowOverride(NDArray value, int64_t max_cache_size) {
     CHECK(data.DataType() == value.DataType()) << "dtype mismatch";
     CHECK_LE(value->shape[0], max_cache_size) << "dim 0 of value too large";
     // reallocate cache
@@ -306,14 +306,14 @@ AttentionKVCache AttentionKVCacheAppend(AttentionKVCache cache, NDArray value) {
 
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_append").set_body_typed(AttentionKVCacheAppend);
 
-AttentionKVCache AttentionKVCacheOverwrite(AttentionKVCache cache, NDArray value,
+AttentionKVCache AttentionKVCacheWindowOverride(AttentionKVCache cache, NDArray value,
                                            int64_t max_cache_size) {
-  cache->Overwrite(value, max_cache_size);
+  cache->WindowOverride(value, max_cache_size);
   return cache;
 }
 
-TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_overwrite")
-    .set_body_typed(AttentionKVCacheOverwrite);
+TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_window_override")
+    .set_body_typed(AttentionKVCacheWindowOverride);
 
 NDArray AttentionKVCacheView(AttentionKVCache cache, ShapeTuple shape) {
   return cache->View(shape);
