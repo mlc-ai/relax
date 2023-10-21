@@ -74,7 +74,7 @@ class AttentionKVCacheObj : public Object {
   /*!
    * \brief current cache position (windowed kv cache only).
    */
-  int64_t current_pos{0};
+  int64_t window_attention_current_pos{0};
 
   /*!
    * \brief View all current cached values as one array.
@@ -133,7 +133,8 @@ class AttentionKVCacheObj : public Object {
     // copy into the current position.
     ICHECK(data.IsContiguous());
 
-    int64_t num_elements_to_copy = std::min(value->shape[0], max_cache_size - current_pos);
+    int64_t num_elements_to_copy =
+        std::min(value->shape[0], max_cache_size - window_attention_current_pos);
     int64_t num_elements_p_entry = 1;
     std::vector<int64_t> shape;
     shape.push_back(num_elements_to_copy);
@@ -142,7 +143,7 @@ class AttentionKVCacheObj : public Object {
       num_elements_p_entry *= data->shape[i];
       shape.push_back(data->shape[i]);
     }
-    int64_t num_filled_elements = current_pos * num_elements_p_entry;
+    int64_t num_filled_elements = window_attention_current_pos * num_elements_p_entry;
 
     DLTensor copy_dst = *(data.operator->());
     copy_dst.byte_offset = num_filled_elements * ((data->dtype.bits * data->dtype.lanes + 7) / 8);
@@ -154,12 +155,13 @@ class AttentionKVCacheObj : public Object {
 
     NDArray::CopyFromTo(&copy_src, &copy_dst);
     this->fill_count = std::min(this->fill_count + value->shape[0], max_cache_size);
-    this->current_pos = std::min(this->current_pos + value->shape[0], max_cache_size);
+    this->window_attention_current_pos =
+        std::min(this->window_attention_current_pos + value->shape[0], max_cache_size);
 
     // copy the remainder to the beginning of the cache
     if (num_elements_to_copy < value->shape[0]) {
       ICHECK_EQ(this->fill_count, max_cache_size);
-      ICHECK_EQ(this->fill_count, this->current_pos);
+      ICHECK_EQ(this->fill_count, this->window_attention_current_pos);
 
       shape[0] = value->shape[0] - num_elements_to_copy;
       num_filled_elements = num_elements_to_copy * num_elements_p_entry;
@@ -174,7 +176,7 @@ class AttentionKVCacheObj : public Object {
       copy_src.shape = &shape[0];
 
       NDArray::CopyFromTo(&copy_src, &copy_dst);
-      this->current_pos = value->shape[0] - num_elements_to_copy;
+      this->window_attention_current_pos = value->shape[0] - num_elements_to_copy;
     }
   }
 
@@ -232,7 +234,7 @@ class AttentionKVCache : public ObjectRef {
     n->Append(init_data);
     if (init_fill_count >= 0) {
       n->fill_count = init_fill_count;
-      n->current_pos = init_fill_count;  // sliding window attention only
+      n->window_attention_current_pos = init_fill_count;  // window attention only
     }
     return AttentionKVCache(n);
   }
