@@ -212,9 +212,9 @@ def test_ndarray_cache():
         np.testing.assert_allclose(v.numpy(), v_np, atol=1e-6, rtol=1e-6)
 
 
-def test_attention_kv_cache_overwrite():
+def test_attention_kv_cache_window_override():
     fcreate = tvm.get_global_func("vm.builtin.attention_kv_cache_create")
-    foverwrite = tvm.get_global_func("vm.builtin.attention_kv_cache_overwrite")
+    foverride = tvm.get_global_func("vm.builtin.attention_kv_cache_window_override")
     fview = tvm.get_global_func("vm.builtin.attention_kv_cache_view")
 
     current_pos = 4
@@ -229,7 +229,7 @@ def test_attention_kv_cache_overwrite():
     for i in range(1, num_steps):
         np_array = i * np.ones((i, 2)).astype("int32")
         np_all_arrays = np.concatenate((np_all_arrays, np_array), axis=0)
-        cache = foverwrite(cache, tvm.nd.array(np_array), 16)
+        cache = foverride(cache, tvm.nd.array(np_array), 16)
         current_pos = (current_pos + i) % 16
 
     res = fview(cache, tvm.runtime.ShapeTuple((16, 2))).numpy()
