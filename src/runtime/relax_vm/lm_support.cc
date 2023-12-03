@@ -94,6 +94,39 @@ class AttentionKVCacheObj : public Object {
     this->window_attention_current_pos = 0;
   }
 
+  /*!
+   * Once the cache size exceeds `max_cache_size`, we trim it back down to `desired_cache_size`.
+   * If we trim, we use the first few slots of the cache as Attention Sinks (https://arxiv.org/abs/2309.17453).
+   * Using Attention Sinks has been shown to improve model output quality after cache trimming. 
+   */
+  void MaybeEvictWithSinks(int64_t max_cache_size,
+                           int64_t desired_cache_size,
+                           int32_t num_attention_sinks) {
+    if (fill_count < max_cache_size) return;
+
+    // Left shift the cache. We just create a new array here as it's tidier than
+    // doing in-place operations and then tracking what slots are allocated versus used.
+    std::vector<int64_t> new_shape(data->shape, data->shape + data->ndim);
+    new_shape[0] = desired_cache_size;
+    NDArray new_data = NDArray::Empty(new_shape, data->dtype, data->device);
+    int64_t shift_slots = fill_count - desired_cache_size;
+    size_t data_elem_size = (data->dtype.bits * data->dtype.lanes + 7) / 8;
+    size_t size_2nd_3rd_dims = data->shape[1] * data->shape[2];
+    size_t shift_bytes = shift_slots * size_2nd_3rd_dims * data_elem_size;
+    size_t total_bytes = fill_count * size_2nd_3rd_dims * data_elem_size;
+    std::memcpy(new_data->data,
+                static_cast<char*>(this->data->data) + shift_bytes,
+                total_bytes - shift_bytes);
+
+    // Add Attention Sinks.
+    size_t zero_bytes = num_attention_sinks * size_2nd_3rd_dims * data_elem_size;
+    std::memset(new_data->data, 0, zero_bytes);
+
+    // Update members.
+    this->data = new_data;
+    this->fill_count = desired_cache_size;
+  }
+
   /** pop n entries */
   void PopN(size_t n) {
     ICHECK_LE(n, fill_count);
@@ -317,6 +350,18 @@ void AttentionKVCacheArrayClear(Array<AttentionKVCache> caches) {
 
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_array_clear")
     .set_body_typed(AttentionKVCacheArrayClear);
+
+void AttentionKVCacheMaybeEvictWithSinks(Array<AttentionKVCache> caches,
+                                         int64_t max_cache_size,
+                                         int64_t desired_cache_size,
+                                         int32_t num_attention_sinks) {
+  for (AttentionKVCache cache : caches) {
+    cache->MaybeEvictWithSinks(max_cache_size, desired_cache_size, num_attention_sinks);
+  }
+}
+
+TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_maybe_evict_with_sinks")
+    .set_body_typed(AttentionKVCacheMaybeEvictWithSinks);
 
 // NOTE this is a built-in highly related to LM so we put it here.
 int SampleTopPFromLogits(NDArray logits, double temperature, double top_p, double uniform_sample) {
