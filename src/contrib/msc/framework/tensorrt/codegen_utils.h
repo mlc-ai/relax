@@ -40,7 +40,7 @@ class TensorRTCodeGenHelper : public BaseCodeGenHelper {
  public:
   /*! \brief Get describe for default node input*/
   const String IdxInputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
-                            const String& suffix = "") final {
+                            const String& suffix = "", bool process = false) final {
     const auto& pair = node->ProducerAndIdxOf(idx);
     if (pair.first->optype == "input") {
       return "*" + IdxNodeBase(pair.first, prefix, suffix);
@@ -53,7 +53,7 @@ class TensorRTCodeGenHelper : public BaseCodeGenHelper {
 
   /*! \brief Get describe for default node output*/
   const String IdxOutputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
-                             const String& suffix = "") final {
+                             const String& suffix = "", bool mark_exit = false) final {
     if (node->optype == "argmax" || node->optype == "argmin") {
       ICHECK_EQ(idx, 0) << "argmax and argmin only has 1 output, get " << idx;
       return IdxNodeBase(node, prefix, suffix) + "->getOutput(1)";
@@ -69,8 +69,8 @@ class TensorRTCodeGenHelper : public BaseCodeGenHelper {
   }
 
   /*! \brief Get describe for default node weight*/
-  const String IdxWeightBase(const MSCJoint& node, const String& wtype,
-                             const String& suffix = "") final {
+  const String IdxWeightBase(const MSCJoint& node, const String& wtype, const String& suffix = "",
+                             bool process = false) final {
     return "mWeights[\"" + node->WeightAt(wtype)->name + "\"]";
   }
 };
@@ -85,6 +85,9 @@ struct TensorRTCodeGenConfig {
   size_t max_workspace{1 << 20};
   std::string cmake_version{"3.5"};
   std::string dataset{"Dataset"};
+  std::string range_file{""};
+  std::string precision{"float32"};
+  std::string precision_mode{"strict"};
   std::string tensorrt_root{"/usr/local/cuda"};
   CODEGEN_CONFIG_MEMBERS
   void Load(dmlc::JSONReader* reader) {
@@ -103,6 +106,12 @@ struct TensorRTCodeGenConfig {
         reader->Read(&cmake_version);
       } else if (key == "dataset") {
         reader->Read(&dataset);
+      } else if (key == "range_file") {
+        reader->Read(&range_file);
+      } else if (key == "precision") {
+        reader->Read(&precision);
+      } else if (key == "precision_mode") {
+        reader->Read(&precision_mode);
       } else if (key == "tensorrt_root") {
         reader->Read(&tensorrt_root);
       } else {

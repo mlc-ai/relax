@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=unused-import
 """tvm.contrib.msc.framework.runtime.tvm.runner"""
 
 from typing import Dict, List, Union, Any
@@ -21,8 +22,31 @@ import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.runtime import ModelRunner
+from tvm.contrib.msc.core.tools import execute_step
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.framework.tvm.codegen import to_relax
+from tvm.contrib.msc.framework.tvm import tools
+
+
+class WrapRunnable(object):
+    """Wrapped runnable for tools
+
+    Parameters
+    -------
+    runnable: tvm.relax.VirtualMachine
+        The virtual machine.
+    entry: str
+        The entry funcname.
+    """
+
+    def __init__(self, runnable: tvm.relax.VirtualMachine, entry: str = "main"):
+        self._runnable = runnable
+        self._entry = entry
+
+    def __call__(self, *inputs) -> List[tvm.nd.array]:
+        execute_step("before_forward", *inputs)
+        output = self._runnable[self._entry](*inputs)
+        return execute_step("after_forward", output)
 
 
 class TVMRunner(ModelRunner):
@@ -46,8 +70,8 @@ class TVMRunner(ModelRunner):
             The runnable
         """
 
-        if "builder" in self._load_config:
-            builder, build_config = self._load_config["builder"]
+        if "builder" in self._generate_config:
+            builder, build_config = self._generate_config["builder"]
             runnable = builder(model, **build_config)
             self._logger.info(
                 "Model({}) processed by customize builder {}({})".format(
@@ -70,10 +94,10 @@ class TVMRunner(ModelRunner):
                     runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cuda())
             else:
                 raise NotImplementedError("Unsupported device " + str(device))
-        return runnable
+        return WrapRunnable(runnable)
 
     def _call_runnable(
-        self, runnable: tvm.relax.VirtualMachine, inputs: Dict[str, np.ndarray], device: str
+        self, runnable: WrapRunnable, inputs: Dict[str, np.ndarray], device: str
     ) -> Union[List[np.ndarray], Dict[str, np.ndarray]]:
         """Call the runnable to get outputs
 
@@ -102,7 +126,7 @@ class TVMRunner(ModelRunner):
             ]
         else:
             raise NotImplementedError("Unsupported device " + str(device))
-        return runnable["main"](*tvm_inputs)
+        return runnable(*tvm_inputs)
 
     def _device_enabled(self, device: str) -> bool:
         """Check if the device is enabled
