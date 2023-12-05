@@ -155,6 +155,15 @@ TVM_DLL Pass AttachGlobalSymbol();
 TVM_DLL Pass Normalize();
 
 /*!
+ * \brief Possibly rename the GlobalVar in an IRModule to ensure these properties:
+ * 1. (Invariant) First ensure every public function has the same name as its "global_symbol"
+ *    attribute;
+ * 2. To ensure 1., we may need to rename private functions with conflicting names;
+ * 3. Finally, the name of every GlobalVar is unique in the IRModule.
+ */
+TVM_DLL Pass NormalizeGlobalVar();
+
+/*!
  * \brief Simplify a Relax module by folding var bindings and match shape nodes,
  * as well as tuple indices.
  * Best used alongside constant folding and eliminating unused bindings.
@@ -265,6 +274,24 @@ TVM_DLL Pass LiftTransformParams();
  * \return The Pass.
  */
 TVM_DLL Pass UpdateVDevice(VDevice new_vdevice, int64_t index);
+
+/*! \brief Expand tuple arguments to internal functions
+ *
+ * \return The Pass
+ */
+TVM_DLL Pass ExpandTupleArguments();
+
+/*! \brief Remove unused parameters to internal functions
+ *
+ * \return The Pass
+ */
+TVM_DLL Pass RemoveUnusedParameters();
+
+/*! \brief Remove unused outputs from internal functions
+ *
+ * \return The Pass
+ */
+TVM_DLL Pass RemoveUnusedOutputs();
 
 /*!
  * \brief Annotate Op Pattern Kind for TIR functions, which is used in FuseOps.

@@ -66,21 +66,19 @@ class BaseOpCode {
   virtual const Array<Doc> GetDocs() = 0;
 
   /*! \brief Get return describe for default node*/
-  virtual const String IdxNode(bool as_raw = true) { return IdxNodeBase(node_, as_raw); }
+  virtual const String IdxNode() { return IdxNodeBase(node_); }
 
   /*! \brief Get describe for default node input*/
-  const String IdxInput(int idx = 0, bool as_raw = false) {
-    return IdxInputBase(node_, idx, as_raw);
+  const String IdxInput(int idx = 0, bool process = true) {
+    return IdxInputBase(node_, idx, process);
   }
 
   /*! \brief Get describe for default node output*/
-  const String IdxOutput(int idx = 0, bool as_raw = false) {
-    return IdxOutputBase(node_, idx, as_raw);
-  }
+  const String IdxOutput(int idx = 0) { return IdxOutputBase(node_, idx); }
 
   /*! \brief Get describe for default node weight*/
-  const String IdxWeight(const String& wtype, bool as_raw = false) {
-    return IdxWeightBase(node_, wtype, as_raw);
+  const String IdxWeight(const String& wtype, bool process = true) {
+    return IdxWeightBase(node_, wtype, process);
   }
 
   /*! \brief Get comment for default node*/
@@ -93,7 +91,7 @@ class BaseOpCode {
   virtual const String callee_name() { return func_name(); }
 
   /*! \brief Get valid return name for the default node*/
-  virtual const String ret_name() { return IdxNode(true); }
+  virtual const String ret_name() { return IdxNode(); }
 
   /*! \brief Get the default node*/
   const MSCJoint node() { return node_; }
@@ -169,14 +167,6 @@ class BaseCodeGen {
       LOG(FATAL) << "Unexpected node scope " << node->scope << " with current scope "
                  << scopes_.top();
     }
-  }
-
-  /*!
-   * \brief Compare version with version in config
-   * 0 for same version, 1 for greater version, -1 for less version
-   */
-  int CompareVersion(size_t major, size_t minor, size_t patch) {
-    return CommonUtils::CompareVersion({major, minor, patch}, config_->version);
   }
 
   /*! \brief Get the docs for the op*/

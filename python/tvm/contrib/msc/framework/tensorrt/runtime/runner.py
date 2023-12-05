@@ -14,23 +14,52 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=unused-import
 """tvm.contrib.msc.framework.tensorrt.runtime.runner"""
 
+import tvm
 from tvm.contrib.msc.core.runtime import BYOCRunner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
-from tvm.contrib.msc.framework.tensorrt.frontend import partition_for_tensorrt
+from tvm.contrib.msc.framework.tensorrt.frontend import (
+    partition_for_tensorrt,
+    transform_for_tensorrt,
+)
 from tvm.contrib.msc.framework.tensorrt.codegen import to_tensorrt
+from tvm.contrib.msc.framework.tensorrt import tools
 
 
 class TensorRTRunner(BYOCRunner):
     """Runner of tensorrt"""
 
-    def setup(self):
-        """Setup the runner"""
+    def setup(self) -> dict:
+        """Setup the runner
 
-        super().setup()
+        Returns
+        -------
+        info: dict
+            The setup info.
+        """
+
         if not self._device.startswith("cuda"):
             self._device = "cuda"
+        return super().setup()
+
+    @classmethod
+    def target_transform(cls, mod: tvm.IRModule):
+        """Transform the mod by target.
+
+        Parameters
+        ----------
+        mod: IRModule
+            The IRModule of relax.
+
+        Returns
+        -------
+        mod: IRModule
+            The IRModule of partitioned relax.
+        """
+
+        return transform_for_tensorrt(mod)
 
     @property
     def codegen_func(self):
