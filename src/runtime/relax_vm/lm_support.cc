@@ -95,14 +95,13 @@ class AttentionKVCacheObj : public Object {
   }
 
   /*!
-   * Once the cache size exceeds `max_cache_size`, we trim it back down to `desired_cache_size`.
+   * Trim cache down to `desired_cache_size`.
    * If we trim, we use the first few slots of the cache as Attention Sinks (https://arxiv.org/abs/2309.17453).
    * Using Attention Sinks has been shown to improve model output quality after cache trimming. 
    */
-  void MaybeEvictWithSinks(int64_t max_cache_size,
-                           int64_t desired_cache_size,
-                           int32_t num_attention_sinks) {
-    if (fill_count < max_cache_size) return;
+  int64_t MaybeEvictWithSinks(int64_t desired_cache_size,
+                              int32_t num_attention_sinks) {
+    if (fill_count < desired_cache_size) return fill_count;
 
     // Left shift the cache. We just create a new array here as it's tidier than
     // doing in-place operations and then tracking what slots are allocated versus used.
@@ -125,6 +124,7 @@ class AttentionKVCacheObj : public Object {
     // Update members.
     this->data = new_data;
     this->fill_count = desired_cache_size;
+    return fill_count;
   }
 
   /** pop n entries */
@@ -351,13 +351,10 @@ void AttentionKVCacheArrayClear(Array<AttentionKVCache> caches) {
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_array_clear")
     .set_body_typed(AttentionKVCacheArrayClear);
 
-void AttentionKVCacheMaybeEvictWithSinks(Array<AttentionKVCache> caches,
-                                         int64_t max_cache_size,
-                                         int64_t desired_cache_size,
-                                         int32_t num_attention_sinks) {
-  for (AttentionKVCache cache : caches) {
-    cache->MaybeEvictWithSinks(max_cache_size, desired_cache_size, num_attention_sinks);
-  }
+int64_t AttentionKVCacheMaybeEvictWithSinks(AttentionKVCache cache,
+                                            int64_t desired_cache_size,
+                                            int32_t num_attention_sinks) {
+  return cache->MaybeEvictWithSinks(desired_cache_size, num_attention_sinks);
 }
 
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_maybe_evict_with_sinks")
