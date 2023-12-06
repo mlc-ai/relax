@@ -217,5 +217,44 @@ def test_attention_kv_cache_window_override():
     ).all()
 
 
+def test_attention_kv_cache_evict():
+    fcreate = tvm.get_global_func("vm.builtin.attention_kv_cache_create")
+    fappend = tvm.get_global_func("vm.builtin.attention_kv_cache_append")
+    fview = tvm.get_global_func("vm.builtin.attention_kv_cache_view")
+
+    fevict = tvm.get_global_func("vm.builtin.attention_kv_cache_maybe_evict_with_sinks")
+
+    cache = fcreate(tvm.nd.empty((1, 2, 2), dtype="int32"), tvm.runtime.ShapeTuple([2, 2, 2]), 0)
+    num_steps = 20
+    for i in range(num_steps):
+        cache = fappend(cache, tvm.nd.array(i * np.ones((1, 2, 2)).astype("int32")))
+
+    new_size = 15
+    num_sinks = 4
+    evict_res = fevict([cache], new_size, num_sinks)
+    #evict_res = num_steps
+
+    res = fview(cache, tvm.runtime.ShapeTuple((evict_res, 2, 2))).numpy()
+    # First `num_sinks` slots are 0s, 1s, 2s, 3s. Then skip to 9s, 10s, ...
+    for i in range(evict_res):
+        expected_value = i if i < num_sinks else (num_steps - new_size + i)
+        assert res[i][0][0] == expected_value
+        assert res[i][0][1] == expected_value
+        assert res[i][1][0] == expected_value
+        assert res[i][1][1] == expected_value
+
+    for i in range(num_steps):
+        cache = fappend(cache, tvm.nd.array((i+num_steps) * np.ones((1, 2, 2)).astype("int32")))
+    evict_res = fevict([cache], new_size, num_sinks)
+    res = fview(cache, tvm.runtime.ShapeTuple((evict_res, 2, 2))).numpy()
+    # First `num_sinks` slots are still 0s, 1s, 2s, 3s. Then skip to 29s, 30s, ...
+    for i in range(evict_res):
+        expected_value = i if i < num_sinks else (2 * num_steps - new_size + i)
+        assert res[i][0][0] == expected_value
+        assert res[i][0][1] == expected_value
+        assert res[i][1][0] == expected_value
+        assert res[i][1][1] == expected_value
+
+
 if __name__ == "__main__":
     tvm.testing.main()

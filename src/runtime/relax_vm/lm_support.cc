@@ -103,26 +103,25 @@ class AttentionKVCacheObj : public Object {
                               int32_t num_attention_sinks) {
     if (fill_count < desired_cache_size) return fill_count;
 
-    // Left shift the cache. We just create a new array here as it's tidier than
-    // doing in-place operations and then tracking what slots are allocated versus used.
-    std::vector<int64_t> new_shape(data->shape, data->shape + data->ndim);
-    new_shape[0] = desired_cache_size;
-    NDArray new_data = NDArray::Empty(new_shape, data->dtype, data->device);
-    int64_t shift_slots = fill_count - desired_cache_size;
+    // Left shift the cache, so that the number of slots decreases to `desired_cache_size`.
+    // Keep the first `num_attention_sinks` slots unchanged. We can zero it out, or reserve them for system.
+    ICHECK(data.IsContiguous());
+    ICHECK_EQ(data->ndim, 3);
+    int64_t shift_slots = fill_count - desired_cache_size + num_attention_sinks;
     size_t data_elem_size = (data->dtype.bits * data->dtype.lanes + 7) / 8;
     size_t size_2nd_3rd_dims = data->shape[1] * data->shape[2];
-    size_t shift_bytes = shift_slots * size_2nd_3rd_dims * data_elem_size;
-    size_t total_bytes = fill_count * size_2nd_3rd_dims * data_elem_size;
-    std::memcpy(new_data->data,
-                static_cast<char*>(this->data->data) + shift_bytes,
-                total_bytes - shift_bytes);
+    std::vector<int64_t> data_shape(data->shape, data->shape + data->ndim);
+    data_shape[0] = desired_cache_size - num_attention_sinks;
 
-    // Add Attention Sinks.
-    size_t zero_bytes = num_attention_sinks * size_2nd_3rd_dims * data_elem_size;
-    std::memset(new_data->data, 0, zero_bytes);
+    DLTensor copy_dst = *(data.operator->());
+    copy_dst.byte_offset = num_attention_sinks * size_2nd_3rd_dims * data_elem_size;
+    copy_dst.shape = &data_shape[0];
+    DLTensor copy_src = *(data.operator->());
+    copy_src.byte_offset = shift_slots * size_2nd_3rd_dims * data_elem_size;;
+    copy_src.shape = &data_shape[0];
+    NDArray::CopyFromTo(&copy_src, &copy_dst);
 
     // Update members.
-    this->data = new_data;
     this->fill_count = desired_cache_size;
     return fill_count;
   }
