@@ -351,10 +351,19 @@ void AttentionKVCacheArrayClear(Array<AttentionKVCache> caches) {
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_array_clear")
     .set_body_typed(AttentionKVCacheArrayClear);
 
-int64_t AttentionKVCacheMaybeEvictWithSinks(AttentionKVCache cache,
+int64_t AttentionKVCacheMaybeEvictWithSinks(Array<AttentionKVCache> caches,
                                             int64_t desired_cache_size,
                                             int32_t num_attention_sinks) {
-  return cache->MaybeEvictWithSinks(desired_cache_size, num_attention_sinks);
+  int64_t new_size = -1;
+  for (AttentionKVCache cache : caches) {
+    if (new_size == -1) {
+      new_size = cache->MaybeEvictWithSinks(desired_cache_size, num_attention_sinks);
+    } else {
+      ICHECK_EQ(new_size, cache->MaybeEvictWithSinks(desired_cache_size, num_attention_sinks))
+        << "KV caches have different sizes!";
+    }
+  }
+  return new_size;
 }
 
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_maybe_evict_with_sinks")
