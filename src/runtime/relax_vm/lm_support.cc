@@ -96,15 +96,16 @@ class AttentionKVCacheObj : public Object {
 
   /*!
    * Trim cache down to `desired_cache_size`.
-   * If we trim, we use the first few slots of the cache as Attention Sinks (https://arxiv.org/abs/2309.17453).
-   * Using Attention Sinks has been shown to improve model output quality after cache trimming. 
+   * If we trim, we use the first few slots of the cache as Attention Sinks
+   * (https://arxiv.org/abs/2309.17453). Using Attention Sinks has been shown to improve model
+   * output quality after cache trimming.
    */
-  int64_t MaybeEvictWithSinks(int64_t desired_cache_size,
-                              int32_t num_attention_sinks) {
+  int64_t MaybeEvictWithSinks(int64_t desired_cache_size, int32_t num_attention_sinks) {
     if (fill_count < desired_cache_size) return fill_count;
 
     // Left shift the cache, so that the number of slots decreases to `desired_cache_size`.
-    // Keep the first `num_attention_sinks` slots unchanged. We can zero it out, or reserve them for system.
+    // Keep the first `num_attention_sinks` slots unchanged. We can zero it out, or reserve them for
+    // system.
     ICHECK(data.IsContiguous());
     ICHECK_EQ(data->ndim, 3);
     int64_t shift_slots = fill_count - desired_cache_size + num_attention_sinks;
@@ -117,7 +118,7 @@ class AttentionKVCacheObj : public Object {
     copy_dst.byte_offset = num_attention_sinks * size_2nd_3rd_dims * data_elem_size;
     copy_dst.shape = &data_shape[0];
     DLTensor copy_src = *(data.operator->());
-    copy_src.byte_offset = shift_slots * size_2nd_3rd_dims * data_elem_size;;
+    copy_src.byte_offset = shift_slots * size_2nd_3rd_dims * data_elem_size;
     copy_src.shape = &data_shape[0];
     NDArray::CopyFromTo(&copy_src, &copy_dst);
 
@@ -359,7 +360,7 @@ int64_t AttentionKVCacheMaybeEvictWithSinks(Array<AttentionKVCache> caches,
       new_size = cache->MaybeEvictWithSinks(desired_cache_size, num_attention_sinks);
     } else {
       ICHECK_EQ(new_size, cache->MaybeEvictWithSinks(desired_cache_size, num_attention_sinks))
-        << "KV caches have different sizes!";
+          << "KV caches have different sizes!";
     }
   }
   return new_size;
