@@ -104,8 +104,12 @@ class AttentionKVCacheObj : public Object {
     if (fill_count < desired_cache_size) return fill_count;
 
     // Left shift the cache, so that the number of slots decreases to `desired_cache_size`.
-    // Keep the first `num_attention_sinks` slots unchanged. We can zero it out, or reserve them for
-    // system.
+    // Keep the first `num_attention_sinks` slots unchanged.
+    // TODO: We should add an option to allow callers to replace sink slots with their chosen token.
+    // The paper mentions using zero-tokens, but shows that using an arbitrary token perform equally
+    // well (Table 1), and having a learned sink token is even better. Our current decision of
+    // keeping the sink tokens unchanged is similar to picking arbitrary tokens, and better suits
+    // dialogue setups with a system command, if `num_attention_sinks` is set to its length.
     ICHECK(data.IsContiguous());
     ICHECK_EQ(data->ndim, 3);
     int64_t shift_slots = fill_count - desired_cache_size + num_attention_sinks;
