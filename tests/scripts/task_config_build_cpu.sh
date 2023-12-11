@@ -31,7 +31,7 @@ echo set\(USE_LLVM \"/usr/bin/llvm-config-17 --link-static\"\) >> config.cmake
 echo set\(CMAKE_CXX_FLAGS \"-Wno-error=range-loop-construct -Wno-error=comment\"\) >> config.cmake
 echo set\(HIDE_PRIVATE_SYMBOLS ON\) >> config.cmake
 echo set\(USE_TENSORFLOW_PATH \"/tensorflow\"\) >> config.cmake
-echo set\(USE_TFLITE \"/opt/tflite\"\) >> config.cmake
+echo set\(USE_TFLITE OFF\) >> config.cmake
 echo set\(USE_FLATBUFFERS_PATH \"/flatbuffers\"\) >> config.cmake
 echo set\(USE_CCACHE OFF\) >> config.cmake
 echo set\(SUMMARIZE ON\) >> config.cmake
