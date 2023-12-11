@@ -94,6 +94,43 @@ class AttentionKVCacheObj : public Object {
     this->window_attention_current_pos = 0;
   }
 
+  /*!
+   * Trim cache down to `desired_cache_size`.
+   * If we trim, we use the first few slots of the cache as Attention Sinks
+   * (https://arxiv.org/abs/2309.17453). Using Attention Sinks has been shown to improve model
+   * output quality after cache trimming.
+   */
+  int64_t MaybeEvictWithSinks(int64_t desired_cache_size, int32_t num_attention_sinks) {
+    if (fill_count < desired_cache_size) return fill_count;
+
+    // Left shift the cache, so that the number of slots decreases to `desired_cache_size`.
+    // Keep the first `num_attention_sinks` slots unchanged.
+    // TODO: We should add an option to allow callers to replace sink slots with their chosen token.
+    // The paper mentions using zero-tokens, but shows that using an arbitrary token perform equally
+    // well (Table 1), and having a learned sink token is even better. Our current decision of
+    // keeping the sink tokens unchanged is similar to picking arbitrary tokens, and better suits
+    // dialogue setups with a system command, if `num_attention_sinks` is set to its length.
+    ICHECK(data.IsContiguous());
+    ICHECK_EQ(data->ndim, 3);
+    int64_t shift_slots = fill_count - desired_cache_size + num_attention_sinks;
+    size_t data_elem_size = (data->dtype.bits * data->dtype.lanes + 7) / 8;
+    size_t size_2nd_3rd_dims = data->shape[1] * data->shape[2];
+    std::vector<int64_t> data_shape(data->shape, data->shape + data->ndim);
+    data_shape[0] = desired_cache_size - num_attention_sinks;
+
+    DLTensor copy_dst = *(data.operator->());
+    copy_dst.byte_offset = num_attention_sinks * size_2nd_3rd_dims * data_elem_size;
+    copy_dst.shape = &data_shape[0];
+    DLTensor copy_src = *(data.operator->());
+    copy_src.byte_offset = shift_slots * size_2nd_3rd_dims * data_elem_size;
+    copy_src.shape = &data_shape[0];
+    NDArray::CopyFromTo(&copy_src, &copy_dst);
+
+    // Update members.
+    this->fill_count = desired_cache_size;
+    return fill_count;
+  }
+
   /** pop n entries */
   void PopN(size_t n) {
     ICHECK_LE(n, fill_count);
@@ -317,6 +354,24 @@ void AttentionKVCacheArrayClear(Array<AttentionKVCache> caches) {
 
 TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_array_clear")
     .set_body_typed(AttentionKVCacheArrayClear);
+
+int64_t AttentionKVCacheMaybeEvictWithSinks(Array<AttentionKVCache> caches,
+                                            int64_t desired_cache_size,
+                                            int32_t num_attention_sinks) {
+  int64_t new_size = -1;
+  for (AttentionKVCache cache : caches) {
+    if (new_size == -1) {
+      new_size = cache->MaybeEvictWithSinks(desired_cache_size, num_attention_sinks);
+    } else {
+      ICHECK_EQ(new_size, cache->MaybeEvictWithSinks(desired_cache_size, num_attention_sinks))
+          << "KV caches have different sizes!";
+    }
+  }
+  return new_size;
+}
+
+TVM_REGISTER_GLOBAL("vm.builtin.attention_kv_cache_maybe_evict_with_sinks")
+    .set_body_typed(AttentionKVCacheMaybeEvictWithSinks);
 
 // NOTE this is a built-in highly related to LM so we put it here.
 int SampleTopPFromLogits(NDArray logits, double temperature, double top_p, double uniform_sample) {
