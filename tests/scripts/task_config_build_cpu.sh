@@ -30,7 +30,7 @@ echo set\(USE_PROFILER ON\) >> config.cmake
 echo set\(USE_DNNL ON\) >> config.cmake
 echo set\(USE_ARM_COMPUTE_LIB ON\) >> config.cmake
 echo set\(USE_LLVM \"/usr/bin/llvm-config-15 --link-static\"\) >> config.cmake
-echo set\(USE_NNPACK ON\) >> config.cmake
+echo set\(USE_NNPACK OFF\) >> config.cmake
 echo set\(NNPACK_PATH /NNPACK/build/\) >> config.cmake
 echo set\(USE_ANTLR ON\) >> config.cmake
 echo set\(CMAKE_CXX_FLAGS \"-Werror -Wno-error=range-loop-construct\"\) >> config.cmake
@@ -40,9 +40,9 @@ echo set\(HIDE_PRIVATE_SYMBOLS ON\) >> config.cmake
 # with the change in the way TFLite is built. It can be
 # removed once we migrate to TensorFlow and TFLite > 2.9.1
 if [ -d "/opt/tflite" ]; then
-  echo set\(USE_TFLITE \"/opt/tflite\"\) >> config.cmake
+  echo set\(USE_TFLITE OFF\) >> config.cmake
 else
-  echo set\(USE_TFLITE ON\) >> config.cmake
+  echo set\(USE_TFLITE OFF\) >> config.cmake
 fi
 
 echo set\(USE_TENSORFLOW_PATH \"/tensorflow\"\) >> config.cmake
