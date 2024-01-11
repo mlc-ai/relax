@@ -135,11 +135,23 @@ InferLayoutOutput InferLayoutStatistical(const Call& call,
                            Attrs(new_attrs));
 }
 
-TVM_REGISTER_NODE_TYPE(ScanopAttrs);
+/* relax.cumsum */
+TVM_REGISTER_NODE_TYPE(CumsumAttrs);
 
-StructInfo InferStructInfoScan(const Call& call, const BlockBuilder& ctx) {
+Expr cumsum(Expr data, Optional<Integer> axis, DataType dtype) {
+  auto attrs = make_object<CumsumAttrs>();
+  attrs->axis = std::move(axis);
+  attrs->dtype = std::move(dtype);
+
+  static const Op& op = Op::Get("relax.cumsum");
+  return Call(op, {std::move(data)}, Attrs{attrs}, {});
+}
+
+TVM_REGISTER_GLOBAL("relax.op.cumsum").set_body_typed(cumsum);
+
+StructInfo InferStructInfoCumsum(const Call& call, const BlockBuilder& ctx) {
   TensorStructInfo data_sinfo = GetUnaryInputTensorStructInfo(call, ctx);
-  const auto* attrs = call->attrs.as<ScanopAttrs>();
+  const auto* attrs = call->attrs.as<CumsumAttrs>();
 
   DataType out_type = attrs->dtype.is_void() ? data_sinfo->dtype : attrs->dtype;
 
@@ -165,44 +177,11 @@ StructInfo InferStructInfoScan(const Call& call, const BlockBuilder& ctx) {
   }
 }
 
-/* relax.cumprod */
-Expr cumprod(Expr data, Optional<Integer> axis, DataType dtype, Bool exclusive) {
-  auto attrs = make_object<ScanopAttrs>();
-  attrs->axis = std::move(axis);
-  attrs->dtype = std::move(dtype);
-  attrs->exclusive = std::move(exclusive);
-
-  static const Op& op = Op::Get("relax.cumprod");
-  return Call(op, {std::move(data)}, Attrs{attrs}, {});
-}
-
-TVM_REGISTER_GLOBAL("relax.op.cumprod").set_body_typed(cumprod);
-
-TVM_REGISTER_OP("relax.cumprod")
-    .set_attrs_type<ScanopAttrs>()
-    .set_num_inputs(1)
-    .add_argument("data", "Tensor", "The input tensor.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoScan)
-    .set_attr<Bool>("FPurity", Bool(true));
-
-/* relax.cumsum */
-Expr cumsum(Expr data, Optional<Integer> axis, DataType dtype, Bool exclusive) {
-  auto attrs = make_object<ScanopAttrs>();
-  attrs->axis = std::move(axis);
-  attrs->dtype = std::move(dtype);
-  attrs->exclusive = std::move(exclusive);
-
-  static const Op& op = Op::Get("relax.cumsum");
-  return Call(op, {std::move(data)}, Attrs{attrs}, {});
-}
-
-TVM_REGISTER_GLOBAL("relax.op.cumsum").set_body_typed(cumsum);
-
 TVM_REGISTER_OP("relax.cumsum")
-    .set_attrs_type<ScanopAttrs>()
+    .set_attrs_type<CumsumAttrs>()
     .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor.")
-    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoScan)
+    .set_attr<FInferStructInfo>("FInferStructInfo", InferStructInfoCumsum)
     .set_attr<Bool>("FPurity", Bool(true));
 
 TVM_REGISTER_NODE_TYPE(StatisticalAttrs);

@@ -86,22 +86,6 @@ Expr std(Expr x, Optional<Array<Integer>> axis, bool keepdims);
 Expr sum(Expr x, Optional<Array<Integer>> axis, bool keepdims);
 
 /*!
- * \brief Numpy style cumprod op. Return the cumulative inclusive product of the elements along
- * a given axis.
- * \param data The input tensor.
- * \param axis Axis along which the cumulative product is computed. The default (None) is to compute
- * the cumprod over the flattened array.
- * \param dtype Type of the returned array and of the accumulator in which the elements are
- * computed. If dtype is not specified, it defaults to the dtype of data.
- * \param exclusive Whehter the first element is exclusive. If true will return exclusive sum in
- * which the first element is not included.
- * \return The computed
- * result.
- */
-Expr cumprod(Expr data, Optional<Integer> axis = NullOpt, DataType dtype = DataType::Void(),
-             Bool exclusive = Bool(false));
-
-/*!
  * \brief Numpy style cumsum op. Return the cumulative inclusive sum of the elements along
  * a given axis.
  * \param data The input tensor.
@@ -109,12 +93,9 @@ Expr cumprod(Expr data, Optional<Integer> axis = NullOpt, DataType dtype = DataT
  * the cumsum over the flattened array.
  * \param dtype Type of the returned array and of the accumulator in which the elements are summed.
  * If dtype is not specified, it defaults to the dtype of data.
- * \param exclusive Whehter the first element is exclusive. If true will return exclusive sum in
- * which the first element is not included.
  * \return The computed result.
  */
-Expr cumsum(Expr data, Optional<Integer> axis = NullOpt, DataType dtype = DataType::Void(),
-            Bool exclusive = Bool(false));
+Expr cumsum(Expr data, Optional<Integer> axis = NullOpt, DataType dtype = DataType::Void());
 
 /*! \brief Computes the variance of tensor elements over given axes. */
 Expr variance(Expr x, Optional<Array<Integer>> axis, bool keepdims);

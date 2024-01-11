@@ -37,21 +37,15 @@ def _check(
 
 def test_sort():
     @R.function
-    def foo(
-        x: R.Tensor((2, 3), "int32")
-    ) -> R.Tuple(R.Tensor((2, 2), dtype="int32"), R.Tensor((2, 2), dtype="int32")):
-        lv0 = R.sort(x, axis=1)
-        lv1 = R.argsort(lv0)
-        r = R.topk(lv1, axis=1, k=2)
+    def foo(x: R.Tensor((2, 3), "int32")) -> R.Tensor((2, 3), "int32"):
+        r = R.sort(x, axis=1)
         return r
 
     x = relax.Var("x", R.Tensor((2, 3), "int32"))
     bb = relax.BlockBuilder()
     with bb.function("foo", (x,)):
-        lv0 = bb.emit(relax.op.sort(x, axis=1))
-        lv1 = bb.emit(relax.op.argsort(lv0))
-        r = bb.emit(relax.op.topk(lv1, axis=1, k=2))
-        bb.emit_func_output(r)
+        tensor = bb.emit(relax.op.sort(x, axis=1))
+        bb.emit_func_output(tensor)
 
     _check(foo, bb.get()["foo"])
 
