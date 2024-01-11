@@ -40,9 +40,9 @@ echo set\(HIDE_PRIVATE_SYMBOLS ON\) >> config.cmake
 # with the change in the way TFLite is built. It can be
 # removed once we migrate to TensorFlow and TFLite > 2.9.1
 if [ -d "/opt/tflite" ]; then
-  echo set\(USE_TFLITE \"/opt/tflite\"\) >> config.cmake
+  echo set\(USE_TFLITE OFF\) >> config.cmake
 else
-  echo set\(USE_TFLITE ON\) >> config.cmake
+  echo set\(USE_TFLITE OFF\) >> config.cmake
 fi
 
 echo set\(USE_TENSORFLOW_PATH \"/tensorflow\"\) >> config.cmake
