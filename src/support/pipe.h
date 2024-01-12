@@ -79,7 +79,8 @@ class Pipe : public dmlc::Stream {
 #ifdef _WIN32
     auto fread = [&]() -> ssize_t {
       DWORD nread;
-      if (!ReadFile(handle_, static_cast<TCHAR*>(ptr), size, &nread, nullptr)) return -1;
+      if (!ReadFile(handle_, static_cast<TCHAR*>(ptr), size, &nread, nullptr))
+        return static_cast<ssize_t>(-1);
       return static_cast<ssize_t>(nread);
     };
     DWORD nread = static_cast<DWORD>(RetryCallOnEINTR(fread, GetLastErrorCode));
@@ -101,7 +102,8 @@ class Pipe : public dmlc::Stream {
 #ifdef _WIN32
     auto fwrite = [&]() -> ssize_t {
       DWORD nwrite;
-      if (!WriteFile(handle_, static_cast<const TCHAR*>(ptr), size, &nwrite, nullptr)) return -1;
+      if (!WriteFile(handle_, static_cast<const TCHAR*>(ptr), size, &nwrite, nullptr))
+        return static_cast<ssize_t>(-1);
       return static_cast<ssize_t>(nwrite);
     };
     DWORD nwrite = static_cast<DWORD>(RetryCallOnEINTR(fwrite, GetLastErrorCode));
