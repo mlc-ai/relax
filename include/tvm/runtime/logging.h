@@ -560,15 +560,26 @@ std::unique_ptr<std::string> LogCheckFormat(const X& x, const Y& y) {
     return LogCheck##name<int, int>(x, y);                                                \
   }
 
+#if defined(__GNUC__) || defined(__clang__)  // GCC and Clang
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-compare"
+#elif defined(_MSC_VER)  // MSVC
+#pragma warning(push)
+#pragma warning(disable : 4389)  // '==' : signed/unsigned mismatch
+#endif
+
 TVM_CHECK_FUNC(_LT, <)
 TVM_CHECK_FUNC(_GT, >)
 TVM_CHECK_FUNC(_LE, <=)
 TVM_CHECK_FUNC(_GE, >=)
 TVM_CHECK_FUNC(_EQ, ==)
 TVM_CHECK_FUNC(_NE, !=)
+
+#if defined(__GNUC__) || defined(__clang__)  // GCC and Clang
 #pragma GCC diagnostic pop
+#elif defined(_MSC_VER)  // MSVC
+#pragma warning(pop)
+#endif
 
 }  // namespace detail
 
