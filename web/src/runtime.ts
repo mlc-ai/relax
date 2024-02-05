@@ -1542,7 +1542,6 @@ export class Instance implements Disposable {
     const processShard = async (i: number) => {
       reportCallback(i);
       const shard = list[i];
-
       fetchedBytes += shard.nbytes;
       const dataUrl = new URL(shard.dataPath, ndarrayCacheUrl).href;
       let buffer;
@@ -1585,7 +1584,6 @@ export class Instance implements Disposable {
     }
 
     await Promise.all(list.map((_, index) => processShard(index)));
-    
     reportCallback(list.length);
   }
 
