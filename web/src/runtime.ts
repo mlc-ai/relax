@@ -1539,10 +1539,12 @@ export class Instance implements Disposable {
       });
     }
 
-    for (let i = 0; i < list.length; ++i) {
+    const processShard = async (i: number) => {
       reportCallback(i);
-      fetchedBytes += list[i].nbytes;
-      const dataUrl = new URL(list[i].dataPath, ndarrayCacheUrl).href;
+      const shard = list[i];
+
+      fetchedBytes += shard.nbytes;
+      const dataUrl = new URL(shard.dataPath, ndarrayCacheUrl).href;
       let buffer;
       try {
         buffer = await (await artifactCache.fetchWithCache(dataUrl)).arrayBuffer();
@@ -1550,7 +1552,7 @@ export class Instance implements Disposable {
         this.env.logger("Error: Cannot fetch " + dataUrl + " err= " + err);
         throw err;
       }
-      const shardRecords = list[i].records;
+      const shardRecords = shard.records;
       for (let j = 0; j < shardRecords.length; ++j) {
         const rec = shardRecords[j];
         const cpu_arr = this.withNewScope(() => {
@@ -1581,6 +1583,9 @@ export class Instance implements Disposable {
       }
       timeElapsed = Math.ceil((perf.now() - tstart) / 1000);
     }
+
+    await Promise.all(list.map((_, index) => processShard(index)));
+    
     reportCallback(list.length);
   }
 
