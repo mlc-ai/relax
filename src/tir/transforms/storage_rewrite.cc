@@ -1724,7 +1724,8 @@ Pass StorageRewrite() {
     }
 
     Optional<Target> target = f->GetAttr<Target>("target");
-    if (target.defined() && target.value()->kind->name == "vulkan") {
+    if (target.defined() &&
+        (target.value()->kind->name == "vulkan" || target.value()->kind->name == "webgpu")) {
       // Require exactly same-dtype matching in smem reuse for Vulkan
       reuse_require_exact_matched_dtype = true;
     }
