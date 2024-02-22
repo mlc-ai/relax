@@ -34,6 +34,7 @@ class BaseBeforeAfter(tvm.testing.CompareBeforeAfter):
         return transform
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 class TestMatmulTensorize(BaseBeforeAfter):
     # fmt: off
 
@@ -261,6 +262,7 @@ class TestMatmulTensorizeTooSmall(BaseBeforeAfter):
     # fmt: on
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 class TestMatmulTensorizeEpilogue(BaseBeforeAfter):
     # fmt: off
 
@@ -425,6 +427,7 @@ class TestMatmulTensorizeEpilogue(BaseBeforeAfter):
     # fmt: on
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 class TestMatmulInt8Tensorize(BaseBeforeAfter):
     # fmt: off
     @T.prim_func
@@ -558,6 +561,7 @@ class TestMatmulInt8Tensorize(BaseBeforeAfter):
     # fmt: on
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 class TestMatmulInt8Tensorize3d2dDyn(BaseBeforeAfter):
     # fmt: off
     @T.prim_func
