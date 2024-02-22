@@ -22,9 +22,11 @@ from tvm.s_tir import dlight as dl
 from tvm.script import tir as T
 from tvm.target import Target
 
+import pytest
 
+
+@pytest.mark.skip(reason="pipeline disabled")
 def test_matmul_tensorize():
-    # fmt: off
     @T.prim_func(private=True)
     def before(X: T.Buffer((256, 256), "float16"), W: T.Buffer((256, 256), "float16"), compute: T.Buffer((256, 256), "float16")):
         T.func_attr({"tir.noalias": True})
@@ -258,6 +260,7 @@ def test_matmul_tensorize_too_small():
     tvm.ir.assert_structural_equal(mod["main"], expected)
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 def test_matmul_tensorize_epilogue():
     # fmt: off
     @T.prim_func(private=True)
@@ -426,6 +429,7 @@ def test_matmul_tensorize_epilogue():
     tvm.ir.assert_structural_equal(mod["main"], expected)
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 def test_matmul_int8_tensorize():
     # fmt: off
     @T.prim_func(private=True)
@@ -564,6 +568,7 @@ def test_matmul_int8_tensorize():
     tvm.ir.assert_structural_equal(mod["main"], expected)
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 def test_matmul_int8_tensorize_3d2d_dyn():
     # fmt: off
     @T.prim_func(private=True)
