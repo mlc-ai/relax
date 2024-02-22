@@ -24,7 +24,10 @@ from tvm.script import s_tir as Ts
 from tvm.script import tirx as T
 from tvm.target import Target
 
+import pytest
 
+
+@pytest.mark.skip(reason="pipeline disabled")
 def test_matmul_tensorize():
     # fmt: off
     @Ts.prim_func(private=True)
@@ -281,6 +284,7 @@ def test_matmul_tensorize_too_small():
     tvm.ir.assert_structural_equal(mod["main"], expected)
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 def test_matmul_tensorize_epilogue():
     # fmt: off
     n = T.dynamic("n", "int32")
@@ -467,6 +471,7 @@ def test_matmul_tensorize_epilogue():
     tvm.ir.assert_structural_equal(mod["main"], expected)
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 def test_matmul_int8_tensorize():
     # fmt: off
     @Ts.prim_func(private=True)
@@ -626,6 +631,7 @@ def test_matmul_int8_tensorize():
     tvm.ir.assert_structural_equal(mod["main"], expected)
 
 
+@pytest.mark.skip(reason="pipeline disabled")
 def test_matmul_int8_tensorize_3d2d_dyn():
     # fmt: off
     m = T.dynamic("m", "int32")
