@@ -576,10 +576,11 @@ class MatmulTensorization(GPUScheduleRule):
         i0, i1, i2, i3 = sch.split(i, factors=i_factors)
         j0, j1, j2, j3 = sch.split(j, factors=j_factors)
         k0, k1 = sch.split(k, k_factors)
-        sch.annotate(k0, "software_pipeline_order", [0, 3, 1, 4, 5, 2, 6])
-        sch.annotate(k0, "software_pipeline_stage", [0, 0, 0, 0, 0, 1, 1])
-        sch.annotate(k1, "software_pipeline_order", [0, 1, 2])
-        sch.annotate(k1, "software_pipeline_stage", [0, 0, 1])
+        if target.arch.startswith("sm_") and int(target.arch[-2:]) > 75:
+            sch.annotate(k0, "software_pipeline_order", [0, 3, 1, 4, 5, 2, 6])
+            sch.annotate(k0, "software_pipeline_stage", [0, 0, 0, 0, 0, 1, 1])
+            sch.annotate(k1, "software_pipeline_order", [0, 1, 2])
+            sch.annotate(k1, "software_pipeline_stage", [0, 0, 1])
 
         sch.reorder(i0, j0, i1, j1, j2, i2, k0, k1, i3, j3)
 
@@ -797,10 +798,11 @@ class MatmulInt8Tensorization(GPUScheduleRule):
         i0, i1, i2, i3 = sch.split(i, factors=i_factors)
         j0, j1, j2, j3 = sch.split(j, factors=j_factors)
         k0, k1 = sch.split(k, k_factors)
-        sch.annotate(k0, "software_pipeline_order", [0, 3, 1, 4, 5, 2, 6])
-        sch.annotate(k0, "software_pipeline_stage", [0, 0, 0, 0, 0, 1, 1])
-        sch.annotate(k1, "software_pipeline_order", [0, 1, 2])
-        sch.annotate(k1, "software_pipeline_stage", [0, 0, 1])
+        if target.arch.startswith("sm_") and int(target.arch[-2:]) > 75:
+            sch.annotate(k0, "software_pipeline_order", [0, 3, 1, 4, 5, 2, 6])
+            sch.annotate(k0, "software_pipeline_stage", [0, 0, 0, 0, 0, 1, 1])
+            sch.annotate(k1, "software_pipeline_order", [0, 1, 2])
+            sch.annotate(k1, "software_pipeline_stage", [0, 0, 1])
 
         sch.reorder(i0, j0, i1, j1, j2, i2, k0, k1, i3, j3)
 
