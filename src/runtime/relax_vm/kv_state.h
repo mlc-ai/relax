@@ -103,6 +103,17 @@ class KVStateObj : public Object {
    */
   virtual void EndForward() = 0;
 
+  /*!
+   * \brief Set lora weight indices of stacked lora weight buffer.
+   */
+  virtual void SetLoraWeightIndices(const IntTuple& weight_indices) = 0;
+
+  /*!
+   * \brief Get lora batch info for next batch.
+   * Lora batch info is set at BeginForward to resue batch info in kv cache
+   */
+  virtual Array<NDArray> GetLoraBatchInfo() = 0;
+
   static constexpr const uint32_t _type_index = TypeIndex::kDynamic;
   static constexpr const char* _type_key = "relax.vm.KVState";
   TVM_DECLARE_BASE_OBJECT_INFO(KVStateObj, Object)

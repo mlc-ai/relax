@@ -54,6 +54,10 @@ TVM_REGISTER_GLOBAL("vm.builtin.kv_state_begin_forward")
     });
 TVM_REGISTER_GLOBAL("vm.builtin.kv_state_end_forward")
     .set_body_method<KVState>(&KVStateObj::EndForward);
+TVM_REGISTER_GLOBAL("vm.builtin.kv_state_set_lora_weight_indices")
+    .set_body_method<KVState>(&KVStateObj::SetLoraWeightIndices);
+TVM_REGISTER_GLOBAL("vm.builtin.kv_state_get_lora_batch_info")
+    .set_body_method<KVState>(&KVStateObj::GetLoraBatchInfo);
 
 // Attention KV Cache methods
 TVM_REGISTER_GLOBAL("vm.builtin.kv_cache_disagg_prepare_recv")

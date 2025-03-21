@@ -216,6 +216,9 @@ class PagedAttentionKVCacheObj : public AttentionKVCacheObj {
   HostMemoryVector kv_transfer_page_to_page_local_position_map_host_;
   HostMemoryVector kv_transfer_page_to_page_remote_position_map_host_;
   HostMemoryVector kv_transfer_page_to_page_recver_id_host_;
+  HostMemoryVector lora_seq_lengths_host_;
+  HostMemoryVector lora_seq_indptr_host_;
+  HostMemoryVector lora_weight_indices_host_;
 
   //-------------------------------------------
   // For efficient memory management, the actual sizes of the arrays
@@ -236,6 +239,9 @@ class PagedAttentionKVCacheObj : public AttentionKVCacheObj {
   NDArray temp_attn_output_view_;
   NDArray temp_attn_lse_view_;
   NDArray merged_attn_lse_view_;
+  NDArray lora_seq_lengths_view_;
+  NDArray lora_seq_indptr_view_;
+  NDArray lora_weight_indices_view_;
   std::vector<NDArray> qo_indptr_on_depths_view_;
   std::vector<NDArray> page_indptr_on_depths_view_;
   std::vector<NDArray> page_indices_on_depths_view_;
@@ -261,6 +267,7 @@ class PagedAttentionKVCacheObj : public AttentionKVCacheObj {
   PackedFunc f_split_rotary_;
   PackedFunc f_copy_single_page_;
   Optional<PackedFunc> f_debug_get_kv_;
+  IntTuple lora_weight_indices_;
 
   /*! \brief The device this PagedKVCache runs on. */
   Device device_;
@@ -415,6 +422,9 @@ class PagedAttentionKVCacheObj : public AttentionKVCacheObj {
     commit_copy_dst_pos_in_page_table_host_ =
         HostMemoryVector(std::min(kTreeAttnMaxTreeSize * reserved_num_seqs, prefill_chunk_size),
                          dtype_aux_, preferred_host_device);
+    lora_seq_lengths_host_ = HostMemoryVector(reserved_num_seqs, dtype_aux_, preferred_host_device);
+    lora_seq_indptr_host_ = HostMemoryVector(reserved_num_seqs + 1, dtype_aux_, preferred_host_device);
+    lora_weight_indices_host_ = HostMemoryVector(reserved_num_seqs, dtype_aux_, preferred_host_device);
 
     for (int d = 0; d < kPagedKVCacheMaxBlockDepth; ++d) {
       if (NeedKernelBeginForward()) {
@@ -825,7 +835,7 @@ class PagedAttentionKVCacheObj : public AttentionKVCacheObj {
     if (attn_kinds_[0] == AttnKind::kMLA) {
       CHECK(!opt_token_tree_parent_ptr.defined()) << "Tree attention is not supported yet for MLA";
     }
-
+    PrepareLoraBatchInfo(append_lengths);
     CHECK_EQ(seq_ids.size(), append_lengths.size())
         << "The seq_ids size (" << seq_ids.size() << ") and append_lengths size ("
         << append_lengths.size() << ") mismatch.";
@@ -1600,6 +1610,15 @@ class PagedAttentionKVCacheObj : public AttentionKVCacheObj {
     ICHECK(false) << "DebugSetKV for PageAttentionKVCache not implemented yet.";
   }
 
+  void SetLoraWeightIndices(const IntTuple& indices) final {
+    lora_weight_indices_ = indices;
+  }
+
+  Array<NDArray> GetLoraBatchInfo() final {
+    ComputeStreamWaitForCopyStream();
+    return Array<NDArray>{lora_seq_lengths_view_, lora_seq_indptr_view_, lora_weight_indices_view_};
+  }
+
   static constexpr const uint32_t _type_index = TypeIndex::kDynamic;
   static constexpr const char* _type_key = "relax.vm.PagedAttentionKVCache";
   TVM_DECLARE_FINAL_OBJECT_INFO(PagedAttentionKVCacheObj, AttentionKVCacheObj);
@@ -2261,7 +2280,13 @@ class PagedAttentionKVCacheObj : public AttentionKVCacheObj {
             aux_data_manager_->CopyTreeAttnMNIndptrOnDepthAsync(&tree_attn_mn_indptr_host_[d], d);
       }
     }
-    // 16. Create view for temporary arrays for attention computation.
+    // 16. lora_seq_lengths
+    lora_seq_lengths_view_ = aux_data_manager_->CopyLoraSeqLenghtsAsync(&lora_seq_lengths_host_);
+    // 17. lora_seq_indptr
+    lora_seq_indptr_view_ = aux_data_manager_->CopyLoraSeqIndptrAsync(&lora_seq_indptr_host_);
+    // 18. lora_weight_indices
+    lora_weight_indices_view_ = aux_data_manager_->CopyLoraWeightIndicesAsync(&lora_weight_indices_host_);
+    // 19. Create view for temporary arrays for attention computation.
     temp_attn_output_view_ = temp_attn_output_device_.CreateView(
         {total_append_length, num_qo_heads_, v_head_dim_}, temp_attn_output_device_->dtype);
     temp_attn_lse_view_ = temp_attn_lse_device_.CreateView({total_append_length, num_qo_heads_},
@@ -2273,6 +2298,20 @@ class PagedAttentionKVCacheObj : public AttentionKVCacheObj {
     aux_data_manager_->CommitAttnAuxDataCopy();
     // - Reset the dirty flag to false.
     dirty_aux_data_device_ = false;
+  }
+
+  void PrepareLoraBatchInfo(const IntTuple& seq_lens) {
+    if (lora_weight_indices_.empty()) return;
+    ICHECK(lora_weight_indices_.size() == seq_lens.size());
+    lora_seq_lengths_host_.clear();
+    lora_seq_indptr_host_.clear();
+    lora_weight_indices_host_.clear();
+    lora_seq_indptr_host_.push_back(0);
+    for (size_t i = 0; i < seq_lens.size(); ++i) {
+      lora_seq_lengths_host_.push_back(seq_lens[i]);
+      lora_seq_indptr_host_.push_back(lora_seq_lengths_host_.back() + seq_lens[i]);
+      lora_weight_indices_host_.push_back(lora_weight_indices_[i]);
+    }
   }
 };  // namespace relax_vm
 

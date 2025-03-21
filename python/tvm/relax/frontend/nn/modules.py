@@ -114,6 +114,8 @@ class Linear(Module):
             self.bias = Parameter((out_features,), dtype=dtype if out_dtype is None else out_dtype)
         else:
             self.bias = None
+        self.lora_A = None
+        self.lora_B = None
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -132,11 +134,13 @@ class Linear(Module):
         # x: [*B, in_features]
         # w: [in_features, out_features]
         w = op.permute_dims(self.weight)
-        # x: [*B, out_features]
-        x = op.matmul(x, w, out_dtype=self.out_dtype)
+        # y: [*B, out_features]
+        y = op.matmul(x, w, out_dtype=self.out_dtype)
         if self.bias is not None:
-            x = x + self.bias
-        return x
+            y = y + self.bias
+        if self.lora_A:
+            return y + self.lora_B.forward(self.lora_A.forward(x))
+        return y
 
     def to(self, dtype: Optional[str] = None) -> None:
         """

@@ -209,6 +209,7 @@ def dump_ndarray_cache(
     shard_cap_mb=32,
     show_progress: bool = True,
     update_if_exists: bool = False,
+    file_name_prefix: str = "",
 ):
     """Dump parameters to NDArray cache.
 
@@ -239,6 +240,9 @@ def dump_ndarray_cache(
     update_if_exists: bool
         If the cache already exists, update the cache. When set to False, it will overwrite the
         existing files.
+    
+    file_name_prefix: str
+        Add prefix to output file name
     """
     if encode_format not in ("raw", "f32-to-bf16"):
         raise ValueError(f"Invalie encode_format {encode_format}")
@@ -257,7 +261,7 @@ def dump_ndarray_cache(
     print("Start storing to cache %s" % cache_dir)
     shard_cap_nbytes = shard_cap_mb * (1 << 20)
 
-    nd_cache_json = os.path.join(cache_dir, "ndarray-cache.json")
+    nd_cache_json = os.path.join(cache_dir, f"{file_name_prefix}ndarray-cache.json")
     if update_if_exists and os.path.exists(nd_cache_json):
         with open(nd_cache_json, "r") as infile:
             old_data = json.load(infile)
@@ -266,7 +270,7 @@ def dump_ndarray_cache(
             records = old_data["records"]
 
     shard_manager = NDArrayCacheShardingManager(
-        cache_dir, "params_shard", shard_cap_nbytes, initial_shard_records=records
+        cache_dir, f"{file_name_prefix}params_shard", shard_cap_nbytes, initial_shard_records=records
     )
 
     param_generator = params.items() if not from_generator else params
@@ -325,7 +329,7 @@ def dump_ndarray_cache(
                 if item["dtype"] == "float32":
                     item["format"] = "raw"
                     item["dtype"] = "bfloat16"
-        b16_nd_cache_json = os.path.join(cache_dir, "ndarray-cache-b16.json")
+        b16_nd_cache_json = os.path.join(cache_dir, f"{file_name_prefix}ndarray-cache-b16.json")
         # also dump a file that contains bf16
         with open(b16_nd_cache_json, "w") as outfile:
             json.dump({"metadata": meta_data, "records": records}, outfile, indent=4)

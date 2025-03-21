@@ -496,6 +496,12 @@ class PagedKVCacheAuxDataManager {
                                                       HostMemoryVector* dst_data) = 0;
   /*! \brief Commit all the compact KV auxiliary data copy operations since the last commit. */
   virtual void CommitCompactKVAuxDataCopy() = 0;
+  /*! \brief Copy the lora sequence lengths. */
+  virtual NDArray CopyLoraSeqLenghtsAsync(HostMemoryVector* data) = 0;
+  /*! \brief Copy the lora sequence indptr. */
+  virtual NDArray CopyLoraSeqIndptrAsync(HostMemoryVector* data) = 0;
+  /*! \brief Copy the lora weight indices. */
+  virtual NDArray CopyLoraWeightIndicesAsync(HostMemoryVector* data) = 0;
 
  protected:
   /*! \brief The dtype of the auxiliary data. It is expected to be int32. */
@@ -551,6 +557,9 @@ class PlainPagedKVCacheAuxDataManager : public PagedKVCacheAuxDataManager {
     commit_copy_src_dst_pos_in_page_table_device_ =
         NDArray::Empty({2, std::min(kTreeAttnMaxTreeSize * reserved_num_seqs, prefill_chunk_size)},
                        dtype_aux_, device);
+    lora_seq_lengths_device_ = NDArray::Empty({reserved_num_seqs}, dtype_aux_, device);
+    lora_seq_indptr_device_ = NDArray::Empty({reserved_num_seqs + 1}, dtype_aux_, device);
+    lora_weight_indices_device_ = NDArray::Empty({reserved_num_seqs}, dtype_aux_, device);
   }
 
   // The reset of the plain auxiliary data manager is no-op.
@@ -668,6 +677,27 @@ class PlainPagedKVCacheAuxDataManager : public PagedKVCacheAuxDataManager {
     return view;
   }
 
+  NDArray CopyLoraSeqLenghtsAsync(HostMemoryVector* data) final {
+    NDArray view = lora_seq_lengths_device_.CreateView(
+        {static_cast<int64_t>(data->size())}, dtype_aux_);
+    CopyVecDataToArray(view, data->data());
+    return view;
+  }
+
+  NDArray CopyLoraSeqIndptrAsync(HostMemoryVector* data) final {
+    NDArray view = lora_seq_indptr_device_.CreateView(
+        {static_cast<int64_t>(data->size())}, dtype_aux_);
+    CopyVecDataToArray(view, data->data());
+    return view;
+  }
+
+  NDArray CopyLoraWeightIndicesAsync(HostMemoryVector* data) final {
+    NDArray view = lora_weight_indices_device_.CreateView(
+        {static_cast<int64_t>(data->size())}, dtype_aux_);
+    CopyVecDataToArray(view, data->data());
+    return view;
+  }
+
   // The commit of the plain auxiliary data manager is no-op.
   void CommitAttnAuxDataCopy() final {}
 
@@ -760,6 +790,9 @@ class PlainPagedKVCacheAuxDataManager : public PagedKVCacheAuxDataManager {
   NDArray kv_transfer_page_to_page_recver_id_device;
   NDArray commit_copy_length_indptr_device_;
   NDArray commit_copy_src_dst_pos_in_page_table_device_;
+  NDArray lora_seq_lengths_device_;
+  NDArray lora_seq_indptr_device_;
+  NDArray lora_weight_indices_device_;
 };
 
 /*!
@@ -862,6 +895,15 @@ class CachedPagedKVCacheAuxDataManager : public PagedKVCacheAuxDataManager {
     attn_aux_data_copy_offset_ += CeilDivElemAlignment(3 * n_elem);
     return view;
   }
+  NDArray CopyLoraSeqLenghtsAsync(HostMemoryVector* data) final {
+    return CopyAttnAuxVecToCache(data);
+  }
+  NDArray CopyLoraSeqIndptrAsync(HostMemoryVector* data) final {
+    return CopyAttnAuxVecToCache(data);
+  }
+  NDArray CopyLoraWeightIndicesAsync(HostMemoryVector* data) final {
+    return CopyAttnAuxVecToCache(data);
+  }
 
   void CommitAttnAuxDataCopy() final {
     std::vector<int64_t> copy_shape{attn_aux_data_copy_offset_};
@@ -950,6 +992,9 @@ class CachedPagedKVCacheAuxDataManager : public PagedKVCacheAuxDataManager {
     //  - kv_transfer_page_to_page_recver_id
     //  - tree_attn_mask
     //  - tree_attn_mn_indptr
+    //  - lora_seq_lens
+    //  - lora_seq_indptr
+    //  - lora_weight_indices
     cache_size += CeilDivElemAlignment(reserved_num_seqs + 1);
     cache_size += CeilDivElemAlignment(reserved_num_seqs);
     cache_size += CeilDivElemAlignment(prefill_chunk_size);
@@ -962,6 +1007,9 @@ class CachedPagedKVCacheAuxDataManager : public PagedKVCacheAuxDataManager {
     cache_size +=
         CeilDivElemAlignment(kTreeAttnMaxTreeSize * kTreeAttnMaxTreeSize * reserved_num_seqs);
     cache_size += CeilDivElemAlignment(reserved_num_seqs + 1);
+    cache_size += CeilDivElemAlignment(reserved_num_seqs);
+    cache_size += CeilDivElemAlignment(reserved_num_seqs + 1);
+    cache_size += CeilDivElemAlignment(reserved_num_seqs);
 
     return cache_size;
   }

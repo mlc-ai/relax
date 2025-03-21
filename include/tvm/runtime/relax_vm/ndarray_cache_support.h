@@ -83,7 +83,7 @@ struct NDArrayCacheMetadata {
   std::string path;
 
   /*! \brief Load the metadata from a specific directory */
-  TVM_DLL static NDArrayCacheMetadata Load(const std::string& path);
+  TVM_DLL static NDArrayCacheMetadata Load(const std::string& path, const std::string& file_name="ndarray-cache.json");
   /*! \brief Load the metadata from a given JSON string */
   static NDArrayCacheMetadata LoadFromStr(const std::string& json_str, const std::string& path);
 };

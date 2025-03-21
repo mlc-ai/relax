@@ -123,11 +123,11 @@ NDArrayCacheMetadata NDArrayCacheMetadata::LoadFromStr(const std::string& json_s
   return result;
 }
 
-TVM_DLL NDArrayCacheMetadata NDArrayCacheMetadata::Load(const std::string& path) {
+TVM_DLL NDArrayCacheMetadata NDArrayCacheMetadata::Load(const std::string& path, const std::string& file_name) {
   picojson::value json_info;
   {
     std::string json_str;
-    LoadBinaryFromFile(path + "/ndarray-cache.json", &json_str);
+    LoadBinaryFromFile(path + "/" + file_name, &json_str);
     std::string err = picojson::parse(json_info, json_str);
     if (!err.empty()) {
       LOG(FATAL) << "Failed to parse JSON: err. The JSON string is:" << json_str;
@@ -242,9 +242,9 @@ class NDArrayCache {
    * \param device_type The type of device to be loaded.
    * \param device_id The device id.
    */
-  static void Load(const std::string& cache_path, int device_type, int device_id) {
+  static void Load(const std::string& cache_path, const std::string& file_name, int device_type, int device_id) {
     DLDevice device{static_cast<DLDeviceType>(device_type), device_id};
-    NDArrayCacheMetadata metadata = NDArrayCacheMetadata::Load(cache_path);
+    NDArrayCacheMetadata metadata = NDArrayCacheMetadata::Load(cache_path, file_name);
     Optional<NDArray> staging_buffer;
     std::string raw_data;
     Array<NDArray> params;
@@ -291,7 +291,22 @@ TVM_REGISTER_GLOBAL("vm.builtin.ndarray_cache.update").set_body([](TVMArgs args,
 });
 TVM_REGISTER_GLOBAL("vm.builtin.ndarray_cache.remove").set_body_typed(NDArrayCache::Remove);
 TVM_REGISTER_GLOBAL("vm.builtin.ndarray_cache.clear").set_body_typed(NDArrayCache::Clear);
-TVM_REGISTER_GLOBAL("vm.builtin.ndarray_cache.load").set_body_typed(NDArrayCache::Load);
+TVM_REGISTER_GLOBAL("vm.builtin.ndarray_cache.load")
+.set_body([](TVMArgs args, TVMRetValue* rv) {
+    CHECK(args.size() == 3 || args.size() == 4)
+        << "vm.builtin.ndarray_cache.load only accepts 3 or 4 arguments";
+    std::string cache_path = args[0];
+    if (args.size() == 3) {
+        int device_type = args[1];
+        int device_id = args[2];
+        NDArrayCache::Load(cache_path, "ndarray-cache.json", device_type, device_id);
+    } else {
+        std::string file_name = args[1];
+        int device_type = args[2];
+        int device_id = args[3];
+        NDArrayCache::Load(cache_path, file_name, device_type, device_id);
+    }
+});
 
 // This param module node can be useful to get param dict in RPC mode
 // when the remote already have loaded parameters from file.

@@ -372,6 +372,13 @@ class RNNStateImpObj : public RNNStateObj {
     dirty_aux_data_device_ = true;
   }
 
+  void SetLoraWeightIndices(const IntTuple& indices) final { LOG_FATAL << "RNN State do not support LORA"; }
+
+  Array<NDArray> GetLoraBatchInfo() final { 
+    LOG_FATAL << "RNN State do not support LORA";
+    return Array<NDArray>{}; 
+  }
+
  private:
   /*! \brief Get a new free block and return its index. */
   int32_t GetFreeSlot() {
