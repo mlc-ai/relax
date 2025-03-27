@@ -263,7 +263,7 @@ def test_cublas_dispatch():
     out_mod = tvm.relax.transform.BLASDispatch(target)(mod)
     out = build_and_run(out_mod, args, "cuda")
     ref = build_and_run(mod, args, "llvm", legalize=True)
-    
+
     tvm.testing.assert_allclose(out, ref, rtol=1e-2, atol=1e-2)
 
 

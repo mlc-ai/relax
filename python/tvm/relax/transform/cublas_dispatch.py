@@ -37,10 +37,13 @@ class BLASDispatch:  # pylint: disable=too-few-public-methods,broad-exception-ra
 
     def transform_module(self, mod: IRModule, _ctx: tvm.transform.PassContext) -> IRModule:
         """IRModule-level transformation"""
-        
+
         model_names = []
         for gv, func in mod.functions_items():
-            if "relax.backend.blas_dispatch" in func.attrs and func.attrs["relax.backend.blas_dispatch"] is not False:
+            if (
+                "relax.backend.blas_dispatch" in func.attrs
+                and func.attrs["relax.backend.blas_dispatch"] is not False
+            ):
                 model_names.append(gv.name_hint)
 
         mod = tvm.transform.Sequential(
