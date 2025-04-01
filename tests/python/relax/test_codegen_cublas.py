@@ -238,6 +238,35 @@ def test_matmul_offload(
     tvm.testing.assert_allclose(out, ref, rtol=1e-2, atol=1e-2)
 
 
+def test_cublas_dispatch():
+    x_shape, y_shape, transpose_y, epilogue = (8, 8), (8, 8), False, "none"
+    in_dtype, out_dtype = "float16", "float16"
+    _, activation = _epilogue_table[epilogue]
+    var_table = {}
+    concrete_x_shape = _to_concrete_shape(x_shape, var_table)
+    concrete_y_shape = _to_concrete_shape(y_shape, var_table)
+    x = np.random.randn(*concrete_x_shape).astype(in_dtype)
+    y = np.random.randn(*concrete_y_shape).astype(in_dtype)
+    args = (x, y)
+
+    mod = get_relax_matmul_module(
+        x_shape,
+        y_shape,
+        in_dtype,
+        out_dtype,
+        bias_shape=None,
+        transposed_y=transpose_y,
+        activation=activation,
+    )
+
+    target = tvm.target.Target("cuda")
+    out_mod = tvm.relax.transform.BLASDispatch(target)(mod)
+    out = build_and_run(out_mod, args, "cuda")
+    ref = build_and_run(mod, args, "llvm", legalize=True)
+
+    tvm.testing.assert_allclose(out, ref, rtol=1e-2, atol=1e-2)
+
+
 @pytest.mark.parametrize(
     "x_shape, y_shape, transpose_y, epilogue",
     [
