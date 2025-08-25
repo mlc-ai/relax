@@ -129,11 +129,44 @@ def _compile_flashinfer_kernels(
         FLASHINFER_INCLUDE_DIR,
         FLASHINFER_CSRC_DIR,
         FLASHINFER_TVM_BINDING_DIR,
-        Path(tvm_home).resolve() / "include",
-        Path(tvm_home).resolve() / "ffi" / "include",
-        Path(tvm_home).resolve() / "ffi" / "3rdparty" / "dlpack" / "include",
-        Path(tvm_home).resolve() / "3rdparty" / "dmlc-core" / "include",
     ] + CUTLASS_INCLUDE_DIRS
+
+    if "TVM_SOURCE_DIR" in os.environ or "TVM_HOME" in os.environ:
+        tvm_home = (
+            os.environ["TVM_SOURCE_DIR"]
+            if "TVM_SOURCE_DIR" in os.environ
+            else os.environ["TVM_HOME"]
+        )
+        include_paths += [
+            Path(tvm_home).resolve() / "include",
+            Path(tvm_home).resolve() / "ffi" / "include",
+            Path(tvm_home).resolve() / "ffi" / "3rdparty" / "dlpack" / "include",
+            Path(tvm_home).resolve() / "3rdparty" / "dmlc-core" / "include",
+        ]
+    else:
+        tvm_package_path = Path(tvm.__file__).resolve().parent
+        if (tvm_package_path / "include").exists():
+            import tvm_ffi
+
+            tvm_ffi_package_path = Path(tvm_ffi.__file__).resolve().parent
+            include_paths += [
+                tvm_package_path / "include",
+                tvm_package_path / "3rdparty" / "dmlc-core" / "include",
+                tvm_ffi_package_path / "include",
+            ]
+        elif (tvm_package_path.parent.parent / "include").exists():
+            include_paths += [
+                tvm_package_path.parent.parent / "include",
+                tvm_package_path.parent.parent / "ffi" / "include",
+                tvm_package_path.parent.parent / "ffi" / "3rdparty" / "dlpack" / "include",
+                tvm_package_path.parent.parent / "3rdparty" / "dmlc-core" / "include",
+            ]
+        else:
+            # warning: TVM is not installed in the system.
+            print(
+                "Warning: Include path for TVM cannot be found. "
+                "FlashInfer kernel compilation may fail due to missing headers."
+            )
 
     # ------------------------------------------------------------------------
     # 3) Function to compile a single source file
