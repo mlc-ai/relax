@@ -35,7 +35,7 @@ from tvm.runtime import Object, Scriptable, const, Tensor
 
 from . import _ffi_api
 from .buffer import Buffer
-from .expr import Var, IterVar
+from .expr import Var, IterVar, IntImm, Cast
 
 
 class Stmt(Object, Scriptable):
@@ -712,7 +712,21 @@ class BlockRealize(Stmt):
         span: Optional[Span] = None,
     ) -> None:
         if isinstance(predicate, bool):
-            predicate = const(predicate, "bool")
+            # Convert Python bool literals to uint1
+            predicate = IntImm("uint1", 1 if predicate else 0)
+        elif hasattr(predicate, "dtype") and str(predicate.dtype) == "bool":
+            # Convert any PrimExpr with legacy "bool" dtype to uint1
+            # Note: str() is needed because predicate.dtype returns a DataType object
+            # This catches tir.const(True, "bool"), tir.IntImm("bool", 1), EQ/Not/Or/And, etc.
+            # TVM C++ runtime rejects "bool" dtype with:
+            #   CHECK(dtype.is_int() || dtype.is_uint())
+            # uint1 is TVM's canonical representation for boolean values
+            if hasattr(predicate, "value"):
+                # Constant expression (IntImm, const, etc.) - extract value
+                predicate = IntImm("uint1", int(predicate.value))
+            else:
+                # Dynamic expression (EQ, Not, Or, etc.) - cast to preserve logic
+                predicate = Cast("uint1", predicate)
         self.__init_handle_by_constructor__(
             _ffi_api.BlockRealize,  # type: ignore
             iter_values,
