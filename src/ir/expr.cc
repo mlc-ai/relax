@@ -53,8 +53,8 @@ PrimExpr PrimExpr::ConvertFallbackValue(ffi::String value) { return tir::StringI
 IntImm::IntImm(DataType dtype, int64_t value, Span span) {
   ICHECK(dtype.is_scalar()) << "ValueError: IntImm can only take scalar, but " << dtype
                             << " was supplied.";
-  ICHECK(dtype.is_int() || dtype.is_uint())
-      << "ValueError: IntImm supports only int or uint type, but " << dtype << " was supplied.";
+  ICHECK(dtype.is_int() || dtype.is_uint() || dtype.is_bool())
+      << "ValueError: IntImm supports only int, uint, or bool type, but " << dtype << " was supplied.";
   if (dtype.is_uint()) {
     ICHECK_GE(value, 0U) << "ValueError: Literal value " << value
                          << " is negative for unsigned integer type " << dtype;
