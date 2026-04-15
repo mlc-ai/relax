@@ -463,6 +463,11 @@ TVM_REGISTER_TARGET_KIND("webgpu", kDLWebGPU)
     // thread_warp_size=1: is_subwarp_reduction and is_multiwarp_reduction returns false, so no
     // subgroup ops are emitted.
     .add_attr_option<int64_t>("thread_warp_size", refl::DefaultValue(1))
+    // The WebGPU spec mandates `maxComputeWorkgroupStorageSize >= 16384`;
+    // Chrome/Dawn currently exposes 32768.  Without this default the Dlight
+    // scheduler falls back to the generic (48 KB) budget and emits kernels
+    // that exceed Chrome's limit at launch time.
+    .add_attr_option<int64_t>("max_shared_memory_per_block", refl::DefaultValue(32768))
     .set_target_canonicalizer(UpdateWebGPUAttrs)
     .set_default_keys({"webgpu", "gpu"});
 
