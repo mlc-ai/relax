@@ -190,6 +190,41 @@ def test_vulkan_bool_load():
     tvm.testing.run_with_gpu_lock(run_and_check)
 
 
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    not tvm.testing.device_enabled({"kind": "vulkan", "from_device": 0}),
+    reason="vulkan not enabled",
+)
+@pytest.mark.parametrize("scope", ["local", "shared"])
+def test_vulkan_bool_buffer_store(scope):
+    target = tvm.target.Target({"kind": "vulkan", "from_device": 0})
+    arr_size = 256
+
+    @I.ir_module
+    class Module:
+        @T.prim_func
+        def main(A: T.Buffer((256,), "float32"), B: T.Buffer((256,), "int32")):
+            for i in T.thread_binding(256, thread="threadIdx.x"):
+                flag = T.alloc_buffer((256,), "bool", scope=scope)
+                flag[i] = A[i] > T.float32(0.5)
+                B[i] = T.Cast("int32", flag[i])
+
+    f = tvm.compile(Module, target=target)
+
+    a_np = np.random.uniform(size=arr_size).astype("float32")
+    b_np = np.zeros((arr_size,), dtype="int32")
+    ref = (a_np > 0.5).astype(np.int32)
+
+    def run_and_check():
+        dev = tvm.vulkan()
+        a = tvm.runtime.tensor(a_np, dev)
+        b = tvm.runtime.tensor(b_np, dev)
+        f(a, b)
+        tvm.testing.assert_allclose(b.numpy(), ref)
+
+    tvm.testing.run_with_gpu_lock(run_and_check)
+
+
 vulkan_parameter_impl = tvm.testing.parameter("push_constants", "ubo")
 vulkan_parameter_dtype = tvm.testing.parameter("int32", "float32", "int64")
 
