@@ -715,13 +715,21 @@ void CodeGenSPIRV::Dispatch_(const BufferStoreNode* op) {
   auto it = storage_info_.find(buffer_var.get());
   TVM_FFI_ICHECK(it != storage_info_.end());
   StorageInfo& info = it->second;
-  PrimType value_type = op->value.ty();
   PrimType index_type = prim_index.ty();
+  // bool special case: backed by boolean_storage_type_ (int8)
+  PrimType value_type = op->value.ty();
+  const bool store_as_bool = value_type == PrimType::Bool();
+  if (store_as_bool) {
+    value_type = boolean_storage_type_.WithLanes(value_type.lanes());
+  }
   info.CheckContentType(value_type, index_type.lanes());
 
   spirv::SType content_type = builder_->GetSType(info.element_type);
   spirv::Value buffer = MakeValue(buffer_var);
   spirv::Value value = MakeValue(op->value);
+  if (store_as_bool) {
+    value = builder_->Cast(builder_->GetSType(value_type), value);
+  }
   spirv::SType ptr_type = builder_->GetPointerType(content_type, buffer.stype.storage_class);
 
   uint32_t mask = spv::MemoryAccessMaskNone;
@@ -885,7 +893,12 @@ void CodeGenSPIRV::Dispatch_(const AllocBufferNode* op) {
   spirv::Value buf;
   const std::string scope = GetPtrStorageScope(op->buffer.var());
   auto storage_scope = runtime::StorageScope::Create(scope);
-  spirv::SType etype = builder_->GetSType(op->buffer->dtype);
+  // bool special case: backed by boolean_storage_type_ (int8)
+  PrimType alloc_type = op->buffer->dtype;
+  if (alloc_type == PrimType::Bool()) {
+    alloc_type = boolean_storage_type_.WithLanes(alloc_type.lanes());
+  }
+  spirv::SType etype = builder_->GetSType(alloc_type);
   runtime::StorageRank rank = storage_scope.rank;
   spv::StorageClass storage_class;
   const VarNode* var_node = op->buffer.get();
@@ -917,7 +930,7 @@ void CodeGenSPIRV::Dispatch_(const AllocBufferNode* op) {
       int32_t aligned_constant_size = ((constant_size + 3) & ~0x3);
       buf = builder_->Allocate(etype, static_cast<uint32_t>(aligned_constant_size), storage_class);
 
-      size_t num_bytes = ((op->buffer->dtype.bits() + 7) / 8) * op->buffer->dtype.lanes() *
+      size_t num_bytes = ((alloc_type.bits() + 7) / 8) * alloc_type.lanes() *
                          static_cast<uint32_t>(aligned_constant_size);
       shared_memory_bytes_used_ += num_bytes;
     } break;
@@ -929,7 +942,7 @@ void CodeGenSPIRV::Dispatch_(const AllocBufferNode* op) {
 
   StorageInfo& info = storage_info_[var_node];
   TVM_FFI_ICHECK(!info.element_type_known);
-  info.SetContentType(op->buffer->dtype, op->buffer.name());
+  info.SetContentType(alloc_type, op->buffer.name());
 
   TVM_FFI_ICHECK(!var_map_.count(var_node));
   var_map_[var_node] = buf;
