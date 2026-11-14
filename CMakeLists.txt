@@ -363,6 +363,21 @@ add_dependencies(runtime tvm_runtime::shared)
 set(TVM_RUNTIME_BACKEND_LIBS tvm_runtime_extra)
 foreach(_backend cuda opencl vulkan metal rocm)
   if(TARGET tvm_runtime_${_backend})
+    if(MSVC)
+      # Registration-only DLLs need an export to produce an import library.
+      # Retain the import so loading a consumer runs the backend registrations.
+      set(_backend_target tvm_runtime_${_backend})
+      set(_backend_link_source "${CMAKE_CURRENT_BINARY_DIR}/${_backend_target}_link.c")
+      file(GENERATE OUTPUT "${_backend_link_source}"
+        CONTENT "__declspec(dllexport) void ${_backend_target}_force_link(void) {}\n")
+      target_sources(${_backend_target} PRIVATE "${_backend_link_source}")
+      set(_backend_link_symbol ${_backend_target}_force_link)
+      if(MSVC_C_ARCHITECTURE_ID STREQUAL "X86")
+        string(PREPEND _backend_link_symbol "_")
+      endif()
+      target_link_options(${_backend_target} INTERFACE
+        "LINKER:/INCLUDE:${_backend_link_symbol}")
+    endif()
     list(APPEND TVM_RUNTIME_BACKEND_LIBS tvm_runtime_${_backend})
   endif()
 endforeach()
