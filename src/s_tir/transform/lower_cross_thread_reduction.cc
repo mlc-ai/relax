@@ -158,7 +158,7 @@ ffi::Array<TensorVar> MakeScratchpads(const ffi::Array<TensorVar>& reduction_ten
     new_tensors.push_back(
         TensorVar(name, TensorType(/*shape=*/{IntImm::Int32(1)}, /*dtype=*/tensor.dtype(),
                                    scope_local, /*data_alignment=*/0,
-                                   tvm::tirx::TileLayoutNode::DefaultLayout({IntImm::Int32(1)}))));
+                                   tvm::tirx::TileLayout::DefaultLayout({IntImm::Int32(1)}))));
   }
   return new_tensors;
 }

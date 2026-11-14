@@ -827,8 +827,8 @@ Stmt TensorCompactorCompact(
     if (strides.empty()) {
       if (n->layout.has_value()) {
         auto tile = n->layout.value().as_or_throw<tvm::tirx::TileLayout>();
-        n->layout = tvm::tirx::TileLayout(tvm::tirx::TileLayoutNode::DefaultLayout(n->shape)->shard,
-                                          {}, tile->offset);
+        n->layout = tvm::tirx::TileLayout(tvm::tirx::TileLayout::DefaultLayout(n->shape)->shard, {},
+                                          tile->offset);
       }
     } else {
       static const auto memory_axis = tvm::tirx::Axis::Get("m");

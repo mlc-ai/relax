@@ -1228,8 +1228,8 @@ IndexMap LegalizeIndexMapDType(const IndexMap& index_map, const ffi::Array<PrimE
         TVM_FFI_ICHECK(index_dtype.has_value());
         return tvm::prim::MakeConst(PrimType(*index_dtype), ptr->value);
       } else {
-        return SubstituteWithDataTypeLegalization(index,
-                                                  [&](const Var& var) { return var_map.Get(var); });
+        return SubstituteWithDataTypeLegalization(
+            index, [&](const Var& var) -> ffi::Optional<PrimExpr> { return var_map.Get(var); });
       }
     });
     ffi::Optional<IndexMap> opt_inverse_index_map = std::nullopt;
@@ -1281,13 +1281,13 @@ void TransformLayout(ScheduleState self, const StmtSRef& block_sref, int tensor_
   ffi::Optional<IndexMap> opt_inverse = std::nullopt;
   PrimExpr padding_predicate = IntImm::Bool(false);
   if (!assume_injective_transform) {
-    std::tie(opt_inverse, padding_predicate) = [&]() {
-      ffi::Array<Range> region;
-      for (const auto& dim : old_tensor.shape()) {
-        region.push_back(Range::FromMinExtent(IntImm(dim.ty(), 0), dim));
-      }
-      return index_map.NonSurjectiveInverse(region, analyzer);
-    }();
+    ffi::Array<Range> region;
+    for (const auto& dim : old_tensor.shape()) {
+      region.push_back(Range::FromMinExtent(IntImm(dim.ty(), 0), dim));
+    }
+    auto [inverse, predicate] = index_map.NonSurjectiveInverse(region, analyzer);
+    opt_inverse = std::move(inverse);
+    padding_predicate = std::move(predicate);
   }
 
   bool has_padding = !IsZero(padding_predicate);

@@ -388,7 +388,8 @@ Type TIRxPackedValueType(const Type& type, bool is_result) {
       const auto* tile = tensor->layout.as<tirx::TileLayoutNode>();
       // Runtime origin matching is handled separately by the native call boundary.
       bool regular_contiguous =
-          regular && (!tensor->layout.has_value() || (tile && tile->IsContiguous()));
+          regular && (!tensor->layout.has_value() ||
+                      (tile && ffi::GetRef<tirx::TileLayout>(tile).IsContiguous()));
       TVM_FFI_CHECK(regular_contiguous, TypeError)
           << "A Relax-to-TIRx call cannot implicitly convert tensor layout or allocated address: "
           << type;
