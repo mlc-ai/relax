@@ -154,12 +154,25 @@ void CopyTensorFromBytes(ffi::Tensor param, const void* data, size_t nbytes,
 
 ffi::Tensor TensorCacheMetadata::FileRecord::ParamRecord::Load(
     Device device, const std::string* raw_data, ffi::Optional<ffi::Tensor>* staging_buffer) const {
+  // FileRecord::Load validates the shard total; validate each parameter before copying.
+  // Subtraction after the offset check avoids signed overflow in the range check.
+  TVM_FFI_CHECK(raw_data != nullptr, ValueError) << "Shard buffer must not be null.";
+  int64_t shard_len = static_cast<int64_t>(raw_data->length());
+  TVM_FFI_CHECK(byte_offset >= 0 && nbytes >= 0 && byte_offset <= shard_len &&
+                    nbytes <= shard_len - byte_offset,
+                ValueError)
+      << "Parameter byte range starting at " << byte_offset << " with length " << nbytes
+      << " is out of bounds of the " << shard_len << "-byte shard buffer.";
   ffi::Tensor arr = tvm::runtime::Empty(shape, dtype, device);
   if (dtype == DLDataType{kDLFloat, 32, 1} && format == "f32-to-bf16") {
-    // decode bf16 to f32
+    // Decode bf16 to f32; the uint16_t buffer requires an even byte count.
+    TVM_FFI_CHECK(nbytes % 2 == 0, ValueError)
+        << "Parameter nbytes must be even for the f32-to-bf16 format, but got " << nbytes << ".";
     std::vector<uint16_t> buffer(nbytes / 2);
     std::vector<uint32_t> decoded(nbytes / 2);
-    std::memcpy(buffer.data(), raw_data->data() + byte_offset, nbytes);
+    if (nbytes > 0) {
+      std::memcpy(buffer.data(), raw_data->data() + byte_offset, nbytes);
+    }
     for (size_t i = 0; i < buffer.size(); ++i) {
       decoded[i] = static_cast<uint32_t>(buffer[i]) << 16;
     }
