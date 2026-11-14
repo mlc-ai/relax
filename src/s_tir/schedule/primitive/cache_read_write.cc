@@ -1652,7 +1652,7 @@ TensorVar CreateReindexTensor(const TensorVar& tensor, const ffi::Array<IterVar>
   if (new_tensor->layout.has_value()) {
     auto tile = new_tensor->layout.value().as_or_throw<tirx::TileLayout>();
     new_tensor->layout =
-        tirx::TileLayout(tirx::TileLayoutNode::DefaultLayout(new_shape)->shard, {}, tile->offset);
+        tirx::TileLayout(tirx::TileLayout::DefaultLayout(new_shape)->shard, {}, tile->offset);
   }
   return TensorVar(tensor->name + "_reindex", TensorType(std::move(new_tensor)), tensor->loc);
 }

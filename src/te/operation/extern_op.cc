@@ -64,7 +64,8 @@ ExternOp::ExternOp(std::string name, std::string tag, ffi::Map<ffi::String, ffi:
     const auto& layout = input_placeholders[i].ty()->layout;
     if (layout.has_value()) {
       const auto* tile = layout.as<tirx::TileLayoutNode>();
-      TVM_FFI_ICHECK(tile && tile->IsContiguous()) << "External inputs require contiguous strides";
+      TVM_FFI_ICHECK(tile && ffi::GetRef<tirx::TileLayout>(tile).IsContiguous())
+          << "External inputs require contiguous strides";
     }
   }
   n->inputs = std::move(inputs);
